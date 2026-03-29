@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
+import { Oswald } from 'next/font/google';
 import USAMap from './components/USAMap';
+
+const oswald = Oswald({ subsets: ['latin'], weight: ['700'] });
 
 export const metadata: Metadata = {
   title: 'Ultimate Hockey Tournaments — Premier Youth & Adult Hockey Events',
@@ -28,9 +31,11 @@ export default function HomePage() {
           <p className="text-brand-300 font-medium text-sm tracking-wide uppercase mb-4">
             2026-2027 Season
           </p>
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-semibold text-white max-w-4xl mx-auto leading-[1.05]">
-            Where champions{' '}
-            <span className="text-brand-400">compete.</span>
+          <h1
+            className={oswald.className + " text-5xl sm:text-6xl lg:text-8xl font-bold uppercase tracking-tight text-white max-w-4xl mx-auto leading-[0.95]"}
+          >
+            WHERE CHAMPIONS{' '}
+            <span className="text-brand-400">COMPETE.</span>
           </h1>
           <p className="mt-6 text-xl text-white/70 max-w-2xl mx-auto leading-relaxed">
             Premier youth and adult hockey tournaments across the Midwest.
@@ -50,12 +55,10 @@ export default function HomePage() {
             <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Find events near you.</h2>
             <p className="mt-3 text-lg text-[#6e6e73]">Click an active state to browse tournaments in your area.</p>
           </div>
-
           {/* Interactive map — desktop only */}
           <div className="hidden md:block mb-10">
             <USAMap />
           </div>
-
           {/* State cards — always visible */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {[
@@ -67,7 +70,7 @@ export default function HomePage() {
             ].map((state) => (
               <a
                 key={state.abbr}
-                href={`/events?state=${state.abbr}`}
+                href={"/events?state=" + state.abbr}
                 className="bg-white rounded-2xl p-5 shadow-soft hover:shadow-md transition-all group"
               >
                 <div className="flex items-center justify-between mb-2">
@@ -109,7 +112,7 @@ export default function HomePage() {
             ].map((city) => (
               <a
                 key={city.name}
-                href={`/events?city=${encodeURIComponent(city.name)}`}
+                href={"/events?city=" + encodeURIComponent(city.name)}
                 className="card p-6 group cursor-pointer"
               >
                 <div className="flex items-start justify-between">
@@ -185,7 +188,8 @@ export default function HomePage() {
         <div className="section text-center">
           <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Partner with us.</h2>
           <p className="mt-3 text-lg text-[#6e6e73] max-w-2xl mx-auto">
-            Get your brand in front of thousands of hockey families. Per-event and season-long sponsorship packages available.
+            Get your brand in front of thousands of hockey families.
+            Per-event and season-long sponsorship packages available.
           </p>
           <div className="mt-8">
             <a href="/sponsors" className="btn-primary text-base px-8 py-4">Explore Sponsorships</a>
