@@ -8,30 +8,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // UHT Brand — Clean, bright, Apple-inspired
+        // UHT Brand Colors
+        // Cyan #00ccff, Navy #003e79, White #fdfdfd
         brand: {
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          300: '#fcd34d',
-          400: '#fbbf24',
-          500: '#f59e0b',  // Primary amber/gold
-          600: '#d97706',
-          700: '#b45309',
-          800: '#92400e',
-          900: '#78350f',
+          50: '#e6faff',
+          100: '#b3f0ff',
+          200: '#80e6ff',
+          300: '#4ddbff',
+          400: '#1ad1ff',
+          500: '#00ccff',  // Primary cyan
+          600: '#00b8e6',
+          700: '#0099bf',
+          800: '#007a99',
+          900: '#005c73',
         },
         navy: {
-          50: '#f0f4ff',
-          100: '#dbe4ff',
-          200: '#bac8ff',
-          300: '#91a7ff',
-          400: '#748ffc',
-          500: '#5c7cfa',
-          600: '#4c6ef5',
-          700: '#1e3a5f',
-          800: '#1a2744',
-          900: '#0f172a',
+          50: '#e6edf5',
+          100: '#c0d1e6',
+          200: '#99b5d6',
+          300: '#7399c6',
+          400: '#4d7db6',
+          500: '#2661a6',
+          600: '#00508f',
+          700: '#003e79',  // Primary navy
+          800: '#002f5c',
+          900: '#001f3f',
         },
       },
       fontFamily: {
