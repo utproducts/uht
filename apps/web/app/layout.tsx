@@ -27,18 +27,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
-// ==================
-// NAVIGATION
-// ==================
 function Navigation() {
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e8e8ed]">
       <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <a href="/" className="flex items-center gap-3">
             <img
-              src="/UHT%20(MAIN%20FILES)..png"
+              src="/uht-logo.png"
               alt="Ultimate Hockey Tournaments"
               className="h-10 w-auto"
             />
@@ -46,37 +42,17 @@ function Navigation() {
               Ultimate Tournaments
             </span>
           </a>
-
-          {/* Main nav links */}
           <div className="hidden md:flex items-center gap-8">
-            <a href="/events" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              Events
-            </a>
-            <a href="/cities" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              Cities
-            </a>
-            <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              Book Ice
-            </a>
-            <a href="/sponsors" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              Sponsors
-            </a>
-            <a href="/faq" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              FAQ
-            </a>
-            <a href="/contact" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              Contact
-            </a>
+            <a href="/events" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Events</a>
+            <a href="/cities" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Cities</a>
+            <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Book Ice</a>
+            <a href="/sponsors" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sponsors</a>
+            <a href="/faq" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">FAQ</a>
+            <a href="/contact" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Contact</a>
           </div>
-
-          {/* Right side */}
           <div className="flex items-center gap-4">
-            <a href="/login" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">
-              Sign In
-            </a>
-            <a href="/events" className="btn-primary text-sm py-2 px-5">
-              Find Events
-            </a>
+            <a href="/login" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sign In</a>
+            <a href="/events" className="btn-primary text-sm py-2 px-5">Find Events</a>
           </div>
         </div>
       </div>
@@ -84,9 +60,6 @@ function Navigation() {
   );
 }
 
-// ==================
-// FOOTER
-// ==================
 function Footer() {
   return (
     <footer className="bg-[#f5f5f7] border-t border-[#e8e8ed]">
@@ -94,18 +67,13 @@ function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <img
-                src="/UHT%20(MAIN%20FILES)..png"
-                alt="Ultimate Hockey Tournaments"
-                className="h-8 w-auto"
-              />
+              <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
               <span className="font-semibold text-[#1d1d1f]">Ultimate Tournaments</span>
             </div>
             <p className="text-sm text-[#6e6e73] leading-relaxed">
               Premier youth and adult hockey tournaments across the Midwest.
             </p>
           </div>
-
           <div>
             <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Events</h4>
             <div className="space-y-2">
@@ -114,7 +82,6 @@ function Footer() {
               <a href="/book-ice" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Book Ice</a>
             </div>
           </div>
-
           <div>
             <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Support</h4>
             <div className="space-y-2">
@@ -123,7 +90,6 @@ function Footer() {
               <a href="/sponsors" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Become a Sponsor</a>
             </div>
           </div>
-
           <div>
             <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Portals</h4>
             <div className="space-y-2">
@@ -133,31 +99,20 @@ function Footer() {
             </div>
           </div>
         </div>
-
         <div className="mt-10 pt-6 border-t border-[#d2d2d7] flex items-center justify-between">
-          <p className="text-xs text-[#86868b]">
-            &copy; {new Date().getFullYear()} Ultimate Hockey Tournaments. All rights reserved.
-          </p>
-          <p className="text-xs text-[#86868b]">
-            USA Hockey Sanctioned Events
-          </p>
+          <p className="text-xs text-[#86868b]">&copy; {new Date().getFullYear()} Ultimate Hockey Tournaments. All rights reserved.</p>
+          <p className="text-xs text-[#86868b]">USA Hockey Sanctioned Events</p>
         </div>
       </div>
     </footer>
   );
 }
 
-// ==================
-// CHAT WIDGET
-// ==================
 function ChatWidget() {
   return (
     <div id="chat-widget" className="fixed bottom-6 right-6 z-50">
       <button
-        className="w-14 h-14 bg-navy-700 rounded-full shadow-elevated
-                   flex items-center justify-center text-white
-                   hover:bg-navy-800 transition-all duration-200
-                   hover:scale-105 active:scale-95"
+        className="w-14 h-14 bg-navy-700 rounded-full shadow-elevated flex items-center justify-center text-white hover:bg-navy-800 transition-all duration-200 hover:scale-105 active:scale-95"
         aria-label="Chat with us"
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
