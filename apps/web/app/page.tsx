@@ -5,7 +5,7 @@ import USAMap from './components/USAMap';
 const oswald = Oswald({ subsets: ['latin'], weight: ['700'] });
 
 export const metadata: Metadata = {
-  title: 'Ultimate Hockey Tournaments — Premier Youth & Adult Hockey Events',
+  title: 'Ultimate Hockey Tournaments \u2014 Premier Youth & Adult Hockey Events',
 };
 
 export default function HomePage() {
@@ -55,11 +55,9 @@ export default function HomePage() {
             <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Find events near you.</h2>
             <p className="mt-3 text-lg text-[#6e6e73]">Click an active state to browse tournaments in your area.</p>
           </div>
-          {/* Interactive map — desktop only */}
           <div className="hidden md:block mb-10">
             <USAMap />
           </div>
-          {/* State cards — always visible */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {[
               { abbr: 'IL', name: 'Illinois', cities: ['Chicago'], events: 8 },
@@ -135,8 +133,15 @@ export default function HomePage() {
       </section>
 
       {/* UPCOMING EVENTS */}
-      <section className="bg-[#f5f5f7]">
-        <div className="section">
+      <section className="relative overflow-hidden bg-[#f5f5f7]">
+        <div className="absolute inset-0">
+          <img
+            src="/hockey-action.jpg"
+            alt=""
+            className="w-full h-full object-cover opacity-20"
+          />
+        </div>
+        <div className="section relative z-10">
           <div className="flex items-end justify-between mb-10">
             <div>
               <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Upcoming events.</h2>
@@ -199,4 +204,3 @@ export default function HomePage() {
     </>
   );
 }
-
