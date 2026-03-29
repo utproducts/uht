@@ -92,7 +92,7 @@ export default function EventsPage() {
 
               {/* Event Details */}
               <div className="p-6">
-                <h3 className="text-lg font-semibold text-[#1d1d1f] group-hover:text-brand-600 transition-colors">
+                <h3 className="text-lg font-semibold text-[#1d1d1f] group-hover:text-brand-500 transition-colors">
                   Sample Tournament {i + 1}
                 </h3>
                 <p className="text-sm text-[#6e6e73] mt-1">
