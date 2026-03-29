@@ -9,18 +9,26 @@ export default function HomePage() {
     <>
       {/* ==================
           HERO SECTION
-          Apple-style: Big typography, lots of white space, single CTA
+          Navy background with rink image at 30% opacity
           ================== */}
-      <section className="relative overflow-hidden bg-white">
-        <div className="section py-24 sm:py-32 text-center">
-          <p className="text-brand-600 font-medium text-sm tracking-wide uppercase mb-4">
+      <section className="relative overflow-hidden bg-navy-700">
+        {/* Background rink image */}
+        <div className="absolute inset-0">
+          <img
+            src="/hero-rink.jpg"
+            alt=""
+            className="w-full h-full object-cover opacity-30"
+          />
+        </div>
+        <div className="section py-24 sm:py-32 text-center relative z-10">
+          <p className="text-brand-300 font-medium text-sm tracking-wide uppercase mb-4">
             2026-2027 Season
           </p>
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-semibold text-[#1d1d1f] max-w-4xl mx-auto leading-[1.05]">
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-semibold text-white max-w-4xl mx-auto leading-[1.05]">
             Where champions{' '}
-            <span className="text-brand-500">compete.</span>
+            <span className="text-brand-400">compete.</span>
           </h1>
-          <p className="mt-6 text-xl text-[#6e6e73] max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-6 text-xl text-white/70 max-w-2xl mx-auto leading-relaxed">
             Premier youth and adult hockey tournaments across the Midwest.
             Register your team, track live scores, and build your legacy.
           </p>
@@ -91,14 +99,14 @@ export default function HomePage() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-[#1d1d1f] group-hover:text-brand-600 transition-colors">
+                    <h3 className="text-lg font-semibold text-[#1d1d1f] group-hover:text-brand-500 transition-colors">
                       {city.name}
                     </h3>
                     <p className="text-sm text-[#6e6e73] mt-1">{city.state}</p>
                   </div>
                   <span className="badge badge-brand">{city.events} events</span>
                 </div>
-                <div className="mt-4 flex items-center text-sm text-brand-600 font-medium">
+                <div className="mt-4 flex items-center text-sm text-brand-500 font-medium">
                   View events
                   <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -139,7 +147,7 @@ export default function HomePage() {
             {[1, 2, 3].map((i) => (
               <div key={i} className="card overflow-hidden">
                 {/* Event logo area */}
-                <div className="aspect-[3/2] bg-gradient-to-br from-brand-50 to-brand-100 flex items-center justify-center">
+                <div className="aspect-[3/2] bg-gradient-to-br from-brand-50 to-navy-50 flex items-center justify-center">
                   <div className="w-24 h-24 bg-white rounded-2xl shadow-soft flex items-center justify-center">
                     <span className="text-[#86868b] text-xs">Event Logo</span>
                   </div>
