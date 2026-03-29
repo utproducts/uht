@@ -1,0 +1,33 @@
+name = "uht-api"
+main = "src/index.ts"
+compatibility_date = "2024-10-18"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "uht-db"
+database_id = "" # Will be filled after D1 creation
+
+# KV Namespace for sessions/cache
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "" # Will be filled after KV creation
+
+# R2 Bucket for file storage (logos, images, merch templates)
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "uht-assets"
+
+# Environment variables (set via wrangler secret)
+# STRIPE_SECRET_KEY
+# SENDGRID_API_KEY
+# TEXTMAGIC_USERNAME
+# TEXTMAGIC_API_KEY
+# CLAUDE_API_KEY
+# JWT_SECRET
+# USA_HOCKEY_API_KEY
+
+[vars]
+ENVIRONMENT = "production"
+CORS_ORIGIN = "https://ultimatetournaments.com"

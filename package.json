@@ -1,0 +1,19 @@
+{
+  "name": "uht-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:migrate": "cd apps/api && npx wrangler d1 migrations apply uht-db",
+    "db:migrate:local": "cd apps/api && npx wrangler d1 migrations apply uht-db --local"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "npm@10.0.0"
+}

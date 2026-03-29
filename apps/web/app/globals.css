@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   UHT Design System — Apple-Inspired Minimalist
+   Clean white backgrounds, subtle shadows,
+   precise typography, lots of whitespace
+   ============================================ */
+
+@layer base {
+  :root {
+    --brand-gold: #f59e0b;
+    --brand-navy: #0f172a;
+    --text-primary: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #86868b;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f7;
+    --bg-tertiary: #fbfbfd;
+    --border-light: #d2d2d7;
+    --border-subtle: #e8e8ed;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-white text-[#1d1d1f] font-sans;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+
+  /* Apple-style headings */
+  h1 {
+    @apply text-5xl font-semibold tracking-tight leading-tight;
+    letter-spacing: -0.015em;
+  }
+  h2 {
+    @apply text-3xl font-semibold tracking-tight;
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  h4 {
+    @apply text-xl font-semibold;
+  }
+}
+
+@layer components {
+  /* Primary CTA button — filled */
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-6 py-3
+           bg-brand-500 text-white font-medium rounded-full
+           transition-all duration-200 ease-out
+           hover:bg-brand-600 hover:shadow-soft
+           active:scale-[0.98]
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+  }
+
+  /* Secondary button — outlined */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-6 py-3
+           bg-white text-[#1d1d1f] font-medium rounded-full
+           border border-[#d2d2d7]
+           transition-all duration-200 ease-out
+           hover:bg-[#f5f5f7] hover:border-[#86868b]
+           active:scale-[0.98]
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2;
+  }
+
+  /* Ghost button — text only */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-4 py-2
+           text-brand-600 font-medium rounded-lg
+           transition-all duration-200
+           hover:bg-brand-50
+           active:scale-[0.98];
+  }
+
+  /* Card — Apple-style elevated card */
+  .card {
+    @apply bg-white rounded-2xl shadow-card
+           border border-[#e8e8ed]
+           transition-all duration-300 ease-out;
+  }
+  .card:hover {
+    @apply shadow-elevated;
+    transform: translateY(-2px);
+  }
+
+  /* Input fields */
+  .input {
+    @apply w-full px-4 py-3 bg-[#f5f5f7] border border-transparent rounded-xl
+           text-[#1d1d1f] placeholder-[#86868b]
+           transition-all duration-200
+           focus:bg-white focus:border-[#d2d2d7] focus:ring-2 focus:ring-brand-500/20
+           focus:outline-none;
+  }
+
+  /* Badge / tag */
+  .badge {
+    @apply inline-flex items-center px-3 py-1
+           text-xs font-medium rounded-full
+           bg-[#f5f5f7] text-[#6e6e73];
+  }
+  .badge-brand {
+    @apply bg-brand-50 text-brand-700;
+  }
+  .badge-success {
+    @apply bg-emerald-50 text-emerald-700;
+  }
+  .badge-warning {
+    @apply bg-amber-50 text-amber-700;
+  }
+  .badge-danger {
+    @apply bg-red-50 text-red-700;
+  }
+
+  /* Section wrapper for consistent spacing */
+  .section {
+    @apply max-w-7xl mx-auto px-6 py-16 sm:px-8 lg:px-12;
+  }
+
+  /* Subtle divider */
+  .divider {
+    @apply border-t border-[#e8e8ed];
+  }
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar (webkit) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d2d2d7;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #86868b;
+}
