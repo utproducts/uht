@@ -11,11 +11,19 @@ export default function HomePage() {
       {/* HERO */}
       <section className="relative overflow-hidden bg-navy-700">
         <div className="absolute inset-0">
-          <img src="/AdobeStock_693343870.jpeg" alt="" className="w-full h-full object-cover opacity-30" />
+          <img
+            src="/AdobeStock_693343870.jpeg"
+            alt=""
+            className="w-full h-full object-cover opacity-30"
+          />
         </div>
         <div className="section py-20 sm:py-28 text-center relative z-10">
           <div className="mb-6 flex justify-center">
-            <img src="/uht-logo.png" alt="Ultimate Hockey Tournaments" className="h-24 sm:h-32 w-auto drop-shadow-lg" />
+            <img
+              src="/uht-logo.png"
+              alt="Ultimate Hockey Tournaments"
+              className="h-24 sm:h-32 w-auto drop-shadow-lg"
+            />
           </div>
           <p className="text-brand-300 font-medium text-sm tracking-wide uppercase mb-4">
             2026-2027 Season
@@ -35,14 +43,50 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* INTERACTIVE US MAP */}
-      <section className="bg-[#f5f5f7]">
+      {/* FIND EVENTS — MAP + STATE CARDS */}
+      <section className="bg-brand-50">
         <div className="section">
           <div className="text-center mb-8">
             <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Find events near you.</h2>
             <p className="mt-3 text-lg text-[#6e6e73]">Click an active state to browse tournaments in your area.</p>
           </div>
-          <USAMap />
+
+          {/* Interactive map — desktop only */}
+          <div className="hidden md:block mb-10">
+            <USAMap />
+          </div>
+
+          {/* State cards — always visible */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {[
+              { abbr: 'IL', name: 'Illinois', cities: ['Chicago'], events: 8 },
+              { abbr: 'WI', name: 'Wisconsin', cities: ['WI Dells', 'Madison'], events: 6 },
+              { abbr: 'MO', name: 'Missouri', cities: ['St. Louis'], events: 3 },
+              { abbr: 'IN', name: 'Indiana', cities: ['South Bend'], events: 3 },
+              { abbr: 'MI', name: 'Michigan', cities: ['Holland', 'Ann Arbor'], events: 4 },
+            ].map((state) => (
+              <a
+                key={state.abbr}
+                href={`/events?state=${state.abbr}`}
+                className="bg-white rounded-2xl p-5 shadow-soft hover:shadow-md transition-all group"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl font-bold text-navy-700 group-hover:text-brand-500 transition-colors">
+                    {state.abbr}
+                  </span>
+                  <span className="badge badge-brand text-xs">{state.events} events</span>
+                </div>
+                <p className="text-sm font-medium text-[#1d1d1f]">{state.name}</p>
+                <p className="text-xs text-[#6e6e73] mt-1">{state.cities.join(' \u00B7 ')}</p>
+                <div className="mt-3 flex items-center text-xs text-brand-500 font-medium">
+                  Browse events
+                  <svg className="w-3.5 h-3.5 ml-1 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </a>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -63,7 +107,11 @@ export default function HomePage() {
               { name: 'Holland', state: 'MI', events: 2 },
               { name: 'Ann Arbor', state: 'MI', events: 2 },
             ].map((city) => (
-              <a key={city.name} href={`/events?city=${encodeURIComponent(city.name)}`} className="card p-6 group cursor-pointer">
+              <a
+                key={city.name}
+                href={`/events?city=${encodeURIComponent(city.name)}`}
+                className="card p-6 group cursor-pointer"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-[#1d1d1f] group-hover:text-brand-500 transition-colors">{city.name}</h3>
@@ -137,8 +185,7 @@ export default function HomePage() {
         <div className="section text-center">
           <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Partner with us.</h2>
           <p className="mt-3 text-lg text-[#6e6e73] max-w-2xl mx-auto">
-            Get your brand in front of thousands of hockey families.
-            Per-event and season-long sponsorship packages available.
+            Get your brand in front of thousands of hockey families. Per-event and season-long sponsorship packages available.
           </p>
           <div className="mt-8">
             <a href="/sponsors" className="btn-primary text-base px-8 py-4">Explore Sponsorships</a>
