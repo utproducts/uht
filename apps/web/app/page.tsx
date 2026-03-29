@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import USAMap from './components/USAMap';
 
 export const metadata: Metadata = {
   title: 'Ultimate Hockey Tournaments — Premier Youth & Adult Hockey Events',
@@ -34,42 +35,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* FIND EVENTS BY STATE */}
+      {/* INTERACTIVE US MAP */}
       <section className="bg-[#f5f5f7]">
         <div className="section">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">Find events near you.</h2>
-            <p className="mt-3 text-lg text-[#6e6e73]">Select a state to browse tournaments in your area.</p>
+            <p className="mt-3 text-lg text-[#6e6e73]">Click an active state to browse tournaments in your area.</p>
           </div>
-          <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {[
-              { code: 'IL', name: 'Illinois', cities: ['Chicago'], events: 8 },
-              { code: 'WI', name: 'Wisconsin', cities: ['WI Dells', 'Madison'], events: 6 },
-              { code: 'MO', name: 'Missouri', cities: ['St. Louis'], events: 3 },
-              { code: 'IN', name: 'Indiana', cities: ['South Bend'], events: 3 },
-              { code: 'MI', name: 'Michigan', cities: ['Holland', 'Ann Arbor'], events: 4 },
-            ].map((state) => (
-              <a
-                key={state.code}
-                href={`/events?state=${state.code}`}
-                className="group relative bg-white rounded-2xl p-5 border border-[#e8e8ed] hover:border-brand-500 hover:shadow-elevated transition-all duration-300"
-              >
-                <div className="text-4xl font-bold text-navy-700 group-hover:text-brand-500 transition-colors">
-                  {state.code}
-                </div>
-                <div className="mt-2">
-                  <div className="text-sm font-semibold text-[#1d1d1f]">{state.name}</div>
-                  <div className="text-xs text-[#6e6e73] mt-0.5">{state.cities.join(', ')}</div>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="badge badge-brand text-xs">{state.events} events</span>
-                  <svg className="w-4 h-4 text-[#86868b] group-hover:text-brand-500 group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </a>
-            ))}
-          </div>
+          <USAMap />
         </div>
       </section>
 
