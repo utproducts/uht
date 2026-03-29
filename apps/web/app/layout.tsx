@@ -37,7 +37,7 @@ function Navigation() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <a href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-navy-700 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">UHT</span>
             </div>
             <span className="font-semibold text-[#1d1d1f] text-lg tracking-tight">
@@ -92,7 +92,7 @@ function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-navy-700 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-xs">UHT</span>
               </div>
               <span className="font-semibold text-[#1d1d1f]">Ultimate Tournaments</span>
@@ -151,9 +151,9 @@ function ChatWidget() {
     <div id="chat-widget" className="fixed bottom-6 right-6 z-50">
       {/* Chat bubble trigger — will be interactive via client component */}
       <button
-        className="w-14 h-14 bg-brand-500 rounded-full shadow-elevated
+        className="w-14 h-14 bg-navy-700 rounded-full shadow-elevated
                    flex items-center justify-center text-white
-                   hover:bg-brand-600 transition-all duration-200
+                   hover:bg-navy-800 transition-all duration-200
                    hover:scale-105 active:scale-95"
         aria-label="Chat with us"
       >
