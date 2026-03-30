@@ -97,7 +97,7 @@ export default function EventPage({ params }: { params: { slug: string } }) {
       </div>
 
       {/* Hero Header */}
-      <div className="bg-[#003e79] pb-6">
+      <div className="bg-[#003e79]">
         <div className="section">
           <div className="flex flex-col md:flex-row items-start gap-8">
             {/* Event Logo Placeholder */}
@@ -146,7 +146,7 @@ export default function EventPage({ params }: { params: { slug: string } }) {
 
       {/* Tabs */}
       <div className="bg-brand-50 border-b border-[#e5e5e7] sticky top-0 z-20">
-        <div className="section flex items-center gap-0 h-16 overflow-x-auto">
+        <div className="section flex items-center gap-0 h-11 overflow-x-auto !py-0">
           <TabButton label="Event Info" active={true} />
           <TabButton label="Schedule" active={false} />
           <TabButton label="Rules" active={false} />
