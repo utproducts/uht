@@ -85,8 +85,9 @@ export default function EventPage({ params }: { params: { slug: string } }) {
   return (
     <div className="min-h-screen bg-[#f5f5f7]">
       {/* Breadcrumb */}
-      <div className="bg-[#003e79]">
-        <div className="section">
+      <div className="relative overflow-hidden" style={{backgroundImage: 'url(https://images.unsplash.com/photo-1515703407324-5f753afd8be8?w=1920&q=80)', backgroundSize: 'cover', backgroundPosition: 'center'}}>
+        <div className="absolute inset-0 bg-[#003e79]/80" />
+        <div className="relative section">
           <nav className="flex items-center gap-2 text-sm py-4">
             <a href="/events" className="text-[#00ccff] hover:underline">Events</a>
             <span className="text-white/40">/</span>
