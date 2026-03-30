@@ -62,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
 function TabButton({ label, active }: { label: string; active: boolean }) {
   return (
     <button className={
-      'px-5 py-3 text-sm font-semibold border-b-2 transition-colors ' +
+      'px-4 py-2 text-sm font-semibold border-b-2 transition-colors ' +
       (active ? 'border-[#00ccff] text-[#00ccff]' : 'border-transparent text-[#6e6e73] hover:text-[#003e79]')
     }>{label}</button>
   );
