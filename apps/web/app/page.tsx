@@ -138,7 +138,7 @@ export default function HomePage() {
           <img
             src="/hockey-action.jpg"
             alt=""
-            className="w-full h-full object-cover opacity-20"
+            className="w-full h-full object-cover opacity-20 grayscale"
           />
         </div>
         <div className="section relative z-10">
