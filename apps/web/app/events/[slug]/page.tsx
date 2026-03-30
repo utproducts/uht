@@ -22,7 +22,7 @@ const EVENTS: Record<string, any> = {
       { name: 'Canlan West Dundee - South', address: '801 Wesemann Dr, West Dundee, IL 60118' },
       { name: 'Canlan West Dundee - JJ', address: '801 Wesemann Dr, West Dundee, IL 60118' },
       { name: 'Addison Ice Arena - NHL', address: '475 S Grace St, Addison, IL 60101' },
-      { name: 'Addison Ice Arena - Olympic', address: '475 S Grace St, Addison, IL 60101' },
+      { name: 'Addison Ice Arena - Olympic', address: '475 S Grace St Addison, IL 60101' },
     ],
     pricing: [
       { ageGroup: 'Mite', format: '11 min', price: '$1,695.00' },
@@ -63,7 +63,7 @@ function TabButton({ label, active }: { label: string; active: boolean }) {
   return (
     <button className={
       'px-5 py-3 text-sm font-semibold border-b-2 transition-colors ' +
-      (active ? 'border-[#00ccff] text-[#00ccff]' : 'border-transparent text-[#6e6e73] hover:text-white')
+      (active ? 'border-[#00ccff] text-[#00ccff]' : 'border-transparent text-[#6e6e73] hover:text-[#003e79]')
     }>{label}</button>
   );
 }
