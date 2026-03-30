@@ -62,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
 function TabButton({ label, active }: { label: string; active: boolean }) {
   return (
     <button className={
-      'px-4 py-2 text-sm font-semibold border-b-2 transition-colors ' +
+      'px-4 py-1.5 text-sm font-semibold border-b-2 transition-colors ' +
       (active ? 'border-[#00ccff] text-[#00ccff]' : 'border-transparent text-[#6e6e73] hover:text-[#003e79]')
     }>{label}</button>
   );
@@ -97,7 +97,7 @@ export default function EventPage({ params }: { params: { slug: string } }) {
       </div>
 
       {/* Hero Header */}
-      <div className="bg-[#003e79] pb-12">
+      <div className="bg-[#003e79] pb-6">
         <div className="section">
           <div className="flex flex-col md:flex-row items-start gap-8">
             {/* Event Logo Placeholder */}
@@ -145,8 +145,8 @@ export default function EventPage({ params }: { params: { slug: string } }) {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-[#e5e5e7] sticky top-0 z-20">
-        <div className="section flex gap-0 overflow-x-auto">
+      <div className="bg-brand-50 border-b border-[#e5e5e7] sticky top-0 z-20">
+        <div className="section flex items-center gap-0 h-16 overflow-x-auto">
           <TabButton label="Event Info" active={true} />
           <TabButton label="Schedule" active={false} />
           <TabButton label="Rules" active={false} />
