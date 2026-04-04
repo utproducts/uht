@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 const EVENTS: Record<string, any> = {
   'chicago-deep-dish-cup-2026': {
     name: 'The Deep Dish Cup',
+    logo: '/event-logos/deep-dish-cup.png',
     date: 'May 01 - 03, 2026',
     location: 'Chicago, Illinois',
     status: 'Open',
@@ -100,11 +101,15 @@ export default function EventPage({ params }: { params: { slug: string } }) {
       <div className="bg-[#003e79]">
         <div className="section">
           <div className="flex flex-col md:flex-row items-start gap-8">
-            {/* Event Logo Placeholder */}
-            <div className="w-28 h-28 bg-[#001f3f] rounded-xl flex items-center justify-center border border-white/10 shrink-0">
-              <svg className="w-16 h-16 text-[#00ccff]/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+            {/* Event Logo */}
+            <div className="w-28 h-28 bg-[#001f3f] rounded-xl flex items-center justify-center border border-white/10 shrink-0 overflow-hidden">
+              {event.logo ? (
+                <img src={event.logo} alt={event.name + ' logo'} className="w-full h-full object-contain p-2" />
+              ) : (
+                <svg className="w-16 h-16 text-[#00ccff]/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              )}
             </div>
 
             {/* Event Details */}
