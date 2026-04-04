@@ -48,7 +48,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* FIND EVENTS — MAP + STATE CARDS */}
+      {/* FIND EVENTS â MAP + STATE CARDS */}
       <section className="bg-brand-50">
         <div className="section">
           <div className="text-center mb-8">
@@ -155,28 +155,38 @@ export default function HomePage() {
             </a>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="card overflow-hidden">
-                <div className="aspect-[3/2] bg-gradient-to-br from-brand-50 to-navy-50 flex items-center justify-center">
-                  <div className="w-24 h-24 bg-white rounded-2xl shadow-soft flex items-center justify-center">
-                    <span className="text-[#86868b] text-xs">Event Logo</span>
+            {[
+              { name: 'The Deep Dish Cup', slug: 'chicago-deep-dish-cup-2026', logo: '/event-logos/deep-dish-cup.png', location: 'Chicago, IL', date: 'May 1-3, 2026', ages: ['Mite', 'Squirt', 'Pee Wee', 'Bantam'], spots: '12/16' },
+              { name: 'Windy City Showdown', slug: 'windy-city-showdown-2026', logo: '/event-logos/windy-city-showdown.png', location: 'Chicago, IL', date: 'May 16-18, 2026', ages: ['Squirt', 'Pee Wee', 'Bantam'], spots: '8/12' },
+              { name: 'Dells Summer Classic', slug: 'dells-summer-classic-2026', logo: '/event-logos/dells-summer-classic.png', location: 'WI Dells, WI', date: 'Jun 6-8, 2026', ages: ['Mite', 'Squirt', 'Pee Wee'], spots: '6/12' },
+            ].map((evt) => (
+              <div key={evt.slug} className="card overflow-hidden relative">
+                <div className="aspect-[3/2] bg-gradient-to-br from-brand-50 to-navy-50 flex items-center justify-center relative overflow-hidden">
+                  {evt.logo && (
+                    <img src={evt.logo} alt="" className="absolute inset-0 w-full h-full object-contain opacity-20 scale-125" />
+                  )}
+                  <div className="w-24 h-24 bg-white rounded-2xl shadow-soft flex items-center justify-center relative z-10 overflow-hidden">
+                    {evt.logo ? (
+                      <img src={evt.logo} alt={evt.name + ' logo'} className="w-full h-full object-contain p-2" />
+                    ) : (
+                      <span className="text-[#86868b] text-xs">Event Logo</span>
+                    )}
                   </div>
                 </div>
                 <div className="p-6">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="badge badge-brand text-xs">Registration Open</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-[#1d1d1f]">Event Name {i}</h3>
-                  <p className="text-sm text-[#6e6e73] mt-1">Chicago, IL &middot; Apr 12-14, 2026</p>
+                  <h3 className="text-lg font-semibold text-[#1d1d1f]">{evt.name}</h3>
+                  <p className="text-sm text-[#6e6e73] mt-1">{evt.location} &middot; {evt.date}</p>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    <span className="badge text-xs">Mite</span>
-                    <span className="badge text-xs">Squirt</span>
-                    <span className="badge text-xs">Peewee</span>
-                    <span className="badge text-xs">Bantam</span>
+                    {evt.ages.map((age) => (
+                      <span key={age} className="badge text-xs">{age}</span>
+                    ))}
                   </div>
                   <div className="mt-4 flex items-center justify-between">
-                    <span className="text-sm text-[#6e6e73]">12/16 spots filled</span>
-                    <a href="/events/event-slug" className="btn-primary text-sm py-2 px-5">Register</a>
+                    <span className="text-sm text-[#6e6e73]">{evt.spots} spots filled</span>
+                    <a href={'/events/' + evt.slug} className="btn-primary text-sm py-2 px-5">Register</a>
                   </div>
                 </div>
               </div>
