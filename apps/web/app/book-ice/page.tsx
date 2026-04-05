@@ -6,7 +6,8 @@ const API_BASE = 'https://uht.chad-157.workers.dev/api/ice-booking';
 
 interface SlotCount {
   date: string;
-  count: number;
+  available_count: number;
+  total_count: number;
 }
 
 interface Slot {
@@ -29,7 +30,7 @@ function Calendar({
 }: {
   selectedDate: string | null;
   onSelectDate: (d: string) => void;
-  availableDates: Record<string, number>;
+  availableDates: Record<string, { available: number; total: number }>;
 }) {
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date();
@@ -86,24 +87,32 @@ function Calendar({
           const dateStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const cellDate = new Date(viewMonth.year, viewMonth.month, day);
           const isPast = cellDate < today;
-          const count = availableDates[dateStr] || 0;
-          const isAvailable = count > 0 && !isPast;
+          const info = availableDates[dateStr];
+          const avail = info?.available || 0;
+          const total = info?.total || 0;
+          const hasSlots = total > 0 && !isPast;
+          const hasAvailable = avail > 0;
           const isSelected = dateStr === selectedDate;
+          const isSoldOut = hasSlots && !hasAvailable;
           return (
             <button
               key={i}
-              disabled={!isAvailable}
+              disabled={!hasSlots}
               onClick={() => onSelectDate(dateStr)}
               className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-sm transition
                 ${isSelected ? 'bg-cyan-600 text-white font-bold shadow-md' : ''}
-                ${isAvailable && !isSelected ? 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 font-medium cursor-pointer' : ''}
-                ${!isAvailable ? 'text-gray-300 cursor-default' : ''}
+                ${hasAvailable && !isSelected ? 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 font-medium cursor-pointer' : ''}
+                ${isSoldOut && !isSelected ? 'bg-red-50 text-red-400 cursor-pointer' : ''}
+                ${!hasSlots ? 'text-gray-300 cursor-default' : ''}
               `}
             >
               {day}
-              {isAvailable && (
-                <span className={`text-[10px] leading-none ${isSelected ? 'text-cyan-100' : 'text-cyan-500'}`}>
-                  {count} slot{count > 1 ? 's' : ''}
+              {hasSlots && (
+                <span className={`text-[10px] leading-none ${
+                  isSelected ? 'text-cyan-100' :
+                  isSoldOut ? 'text-red-400' : 'text-cyan-500'
+                }`}>
+                  {isSoldOut ? 'Full' : `${avail} left`}
                 </span>
               )}
             </button>
@@ -136,7 +145,7 @@ function TimeSlotPicker({
   if (slots.length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
-        No available time slots for this date.
+        No time slots for this date.
       </div>
     );
   }
@@ -148,23 +157,42 @@ function TimeSlotPicker({
     return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
   };
 
+  const availableSlots = slots.filter((s) => s.status === 'available');
+  const takenSlots = slots.filter((s) => s.status !== 'available');
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
-      <h3 className="text-lg font-bold text-gray-900 mb-4">Available Times</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-gray-900">Select a Time</h3>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 inline-block" /> Available ({availableSlots.length})</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> Booked ({takenSlots.length})</span>
+        </div>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {slots.map((slot) => {
+          const isTaken = slot.status !== 'available';
           const selected = selectedSlot?.id === slot.id;
           return (
             <button
               key={slot.id}
-              onClick={() => onSelect(slot)}
-              className={`p-3 rounded-xl border-2 text-center transition
-                ${selected ? 'border-cyan-600 bg-cyan-50 shadow-md' : 'border-gray-200 hover:border-cyan-300 hover:bg-gray-50'}
+              disabled={isTaken}
+              onClick={() => !isTaken && onSelect(slot)}
+              className={`p-3 rounded-xl border-2 text-center transition relative
+                ${isTaken ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60' : ''}
+                ${selected ? 'border-cyan-600 bg-cyan-50 shadow-md' : ''}
+                ${!isTaken && !selected ? 'border-gray-200 hover:border-cyan-300 hover:bg-gray-50' : ''}
               `}
             >
-              <div className={`font-bold ${selected ? 'text-cyan-700' : 'text-gray-900'}`}>{fmt(slot.start_time)}</div>
-              <div className="text-xs text-gray-500">to {fmt(slot.end_time)}</div>
-              <div className="text-sm font-semibold text-green-600 mt-1">${(slot.price_cents / 100).toFixed(0)}</div>
+              <div className={`font-bold ${isTaken ? 'text-gray-400' : selected ? 'text-cyan-700' : 'text-gray-900'}`}>
+                {fmt(slot.start_time)}
+              </div>
+              <div className={`text-xs ${isTaken ? 'text-gray-300' : 'text-gray-500'}`}>to {fmt(slot.end_time)}</div>
+              {isTaken ? (
+                <div className="text-xs font-semibold text-red-400 mt-1">Booked</div>
+              ) : (
+                <div className="text-sm font-semibold text-green-600 mt-1">${(slot.price_cents / 100).toFixed(0)}</div>
+              )}
             </button>
           );
         })}
@@ -350,7 +378,7 @@ function BookingForm({
 // âââ Main Page ââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function BookIcePage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [availableDates, setAvailableDates] = useState<Record<string, number>>({});
+  const [availableDates, setAvailableDates] = useState<Record<string, { available: number; total: number }>>({});
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -377,9 +405,9 @@ export default function BookIcePage() {
       .then((r) => r.json())
       .then((json) => {
         if (json.success && json.data) {
-          const map: Record<string, number> = {};
+          const map: Record<string, { available: number; total: number }> = {};
           json.data.forEach((row: SlotCount) => {
-            map[row.date] = row.count;
+            map[row.date] = { available: row.available_count, total: row.total_count };
           });
           setAvailableDates(map);
         }
@@ -393,7 +421,7 @@ export default function BookIcePage() {
     setLoadingSlots(true);
     setSelectedSlot(null);
     setShowForm(false);
-    fetch(`${API_BASE}/slots?start_date=${selectedDate}&end_date=${selectedDate}&status=available`)
+    fetch(`${API_BASE}/slots?start_date=${selectedDate}&end_date=${selectedDate}&status=all`)
       .then((r) => r.json())
       .then((json) => {
         setSlots(json.success ? json.data : []);

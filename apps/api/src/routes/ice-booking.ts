@@ -27,8 +27,8 @@ iceBookingRoutes.get('/slots', async (c) => {
   if (venue_id) { query += ' AND is2.venue_id = ?'; params.push(venue_id); }
   if (start_date) { query += ' AND is2.date >= ?'; params.push(start_date); }
   if (end_date) { query += ' AND is2.date <= ?'; params.push(end_date); }
-  if (status) { query += ' AND is2.status = ?'; params.push(status); }
-  else { query += " AND is2.status = 'available'"; }
+  if (status && status !== 'all') { query += ' AND is2.status = ?'; params.push(status); }
+  else if (!status) { query += " AND is2.status = 'available'"; }
 
   query += ' ORDER BY is2.date ASC, is2.start_time ASC';
   const result = await db.prepare(query).bind(...params).all();
@@ -42,9 +42,11 @@ iceBookingRoutes.get('/slots/counts', async (c) => {
   const { start_date, end_date } = c.req.query();
 
   let query = `
-    SELECT date, COUNT(*) as available_count
+    SELECT date,
+      COUNT(*) as total_count,
+      SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) as available_count
     FROM ice_slots
-    WHERE status = 'available'
+    WHERE 1=1
   `;
   const params: string[] = [];
 
@@ -235,6 +237,67 @@ iceBookingRoutes.post('/webhooks/stripe', async (c) => {
 // ==========================================
 // ADMIN ENDPOINTS
 // ==========================================
+
+// Admin: Generate slots from template applied to specific dates
+const templateGenerateSchema = z.object({
+  venueId: z.string(),
+  rinkId: z.string().optional(),
+  dates: z.array(z.string()),
+  dailyStartTime: z.string(),
+  dailyEndTime: z.string(),
+  slotDurationMinutes: z.number().default(60),
+  bufferMinutes: z.number().default(15),
+  priceCents: z.number().default(39500),
+});
+
+iceBookingRoutes.post('/slots/generate-template',
+  zValidator('json', templateGenerateSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const [startHour, startMin] = data.dailyStartTime.split(':').map(Number);
+  const [endHour, endMin] = data.dailyEndTime.split(':').map(Number);
+  const slotSpacing = data.slotDurationMinutes + data.bufferMinutes;
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const dateStr of data.dates) {
+    // Check if slots already exist for this date
+    const existing = await db.prepare(
+      'SELECT COUNT(*) as cnt FROM ice_slots WHERE venue_id = ? AND date = ?'
+    ).bind(data.venueId, dateStr).first<any>();
+
+    if (existing?.cnt > 0) {
+      skipped++;
+      continue;
+    }
+
+    let minutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+
+    while (minutes + data.slotDurationMinutes <= endMinutes) {
+      const slotStartH = String(Math.floor(minutes / 60)).padStart(2, '0');
+      const slotStartM = String(minutes % 60).padStart(2, '0');
+      const slotEndMinutes = minutes + data.slotDurationMinutes;
+      const slotEndH = String(Math.floor(slotEndMinutes / 60)).padStart(2, '0');
+      const slotEndM = String(slotEndMinutes % 60).padStart(2, '0');
+
+      await db.prepare(`
+        INSERT INTO ice_slots (id, venue_id, rink_id, date, start_time, end_time, duration_minutes, price_cents)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        crypto.randomUUID().replace(/-/g, ''), data.venueId, data.rinkId || null,
+        dateStr, `${slotStartH}:${slotStartM}`, `${slotEndH}:${slotEndM}`,
+        data.slotDurationMinutes, data.priceCents
+      ).run();
+      created++;
+      minutes += slotSpacing;
+    }
+  }
+
+  return c.json({ success: true, data: { created, skipped, dates: data.dates.length } }, 201);
+});
 
 // Admin: Create ice slots (bulk)
 const createSlotsSchema = z.object({

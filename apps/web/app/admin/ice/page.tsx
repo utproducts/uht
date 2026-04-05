@@ -35,7 +35,7 @@ interface Booking {
   created_at: string;
 }
 
-// âââ Time Formatter ââââââââââââââââââââââââââââââââââââââââââââ
+// --- Time Formatter ---
 const fmt = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
@@ -43,30 +43,171 @@ const fmt = (t: string) => {
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 };
 
-// âââ Slot Generator Form âââââââââââââââââââââââââââââââââââââââ
+// --- Template Presets ---
+interface Template {
+  name: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  buffer: number;
+  price: number;
+  description: string;
+}
+
+const TEMPLATES: Template[] = [
+  { name: 'Weekday Afternoon', startTime: '15:00', endTime: '20:00', duration: 60, buffer: 15, price: 395, description: '3 PM - 8 PM (4 slots)' },
+  { name: 'Weekday Evening', startTime: '17:00', endTime: '22:00', duration: 60, buffer: 15, price: 395, description: '5 PM - 10 PM (4 slots)' },
+  { name: 'Weekend All Day', startTime: '06:00', endTime: '22:00', duration: 60, buffer: 15, price: 450, description: '6 AM - 10 PM (12 slots)' },
+  { name: 'Weekend Morning', startTime: '06:00', endTime: '12:00', duration: 60, buffer: 15, price: 395, description: '6 AM - 12 PM (4 slots)' },
+  { name: 'Full Day', startTime: '06:00', endTime: '23:00', duration: 60, buffer: 15, price: 395, description: '6 AM - 11 PM (13 slots)' },
+  { name: 'Custom', startTime: '06:00', endTime: '23:00', duration: 60, buffer: 15, price: 395, description: 'Set your own hours' },
+];
+
+// --- Mini Calendar for multi-date selection ---
+function DatePicker({ selectedDates, onToggleDate }: { selectedDates: Set<string>; onToggleDate: (d: string) => void }) {
+  const [viewMonth, setViewMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+
+  const daysInMonth = new Date(viewMonth.year, viewMonth.month + 1, 0).getDate();
+  const firstDow = new Date(viewMonth.year, viewMonth.month, 1).getDay();
+  const monthLabel = new Date(viewMonth.year, viewMonth.month).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const prev = () => setViewMonth((v) => (v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 }));
+  const next = () => setViewMonth((v) => (v.month === 11 ? { year: v.year + 1, month: 0 } : { ...v, month: v.month + 1 }));
+
+  const cells: (number | null)[] = Array(firstDow).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const selectWeekdays = () => {
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(viewMonth.year, viewMonth.month, d);
+      if (dt < today) continue;
+      const dow = dt.getDay();
+      const dateStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (dow >= 1 && dow <= 5 && !selectedDates.has(dateStr)) onToggleDate(dateStr);
+    }
+  };
+  const selectWeekends = () => {
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(viewMonth.year, viewMonth.month, d);
+      if (dt < today) continue;
+      const dow = dt.getDay();
+      const dateStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if ((dow === 0 || dow === 6) && !selectedDates.has(dateStr)) onToggleDate(dateStr);
+    }
+  };
+  const clearAll = () => {
+    selectedDates.forEach((d) => onToggleDate(d));
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={prev} className="p-1.5 rounded-full hover:bg-gray-100 transition">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+        </button>
+        <span className="text-sm font-bold text-gray-900">{monthLabel}</span>
+        <button onClick={next} className="p-1.5 rounded-full hover:bg-gray-100 transition">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+          <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-1">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((day, i) => {
+          if (day === null) return <div key={i} />;
+          const dateStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const cellDate = new Date(viewMonth.year, viewMonth.month, day);
+          const isPast = cellDate < today;
+          const isSelected = selectedDates.has(dateStr);
+          const dow = cellDate.getDay();
+          const isWeekend = dow === 0 || dow === 6;
+          return (
+            <button
+              key={i}
+              disabled={isPast}
+              onClick={() => onToggleDate(dateStr)}
+              className={`aspect-square flex items-center justify-center rounded text-xs transition
+                ${isPast ? 'text-gray-200 cursor-default' : ''}
+                ${isSelected ? 'bg-cyan-600 text-white font-bold' : ''}
+                ${!isSelected && !isPast ? (isWeekend ? 'text-cyan-700 hover:bg-cyan-50' : 'text-gray-700 hover:bg-gray-100') : ''}
+              `}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button onClick={selectWeekdays} className="text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700 transition">+ Weekdays</button>
+        <button onClick={selectWeekends} className="text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700 transition">+ Weekends</button>
+        {selectedDates.size > 0 && (
+          <button onClick={clearAll} className="text-[11px] px-2 py-1 text-red-500 hover:text-red-700 font-medium transition">Clear All</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Slot Generator with Templates ---
 function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [startTime, setStartTime] = useState('06:00');
-  const [endTime, setEndTime] = useState('23:00');
-  const [duration, setDuration] = useState(60);
-  const [buffer, setBuffer] = useState(15);
-  const [price, setPrice] = useState(395);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template>(TEMPLATES[0]);
+  const [startTime, setStartTime] = useState(TEMPLATES[0].startTime);
+  const [endTime, setEndTime] = useState(TEMPLATES[0].endTime);
+  const [duration, setDuration] = useState(TEMPLATES[0].duration);
+  const [buffer, setBuffer] = useState(TEMPLATES[0].buffer);
+  const [price, setPrice] = useState(TEMPLATES[0].price);
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState('');
 
+  const handleTemplateChange = (tmpl: Template) => {
+    setSelectedTemplate(tmpl);
+    setStartTime(tmpl.startTime);
+    setEndTime(tmpl.endTime);
+    setDuration(tmpl.duration);
+    setBuffer(tmpl.buffer);
+    setPrice(tmpl.price);
+  };
+
+  const toggleDate = (d: string) => {
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+  };
+
+  // Preview: compute how many slots per day
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins = eh * 60 + em;
+  const slotsPerDay = endMins > startMins ? Math.floor((endMins - startMins) / (duration + buffer)) : 0;
+
   const handleGenerate = () => {
-    if (!startDate || !endDate) return;
+    if (selectedDates.size === 0) return;
     setGenerating(true);
     setResult('');
 
-    fetch(`${API_BASE}/slots/generate`, {
+    const dates = Array.from(selectedDates).sort();
+
+    fetch(`${API_BASE}/slots/generate-template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         venueId: 'rosemont-outdoor',
-        startDate,
-        endDate,
+        dates,
         dailyStartTime: startTime,
         dailyEndTime: endTime,
         slotDurationMinutes: duration,
@@ -77,7 +218,10 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
       .then((r) => r.json())
       .then((json) => {
         if (json.success) {
-          setResult(`Created ${json.data.created} slots`);
+          const parts = [`Created ${json.data.created} slots across ${json.data.dates} days`];
+          if (json.data.skipped > 0) parts.push(`(${json.data.skipped} days skipped - already had slots)`);
+          setResult(parts.join(' '));
+          setSelectedDates(new Set());
           onGenerated();
         } else {
           setResult(`Error: ${json.error || 'Failed to generate'}`);
@@ -90,52 +234,111 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
       });
   };
 
+  const isCustom = selectedTemplate.name === 'Custom';
+  const sortedDates = Array.from(selectedDates).sort();
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
-      <h3 className="text-lg font-bold text-gray-900 mb-4">Generate Time Slots</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+      <h3 className="text-lg font-bold text-gray-900 mb-1">Generate Time Slots</h3>
+      <p className="text-sm text-gray-500 mb-4">Pick a template, select dates, and generate.</p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: Template + Settings */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Template</label>
+            <div className="grid grid-cols-2 gap-2">
+              {TEMPLATES.map((tmpl) => (
+                <button
+                  key={tmpl.name}
+                  onClick={() => handleTemplateChange(tmpl)}
+                  className={`p-3 rounded-xl border-2 text-left transition ${
+                    selectedTemplate.name === tmpl.name
+                      ? 'border-cyan-600 bg-cyan-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className={`text-sm font-bold ${selectedTemplate.name === tmpl.name ? 'text-cyan-700' : 'text-gray-900'}`}>{tmpl.name}</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5">{tmpl.description}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Time settings */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+              Settings {!isCustom && <span className="text-gray-400 normal-case font-normal">- from template</span>}
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-gray-500 mb-1">Start Time</label>
+                <input type="time" value={startTime} onChange={(e) => { setStartTime(e.target.value); if (!isCustom) setSelectedTemplate(TEMPLATES[5]); }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-500 mb-1">End Time</label>
+                <input type="time" value={endTime} onChange={(e) => { setEndTime(e.target.value); if (!isCustom) setSelectedTemplate(TEMPLATES[5]); }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-500 mb-1">Duration</label>
+                <input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-500 mb-1">Buffer (min)</label>
+                <input type="number" value={buffer} onChange={(e) => setBuffer(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-[11px] text-gray-500 mb-1">Price per Slot ($)</label>
+                <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Daily Start</label>
-          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Daily End</label>
-          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+
+        {/* Right: Date Picker */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Select Dates</label>
+            <DatePicker selectedDates={selectedDates} onToggleDate={toggleDate} />
+          </div>
+
+          {/* Selected dates summary */}
+          {sortedDates.length > 0 && (
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-xs font-semibold text-gray-600 mb-2">
+                {sortedDates.length} date{sortedDates.length !== 1 ? 's' : ''} selected - {slotsPerDay} slot{slotsPerDay !== 1 ? 's' : ''}/day - {sortedDates.length * slotsPerDay} total slots
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {sortedDates.map((d) => {
+                  const dt = new Date(d + 'T12:00:00');
+                  const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                  const dow = dt.getDay();
+                  const isWeekend = dow === 0 || dow === 6;
+                  return (
+                    <span key={d} className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium ${
+                      isWeekend ? 'bg-cyan-100 text-cyan-700' : 'bg-gray-200 text-gray-700'
+                    }`}>
+                      {label}
+                      <button onClick={() => toggleDate(d)} className="hover:text-red-500 ml-0.5">&times;</button>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Duration (min)</label>
-          <input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Buffer (min)</label>
-          <input type="number" value={buffer} onChange={(e) => setBuffer(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Price ($)</label>
-          <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-        </div>
-      </div>
-      <div className="flex items-center gap-4">
-        <button onClick={handleGenerate} disabled={generating || !startDate || !endDate}
+
+      {/* Generate Button */}
+      <div className="flex items-center gap-4 mt-6 pt-4 border-t border-gray-100">
+        <button onClick={handleGenerate} disabled={generating || selectedDates.size === 0}
           className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-400 text-white font-bold rounded-xl transition text-sm">
-          {generating ? 'Generating...' : 'Generate Slots'}
+          {generating ? 'Generating...' : `Generate ${selectedDates.size * slotsPerDay} Slots`}
         </button>
         {result && (
           <span className={`text-sm font-medium ${result.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
@@ -147,7 +350,7 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
   );
 }
 
-// âââ Slots Table âââââââââââââââââââââââââââââââââââââââââââââââ
+// --- Slots Table ---
 function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (id: string) => void; onRefresh: () => void }) {
   const grouped = slots.reduce((acc, slot) => {
     if (!acc[slot.date]) acc[slot.date] = [];
@@ -181,7 +384,7 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
           return (
             <div key={date}>
               <div className="bg-gray-50 px-4 py-2 text-xs font-bold text-gray-600 uppercase tracking-wide sticky top-0">
-                {dateLabel} â {grouped[date].length} slot{grouped[date].length !== 1 ? 's' : ''}
+                {dateLabel} - {grouped[date].length} slot{grouped[date].length !== 1 ? 's' : ''}
               </div>
               {grouped[date].map((slot) => (
                 <div key={slot.id} className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between hover:bg-gray-50">
@@ -192,7 +395,7 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
                       slot.status === 'held' ? 'bg-amber-400' : 'bg-gray-400'
                     }`} />
                     <span className="text-sm font-medium text-gray-900">
-                      {fmt(slot.start_time)} â {fmt(slot.end_time)}
+                      {fmt(slot.start_time)} - {fmt(slot.end_time)}
                     </span>
                     <span className="text-xs text-gray-500">{slot.duration_minutes}min</span>
                     <span className="text-sm font-semibold text-green-600">${(slot.price_cents / 100).toFixed(0)}</span>
@@ -227,7 +430,7 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
   );
 }
 
-// âââ Bookings Table ââââââââââââââââââââââââââââââââââââââââââââ
+// --- Bookings Table ---
 function BookingsTable({ bookings }: { bookings: Booking[] }) {
   if (bookings.length === 0) {
     return (
@@ -261,7 +464,7 @@ function BookingsTable({ bookings }: { bookings: Booking[] }) {
                 <td className="px-4 py-2.5 whitespace-nowrap">
                   {new Date(b.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </td>
-                <td className="px-4 py-2.5 whitespace-nowrap">{fmt(b.start_time)} â {fmt(b.end_time)}</td>
+                <td className="px-4 py-2.5 whitespace-nowrap">{fmt(b.start_time)} - {fmt(b.end_time)}</td>
                 <td className="px-4 py-2.5 font-medium">{b.booked_by_name}</td>
                 <td className="px-4 py-2.5 text-gray-600">{b.booked_by_email}</td>
                 <td className="px-4 py-2.5 text-gray-600">{b.booked_by_phone}</td>
@@ -283,7 +486,7 @@ function BookingsTable({ bookings }: { bookings: Booking[] }) {
   );
 }
 
-// âââ Main Admin Page âââââââââââââââââââââââââââââââââââââââââââ
+// --- Main Admin Page ---
 export default function AdminIcePage() {
   const [tab, setTab] = useState<'slots' | 'bookings'>('slots');
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -346,7 +549,7 @@ export default function AdminIcePage() {
             <p className="text-sm text-gray-400 mt-1">Rosemont Outdoor Rink</p>
           </div>
           <a href="/book-ice" className="text-sm text-cyan-400 hover:text-cyan-300 font-medium">
-            View Public Page â
+            View Public Page &rarr;
           </a>
         </div>
       </div>
