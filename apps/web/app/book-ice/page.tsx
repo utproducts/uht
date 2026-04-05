@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = 'https://uht.utproducts.workers.dev/api/ice-booking';
+const API_BASE = 'https://uht.chad-157.workers.dev/api/ice-booking';
 
 interface SlotCount {
   date: string;

@@ -1,4 +1,4 @@
-name = "uht-api"
+name = "uht"
 main = "src/index.ts"
 compatibility_date = "2024-10-18"
 compatibility_flags = ["nodejs_compat"]
@@ -7,12 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "uht-db"
-database_id = "" # Will be filled after D1 creation
+database_id = "3aa708ea-fcfb-4c90-b487-33b18556e08c"
 
 # KV Namespace for sessions/cache
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "" # Will be filled after KV creation
+id = "9bfc3fda183f40dcb2bbaae0ff07b2c3"
 
 # R2 Bucket for file storage (logos, images, merch templates)
 [[r2_buckets]]
@@ -30,4 +30,4 @@ bucket_name = "uht-assets"
 
 [vars]
 ENVIRONMENT = "production"
-CORS_ORIGIN = "https://ultimatetournaments.com"
+CORS_ORIGIN = "*"

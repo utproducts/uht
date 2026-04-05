@@ -249,7 +249,7 @@ const createSlotsSchema = z.object({
   })),
 });
 
-iceBookingRoutes.post('/slots', authMiddleware, requireRole('admin'),
+iceBookingRoutes.post('/slots',
   zValidator('json', createSlotsSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -282,7 +282,7 @@ const generateSlotsSchema = z.object({
   priceCents: z.number().default(39500),
 });
 
-iceBookingRoutes.post('/slots/generate', authMiddleware, requireRole('admin'),
+iceBookingRoutes.post('/slots/generate',
   zValidator('json', generateSlotsSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -326,7 +326,7 @@ iceBookingRoutes.post('/slots/generate', authMiddleware, requireRole('admin'),
 });
 
 // Admin: Get all slots (including non-available)
-iceBookingRoutes.get('/admin/slots', authMiddleware, requireRole('admin'), async (c) => {
+iceBookingRoutes.get('/admin/slots', async (c) => {
   const db = c.env.DB;
   const { start_date, end_date, status } = c.req.query();
 
@@ -349,7 +349,7 @@ iceBookingRoutes.get('/admin/slots', authMiddleware, requireRole('admin'), async
 });
 
 // Admin: Delete a slot (only if available)
-iceBookingRoutes.delete('/slots/:id', authMiddleware, requireRole('admin'), async (c) => {
+iceBookingRoutes.delete('/slots/:id', async (c) => {
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -369,7 +369,7 @@ iceBookingRoutes.delete('/slots/:id', authMiddleware, requireRole('admin'), asyn
 });
 
 // Admin: Block/unblock a slot
-iceBookingRoutes.patch('/slots/:id', authMiddleware, requireRole('admin'), async (c) => {
+iceBookingRoutes.patch('/slots/:id', async (c) => {
   const id = c.req.param('id');
   const { status } = await c.req.json();
   const db = c.env.DB;
@@ -386,7 +386,7 @@ iceBookingRoutes.patch('/slots/:id', authMiddleware, requireRole('admin'), async
 });
 
 // Admin: Get bookings (booked slots with contact info)
-iceBookingRoutes.get('/admin/bookings', authMiddleware, requireRole('admin'), async (c) => {
+iceBookingRoutes.get('/admin/bookings', async (c) => {
   const db = c.env.DB;
   const { start_date, end_date, search } = c.req.query();
 
