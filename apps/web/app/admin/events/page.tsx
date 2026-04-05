@@ -85,76 +85,76 @@ function EventCard({ event, onViewDetails }: { event: EventItem; onViewDetails: 
       {/* Top bar with status */}
       <div className="h-1.5 bg-gradient-to-r from-cyan-500 to-blue-600" />
 
-      <div className="p-5">
+      <div className="p-4">
         {/* Header Row */}
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start justify-between mb-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-lg">{locationIcon(event.city)}</span>
-              <h3 className="text-lg font-bold text-gray-900 truncate">{event.tournament_name || event.name}</h3>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className="text-base">{locationIcon(event.city)}</span>
+              <h3 className="text-sm font-bold text-gray-900 truncate leading-tight">{event.tournament_name || event.name}</h3>
             </div>
-            <p className="text-sm text-gray-500">{event.name}</p>
+            <p className="text-xs text-gray-500 truncate">{event.name}</p>
           </div>
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ml-3 ${statusColor(event.status)}`}>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ml-2 ${statusColor(event.status)}`}>
             {statusLabel(event.status)}
           </span>
         </div>
 
         {/* Date + Location */}
-        <div className="flex items-center gap-4 mb-4 text-sm text-gray-600">
-          <div className="flex items-center gap-1.5">
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-xs text-gray-600">
+          <div className="flex items-center gap-1">
+            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             <span className="font-medium">{fmtDate(event.start_date)} - {fmtDate(event.end_date)}</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <div className="flex items-center gap-1">
+            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             <span>{event.city}, {event.state}</span>
           </div>
           {!isPast && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded ${days <= 7 ? 'bg-red-50 text-red-600' : days <= 30 ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
-              {days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `${days} days`}
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${days <= 7 ? 'bg-red-50 text-red-600' : days <= 30 ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
+              {days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `${days}d`}
             </span>
           )}
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <div className="text-xl font-bold text-blue-600">{event.registration_count}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Teams</div>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="bg-gray-50 rounded-lg p-2 text-center">
+            <div className="text-lg font-bold text-blue-600">{event.registration_count}</div>
+            <div className="text-[10px] text-gray-500 font-medium">Teams</div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <div className="text-xl font-bold text-green-600">${revenue > 0 ? revenue.toLocaleString() : '0'}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Revenue</div>
+          <div className="bg-gray-50 rounded-lg p-2 text-center">
+            <div className="text-lg font-bold text-green-600">${revenue > 0 ? revenue.toLocaleString() : '0'}</div>
+            <div className="text-[10px] text-gray-500 font-medium">Revenue</div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-3 text-center">
-            <div className="text-xl font-bold text-gray-900">{event.slots_count || 100}</div>
-            <div className="text-[11px] text-gray-500 font-medium">Slots</div>
+          <div className="bg-gray-50 rounded-lg p-2 text-center">
+            <div className="text-lg font-bold text-gray-900">{event.slots_count || 100}</div>
+            <div className="text-[10px] text-gray-500 font-medium">Slots</div>
           </div>
         </div>
 
         {/* Age Groups Tags */}
         {ageGroups.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
+          <div className="flex flex-wrap gap-1 mb-3">
             {ageGroups.map((ag: string) => (
-              <span key={ag} className="text-[11px] px-2 py-0.5 bg-cyan-50 text-cyan-700 rounded-full font-medium">{ag}</span>
+              <span key={ag} className="text-[10px] px-1.5 py-0.5 bg-cyan-50 text-cyan-700 rounded-full font-medium">{ag}</span>
             ))}
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2 pt-3 border-t border-gray-100">
+        <div className="flex gap-1.5 pt-3 border-t border-gray-100">
           <button
             onClick={() => onViewDetails(event.id)}
-            className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition"
+            className="flex-1 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-xs transition"
           >
             View Details
           </button>
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">
+          <button className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-xs transition">
             Edit
           </button>
-          <button className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-xl text-sm transition" title="Duplicate">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+          <button className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-lg text-xs transition" title="Duplicate">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           </button>
         </div>
       </div>
@@ -392,12 +392,25 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
   );
 }
 
+// --- Month helpers ---
+const getMonthKey = (d: string) => {
+  const dt = new Date(d + 'T12:00:00');
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const getMonthLabel = (key: string) => {
+  const [y, m] = key.split('-');
+  const dt = new Date(parseInt(y), parseInt(m) - 1, 1);
+  return dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
+
 // --- Main Admin Events Page ---
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [search, setSearch] = useState('');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -411,13 +424,20 @@ export default function AdminEventsPage() {
       .catch(() => setLoading(false));
   }, [filter]);
 
-  const filtered = search
-    ? events.filter((e) =>
-        e.name.toLowerCase().includes(search.toLowerCase()) ||
-        (e.tournament_name && e.tournament_name.toLowerCase().includes(search.toLowerCase())) ||
-        e.city.toLowerCase().includes(search.toLowerCase())
-      )
-    : events;
+  // Get unique months from events for month filter
+  const months = Array.from(new Set(events.map(e => getMonthKey(e.start_date)))).sort();
+
+  // Reset month filter when switching tabs if that month doesn't exist
+  const activeMonth = monthFilter !== 'all' && !months.includes(monthFilter) ? 'all' : monthFilter;
+
+  const filtered = events.filter((e) => {
+    const matchesSearch = !search ||
+      e.name.toLowerCase().includes(search.toLowerCase()) ||
+      (e.tournament_name && e.tournament_name.toLowerCase().includes(search.toLowerCase())) ||
+      e.city.toLowerCase().includes(search.toLowerCase());
+    const matchesMonth = activeMonth === 'all' || getMonthKey(e.start_date) === activeMonth;
+    return matchesSearch && matchesMonth;
+  });
 
   // Stats
   const totalTeams = events.reduce((sum, e) => sum + e.registration_count, 0);
@@ -427,12 +447,12 @@ export default function AdminEventsPage() {
     return (
       <div className="min-h-screen bg-gray-100">
         <div className="bg-gray-900 text-white py-6">
-          <div className="max-w-6xl mx-auto px-4">
+          <div className="max-w-7xl mx-auto px-4">
             <h1 className="text-2xl font-extrabold">Event Management</h1>
             <p className="text-sm text-gray-400 mt-1">Ultimate Tournaments</p>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="max-w-7xl mx-auto px-4 py-6">
           <EventDetail eventId={selectedEventId} onBack={() => setSelectedEventId(null)} />
         </div>
       </div>
@@ -443,7 +463,7 @@ export default function AdminEventsPage() {
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <div className="bg-gray-900 text-white py-6">
-        <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold">Event Management</h1>
             <p className="text-sm text-gray-400 mt-1">Ultimate Tournaments</p>
@@ -455,7 +475,7 @@ export default function AdminEventsPage() {
       </div>
 
       {/* Stats Bar */}
-      <div className="max-w-6xl mx-auto px-4 -mt-4">
+      <div className="max-w-7xl mx-auto px-4 -mt-4">
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">{events.length}</div>
@@ -473,36 +493,67 @@ export default function AdminEventsPage() {
       </div>
 
       {/* Controls */}
-      <div className="max-w-6xl mx-auto px-4 mt-6 flex items-center gap-4 flex-wrap">
-        {/* Filter Toggle */}
-        <div className="flex gap-1 bg-gray-200 rounded-xl p-1">
-          {(['upcoming', 'past', 'all'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                filter === f ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
+      <div className="max-w-7xl mx-auto px-4 mt-6 space-y-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Filter Toggle */}
+          <div className="flex gap-1 bg-gray-200 rounded-xl p-1">
+            {(['upcoming', 'past', 'all'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => { setFilter(f); setMonthFilter('all'); }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                  filter === f ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="flex-1 max-w-xs">
+            <input
+              type="text"
+              placeholder="Search events..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+            />
+          </div>
         </div>
 
-        {/* Search */}
-        <div className="flex-1 max-w-xs">
-          <input
-            type="text"
-            placeholder="Search events..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-          />
-        </div>
+        {/* Month Filter */}
+        {months.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1">Month:</span>
+            <button
+              onClick={() => setMonthFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeMonth === 'all' ? 'bg-cyan-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'
+              }`}
+            >
+              All
+            </button>
+            {months.map((m) => {
+              const count = events.filter(e => getMonthKey(e.start_date) === m).length;
+              return (
+                <button
+                  key={m}
+                  onClick={() => setMonthFilter(m)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    activeMonth === m ? 'bg-cyan-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'
+                  }`}
+                >
+                  {getMonthLabel(m)} <span className="opacity-60">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Events Grid */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
@@ -513,7 +564,7 @@ export default function AdminEventsPage() {
             <p className="text-gray-500 font-medium">No {filter} events found</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
             {filtered.map((event) => (
               <EventCard key={event.id} event={event} onViewDetails={setSelectedEventId} />
             ))}
