@@ -12,6 +12,7 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Schedule Builder', href: '/dashboard/admin/schedule', icon: '\u{1F4C5}' },
     { name: 'Financials', href: '/dashboard/admin/financials', icon: '\u{1F4B0}' },
     { name: 'Communications', href: '/dashboard/admin/comms', icon: '\u{1F4E7}' },
+    { name: 'Book Ice', href: '/dashboard/admin/ice', icon: '\u{26F8}' },
     { name: 'Settings', href: '/dashboard/admin/settings', icon: '\u{2699}' },
   ]},
   director: { label: 'Director', items: [
@@ -56,7 +57,7 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Completed', href: '/dashboard/scorekeeper/completed', icon: '\u{2705}' },
   ]},
   referee: { label: 'Referee', items: [
-    { name: 'Overview', href: '/dashboard/referee', icon: '\u{1F4CA}' },
+    { name: 'Overview', href: '/dashboard/referee', icon: '\t{1F4CA}' },
     { name: 'Assignments', href: '/dashboard/referee/assignments', icon: '\u{1F4C5}' },
     { name: 'Reports', href: '/dashboard/referee/reports', icon: '\u{1F4DD}' },
   ]},
