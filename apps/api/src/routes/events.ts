@@ -138,6 +138,95 @@ eventRoutes.get('/meta/states', async (c) => {
 });
 
 // ==================
+// ADMIN: List events (with registration counts, upcoming/past)
+// ==================
+eventRoutes.get('/admin/list', async (c) => {
+  const db = c.env.DB;
+  const { filter = 'upcoming' } = c.req.query();
+  const today = new Date().toISOString().split('T')[0];
+
+  let dateCondition = '';
+  if (filter === 'upcoming') {
+    dateCondition = `AND e.end_date >= '${today}'`;
+  } else if (filter === 'past') {
+    dateCondition = `AND e.end_date < '${today}'`;
+  }
+
+  const result = await db.prepare(`
+    SELECT e.*,
+      t.name as tournament_name, t.location as tournament_location,
+      (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as registration_count,
+      (SELECT SUM(er2.payment_amount_cents) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.payment_amount_cents IS NOT NULL) as total_revenue_cents
+    FROM events e
+    LEFT JOIN tournaments t ON t.id = e.tournament_id
+    WHERE 1=1 ${dateCondition}
+    ORDER BY e.start_date ASC
+  `).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// ADMIN: Get single event detail with registrations
+// ==================
+eventRoutes.get('/admin/detail/:id', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+
+  const event = await db.prepare(`
+    SELECT e.*, t.name as tournament_name, t.location as tournament_location, t.organizer as tournament_organizer
+    FROM events e
+    LEFT JOIN tournaments t ON t.id = e.tournament_id
+    WHERE e.id = ?
+  `).bind(id).first();
+
+  if (!event) {
+    return c.json({ success: false, error: 'Event not found' }, 404);
+  }
+
+  // Get registrations grouped by age_group
+  const registrations = await db.prepare(`
+    SELECT * FROM event_registrations
+    WHERE event_id = ?
+    ORDER BY age_group ASC, team_name ASC
+  `).bind(id).all();
+
+  // Get registration summary by age group
+  const summary = await db.prepare(`
+    SELECT age_group, COUNT(*) as team_count,
+      SUM(CASE WHEN payment_amount_cents IS NOT NULL THEN payment_amount_cents ELSE 0 END) as revenue_cents
+    FROM event_registrations
+    WHERE event_id = ?
+    GROUP BY age_group
+    ORDER BY age_group ASC
+  `).bind(id).all();
+
+  return c.json({
+    success: true,
+    data: {
+      ...event,
+      registrations: registrations.results,
+      registration_summary: summary.results,
+    },
+  });
+});
+
+// ==================
+// ADMIN: Get tournaments list
+// ==================
+eventRoutes.get('/admin/tournaments', async (c) => {
+  const db = c.env.DB;
+  const result = await db.prepare(`
+    SELECT t.*,
+      (SELECT COUNT(*) FROM events e WHERE e.tournament_id = t.id) as event_count
+    FROM tournaments t
+    ORDER BY t.name ASC
+  `).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
 // ADMIN: Create event
 // ==================
 const createEventSchema = z.object({
