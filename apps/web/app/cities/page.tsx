@@ -1,3 +1,4 @@
+// Cities page - UHT
 import type { Metadata } from 'next';
 import { Oswald } from 'next/font/google';
 
