@@ -162,11 +162,236 @@ function EventCard({ event, onViewDetails }: { event: EventItem; onViewDetails: 
   );
 }
 
+// --- Payment Status Helpers ---
+const paymentStatusColor = (s: string) => {
+  switch (s) {
+    case 'paid': return 'bg-green-100 text-green-700';
+    case 'partial': return 'bg-amber-100 text-amber-700';
+    case 'refunded': return 'bg-red-100 text-red-700';
+    case 'comp': return 'bg-purple-100 text-purple-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+};
+
+const paymentStatusLabel = (s: string) => {
+  switch (s) {
+    case 'paid': return 'Paid';
+    case 'partial': return 'Partial';
+    case 'unpaid': return 'Unpaid';
+    case 'refunded': return 'Refunded';
+    case 'comp': return 'Comp';
+    default: return 'Unpaid';
+  }
+};
+
+// --- Edit Registration Modal ---
+function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
+  reg: any;
+  eventId: string;
+  hotels: string[];
+  onClose: () => void;
+  onSaved: (updated: any) => void;
+}) {
+  const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
+  const [paymentAmount, setPaymentAmount] = useState(reg.payment_amount_cents ? (reg.payment_amount_cents / 100).toString() : '');
+  const [paymentMethod, setPaymentMethod] = useState(reg.payment_method || '');
+  const [hotelAssigned, setHotelAssigned] = useState(reg.hotel_assigned || '');
+  const [notes, setNotes] = useState(reg.notes || '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const prefs = [reg.hotel_pref_1, reg.hotel_pref_2, reg.hotel_pref_3].filter(Boolean);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body: any = {
+        payment_status: paymentStatus,
+        payment_amount_cents: paymentAmount ? Math.round(parseFloat(paymentAmount) * 100) : null,
+        payment_method: paymentMethod || null,
+        hotel_assigned: hotelAssigned || null,
+        notes: notes || null,
+      };
+      const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSaved(true);
+        onSaved(json.data);
+        setTimeout(() => onClose(), 600);
+      }
+    } catch (e) {
+      console.error('Save error:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">{reg.team_name}</h3>
+              <p className="text-sm text-gray-500">{reg.age_group} {reg.division ? `· ${reg.division}` : ''}</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-6">
+          {/* Manager Info (read-only) */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contact Info</div>
+            <div className="text-sm text-gray-700">
+              <span className="font-medium">{reg.manager_first_name} {reg.manager_last_name}</span>
+              {reg.email1 && <span className="block text-gray-500">{reg.email1}</span>}
+              {reg.phone && <span className="block text-gray-500">{reg.phone}</span>}
+            </div>
+          </div>
+
+          {/* Payment Section */}
+          <div>
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Payment</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                >
+                  <option value="unpaid">Unpaid</option>
+                  <option value="paid">Paid</option>
+                  <option value="partial">Partial</option>
+                  <option value="refunded">Refunded</option>
+                  <option value="comp">Comp</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+              >
+                <option value="">Not specified</option>
+                <option value="credit_card">Credit Card</option>
+                <option value="check">Check</option>
+                <option value="cash">Cash</option>
+                <option value="wire">Wire Transfer</option>
+                <option value="comp">Comp / Free</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Hotel Section */}
+          <div>
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Hotel Assignment</div>
+
+            {/* Show team preferences */}
+            {prefs.length > 0 && (
+              <div className="bg-blue-50 rounded-xl p-3 mb-3">
+                <div className="text-xs font-semibold text-blue-600 mb-1.5">Team Preferences</div>
+                <div className="space-y-1">
+                  {prefs.map((p: string, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="w-5 h-5 rounded-full bg-blue-200 text-blue-700 text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                      <span className="text-gray-700">{p}</span>
+                      {!hotelAssigned && (
+                        <button
+                          onClick={() => setHotelAssigned(p)}
+                          className="ml-auto text-[10px] px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full font-medium transition"
+                        >
+                          Assign
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reg.hotel_choice === 'Local Team' && (
+              <div className="bg-gray-50 rounded-xl p-3 mb-3 text-sm text-gray-600">
+                <span className="font-medium">Local Team</span> — no hotel needed
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Hotel</label>
+              <select
+                value={hotelAssigned}
+                onChange={(e) => setHotelAssigned(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+              >
+                <option value="">Not assigned</option>
+                {hotels.map((h) => (
+                  <option key={h} value={h}>{h}{prefs.includes(h) ? ` (Choice #${prefs.indexOf(h) + 1})` : ''}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Admin Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Internal notes about this team..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`flex-1 px-4 py-2.5 font-semibold rounded-xl text-sm transition ${
+              saved ? 'bg-green-500 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+            } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Event Detail Overlay ---
 function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void }) {
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'overview' | 'participants' | 'schedules'>('overview');
+  const [editingReg, setEditingReg] = useState<any>(null);
+  const [hotels, setHotels] = useState<string[]>([]);
 
   useEffect(() => {
     fetch(`${API_BASE}/admin/detail/${eventId}`)
@@ -176,7 +401,20 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    // Fetch available hotels for this event
+    fetch(`${API_BASE}/admin/hotels/${eventId}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setHotels(json.data);
+      })
+      .catch(() => {});
   }, [eventId]);
+
+  const handleRegSaved = (updated: any) => {
+    if (!event) return;
+    const newRegs = event.registrations.map((r: any) => r.id === updated.id ? updated : r);
+    setEvent({ ...event, registrations: newRegs });
+  };
 
   if (loading) {
     return (
@@ -329,55 +567,101 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
 
       {tab === 'participants' && (
         <div className="space-y-4">
-          {Object.keys(grouped).sort().map((ageGroup) => (
+          {editingReg && (
+            <EditRegistrationModal
+              reg={editingReg}
+              eventId={eventId}
+              hotels={hotels}
+              onClose={() => setEditingReg(null)}
+              onSaved={handleRegSaved}
+            />
+          )}
+          {Object.keys(grouped).sort().map((ageGroup) => {
+            const groupPaid = grouped[ageGroup].filter((r: any) => r.payment_status === 'paid').length;
+            const groupHotel = grouped[ageGroup].filter((r: any) => r.hotel_assigned).length;
+            return (
             <div key={ageGroup} className="bg-white rounded-2xl shadow-lg overflow-hidden">
               <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-900">{ageGroup}</h3>
-                <span className="text-sm text-gray-500 font-medium">{grouped[ageGroup].length} team{grouped[ageGroup].length !== 1 ? 's' : ''}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-green-600 font-medium">{groupPaid}/{grouped[ageGroup].length} paid</span>
+                  <span className="text-[11px] text-blue-600 font-medium">{groupHotel}/{grouped[ageGroup].length} hotels</span>
+                  <span className="text-sm text-gray-500 font-medium">{grouped[ageGroup].length} team{grouped[ageGroup].length !== 1 ? 's' : ''}</span>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50/50 text-left">
                     <tr>
-                      <th className="px-5 py-2.5 font-semibold text-gray-600">Team</th>
-                      <th className="px-5 py-2.5 font-semibold text-gray-600">Manager</th>
-                      <th className="px-5 py-2.5 font-semibold text-gray-600">Contact</th>
-                      <th className="px-5 py-2.5 font-semibold text-gray-600">Division</th>
-                      <th className="px-5 py-2.5 font-semibold text-gray-600">Payment</th>
-                      <th className="px-5 py-2.5 font-semibold text-gray-600">Hotel</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Team</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Manager</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Contact</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Payment</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Hotel</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600 w-16"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {grouped[ageGroup].map((reg: any) => (
                       <tr key={reg.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
-                        <td className="px-5 py-3 font-medium text-gray-900">{reg.team_name}</td>
-                        <td className="px-5 py-3 text-gray-600">
+                        <td className="px-4 py-3 font-medium text-gray-900">{reg.team_name}</td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">
                           {reg.manager_first_name ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim() : '-'}
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-4 py-3">
                           <div className="text-gray-600 text-xs">{reg.email1}</div>
-                          {reg.phone && <div className="text-gray-400 text-xs">{reg.phone}</div>}
+                          {reg.phone && <div className="text-gray-400 text-[11px]">{reg.phone}</div>}
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-4 py-3">
                           {reg.division ? (
-                            <span className="text-xs font-medium px-2 py-1 bg-gray-100 text-gray-700 rounded">{reg.division}</span>
+                            <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-700 rounded">{reg.division}</span>
                           ) : '-'}
                         </td>
-                        <td className="px-5 py-3">
-                          {reg.payment_amount_cents ? (
-                            <span className="font-semibold text-green-600">${(reg.payment_amount_cents / 100).toLocaleString()}</span>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit ${paymentStatusColor(reg.payment_status || 'unpaid')}`}>
+                              {paymentStatusLabel(reg.payment_status || 'unpaid')}
+                            </span>
+                            {reg.payment_amount_cents ? (
+                              <span className="text-xs font-medium text-gray-700">${(reg.payment_amount_cents / 100).toLocaleString()}</span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {reg.hotel_assigned ? (
+                            <div>
+                              <span className="text-xs font-medium text-blue-700">{reg.hotel_assigned}</span>
+                              <span className="block text-[10px] text-green-600 font-medium">Assigned</span>
+                            </div>
+                          ) : reg.hotel_choice === 'Local Team' ? (
+                            <span className="text-xs text-gray-500">Local Team</span>
+                          ) : reg.hotel_pref_1 ? (
+                            <div>
+                              <span className="text-xs text-gray-500 truncate block max-w-[120px]">{reg.hotel_pref_1}</span>
+                              <span className="text-[10px] text-amber-500 font-medium">Needs assignment</span>
+                            </div>
                           ) : (
-                            <span className="text-amber-500 text-xs font-medium">Pending</span>
+                            <span className="text-xs text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-5 py-3 text-gray-500 text-xs max-w-[140px] truncate">{reg.hotel_choice || '-'}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setEditingReg(reg)}
+                            className="p-1.5 hover:bg-cyan-50 text-gray-400 hover:text-cyan-600 rounded-lg transition"
+                            title="Edit registration"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

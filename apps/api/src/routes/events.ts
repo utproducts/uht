@@ -227,6 +227,89 @@ eventRoutes.get('/admin/tournaments', async (c) => {
 });
 
 // ==================
+// ADMIN: Update registration (payment, hotel assignment, notes)
+// ==================
+const updateRegistrationSchema = z.object({
+  payment_status: z.enum(['unpaid', 'paid', 'partial', 'refunded', 'comp']).optional(),
+  payment_amount_cents: z.number().nullable().optional(),
+  payment_method: z.enum(['credit_card', 'check', 'cash', 'wire', 'comp', '']).nullable().optional(),
+  hotel_assigned: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistrationSchema), async (c) => {
+  const regId = c.req.param('regId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Verify registration exists
+  const existing = await db.prepare('SELECT id FROM event_registrations WHERE id = ?').bind(regId).first();
+  if (!existing) {
+    return c.json({ success: false, error: 'Registration not found' }, 404);
+  }
+
+  // Build dynamic SET clause
+  const setClauses: string[] = [];
+  const params: (string | number | null)[] = [];
+
+  if (data.payment_status !== undefined) {
+    setClauses.push('payment_status = ?');
+    params.push(data.payment_status);
+  }
+  if (data.payment_amount_cents !== undefined) {
+    setClauses.push('payment_amount_cents = ?');
+    params.push(data.payment_amount_cents);
+  }
+  if (data.payment_method !== undefined) {
+    setClauses.push('payment_method = ?');
+    params.push(data.payment_method || null);
+  }
+  if (data.hotel_assigned !== undefined) {
+    setClauses.push('hotel_assigned = ?');
+    params.push(data.hotel_assigned);
+  }
+  if (data.notes !== undefined) {
+    setClauses.push('notes = ?');
+    params.push(data.notes);
+  }
+
+  if (setClauses.length === 0) {
+    return c.json({ success: false, error: 'No fields to update' }, 400);
+  }
+
+  setClauses.push("updated_at = datetime('now')");
+  params.push(regId);
+
+  await db.prepare(`UPDATE event_registrations SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+
+  // Return updated registration
+  const updated = await db.prepare('SELECT * FROM event_registrations WHERE id = ?').bind(regId).first();
+
+  return c.json({ success: true, data: updated });
+});
+
+// ==================
+// ADMIN: Get available hotels for an event (for dropdown)
+// ==================
+eventRoutes.get('/admin/hotels/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Get distinct hotel names from preferences for this event
+  const result = await db.prepare(`
+    SELECT DISTINCT hotel FROM (
+      SELECT hotel_pref_1 as hotel FROM event_registrations WHERE event_id = ? AND hotel_pref_1 IS NOT NULL
+      UNION SELECT hotel_pref_2 FROM event_registrations WHERE event_id = ? AND hotel_pref_2 IS NOT NULL
+      UNION SELECT hotel_pref_3 FROM event_registrations WHERE event_id = ? AND hotel_pref_3 IS NOT NULL
+      UNION SELECT hotel_assigned FROM event_registrations WHERE event_id = ? AND hotel_assigned IS NOT NULL
+      UNION SELECT hotel_choice FROM event_registrations WHERE event_id = ? AND hotel_choice IS NOT NULL
+    ) ORDER BY hotel ASC
+  `).bind(eventId, eventId, eventId, eventId, eventId).all();
+
+  return c.json({ success: true, data: result.results.map((r: any) => r.hotel).filter(Boolean) });
+});
+
+// ==================
 // ADMIN: Create event
 // ==================
 const createEventSchema = z.object({
