@@ -232,7 +232,7 @@ eventRoutes.get('/admin/tournaments', async (c) => {
 const updateRegistrationSchema = z.object({
   payment_status: z.enum(['unpaid', 'paid', 'partial', 'refunded', 'comp']).optional(),
   payment_amount_cents: z.number().nullable().optional(),
-  payment_method: z.enum(['credit_card', 'check', 'cash', 'wire', 'comp', '']).nullable().optional(),
+  payment_method: z.string().nullable().optional(),
   hotel_assigned: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
 });

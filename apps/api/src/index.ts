@@ -29,10 +29,12 @@ app.use('*', cors({
     const allowed = [
       'https://ultimatetournaments.com',
       'https://www.ultimatetournaments.com',
-      'https://uht-web.pages.dev',  // Cloudflare Pages preview
+      'https://uht-web.pages.dev',
     ];
     // Allow localhost in development
     if (origin?.startsWith('http://localhost')) return origin;
+    // Allow all Cloudflare Pages preview deploys (*.uht-web.pages.dev)
+    if (origin?.endsWith('.uht-web.pages.dev')) return origin;
     return allowed.includes(origin ?? '') ? origin! : '';
   },
   credentials: true,

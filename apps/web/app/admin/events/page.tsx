@@ -198,12 +198,15 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
   const [hotelAssigned, setHotelAssigned] = useState(reg.hotel_assigned || '');
   const [notes, setNotes] = useState(reg.notes || '');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saveResult, setSaveResult] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const prefs = [reg.hotel_pref_1, reg.hotel_pref_2, reg.hotel_pref_3].filter(Boolean);
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveResult('idle');
+    setErrorMsg('');
     try {
       const body: any = {
         payment_status: paymentStatus,
@@ -217,15 +220,22 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Server error ${res.status}: ${errText}`);
+      }
       const json = await res.json();
       if (json.success) {
-        setSaved(true);
+        setSaveResult('success');
         onSaved(json.data);
-        setTimeout(() => onClose(), 600);
+        setTimeout(() => onClose(), 800);
+      } else {
+        throw new Error(json.error || 'Save failed');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Save error:', e);
-    } finally {
+      setSaveResult('error');
+      setErrorMsg(e.message || 'Failed to save. Please try again.');
       setSaving(false);
     }
   };
@@ -365,6 +375,13 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
           </div>
         </div>
 
+        {/* Error message */}
+        {saveResult === 'error' && (
+          <div className="mx-6 mb-2 px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">
+            {errorMsg}
+          </div>
+        )}
+
         {/* Footer */}
         <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex gap-3">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">
@@ -372,12 +389,12 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || saveResult === 'success'}
             className={`flex-1 px-4 py-2.5 font-semibold rounded-xl text-sm transition ${
-              saved ? 'bg-green-500 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+              saveResult === 'success' ? 'bg-green-500 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'
             } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Changes'}
+            {saveResult === 'success' ? 'Saved! Closing...' : saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
