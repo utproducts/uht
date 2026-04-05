@@ -26,7 +26,7 @@ const CITIES = [
     slug: 'wisconsin-dells',
     tagline: 'Where hockey meets vacation',
     description: 'Tournament hockey in America\'s waterpark capital. Play hard, then hit the Dells attractions with the family. A fan-favorite destination every summer.',
-    image: 'https://images.unsplash.com/photo-1570639034860-12bfb7ca532b?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1627319704960-7bb15934f478?w=800&q=80',
     arenas: ['Poppy Waterman Ice Arena'],
   },
   {
@@ -36,7 +36,7 @@ const CITIES = [
     slug: 'st-louis',
     tagline: 'Blues country, tournament hockey',
     description: 'Compete in the home of the Stanley Cup champion Blues. Great rinks, passionate hockey community, and the Gateway Arch as your backdrop.',
-    image: 'https://images.unsplash.com/photo-1603366615917-1fa6dad5c4fa?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1675906798393-89cbae461520?w=800&q=80',
     arenas: ['Centene Community Ice Center', 'Queeny Park Ice Arena'],
   },
   {
@@ -46,7 +46,7 @@ const CITIES = [
     slug: 'south-bend',
     tagline: 'Fighting Irish hockey territory',
     description: 'Home of Notre Dame and some of Indiana\'s best ice. A growing hockey market with top-notch facilities and Midwest hospitality.',
-    image: 'https://images.unsplash.com/photo-1564769625688-040f5765883e?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1508507596652-540da01c3453?w=800&q=80',
     arenas: ['Compton Family Ice Arena', 'Ice Box'],
   },
   {
@@ -56,7 +56,7 @@ const CITIES = [
     slug: 'madison',
     tagline: 'College town, big-time hockey',
     description: 'Wisconsin\'s capital city delivers excellent tournament hockey alongside great restaurants, lakes, and the energy of a Big Ten campus.',
-    image: 'https://images.unsplash.com/photo-1569163139599-0f4517e36f51?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1748276122946-bbbd8f1d4f94?w=800&q=80',
     arenas: ['Madison Ice Arena'],
   },
   {
@@ -66,7 +66,7 @@ const CITIES = [
     slug: 'holland',
     tagline: 'Lake Michigan hockey charm',
     description: 'A hidden gem on Michigan\'s west coast. Beautiful lakeside setting, great community rinks, and a small-town feel that families love.',
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1602076693004-ba674acf4389?w=800&q=80',
     arenas: ['Edge Ice Arena'],
   },
   {
@@ -76,7 +76,7 @@ const CITIES = [
     slug: 'ann-arbor',
     tagline: 'Wolverine hockey excellence',
     description: 'One of America\'s great college hockey towns. Home to incredible facilities and a deep-rooted hockey culture that runs year-round.',
-    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1508760215803-36f2ec2b7713?w=800&q=80',
     arenas: ['Ann Arbor Ice Cube', 'Yost Ice Arena'],
   },
 ];
