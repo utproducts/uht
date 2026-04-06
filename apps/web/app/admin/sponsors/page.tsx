@@ -242,7 +242,7 @@ export default function AdminSponsorsPage() {
                           </div>
                           {tiers.length > 0 && (
                             <div className="flex gap-1">
-                              {[...new Set(tiers)].map(t => (
+                              {Array.from(new Set(tiers)).map(t => (
                                 <span key={t} className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierColors[t] || tierColors.custom}`}>
                                   {t.toUpperCase()}
                                 </span>
