@@ -88,12 +88,14 @@ function EventCard({ event }: { event: Event }) {
 
   return (
     <div
-      className={`group relative rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all duration-300 ${
+      className={`group relative rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all duration-300 border-l-4 border-[#00ccff] ${
         isPast ? 'opacity-75 hover:opacity-100' : ''
       }`}
     >
       {/* ── Card Header: gradient bg + watermark logo + actual logo ── */}
       <div className={`relative bg-gradient-to-br ${cityGradient(event.city)} h-48 flex items-center justify-center overflow-hidden`}>
+        {/* Diagonal stripe accent */}
+        <div className="absolute inset-0 bg-diagonal-stripes opacity-10 pointer-events-none" />
         {/* Large watermark/shadow logo in background */}
         {event.logo_url && (
           <img
@@ -270,7 +272,7 @@ export default function EventsPage() {
   const pastCount = events.filter(e => e.status === 'completed').length;
 
   return (
-    <div className="bg-[#f5f5f7] min-h-screen">
+    <div className="bg-gradient-to-b from-[#0a1929] via-[#051e35] to-[#051e35] min-h-screen">
       {/* Hero header */}
       <div className="bg-gradient-to-br from-[#003e79] to-[#001f3f] relative overflow-hidden">
         <div className="absolute inset-0 opacity-5">
@@ -310,13 +312,13 @@ export default function EventsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border-b border-[#e8e8ed] sticky top-0 z-30">
+      <div className="bg-gradient-to-r from-[#003e79]/95 to-[#002851]/95 backdrop-blur-md border-b border-[#00ccff]/20 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-4">
           <div className="flex flex-wrap gap-3 items-center">
             <select
               value={cityFilter}
               onChange={e => setCityFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border border-[#e8e8ed] bg-[#f5f5f7] text-sm text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#00ccff]/30 focus:border-[#00ccff]"
+              className="px-4 py-2.5 rounded-lg border border-[#00ccff]/30 bg-white/10 backdrop-blur-sm text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-[#00ccff]"
             >
               <option value="">All Cities</option>
               <option value="Chicago">Chicago, IL</option>
@@ -331,7 +333,7 @@ export default function EventsPage() {
             <select
               value={ageFilter}
               onChange={e => setAgeFilter(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border border-[#e8e8ed] bg-[#f5f5f7] text-sm text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#00ccff]/30 focus:border-[#00ccff]"
+              className="px-4 py-2.5 rounded-lg border border-[#00ccff]/30 bg-white/10 backdrop-blur-sm text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-[#00ccff]"
             >
               <option value="">All Age Groups</option>
               <option value="Mite">Mite</option>
@@ -348,11 +350,11 @@ export default function EventsPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search events..."
-                className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] bg-[#f5f5f7] text-sm text-[#1d1d1f] placeholder:text-[#86868b] focus:outline-none focus:ring-2 focus:ring-[#00ccff]/30 focus:border-[#00ccff]"
+                className="w-full px-4 py-2.5 rounded-lg border border-[#00ccff]/30 bg-white/10 backdrop-blur-sm text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-[#00ccff]"
               />
             </div>
 
-            <span className="text-sm text-[#86868b] ml-auto">
+            <span className="text-sm text-white/70 ml-auto">
               {filtered.length} event{filtered.length !== 1 ? 's' : ''}
             </span>
           </div>
