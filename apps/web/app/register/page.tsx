@@ -715,12 +715,19 @@ export default function RegisterPage() {
 
             {/* Order summary */}
             <div className="bg-[#f5f5f7] rounded-xl p-4 mb-6">
-              <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Order Summary</h4>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-[#1d1d1f]">Order Summary</h4>
+                {selectedUpsellIds.size > 0 && (
+                  <span className="text-xs text-emerald-600 font-medium">{1 + selectedUpsellIds.size} events</span>
+                )}
+              </div>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-[#6e6e73]">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
-                  <span className="font-medium">{formatPrice(basePriceCents)}</span>
+                {/* Primary event — always present */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6e6e73] flex-1">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
+                  <span className="font-medium ml-3">{formatPrice(basePriceCents)}</span>
                 </div>
+                {/* Additional events — with remove button */}
                 {Array.from(selectedUpsellIds).map(id => {
                   const ue = upsellEvents.find(e => e.id === id);
                   if (!ue) return null;
@@ -728,10 +735,19 @@ export default function RegisterPage() {
                   const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
                   const discountedPrice = uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
                   return (
-                    <div key={id} className="flex justify-between">
-                      <span className="text-[#6e6e73]">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
-                      <div className="text-right">
-                        {ueDiscountPct > 0 && <span className="text-xs text-[#86868b] line-through mr-2">{formatPrice(uePriceCents)}</span>}
+                    <div key={id} className="flex items-center justify-between group">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <button
+                          onClick={() => toggleUpsell(id)}
+                          className="w-5 h-5 flex items-center justify-center rounded text-[#86868b] hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
+                          title="Remove from order"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                        <span className="text-[#6e6e73] truncate">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                        {ueDiscountPct > 0 && <span className="text-xs text-[#86868b] line-through">{formatPrice(uePriceCents)}</span>}
                         <span className="font-medium">{formatPrice(discountedPrice)}</span>
                       </div>
                     </div>
