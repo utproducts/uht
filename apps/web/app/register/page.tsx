@@ -105,6 +105,8 @@ export default function RegisterPage() {
   const [upsellEvents, setUpsellEvents] = useState<UpsellEvent[]>([]);
   const [selectedUpsellIds, setSelectedUpsellIds] = useState<Set<string>>(new Set());
   const [loadingUpsell, setLoadingUpsell] = useState(false);
+  const [upsellCityFilter, setUpsellCityFilter] = useState('');
+  const [upsellMonthFilter, setUpsellMonthFilter] = useState('');
 
   // Result
   const [regResult, setRegResult] = useState<any>(null);
@@ -501,7 +503,34 @@ export default function RegisterPage() {
         )}
 
         {/* ═══════════════════════════════════ STEP 3: MULTI-EVENT UPSELL ═══════════════════════════════════ */}
-        {step === 'upsell' && (
+        {step === 'upsell' && (() => {
+          // Derive unique cities and months from upsell events for filter chips
+          const upsellCities = Array.from(new Set(upsellEvents.map(ue => ue.city))).sort();
+          const upsellMonths = Array.from(new Set(upsellEvents.map(ue => {
+            const d = new Date(ue.start_date + 'T12:00:00');
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          }))).sort();
+          const monthLabel = (ym: string) => {
+            const [y, m] = ym.split('-');
+            return new Date(parseInt(y), parseInt(m) - 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
+          };
+
+          // Apply filters
+          let filteredUpsell = upsellEvents;
+          if (upsellCityFilter) {
+            filteredUpsell = filteredUpsell.filter(ue => ue.city === upsellCityFilter);
+          }
+          if (upsellMonthFilter) {
+            filteredUpsell = filteredUpsell.filter(ue => {
+              const d = new Date(ue.start_date + 'T12:00:00');
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === upsellMonthFilter;
+            });
+          }
+
+          // Count selected that are currently hidden by filters
+          const hiddenSelectedCount = Array.from(selectedUpsellIds).filter(id => !filteredUpsell.find(ue => ue.id === id)).length;
+
+          return (
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <div className="text-center mb-6">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-full text-sm font-semibold mb-4">
@@ -527,104 +556,208 @@ export default function RegisterPage() {
                 <p>No other upcoming events at this time.</p>
               </div>
             ) : (
-              <div className="space-y-3 mb-6 max-h-[400px] overflow-y-auto">
-                {upsellEvents.map(ue => {
-                  const isSelected = selectedUpsellIds.has(ue.id);
-                  const uePriceCents = ue.price_cents || 0;
-                  const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
-                  const discountedPrice = uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
-                  return (
-                    <button
-                      key={ue.id}
-                      onClick={() => toggleUpsell(ue.id)}
-                      className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                        isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-[#e8e8ed] hover:border-[#00ccff]/40'
-                      }`}
-                    >
-                      <div className="flex items-start gap-4">
-                        {ue.logo_url ? (
-                          <img src={ue.logo_url} alt="" className="w-12 h-12 object-contain rounded-lg flex-shrink-0" />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] flex items-center justify-center flex-shrink-0">
-                            <span className="text-lg">🏒</span>
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-[#1d1d1f] truncate">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</p>
-                          <p className="text-xs text-[#6e6e73] mt-0.5">{ue.city}, {ue.state} · {formatDateRange(ue.start_date, ue.end_date)}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            {ueDiscountPct > 0 ? (
-                              <>
-                                <span className="text-xs text-[#86868b] line-through">{formatPrice(uePriceCents)}</span>
-                                <span className="text-sm font-bold text-emerald-600">{formatPrice(discountedPrice)}</span>
-                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Save {ueDiscountPct}%</span>
-                              </>
-                            ) : (
-                              <span className="text-sm font-semibold text-[#1d1d1f]">{formatPrice(uePriceCents)}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-1 transition-all ${
-                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-[#d1d1d6]'
-                        }`}>
-                          {isSelected && (
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                          )}
-                        </div>
+              <>
+                {/* ── Filter bar ── */}
+                <div className="mb-4">
+                  {/* City filter chips */}
+                  {upsellCities.length > 1 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider mb-2">Filter by City</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setUpsellCityFilter('')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            !upsellCityFilter
+                              ? 'bg-[#003e79] text-white shadow-sm'
+                              : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+                          }`}
+                        >
+                          All Cities
+                        </button>
+                        {upsellCities.map(city => {
+                          const count = upsellEvents.filter(ue => ue.city === city).length;
+                          return (
+                            <button
+                              key={city}
+                              onClick={() => setUpsellCityFilter(upsellCityFilter === city ? '' : city)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                upsellCityFilter === city
+                                  ? 'bg-[#003e79] text-white shadow-sm'
+                                  : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+                              }`}
+                            >
+                              {city} ({count})
+                            </button>
+                          );
+                        })}
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                    </div>
+                  )}
 
-            {/* Order summary */}
-            {(selectedUpsellIds.size > 0 || true) && (
-              <div className="bg-[#f5f5f7] rounded-xl p-4 mb-6">
-                <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Order Summary</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-[#6e6e73]">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
-                    <span className="font-medium">{formatPrice(basePriceCents)}</span>
+                  {/* Month filter chips */}
+                  {upsellMonths.length > 1 && (
+                    <div>
+                      <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider mb-2">Filter by Month</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setUpsellMonthFilter('')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            !upsellMonthFilter
+                              ? 'bg-[#003e79] text-white shadow-sm'
+                              : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+                          }`}
+                        >
+                          All Dates
+                        </button>
+                        {upsellMonths.map(ym => {
+                          const count = upsellEvents.filter(ue => {
+                            const d = new Date(ue.start_date + 'T12:00:00');
+                            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === ym;
+                          }).length;
+                          return (
+                            <button
+                              key={ym}
+                              onClick={() => setUpsellMonthFilter(upsellMonthFilter === ym ? '' : ym)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                                upsellMonthFilter === ym
+                                  ? 'bg-[#003e79] text-white shadow-sm'
+                                  : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+                              }`}
+                            >
+                              {monthLabel(ym)} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Active filter + result count */}
+                  {(upsellCityFilter || upsellMonthFilter) && (
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#e8e8ed]">
+                      <span className="text-xs text-[#86868b]">
+                        Showing {filteredUpsell.length} of {upsellEvents.length} events
+                        {hiddenSelectedCount > 0 && (
+                          <span className="text-emerald-600 font-medium"> · {hiddenSelectedCount} selected not shown</span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => { setUpsellCityFilter(''); setUpsellMonthFilter(''); }}
+                        className="text-xs font-medium text-[#00ccff] hover:text-[#0099bf]"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Event list ── */}
+                {filteredUpsell.length === 0 ? (
+                  <div className="text-center py-6 text-[#86868b]">
+                    <p className="text-sm">No events match your filters.</p>
+                    <button onClick={() => { setUpsellCityFilter(''); setUpsellMonthFilter(''); }} className="text-sm font-medium text-[#00ccff] mt-2">
+                      Clear Filters
+                    </button>
                   </div>
-                  {Array.from(selectedUpsellIds).map(id => {
-                    const ue = upsellEvents.find(e => e.id === id);
-                    if (!ue) return null;
+                ) : (
+                <div className="space-y-3 mb-6 max-h-[400px] overflow-y-auto">
+                  {filteredUpsell.map(ue => {
+                    const isSelected = selectedUpsellIds.has(ue.id);
                     const uePriceCents = ue.price_cents || 0;
                     const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
                     const discountedPrice = uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
                     return (
-                      <div key={id} className="flex justify-between">
-                        <span className="text-[#6e6e73]">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
-                        <div className="text-right">
-                          {ueDiscountPct > 0 && <span className="text-xs text-[#86868b] line-through mr-2">{formatPrice(uePriceCents)}</span>}
-                          <span className="font-medium">{formatPrice(discountedPrice)}</span>
+                      <button
+                        key={ue.id}
+                        onClick={() => toggleUpsell(ue.id)}
+                        className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                          isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-[#e8e8ed] hover:border-[#00ccff]/40'
+                        }`}
+                      >
+                        <div className="flex items-start gap-4">
+                          {ue.logo_url ? (
+                            <img src={ue.logo_url} alt="" className="w-12 h-12 object-contain rounded-lg flex-shrink-0" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] flex items-center justify-center flex-shrink-0">
+                              <span className="text-lg">🏒</span>
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-[#1d1d1f] truncate">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</p>
+                            <p className="text-xs text-[#6e6e73] mt-0.5">{ue.city}, {ue.state} · {formatDateRange(ue.start_date, ue.end_date)}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              {ueDiscountPct > 0 ? (
+                                <>
+                                  <span className="text-xs text-[#86868b] line-through">{formatPrice(uePriceCents)}</span>
+                                  <span className="text-sm font-bold text-emerald-600">{formatPrice(discountedPrice)}</span>
+                                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Save {ueDiscountPct}%</span>
+                                </>
+                              ) : (
+                                <span className="text-sm font-semibold text-[#1d1d1f]">{formatPrice(uePriceCents)}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-1 transition-all ${
+                            isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-[#d1d1d6]'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
-                  {upsellSavingsCents > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-semibold pt-2 border-t border-[#e8e8ed]">
-                      <span>Multi-event savings</span>
-                      <span>-{formatPrice(upsellSavingsCents)}</span>
+                </div>
+                )}
+              </>
+            )}
+
+            {/* Order summary */}
+            <div className="bg-[#f5f5f7] rounded-xl p-4 mb-6">
+              <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Order Summary</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-[#6e6e73]">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
+                  <span className="font-medium">{formatPrice(basePriceCents)}</span>
+                </div>
+                {Array.from(selectedUpsellIds).map(id => {
+                  const ue = upsellEvents.find(e => e.id === id);
+                  if (!ue) return null;
+                  const uePriceCents = ue.price_cents || 0;
+                  const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
+                  const discountedPrice = uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
+                  return (
+                    <div key={id} className="flex justify-between">
+                      <span className="text-[#6e6e73]">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
+                      <div className="text-right">
+                        {ueDiscountPct > 0 && <span className="text-xs text-[#86868b] line-through mr-2">{formatPrice(uePriceCents)}</span>}
+                        <span className="font-medium">{formatPrice(discountedPrice)}</span>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex justify-between font-bold text-[#1d1d1f] pt-2 border-t border-[#e8e8ed]">
-                    <span>Total</span>
-                    <span>{formatPrice(
-                      basePriceCents +
-                      Array.from(selectedUpsellIds).reduce((sum, id) => {
-                        const ue = upsellEvents.find(e => e.id === id);
-                        if (!ue) return sum;
-                        const uePriceCents = ue.price_cents || 0;
-                        const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
-                        return sum + uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
-                      }, 0)
-                    )}</span>
+                  );
+                })}
+                {upsellSavingsCents > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-semibold pt-2 border-t border-[#e8e8ed]">
+                    <span>Multi-event savings</span>
+                    <span>-{formatPrice(upsellSavingsCents)}</span>
                   </div>
+                )}
+                <div className="flex justify-between font-bold text-[#1d1d1f] pt-2 border-t border-[#e8e8ed]">
+                  <span>Total</span>
+                  <span>{formatPrice(
+                    basePriceCents +
+                    Array.from(selectedUpsellIds).reduce((sum, id) => {
+                      const ue = upsellEvents.find(e => e.id === id);
+                      if (!ue) return sum;
+                      const uePriceCents = ue.price_cents || 0;
+                      const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
+                      return sum + uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
+                    }, 0)
+                  )}</span>
                 </div>
               </div>
-            )}
+            </div>
 
             <div className="flex items-center justify-between pt-2">
               <button onClick={() => setStep('payment')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
@@ -638,7 +771,8 @@ export default function RegisterPage() {
               </button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ═══════════════════════════════════ SUBMITTING ═══════════════════════════════════ */}
         {step === 'submitting' && (
