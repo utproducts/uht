@@ -7,6 +7,51 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 export const sponsorRoutes = new Hono<{ Bindings: Env }>();
 
 // ==================
+// PUBLIC: Submit sponsorship inquiry
+// ==================
+const inquirySchema = z.object({
+  name: z.string().min(1),
+  company: z.string().optional(),
+  email: z.string().email(),
+  phone: z.string().optional(),
+  package: z.string().optional(),
+  message: z.string().optional(),
+});
+
+sponsorRoutes.post('/inquiry', zValidator('json', inquirySchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Store the inquiry in a simple table
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS sponsor_inquiries (
+        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+        name TEXT NOT NULL,
+        company TEXT,
+        email TEXT NOT NULL,
+        phone TEXT,
+        package_interest TEXT,
+        message TEXT,
+        status TEXT DEFAULT 'new',
+        created_at TEXT DEFAULT (datetime('now'))
+      )
+    `).run();
+
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO sponsor_inquiries (id, name, company, email, phone, package_interest, message)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, data.name, data.company || null, data.email, data.phone || null, data.package || null, data.message || null).run();
+
+    return c.json({ success: true, data: { id } }, 201);
+  } catch (err) {
+    console.error('Inquiry error:', err);
+    return c.json({ success: false, error: 'Failed to submit inquiry' }, 500);
+  }
+});
+
+// ==================
 // PUBLIC: Get sponsorship packages
 // ==================
 sponsorRoutes.get('/packages', async (c) => {
