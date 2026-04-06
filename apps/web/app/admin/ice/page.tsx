@@ -540,22 +540,20 @@ export default function AdminIcePage() {
   const revenue = slots.filter((s) => s.status === 'booked').reduce((sum, s) => sum + s.price_cents, 0);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="bg-gray-100 min-h-full">
       {/* Header */}
-      <div className="bg-gray-900 text-white py-6">
-        <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold">Ice Booking Admin</h1>
-            <p className="text-sm text-gray-400 mt-1">Rosemont Outdoor Rink</p>
-          </div>
-          <a href="/book-ice" className="text-sm text-cyan-400 hover:text-cyan-300 font-medium">
-            View Public Page &rarr;
-          </a>
+      <div className="max-w-6xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-gray-900">Ice Booking Admin</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Rosemont Outdoor Rink</p>
         </div>
+        <a href="/book-ice" className="text-sm text-cyan-600 hover:text-cyan-700 font-medium">
+          View Public Page &rarr;
+        </a>
       </div>
 
       {/* Stats */}
-      <div className="max-w-6xl mx-auto px-4 -mt-4">
+      <div className="max-w-6xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">{totalSlots}</div>
@@ -577,7 +575,7 @@ export default function AdminIcePage() {
       </div>
 
       {/* Tab Switcher */}
-      <div className="max-w-6xl mx-auto px-4 mt-6">
+      <div className="max-w-6xl mx-auto px-6 mt-6">
         <div className="flex gap-1 bg-gray-200 rounded-xl p-1 w-fit">
           <button
             onClick={() => setTab('slots')}
@@ -599,7 +597,7 @@ export default function AdminIcePage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />

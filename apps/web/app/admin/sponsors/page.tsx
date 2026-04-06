@@ -96,22 +96,19 @@ export default function AdminSponsorsPage() {
   const pendingRevenue = sponsorships.filter(s => s.payment_status === 'unpaid').reduce((sum, s) => sum + (s.amount_cents || 0), 0);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="bg-gray-100 min-h-full">
       {/* Header */}
-      <div className="bg-gray-900 text-white py-6">
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold">Sponsor Management</h1>
-            <p className="text-sm text-gray-400 mt-1">Ultimate Tournaments</p>
-          </div>
-          <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
-            + Add Sponsor
-          </button>
+      <div className="max-w-7xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-gray-900">Sponsor Management</h1>
         </div>
+        <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
+          + Add Sponsor
+        </button>
       </div>
 
       {/* Stats */}
-      <div className="max-w-7xl mx-auto px-4 -mt-4">
+      <div className="max-w-7xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">{totalSponsors}</div>
@@ -133,7 +130,7 @@ export default function AdminSponsorsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 mt-6">
+      <div className="max-w-7xl mx-auto px-6 mt-6">
         <div className="flex gap-1 bg-gray-200 rounded-xl p-1 w-fit">
           {(['overview', 'sponsors', 'packages'] as const).map(t => (
             <button
@@ -149,7 +146,7 @@ export default function AdminSponsorsPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-6 py-6">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
