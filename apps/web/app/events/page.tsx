@@ -135,12 +135,12 @@ function FeaturedEvent({ event }: { event: Event }) {
           <h2 className="text-3xl lg:text-4xl font-bold text-[#1d1d1f] leading-tight mb-4">{event.name}</h2>
 
           <div className="space-y-2 mb-5">
-            <p className="flex items-center gap-2 text-[#6e6e73]">
-              <svg className="w-5 h-5 text-[#003e79]/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            <p className="flex items-center gap-2 text-[#3d3d3d]">
+              <svg className="w-5 h-5 text-[#003e79]/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               {event.city}, {event.state}
             </p>
-            <p className="flex items-center gap-2 text-[#6e6e73]">
-              <svg className="w-5 h-5 text-[#003e79]/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            <p className="flex items-center gap-2 text-[#3d3d3d]">
+              <svg className="w-5 h-5 text-[#003e79]/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               {formatDateRange(event.start_date, event.end_date)}
             </p>
           </div>
@@ -241,12 +241,12 @@ function EventCard({ event }: { event: Event }) {
         </h3>
 
         <div className="mt-2 space-y-1">
-          <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
-            <svg className="w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <p className="flex items-center gap-2 text-sm text-[#3d3d3d]">
+            <svg className="w-4 h-4 text-[#6e6e73]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             {event.city}, {event.state}
           </p>
-          <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
-            <svg className="w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          <p className="flex items-center gap-2 text-sm text-[#3d3d3d]">
+            <svg className="w-4 h-4 text-[#6e6e73]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             {formatDateRange(event.start_date, event.end_date)}
           </p>
         </div>
@@ -269,7 +269,7 @@ function EventCard({ event }: { event: Event }) {
 
         {/* Info snippet */}
         {event.information && (
-          <p className="text-sm text-[#86868b] mt-3 line-clamp-2 leading-relaxed">{event.information}</p>
+          <p className="text-sm text-[#4a4a4a] mt-3 line-clamp-2 leading-relaxed">{event.information}</p>
         )}
 
         {/* Actions */}
