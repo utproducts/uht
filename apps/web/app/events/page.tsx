@@ -97,6 +97,9 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
   const [loadingTeams, setLoadingTeams] = useState(isLoggedIn);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [step, setStep] = useState<'auth' | 'select' | 'payment'>(isLoggedIn ? 'select' : 'auth');
+  const [submittingReg, setSubmittingReg] = useState(false);
+  const [registrationResult, setRegistrationResult] = useState<string | null>(null);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
 
   // Fetch user's teams — check localStorage first, then API
   useEffect(() => {
@@ -137,7 +140,41 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
     })();
   }, [isLoggedIn]);
 
-  const selectedTeamName = userTeams.find(t => t.id === selectedTeam)?.name;
+  const selectedTeamObj = userTeams.find(t => t.id === selectedTeam);
+  const selectedTeamName = selectedTeamObj?.name;
+
+  const handleRegister = async (paymentChoice: 'pay_now' | 'pay_later') => {
+    if (!selectedTeam || !selectedTeamName) return;
+    setSubmittingReg(true);
+    setRegistrationError(null);
+
+    try {
+      const user = auth?.user;
+      const res = await fetch(`${API}/events/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: event.id,
+          teamId: selectedTeam,
+          teamName: selectedTeamName,
+          ageGroup: (selectedTeamObj as any)?.ageGroup || 'Unknown',
+          email: user?.email || 'unknown@email.com',
+          managerFirstName: user?.name?.split(' ')[0] || undefined,
+          managerLastName: user?.name?.split(' ').slice(1).join(' ') || undefined,
+          paymentChoice,
+        }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setRegistrationResult(json.data.message || 'Registration submitted! Check your email for confirmation.');
+      } else {
+        setRegistrationError(json.error || 'Registration failed. Please try again.');
+      }
+    } catch (err) {
+      setRegistrationError('Network error. Please try again.');
+    }
+    setSubmittingReg(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -261,6 +298,19 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
           {/* ── Step: Payment ── */}
           {step === 'payment' && !loadingTeams && (
             <>
+              {registrationResult ? (
+                <div className="text-center py-4">
+                  <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <h4 className="font-semibold text-[#1d1d1f] text-lg mb-1">Registration Submitted!</h4>
+                  <p className="text-sm text-[#6e6e73] mb-2">
+                    {registrationResult}
+                  </p>
+                  <p className="text-xs text-[#86868b]">You can close this window.</p>
+                </div>
+              ) : (
+              <>
               <h4 className="font-semibold text-[#1d1d1f] mb-1">Complete Registration</h4>
               {selectedTeamName && (
                 <p className="text-sm text-[#6e6e73] mb-1">
@@ -273,20 +323,28 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
                 </p>
               )}
 
+              {registrationError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{registrationError}</div>
+              )}
+
               <div className="space-y-3">
                 <button
-                  onClick={() => { alert('Payment processing coming soon!'); onClose(); }}
-                  className="w-full py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-colors shadow-sm"
+                  onClick={() => handleRegister('pay_now')}
+                  disabled={submittingReg}
+                  className="w-full py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-50 transition-colors shadow-sm"
                 >
-                  Pay Now — {formatPrice(event.price_cents)}
+                  {submittingReg ? 'Submitting...' : `Pay Now — ${formatPrice(event.price_cents)}`}
                 </button>
                 <button
-                  onClick={() => { alert('Registration saved! Payment can be made later.'); onClose(); }}
-                  className="w-full py-3.5 rounded-xl font-semibold text-[#1d1d1f] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition-colors"
+                  onClick={() => handleRegister('pay_later')}
+                  disabled={submittingReg}
+                  className="w-full py-3.5 rounded-xl font-semibold text-[#1d1d1f] bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-50 transition-colors"
                 >
-                  Pay Later
+                  {submittingReg ? 'Submitting...' : 'Pay Later'}
                 </button>
               </div>
+              </>
+              )}
 
               {userTeams.length > 1 && (
                 <button

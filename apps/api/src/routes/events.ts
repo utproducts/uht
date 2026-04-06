@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
 import { sendApprovalEmail } from '../lib/approval-email';
+import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 
 export const eventRoutes = new Hono<{ Bindings: Env }>();
 
@@ -407,6 +408,97 @@ eventRoutes.post('/admin/duplicate/:id', async (c) => {
   ).run();
 
   return c.json({ success: true, data: { id: newId, slug: newSlug, start_date: newStart, end_date: newEnd, scorekeeper_pin: newPin } }, 201);
+});
+
+// ==================
+// CONSUMER: Register team for an event (from events page)
+// ==================
+const consumerRegisterSchema = z.object({
+  eventId: z.string(),
+  teamId: z.string(),
+  teamName: z.string(),
+  ageGroup: z.string(),
+  division: z.string().optional(),
+  managerFirstName: z.string().optional(),
+  managerLastName: z.string().optional(),
+  email: z.string().email(),
+  phone: z.string().optional(),
+  headCoachName: z.string().optional(),
+  paymentChoice: z.enum(['pay_now', 'pay_later']),
+});
+
+eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Verify event exists and is open for registration
+  const event = await db.prepare(
+    'SELECT id, name, city, state, start_date, end_date, status, price_cents, deposit_cents FROM events WHERE id = ?'
+  ).bind(data.eventId).first<any>();
+
+  if (!event) {
+    return c.json({ success: false, error: 'Event not found' }, 404);
+  }
+  if (event.status !== 'registration_open' && event.status !== 'active') {
+    return c.json({ success: false, error: 'Registration is not open for this event' }, 400);
+  }
+
+  // Check if team is already registered for this event
+  const existing = await db.prepare(
+    "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status != 'denied'"
+  ).bind(data.eventId, data.teamName).first();
+
+  if (existing) {
+    return c.json({ success: false, error: 'This team is already registered for this event' }, 409);
+  }
+
+  // Create registration with 'pending' status
+  const regId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+  `).bind(
+    regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
+    data.managerFirstName || null, data.managerLastName || null,
+    data.email, data.phone || null,
+    data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid'
+  ).run();
+
+  // Send confirmation email
+  const startDate = new Date(event.start_date + 'T12:00:00');
+  const endDate = new Date(event.end_date + 'T12:00:00');
+  const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+  let emailResult = { success: false, error: 'not sent' };
+  try {
+    emailResult = await sendRegistrationConfirmationEmail(c.env, {
+      recipientEmail: data.email,
+      recipientName: data.managerFirstName
+        ? `${data.managerFirstName} ${data.managerLastName || ''}`.trim()
+        : data.teamName,
+      teamName: data.teamName,
+      ageGroup: data.ageGroup,
+      division: data.division || undefined,
+      eventName: event.name,
+      eventDate: eventDateStr,
+      eventCity: `${event.city}, ${event.state}`,
+      headCoachName: data.headCoachName || undefined,
+      priceCents: event.price_cents || undefined,
+      depositCents: event.deposit_cents || undefined,
+    });
+  } catch (err: any) {
+    console.error('Registration confirmation email error:', err);
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      id: regId,
+      status: 'pending',
+      email_sent: emailResult.success,
+      message: 'Registration received! You will receive a confirmation email shortly. Our team reviews registrations within 24-48 hours.',
+    },
+  }, 201);
 });
 
 // ==================
