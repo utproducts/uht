@@ -1088,12 +1088,14 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
   const summary = event.registration_summary || [];
   const totalRevenue = registrations.reduce((sum: number, r: any) => sum + (r.payment_amount_cents || 0), 0);
 
-  // Group registrations by age_group
+  // Group registrations by age_group, stable sort by team_name within each group
   const grouped: Record<string, any[]> = {};
   registrations.forEach((r: any) => {
     if (!grouped[r.age_group]) grouped[r.age_group] = [];
     grouped[r.age_group].push(r);
   });
+  // Sort each group by team name so rows don't jump on status change
+  Object.values(grouped).forEach(arr => arr.sort((a: any, b: any) => (a.team_name || '').localeCompare(b.team_name || '')));
 
   return (
     <div>
@@ -1283,6 +1285,8 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                             value={reg.status || 'pending'}
                             onChange={async (e) => {
                               const newStatus = e.target.value;
+                              // Optimistic update — apply immediately so UI doesn't jump
+                              handleRegSaved({ ...reg, status: newStatus });
                               try {
                                 const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
                                   method: 'PATCH',
@@ -1292,8 +1296,14 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                                 const json = await res.json() as any;
                                 if (json.success) {
                                   handleRegSaved(json.data);
+                                } else {
+                                  // Revert on failure
+                                  handleRegSaved(reg);
                                 }
-                              } catch {}
+                              } catch {
+                                // Revert on error
+                                handleRegSaved(reg);
+                              }
                             }}
                             className={`text-xs font-semibold rounded-lg px-2 py-1.5 border-0 cursor-pointer focus:ring-2 focus:ring-cyan-500 outline-none transition ${
                               reg.status === 'approved' ? 'bg-green-100 text-green-700' :
