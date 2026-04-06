@@ -412,6 +412,7 @@ eventRoutes.post('/admin/duplicate/:id', async (c) => {
 // ADMIN: Update registration (payment, hotel assignment, notes)
 // ==================
 const updateRegistrationSchema = z.object({
+  status: z.enum(['pending', 'approved', 'denied', 'waitlisted']).optional(),
   payment_status: z.enum(['unpaid', 'paid', 'partial', 'refunded', 'comp']).optional(),
   payment_amount_cents: z.number().nullable().optional(),
   payment_method: z.string().nullable().optional(),
@@ -434,6 +435,10 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
   const setClauses: string[] = [];
   const params: (string | number | null)[] = [];
 
+  if (data.status !== undefined) {
+    setClauses.push('status = ?');
+    params.push(data.status);
+  }
   if (data.payment_status !== undefined) {
     setClauses.push('payment_status = ?');
     params.push(data.payment_status);

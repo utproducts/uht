@@ -189,20 +189,133 @@ function OrgDash() {
 }
 
 function CoachDash() {
+  const [teams, setTeams] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Get team IDs from localStorage (created via Create Team page)
+        const localTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+        const ids = localTeams.map((t: any) => t.id).filter(Boolean);
+
+        if (ids.length > 0) {
+          const res = await fetch(`https://uht.chad-157.workers.dev/api/teams/by-ids?ids=${ids.join(',')}`);
+          const json = await res.json();
+          if (json.success && json.data.length > 0) {
+            setTeams(json.data);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Fallback: show localStorage data directly
+        if (localTeams.length > 0) {
+          setTeams(localTeams);
+        }
+      } catch {}
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" /></div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="My Teams" value={2} />
-        <StatCard label="Next Game" value="Sat 9AM" sub="Rink 2" />
-        <StatCard label="Record" value="6-2-1" sub="Presidents Day" />
-        <StatCard label="Roster Size" value={17} sub="All cleared" />
+        <StatCard label="My Teams" value={teams.length} />
+        <StatCard label="Upcoming Events" value={0} sub="Register from Events page" />
+        <StatCard label="Players" value={0} sub="Add via USA Hockey" />
+        <StatCard label="Balance" value="$0" sub="No outstanding fees" />
       </div>
-      <SectionTitle>Upcoming Games</SectionTitle>
-      <Table headers={['Date', 'Time', 'Opponent', 'Rink']} rows={[
-        ['Sat Feb 15', '9:00 AM', 'NJ Devils U14', 'Rink 2'],
-        ['Sat Feb 15', '3:30 PM', 'NY Rangers U14', 'Rink 1'],
-        ['Sun Feb 16', '11:00 AM', 'TBD (Playoff)', 'Rink 1'],
-      ]} />
+
+      {/* My Teams */}
+      <div className="flex items-center justify-between">
+        <SectionTitle>My Teams</SectionTitle>
+        <a href="/create-team" className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
+          + Create Team
+        </a>
+      </div>
+
+      {teams.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+          <div className="text-4xl mb-3">🏒</div>
+          <h3 className="text-lg font-bold text-gray-700 mb-2">No Teams Yet</h3>
+          <p className="text-sm text-gray-400 mb-5">Create your first team to start registering for tournaments.</p>
+          <a href="/create-team" className="inline-block px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
+            Create Your First Team
+          </a>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {teams.map((team: any) => (
+            <div key={team.id} className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg">{team.name}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {team.age_group}{team.division_level ? ` · ${team.division_level}` : ''}
+                  </p>
+                </div>
+                {team.usa_hockey_team_id && (
+                  <span className="text-[10px] font-semibold px-2 py-1 bg-blue-50 text-blue-600 rounded-full">USA Hockey</span>
+                )}
+              </div>
+
+              {(team.city || team.state) && (
+                <p className="text-sm text-gray-500 mb-2">
+                  📍 {[team.city, team.state].filter(Boolean).join(', ')}
+                </p>
+              )}
+
+              {team.head_coach_name && (
+                <p className="text-sm text-gray-500 mb-1">
+                  🧑‍🏫 Coach: <span className="font-medium text-gray-700">{team.head_coach_name}</span>
+                </p>
+              )}
+
+              {team.season_record && (
+                <p className="text-sm text-gray-500 mb-1">
+                  📊 Record: <span className="font-medium text-gray-700">{team.season_record}</span>
+                </p>
+              )}
+
+              {team.hometown_league && (
+                <p className="text-sm text-gray-500 mb-1">
+                  🏟️ League: <span className="font-medium text-gray-700">{team.hometown_league}</span>
+                </p>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <a href="/events" className="flex-1 text-center px-3 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 font-semibold rounded-xl text-xs transition">
+                  Register for Event
+                </a>
+                <button className="px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 font-medium rounded-xl text-xs transition">
+                  Edit Team
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Quick Links */}
+      <SectionTitle>Quick Actions</SectionTitle>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Browse Events', href: '/events', icon: '🏆' },
+          { label: 'Create Team', href: '/create-team', icon: '🏒' },
+          { label: 'My Schedule', href: '/dashboard/coach/schedule', icon: '📅' },
+          { label: 'My Roster', href: '/dashboard/coach/roster', icon: '📋' },
+        ].map(a => (
+          <a key={a.label} href={a.href} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition text-center">
+            <div className="text-2xl mb-1">{a.icon}</div>
+            <div className="text-sm font-medium text-gray-800">{a.label}</div>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

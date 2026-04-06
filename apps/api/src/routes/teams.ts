@@ -142,6 +142,26 @@ teamRoutes.post('/admin/dedup', async (c) => {
 });
 
 // ==================
+// Get teams by IDs (for coach/manager dashboard with localStorage team IDs)
+// ==================
+teamRoutes.get('/by-ids', async (c) => {
+  const db = c.env.DB;
+  const idsParam = c.req.query('ids');
+  if (!idsParam) return c.json({ success: true, data: [] });
+
+  const ids = idsParam.split(',').slice(0, 50); // max 50
+  const placeholders = ids.map(() => '?').join(',');
+  const result = await db.prepare(`
+    SELECT id, name, age_group, division_level, city, state, head_coach_name, head_coach_email,
+           manager_name, usa_hockey_team_id, website, hometown_league, team_type, season_record,
+           created_at
+    FROM teams WHERE id IN (${placeholders}) AND is_active = 1
+    ORDER BY name ASC
+  `).bind(...ids).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
 // Get teams for current user (coach/manager/org)
 // ==================
 teamRoutes.get('/my-teams', authMiddleware, async (c) => {

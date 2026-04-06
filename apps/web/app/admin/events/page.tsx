@@ -1224,13 +1224,18 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
           {Object.keys(grouped).sort().map((ageGroup) => {
             const groupPaid = grouped[ageGroup].filter((r: any) => r.payment_status === 'paid').length;
             const groupHotel = grouped[ageGroup].filter((r: any) => r.hotel_assigned).length;
+            const groupApproved = grouped[ageGroup].filter((r: any) => r.status === 'approved').length;
+            const groupPending = grouped[ageGroup].filter((r: any) => !r.status || r.status === 'pending').length;
+            const groupWaitlisted = grouped[ageGroup].filter((r: any) => r.status === 'waitlisted').length;
             return (
             <div key={ageGroup} className="bg-white rounded-2xl shadow-lg overflow-hidden">
               <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-900">{ageGroup}</h3>
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-green-600 font-medium">{groupPaid}/{grouped[ageGroup].length} paid</span>
-                  <span className="text-[11px] text-blue-600 font-medium">{groupHotel}/{grouped[ageGroup].length} hotels</span>
+                  {groupPending > 0 && <span className="text-[11px] text-orange-600 font-medium">{groupPending} pending</span>}
+                  <span className="text-[11px] text-green-600 font-medium">{groupApproved} approved</span>
+                  {groupWaitlisted > 0 && <span className="text-[11px] text-amber-600 font-medium">{groupWaitlisted} waitlisted</span>}
+                  <span className="text-[11px] text-blue-600 font-medium">{groupPaid}/{grouped[ageGroup].length} paid</span>
                   <span className="text-sm text-gray-500 font-medium">{grouped[ageGroup].length} team{grouped[ageGroup].length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
@@ -1242,6 +1247,7 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                       <th className="px-4 py-2.5 font-semibold text-gray-600">Manager</th>
                       <th className="px-4 py-2.5 font-semibold text-gray-600">Contact</th>
                       <th className="px-4 py-2.5 font-semibold text-gray-600">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Status</th>
                       <th className="px-4 py-2.5 font-semibold text-gray-600">Payment</th>
                       <th className="px-4 py-2.5 font-semibold text-gray-600">Hotel</th>
                       <th className="px-4 py-2.5 font-semibold text-gray-600 w-16"></th>
@@ -1249,7 +1255,7 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                   </thead>
                   <tbody>
                     {grouped[ageGroup].map((reg: any) => (
-                      <tr key={reg.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                      <tr key={reg.id} className={"border-b border-gray-50 hover:bg-gray-50 transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
                         <td className="px-4 py-3 font-medium text-gray-900">{reg.team_name}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs">
                           {reg.manager_first_name ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim() : '-'}
@@ -1262,6 +1268,36 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                           {reg.division ? (
                             <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-700 rounded">{reg.division}</span>
                           ) : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={reg.status || 'pending'}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value;
+                              try {
+                                const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: newStatus }),
+                                });
+                                const json = await res.json() as any;
+                                if (json.success) {
+                                  handleRegSaved(json.data);
+                                }
+                              } catch {}
+                            }}
+                            className={`text-xs font-semibold rounded-lg px-2 py-1.5 border-0 cursor-pointer focus:ring-2 focus:ring-cyan-500 outline-none transition ${
+                              reg.status === 'approved' ? 'bg-green-100 text-green-700' :
+                              reg.status === 'denied' ? 'bg-red-100 text-red-700' :
+                              reg.status === 'waitlisted' ? 'bg-amber-100 text-amber-700' :
+                              'bg-orange-100 text-orange-700'
+                            }`}
+                          >
+                            <option value="pending">⏳ Pending</option>
+                            <option value="approved">✅ Approved</option>
+                            <option value="denied">❌ Denied</option>
+                            <option value="waitlisted">📋 Waitlisted</option>
+                          </select>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-0.5">
