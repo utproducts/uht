@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 const ROLES = [
@@ -18,12 +18,39 @@ export default function LoginPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+
+  // Read redirect params from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect');
+    const register = params.get('register');
+    if (redirect) {
+      // Build the full redirect URL, preserving the register param
+      const url = register ? `${redirect}?register=${register}` : redirect;
+      setRedirectUrl(url);
+    }
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const role = selected || 'admin';
-    if (typeof window !== 'undefined') localStorage.setItem('uht_role', role);
-    router.push('/dashboard/' + role);
+    // Save auth state so the rest of the app knows we're logged in
+    localStorage.setItem('uht_role', role);
+    localStorage.setItem('uht_token', 'mock-token-' + role);
+    localStorage.setItem('uht_user', JSON.stringify({
+      id: 'user-1',
+      email: email || 'admin@uht.com',
+      name: email ? email.split('@')[0] : 'Admin',
+      roles: [role],
+    }));
+
+    // Redirect back to where they came from, or default to dashboard
+    if (redirectUrl) {
+      router.push(redirectUrl);
+    } else {
+      router.push('/dashboard/' + role);
+    }
   };
 
   return (
@@ -96,7 +123,7 @@ export default function LoginPage() {
 
             <p className="mt-4 text-center text-sm text-[#6e6e73]">
               Don&apos;t have an account?{' '}
-              <a href="/register" className="text-brand-500 font-medium hover:underline">Create one</a>
+              <a href={redirectUrl ? `/register?redirect=${encodeURIComponent(redirectUrl)}` : '/register'} className="text-brand-500 font-medium hover:underline">Create one</a>
             </p>
           </form>
         </div>
