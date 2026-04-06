@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Oswald } from 'next/font/google';
 import USAMap from './components/USAMap';
+import UpcomingEvents from './components/UpcomingEvents';
 
 const oswald = Oswald({ subsets: ['latin'], weight: ['700'] });
 
@@ -167,55 +168,7 @@ export default function HomePage() {
               </svg>
             </a>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              { name: 'The Deep Dish Cup', slug: 'chicago-deep-dish-cup-2026', logo: '/event-logos/deep-dish-cup.png', location: 'Chicago, IL', date: 'May 1-3, 2026', ages: ['Mite', 'Squirt', 'Pee Wee', 'Bantam'], spots: '12/16', gradient: 'from-[#003e79] via-[#005a9e] to-[#00ccff]' },
-              { name: 'Windy City Showdown', slug: 'windy-city-showdown-2026', logo: '/event-logos/windy-city-showdown.png', location: 'Chicago, IL', date: 'May 16-18, 2026', ages: ['Squirt', 'Pee Wee', 'Bantam'], spots: '8/12', gradient: 'from-[#003e79] via-[#005a9e] to-[#00ccff]' },
-              { name: 'Dells Summer Classic', slug: 'dells-summer-classic-2026', logo: '/event-logos/dells-summer-classic.png', location: 'WI Dells, WI', date: 'Jun 6-8, 2026', ages: ['Mite', 'Squirt', 'Pee Wee'], spots: '6/12', gradient: 'from-[#005599] via-[#0077bb] to-[#00ccff]' },
-            ].map((evt) => (
-              <div key={evt.slug} className="group bg-white rounded-2xl overflow-hidden border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_30px_-10px_rgba(0,62,121,0.15)] hover:-translate-y-0.5 transition-all">
-                {/* Gradient header */}
-                <div className={`relative bg-gradient-to-br ${evt.gradient} h-52 flex items-center justify-center overflow-hidden`}>
-                  <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl" />
-                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl" />
-                  {evt.logo ? (
-                    <img src={evt.logo} alt={evt.name + ' logo'} className="relative z-10 w-36 h-36 object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-300" />
-                  ) : (
-                    <div className="relative z-10 w-36 h-36 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
-                      <span className="text-5xl">🏒</span>
-                    </div>
-                  )}
-                  <div className="absolute top-3 right-3 z-10">
-                    <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white/90 backdrop-blur-sm text-emerald-700 border border-emerald-200">Registration Open</span>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <h3 className="text-lg font-bold text-[#1d1d1f] group-hover:text-[#003e79] transition-colors">{evt.name}</h3>
-                  <div className="mt-2 space-y-1">
-                    <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
-                      <svg className="w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      {evt.location}
-                    </p>
-                    <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
-                      <svg className="w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                      {evt.date}
-                    </p>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {evt.ages.map((age) => (
-                      <span key={age} className="inline-block px-2.5 py-0.5 bg-[#f0f7ff] text-[#003e79] text-xs font-medium rounded-md">{age}</span>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-sm text-[#86868b]">{evt.spots} spots filled</span>
-                    <a href={'/events/' + evt.slug} className="px-5 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all">
-                      Register
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <UpcomingEvents />
           <div className="mt-8 text-center sm:hidden">
             <a href="/events" className="px-6 py-3 rounded-full bg-white text-[#003e79] font-semibold border border-[#d2d2d7] hover:bg-[#f5f5f7] transition-all">View all events</a>
           </div>
