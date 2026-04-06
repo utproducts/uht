@@ -237,18 +237,24 @@ const updateEventSchema = z.object({
   end_date: z.string().optional(),
   status: z.string().optional(),
   tournament_id: z.string().nullable().optional(),
+  venue_id: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   information: z.string().nullable().optional(),
   price_cents: z.number().nullable().optional(),
   deposit_cents: z.number().nullable().optional(),
   slots_count: z.number().nullable().optional(),
   is_sold_out: z.number().optional(),
+  hide_availability: z.number().optional(),
   show_participants: z.number().optional(),
   registration_open_date: z.string().nullable().optional(),
   registration_deadline: z.string().nullable().optional(),
   age_groups: z.string().nullable().optional(),
   divisions: z.string().nullable().optional(),
   season: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional(),
+  rules_url: z.string().nullable().optional(),
+  logo_url: z.string().nullable().optional(),
+  banner_url: z.string().nullable().optional(),
 });
 
 eventRoutes.patch('/admin/update/:id', zValidator('json', updateEventSchema), async (c) => {
@@ -296,6 +302,7 @@ const createEventSimpleSchema = z.object({
   start_date: z.string(),
   end_date: z.string(),
   tournament_id: z.string().nullable().optional(),
+  venue_id: z.string().nullable().optional(),
   status: z.string().optional(),
   description: z.string().nullable().optional(),
   information: z.string().nullable().optional(),
@@ -305,8 +312,14 @@ const createEventSimpleSchema = z.object({
   age_groups: z.string().nullable().optional(),
   divisions: z.string().nullable().optional(),
   season: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional(),
   registration_open_date: z.string().nullable().optional(),
   registration_deadline: z.string().nullable().optional(),
+  rules_url: z.string().nullable().optional(),
+  logo_url: z.string().nullable().optional(),
+  banner_url: z.string().nullable().optional(),
+  hide_availability: z.number().optional(),
+  show_participants: z.number().optional(),
 });
 
 eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), async (c) => {
@@ -317,17 +330,21 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
   const pin = String(Math.floor(1000 + Math.random() * 9000));
 
   await db.prepare(`
-    INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, status,
+    INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, venue_id, status,
       description, information, price_cents, deposit_cents, slots_count, age_groups, divisions,
-      season, registration_open_date, registration_deadline, scorekeeper_pin)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      season, timezone, registration_open_date, registration_deadline, scorekeeper_pin,
+      rules_url, logo_url, banner_url, hide_availability, show_participants)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, data.name, slug, data.city, data.state, data.start_date, data.end_date,
-    data.tournament_id || null, data.status || 'draft',
+    data.tournament_id || null, data.venue_id || null, data.status || 'draft',
     data.description || null, data.information || null,
     data.price_cents || null, data.deposit_cents || null, data.slots_count || 100,
     data.age_groups || null, data.divisions || null,
-    data.season || null, data.registration_open_date || null, data.registration_deadline || null, pin
+    data.season || null, data.timezone || 'Central (CST)',
+    data.registration_open_date || null, data.registration_deadline || null, pin,
+    data.rules_url || null, data.logo_url || null, data.banner_url || null,
+    data.hide_availability || 0, data.show_participants ?? 1
   ).run();
 
   return c.json({ success: true, data: { id, slug, scorekeeper_pin: pin } }, 201);
@@ -472,6 +489,106 @@ eventRoutes.get('/admin/hotels/:eventId', async (c) => {
   `).bind(eventId, eventId, eventId, eventId, eventId).all();
 
   return c.json({ success: true, data: result.results.map((r: any) => r.hotel).filter(Boolean) });
+});
+
+// ==================
+// ADMIN: Get event hotels (from event_hotels table)
+// ==================
+eventRoutes.get('/admin/event-hotels/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const result = await db.prepare(`
+    SELECT * FROM event_hotels WHERE event_id = ? AND is_active = 1 ORDER BY sort_order ASC, hotel_name ASC
+  `).bind(eventId).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// ADMIN: Add hotel to event
+// ==================
+const addHotelSchema = z.object({
+  event_id: z.string(),
+  hotel_name: z.string().min(1),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  rate_description: z.string().nullable().optional(),
+  booking_url: z.string().nullable().optional(),
+  booking_code: z.string().nullable().optional(),
+  room_block_count: z.number().nullable().optional(),
+  sort_order: z.number().optional(),
+});
+
+eventRoutes.post('/admin/event-hotels', zValidator('json', addHotelSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO event_hotels (id, event_id, hotel_name, address, city, state, phone, rate_description, booking_url, booking_code, room_block_count, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, data.event_id, data.hotel_name, data.address || null, data.city || null, data.state || null,
+    data.phone || null, data.rate_description || null, data.booking_url || null, data.booking_code || null,
+    data.room_block_count || null, data.sort_order || 0
+  ).run();
+  const hotel = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(id).first();
+  return c.json({ success: true, data: hotel }, 201);
+});
+
+// ==================
+// ADMIN: Update hotel
+// ==================
+const updateHotelSchema = z.object({
+  hotel_name: z.string().min(1).optional(),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  rate_description: z.string().nullable().optional(),
+  booking_url: z.string().nullable().optional(),
+  booking_code: z.string().nullable().optional(),
+  room_block_count: z.number().nullable().optional(),
+  sort_order: z.number().optional(),
+  is_active: z.number().optional(),
+});
+
+eventRoutes.patch('/admin/event-hotels/:id', zValidator('json', updateHotelSchema), async (c) => {
+  const id = c.req.param('id');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const setClauses: string[] = [];
+  const params: (string | number | null)[] = [];
+  for (const [key, val] of Object.entries(data)) {
+    if (val !== undefined) { setClauses.push(`${key} = ?`); params.push(val as any); }
+  }
+  if (setClauses.length === 0) return c.json({ success: false, error: 'No fields' }, 400);
+  setClauses.push("updated_at = datetime('now')");
+  params.push(id);
+  await db.prepare(`UPDATE event_hotels SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+  const updated = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(id).first();
+  return c.json({ success: true, data: updated });
+});
+
+// ==================
+// ADMIN: Delete hotel from event
+// ==================
+eventRoutes.delete('/admin/event-hotels/:id', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+  const existing = await db.prepare('SELECT id, hotel_name FROM event_hotels WHERE id = ?').bind(id).first<any>();
+  if (!existing) return c.json({ success: false, error: 'Hotel not found' }, 404);
+  await db.prepare('DELETE FROM event_hotels WHERE id = ?').bind(id).run();
+  return c.json({ success: true, data: { deleted: existing.hotel_name } });
+});
+
+// ==================
+// ADMIN: Get venues list
+// ==================
+eventRoutes.get('/admin/venues', async (c) => {
+  const db = c.env.DB;
+  const result = await db.prepare('SELECT id, name, city, state, address, num_rinks FROM venues WHERE is_active = 1 ORDER BY name ASC').all();
+  return c.json({ success: true, data: result.results });
 });
 
 // ==================

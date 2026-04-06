@@ -15,13 +15,51 @@ interface EventItem {
   status: string;
   tournament_name: string | null;
   tournament_location: string | null;
+  tournament_id: string | null;
+  venue_id: string | null;
   registration_count: number;
   total_revenue_cents: number | null;
   age_groups: string | null;
   divisions: string | null;
   slots_count: number | null;
   is_sold_out: number;
+  hide_availability: number;
+  show_participants: number;
   information: string | null;
+  description: string | null;
+  season: string | null;
+  timezone: string | null;
+  rules_url: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  price_cents: number | null;
+  deposit_cents: number | null;
+  registration_open_date: string | null;
+  registration_deadline: string | null;
+}
+
+interface EventHotel {
+  id: string;
+  event_id: string;
+  hotel_name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  rate_description: string | null;
+  booking_url: string | null;
+  booking_code: string | null;
+  room_block_count: number | null;
+  sort_order: number;
+}
+
+interface Venue {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  address: string | null;
+  num_rinks: number;
 }
 
 // --- Helpers ---
@@ -75,43 +113,100 @@ const locationIcon = (city: string) => {
 
 // --- Standard age groups & divisions ---
 const STANDARD_AGE_GROUPS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', '16u/JV', '18u/Var.'];
-const STANDARD_DIVISIONS = ['AA', 'A', 'BB', 'B', 'CC', 'C', 'D1', 'D2', 'D3', 'House'];
+const STANDARD_DIVISIONS = ['AA', 'Gold', 'A1', 'A2', 'Silver', 'A3', 'B1', 'Bronze', 'B2', 'B3', 'House', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3'];
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+const TIMEZONES = ['Eastern (EST)', 'Central (CST)', 'Mountain (MST)', 'Pacific (PST)'];
+const SEASONS = ['fall', 'winter', 'spring', 'summer'];
 
 // --- Event Form Modal ---
-function EventFormModal({ event, tournaments, onClose, onSaved }: {
+function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   event: EventItem | null; // null = create mode
   tournaments: { id: string; name: string }[];
+  venues: Venue[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isEdit = !!event;
+  const [activeTab, setActiveTab] = useState<'details' | 'hotels'>('details');
   const [form, setForm] = useState({
     name: event?.name || '',
     city: event?.city || '',
     state: event?.state || 'IL',
     start_date: event?.start_date || '',
     end_date: event?.end_date || '',
-    tournament_id: (event as any)?.tournament_id || '',
+    tournament_id: event?.tournament_id || '',
+    venue_id: event?.venue_id || '',
     status: event?.status || 'draft',
     information: event?.information || '',
-    price_cents: event ? ((event as any).price_cents ? String((event as any).price_cents / 100) : '') : '',
-    deposit_cents: event ? ((event as any).deposit_cents ? String((event as any).deposit_cents / 100) : '') : '',
+    description: event?.description || '',
+    price_cents: event?.price_cents ? String(event.price_cents / 100) : '',
+    deposit_cents: event?.deposit_cents ? String(event.deposit_cents / 100) : '',
     slots_count: event?.slots_count ? String(event.slots_count) : '100',
     age_groups: event?.age_groups ? JSON.parse(event.age_groups) as string[] : [] as string[],
     divisions: event?.divisions ? JSON.parse(event.divisions) as string[] : [] as string[],
-    registration_open_date: (event as any)?.registration_open_date || '',
-    registration_deadline: (event as any)?.registration_deadline || '',
+    registration_open_date: event?.registration_open_date || '',
+    registration_deadline: event?.registration_deadline || '',
+    season: event?.season || '',
+    timezone: event?.timezone || 'Central (CST)',
+    rules_url: event?.rules_url || '',
+    logo_url: event?.logo_url || '',
+    banner_url: event?.banner_url || '',
+    hide_availability: event?.hide_availability || 0,
+    show_participants: event?.show_participants ?? 1,
+    is_sold_out: event?.is_sold_out || 0,
   });
+
+  // Hotels state
+  const [hotels, setHotels] = useState<EventHotel[]>([]);
+  const [loadingHotels, setLoadingHotels] = useState(false);
+  const [newHotel, setNewHotel] = useState({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
+  const [addingHotel, setAddingHotel] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Load hotels when in edit mode
+  useEffect(() => {
+    if (isEdit && event?.id) {
+      setLoadingHotels(true);
+      fetch(`${API_BASE}/admin/event-hotels/${event.id}`).then(r => r.json()).then(json => {
+        if (json.success) setHotels(json.data);
+        setLoadingHotels(false);
+      }).catch(() => setLoadingHotels(false));
+    }
+  }, [isEdit, event?.id]);
 
   const toggleArrayItem = (field: 'age_groups' | 'divisions', item: string) => {
     setForm(prev => ({
       ...prev,
       [field]: prev[field].includes(item) ? prev[field].filter((i: string) => i !== item) : [...prev[field], item],
     }));
+  };
+
+  const handleAddHotel = async () => {
+    if (!newHotel.hotel_name || !event?.id) return;
+    setAddingHotel(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/event-hotels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: event.id, ...newHotel, sort_order: hotels.length }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setHotels(prev => [...prev, json.data]);
+        setNewHotel({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
+      }
+    } catch (e) { /* ignore */ }
+    setAddingHotel(false);
+  };
+
+  const handleDeleteHotel = async (hotelId: string) => {
+    try {
+      await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, { method: 'DELETE' });
+      setHotels(prev => prev.filter(h => h.id !== hotelId));
+    } catch (e) { /* ignore */ }
   };
 
   const handleSave = async () => {
@@ -126,8 +221,10 @@ function EventFormModal({ event, tournaments, onClose, onSaved }: {
         start_date: form.start_date,
         end_date: form.end_date,
         tournament_id: form.tournament_id || null,
+        venue_id: form.venue_id || null,
         status: form.status,
         information: form.information || null,
+        description: form.description || null,
         price_cents: form.price_cents ? Math.round(parseFloat(form.price_cents) * 100) : null,
         deposit_cents: form.deposit_cents ? Math.round(parseFloat(form.deposit_cents) * 100) : null,
         slots_count: form.slots_count ? parseInt(form.slots_count) : 100,
@@ -135,6 +232,14 @@ function EventFormModal({ event, tournaments, onClose, onSaved }: {
         divisions: form.divisions.length > 0 ? JSON.stringify(form.divisions) : null,
         registration_open_date: form.registration_open_date || null,
         registration_deadline: form.registration_deadline || null,
+        season: form.season || null,
+        timezone: form.timezone || 'Central (CST)',
+        rules_url: form.rules_url || null,
+        logo_url: form.logo_url || null,
+        banner_url: form.banner_url || null,
+        hide_availability: form.hide_availability,
+        show_participants: form.show_participants,
+        is_sold_out: form.is_sold_out,
       };
 
       const url = isEdit ? `${API_BASE}/admin/update/${event!.id}` : `${API_BASE}/admin/create`;
@@ -160,141 +265,318 @@ function EventFormModal({ event, tournaments, onClose, onSaved }: {
     }
   };
 
+  const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none";
+  const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+
+  const currentYear = new Date().getFullYear();
+  const seasonOptions = SEASONS.flatMap(s => [currentYear, currentYear + 1].map(y => `${s}-${y}`));
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl z-10">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Event' : 'Create Event'}</h3>
             <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
               <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
+          {/* Tabs */}
+          <div className="flex gap-1">
+            <button onClick={() => setActiveTab('details')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'details' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+              Event Details
+            </button>
+            {isEdit && (
+              <button onClick={() => setActiveTab('hotels')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'hotels' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+                Hotels ({hotels.length})
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          {/* Event Name + Tournament */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
-              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Chi-Town Showdown 2026" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tournament Template</label>
-              <select value={form.tournament_id} onChange={e => setForm({ ...form, tournament_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
-                <option value="">None</option>
-                {tournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-          </div>
+          {activeTab === 'details' && (
+            <>
+              {/* Event Name + Tournament */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Event Name *</label>
+                  <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Chi-Town Showdown 2026" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Tournament Template</label>
+                  <select value={form.tournament_id} onChange={e => setForm({ ...form, tournament_id: e.target.value })} className={inputCls}>
+                    <option value="">None</option>
+                    {tournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              </div>
 
-          {/* Location */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-              <input type="text" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
-                placeholder="Chicago" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
-              <select value={form.state} onChange={e => setForm({ ...form, state: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
-                {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
+              {/* Location + Venue */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className={labelCls}>City *</label>
+                  <input type="text" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
+                    placeholder="Chicago" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>State *</label>
+                  <select value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} className={inputCls}>
+                    {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>Venue</label>
+                  <select value={form.venue_id} onChange={e => setForm({ ...form, venue_id: e.target.value })} className={inputCls}>
+                    <option value="">No venue selected</option>
+                    {venues.map(v => <option key={v.id} value={v.id}>{v.name} — {v.city}, {v.state}</option>)}
+                  </select>
+                </div>
+              </div>
 
-          {/* Dates */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
-              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
-              <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reg. Opens</label>
-              <input type="date" value={form.registration_open_date} onChange={e => setForm({ ...form, registration_open_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reg. Deadline</label>
-              <input type="date" value={form.registration_deadline} onChange={e => setForm({ ...form, registration_deadline: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-          </div>
+              {/* Dates */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className={labelCls}>Start Date *</label>
+                  <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>End Date *</label>
+                  <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Reg. Opens</label>
+                  <input type="date" value={form.registration_open_date} onChange={e => setForm({ ...form, registration_open_date: e.target.value })} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Reg. Deadline</label>
+                  <input type="date" value={form.registration_deadline} onChange={e => setForm({ ...form, registration_deadline: e.target.value })} className={inputCls} />
+                </div>
+              </div>
 
-          {/* Status + Pricing */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="registration_open">Registration Open</option>
-                <option value="registration_closed">Registration Closed</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
-              <input type="number" step="0.01" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: e.target.value })}
-                placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Deposit ($)</label>
-              <input type="number" step="0.01" value={form.deposit_cents} onChange={e => setForm({ ...form, deposit_cents: e.target.value })}
-                placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Slots</label>
-              <input type="number" value={form.slots_count} onChange={e => setForm({ ...form, slots_count: e.target.value })}
-                placeholder="100" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
-            </div>
-          </div>
+              {/* Status + Pricing */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className={labelCls}>Status</label>
+                  <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputCls}>
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                    <option value="registration_open">Registration Open</option>
+                    <option value="registration_closed">Registration Closed</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Price ($)</label>
+                  <input type="number" step="0.01" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: e.target.value })}
+                    placeholder="1795.00" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Deposit ($)</label>
+                  <input type="number" step="0.01" value={form.deposit_cents} onChange={e => setForm({ ...form, deposit_cents: e.target.value })}
+                    placeholder="350.00" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Max Slots</label>
+                  <input type="number" value={form.slots_count} onChange={e => setForm({ ...form, slots_count: e.target.value })}
+                    placeholder="100" className={inputCls} />
+                </div>
+              </div>
 
-          {/* Age Groups */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Age Groups</label>
-            <div className="flex flex-wrap gap-2">
-              {STANDARD_AGE_GROUPS.map(ag => (
-                <button key={ag} type="button" onClick={() => toggleArrayItem('age_groups', ag)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    form.age_groups.includes(ag) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>{ag}</button>
-              ))}
-            </div>
-          </div>
+              {/* Season + Timezone */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className={labelCls}>Season</label>
+                  <select value={form.season} onChange={e => setForm({ ...form, season: e.target.value })} className={inputCls}>
+                    <option value="">Not set</option>
+                    {seasonOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Timezone</label>
+                  <select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })} className={inputCls}>
+                    {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelCls}>Rules URL</label>
+                  <input type="url" value={form.rules_url} onChange={e => setForm({ ...form, rules_url: e.target.value })}
+                    placeholder="https://..." className={inputCls} />
+                </div>
+              </div>
 
-          {/* Divisions */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Divisions</label>
-            <div className="flex flex-wrap gap-2">
-              {STANDARD_DIVISIONS.map(d => (
-                <button key={d} type="button" onClick={() => toggleArrayItem('divisions', d)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    form.divisions.includes(d) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>{d}</button>
-              ))}
-            </div>
-          </div>
+              {/* Logo + Banner URLs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Logo URL</label>
+                  <input type="url" value={form.logo_url} onChange={e => setForm({ ...form, logo_url: e.target.value })}
+                    placeholder="https://..." className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Banner Image URL</label>
+                  <input type="url" value={form.banner_url} onChange={e => setForm({ ...form, banner_url: e.target.value })}
+                    placeholder="https://..." className={inputCls} />
+                </div>
+              </div>
 
-          {/* Information */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Event Information</label>
-            <textarea value={form.information} onChange={e => setForm({ ...form, information: e.target.value })}
-              rows={3} placeholder="Additional event details shown publicly..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none resize-none" />
-          </div>
+              {/* Age Groups */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Age Groups</label>
+                <div className="flex flex-wrap gap-2">
+                  {STANDARD_AGE_GROUPS.map(ag => (
+                    <button key={ag} type="button" onClick={() => toggleArrayItem('age_groups', ag)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        form.age_groups.includes(ag) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}>{ag}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divisions */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Divisions</label>
+                <div className="flex flex-wrap gap-2">
+                  {STANDARD_DIVISIONS.map(d => (
+                    <button key={d} type="button" onClick={() => toggleArrayItem('divisions', d)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        form.divisions.includes(d) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}>{d}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Toggle Options */}
+              <div className="flex flex-wrap gap-4 py-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.show_participants === 1} onChange={e => setForm({ ...form, show_participants: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
+                  <span className="text-sm text-gray-700">Show Participants</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.hide_availability === 1} onChange={e => setForm({ ...form, hide_availability: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
+                  <span className="text-sm text-gray-700">Hide Availability</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.is_sold_out === 1} onChange={e => setForm({ ...form, is_sold_out: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
+                  <span className="text-sm text-gray-700">Sold Out</span>
+                </label>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className={labelCls}>Description (marketing copy)</label>
+                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                  rows={2} placeholder="Longer description for event page..."
+                  className={inputCls + ' resize-none'} />
+              </div>
+
+              {/* Information */}
+              <div>
+                <label className={labelCls}>Event Information (shown to registrants)</label>
+                <textarea value={form.information} onChange={e => setForm({ ...form, information: e.target.value })}
+                  rows={3} placeholder="e.g. Mite-Midget: AA, A, B, C, D, House. 4 game guarantee!"
+                  className={inputCls + ' resize-none'} />
+              </div>
+            </>
+          )}
+
+          {activeTab === 'hotels' && (
+            <>
+              <div className="text-sm text-gray-500 mb-2">
+                Manage hotel options that teams can choose from during registration.
+              </div>
+
+              {/* Existing Hotels */}
+              {loadingHotels ? (
+                <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600" /></div>
+              ) : hotels.length > 0 ? (
+                <div className="space-y-2">
+                  {hotels.map(h => (
+                    <div key={h.id} className="flex items-start gap-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{h.hotel_name}</p>
+                        {h.rate_description && <p className="text-xs text-cyan-700 font-medium">{h.rate_description}</p>}
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                          {h.address && <p className="text-xs text-gray-500">{h.address}</p>}
+                          {(h.city || h.state) && <p className="text-xs text-gray-500">{[h.city, h.state].filter(Boolean).join(', ')}</p>}
+                          {h.phone && <p className="text-xs text-gray-500">{h.phone}</p>}
+                          {h.booking_code && <p className="text-xs text-gray-500">Code: {h.booking_code}</p>}
+                          {h.booking_url && <a href={h.booking_url} target="_blank" rel="noreferrer" className="text-xs text-cyan-600 underline">Booking Link</a>}
+                        </div>
+                      </div>
+                      <button onClick={() => handleDeleteHotel(h.id)} className="p-1.5 hover:bg-red-50 rounded-lg transition text-red-400 hover:text-red-600 shrink-0">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-400 text-sm border border-dashed border-gray-300">No hotels added yet</div>
+              )}
+
+              {/* Add Hotel Form */}
+              <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-gray-800">Add Hotel</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Hotel Name *</label>
+                    <input type="text" value={newHotel.hotel_name} onChange={e => setNewHotel({ ...newHotel, hotel_name: e.target.value })}
+                      placeholder="e.g. Hilton Rosemont" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Rate / Description</label>
+                    <input type="text" value={newHotel.rate_description} onChange={e => setNewHotel({ ...newHotel, rate_description: e.target.value })}
+                      placeholder="e.g. $129/night - Group Rate" className={inputCls} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelCls}>Address</label>
+                    <input type="text" value={newHotel.address} onChange={e => setNewHotel({ ...newHotel, address: e.target.value })}
+                      placeholder="123 Main St" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>City</label>
+                    <input type="text" value={newHotel.city} onChange={e => setNewHotel({ ...newHotel, city: e.target.value })}
+                      placeholder="Rosemont" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>State</label>
+                    <input type="text" value={newHotel.state} onChange={e => setNewHotel({ ...newHotel, state: e.target.value })}
+                      placeholder="IL" className={inputCls} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelCls}>Phone</label>
+                    <input type="tel" value={newHotel.phone} onChange={e => setNewHotel({ ...newHotel, phone: e.target.value })}
+                      placeholder="(847) 555-0123" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Booking Code</label>
+                    <input type="text" value={newHotel.booking_code} onChange={e => setNewHotel({ ...newHotel, booking_code: e.target.value })}
+                      placeholder="UHT2026" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Booking URL</label>
+                    <input type="url" value={newHotel.booking_url} onChange={e => setNewHotel({ ...newHotel, booking_url: e.target.value })}
+                      placeholder="https://..." className={inputCls} />
+                  </div>
+                </div>
+                <button onClick={handleAddHotel} disabled={!newHotel.hotel_name || addingHotel}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition disabled:opacity-50">
+                  {addingHotel ? 'Adding...' : 'Add Hotel'}
+                </button>
+              </div>
+            </>
+          )}
 
           {result === 'error' && (
             <div className="px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{errorMsg}</div>
@@ -960,6 +1242,7 @@ export default function AdminEventsPage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
   const [tournaments, setTournaments] = useState<{ id: string; name: string }[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<EventItem | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -976,11 +1259,15 @@ export default function AdminEventsPage() {
       .catch(() => setLoading(false));
   }, [filter, refreshKey]);
 
-  // Fetch tournaments for form dropdown
+  // Fetch tournaments + venues for form dropdowns
   useEffect(() => {
     fetch(`${API_BASE}/admin/tournaments`)
       .then(r => r.json())
       .then(json => { if (json.success) setTournaments(json.data.map((t: any) => ({ id: t.id, name: t.name }))); })
+      .catch(() => {});
+    fetch(`${API_BASE}/admin/venues`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setVenues(json.data); })
       .catch(() => {});
   }, []);
 
@@ -1047,6 +1334,7 @@ export default function AdminEventsPage() {
         <EventFormModal
           event={editingEvent === 'create' ? null : editingEvent}
           tournaments={tournaments}
+          venues={venues}
           onClose={() => setEditingEvent(null)}
           onSaved={reloadEvents}
         />
