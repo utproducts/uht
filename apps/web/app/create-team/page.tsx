@@ -2,24 +2,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-const AGE_GROUPS = [
-  'Mite (8U)', 'Squirt (10U)', 'Pee Wee (12U)', 'Bantam (14U)',
-  '16U / JV', '18U / Varsity', 'Girls 10U', 'Girls 12U', 'Girls 14U', 'Girls 16U', 'Girls 19U',
-];
-
-const DIVISIONS = [
-  'AA', 'Gold', 'A1', 'A2', 'Silver', 'A3',
-  'B1', 'Bronze', 'B2', 'B3', 'House', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3',
-];
-
-const LEAGUES = [
-  'COHL', 'NHL', 'NIHL', 'SAVS', 'Little Hawks', 'TOHL',
-  'MVAHA', 'MAWHA', 'NWHL', 'AHAI', 'Other',
-];
-
-const TEAM_TYPES = [
-  'Draft (no cuts)', 'Tournament team', 'Tryout', 'Regular Season Team', 'Added Players',
-];
+// Fallbacks in case API is unreachable
+const FALLBACK_AGE_GROUPS = ['Mite (8U)', 'Squirt (10U)', 'Pee Wee (12U)', 'Bantam (14U)', '16U / JV', '18U / Varsity'];
+const FALLBACK_DIVISIONS = ['AA', 'Gold', 'A1', 'A2', 'Silver', 'B1', 'Bronze', 'House'];
+const FALLBACK_LEAGUES = ['COHL', 'NIHL', 'AHAI', 'Other'];
+const FALLBACK_TEAM_TYPES = ['Draft (no cuts)', 'Tournament team', 'Tryout', 'Regular Season Team', 'Added Players'];
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
@@ -76,6 +63,12 @@ export default function CreateTeamPage() {
   const [success, setSuccess] = useState(false);
   const [redirectAfter, setRedirectAfter] = useState<string | null>(null);
 
+  // Dynamic lookups from API
+  const [ageGroups, setAgeGroups] = useState<string[]>(FALLBACK_AGE_GROUPS);
+  const [divisions, setDivisions] = useState<string[]>(FALLBACK_DIVISIONS);
+  const [leagues, setLeagues] = useState<string[]>(FALLBACK_LEAGUES);
+  const [teamTypes, setTeamTypes] = useState<string[]>(FALLBACK_TEAM_TYPES);
+
   useEffect(() => {
     // Check auth
     const token = localStorage.getItem('uht_token');
@@ -87,6 +80,24 @@ export default function CreateTeamPage() {
     const params = new URLSearchParams(window.location.search);
     const redir = params.get('redirect');
     if (redir) setRedirectAfter(redir);
+
+    // Load dynamic lookups
+    (async () => {
+      try {
+        const res = await fetch(`${API}/lookups?active=true`);
+        const json = await res.json() as any;
+        const items: { category: string; value: string; sort_order: number }[] = json.data || [];
+        const byCategory = (cat: string) => items.filter(i => i.category === cat).map(i => i.value);
+        const ag = byCategory('age_group');
+        const dv = byCategory('division');
+        const lg = byCategory('league');
+        const tt = byCategory('team_type');
+        if (ag.length) setAgeGroups(ag);
+        if (dv.length) setDivisions(dv);
+        if (lg.length) setLeagues(lg);
+        if (tt.length) setTeamTypes(tt);
+      } catch {}
+    })();
   }, [router]);
 
   const set = (field: keyof FormData, value: string) => {
@@ -238,7 +249,7 @@ export default function CreateTeamPage() {
                     <select value={form.ageGroup} onChange={e => set('ageGroup', e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
                       <option value="">Select...</option>
-                      {AGE_GROUPS.map(ag => <option key={ag} value={ag}>{ag}</option>)}
+                      {ageGroups.map(ag => <option key={ag} value={ag}>{ag}</option>)}
                     </select>
                   </div>
                   <div>
@@ -246,7 +257,7 @@ export default function CreateTeamPage() {
                     <select value={form.divisionLevel} onChange={e => set('divisionLevel', e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
                       <option value="">Select...</option>
-                      {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                      {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                 </div>
@@ -274,7 +285,7 @@ export default function CreateTeamPage() {
                     <select value={form.hometownLeague} onChange={e => set('hometownLeague', e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
                       <option value="">Select...</option>
-                      {LEAGUES.map(l => <option key={l} value={l}>{l}</option>)}
+                      {leagues.map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
                   </div>
                   <div>
@@ -288,7 +299,7 @@ export default function CreateTeamPage() {
                 <div>
                   <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Team Type</label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {TEAM_TYPES.map(tt => (
+                    {teamTypes.map(tt => (
                       <button key={tt} type="button" onClick={() => set('teamType', tt)}
                         className={"px-3 py-2.5 rounded-xl border text-sm transition-all text-left " +
                           (form.teamType === tt ? "border-brand-400 bg-brand-50 text-brand-600 font-medium" : "border-gray-200 hover:border-gray-300 text-[#1d1d1f]")}>
