@@ -1018,9 +1018,11 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
 function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void }) {
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'schedules'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'hotels' | 'schedules'>('overview');
   const [editingReg, setEditingReg] = useState<any>(null);
   const [hotels, setHotels] = useState<string[]>([]);
+  const [hotelReport, setHotelReport] = useState<any>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/admin/detail/${eventId}`)
@@ -1038,6 +1040,20 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
       })
       .catch(() => {});
   }, [eventId]);
+
+  // Load hotel report when tab opens
+  useEffect(() => {
+    if (tab === 'hotels' && !hotelReport && !loadingReport) {
+      setLoadingReport(true);
+      fetch(`${HOTEL_API}/report/${eventId}`)
+        .then(r => r.json())
+        .then(json => {
+          if (json.success) setHotelReport(json.data);
+          setLoadingReport(false);
+        })
+        .catch(() => setLoadingReport(false));
+    }
+  }, [tab, eventId]);
 
   const handleRegSaved = (updated: any) => {
     if (!event) return;
@@ -1120,7 +1136,7 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-200 rounded-xl p-1 w-fit mb-6">
-        {(['overview', 'participants', 'schedules'] as const).map((t) => (
+        {(['overview', 'participants', 'hotels', 'schedules'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1128,7 +1144,7 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
               tab === t ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : 'Schedules'}
+            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'hotels' ? 'Hotel Report' : 'Schedules'}
           </button>
         ))}
       </div>
@@ -1291,6 +1307,156 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
             </div>
             );
           })}
+        </div>
+      )}
+
+      {tab === 'hotels' && (
+        <div className="space-y-6">
+          {loadingReport ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+            </div>
+          ) : !hotelReport ? (
+            <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
+              <p>Unable to load hotel report.</p>
+            </div>
+          ) : (
+            <>
+              {/* Report Header Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+                  <div className="text-xl font-bold text-gray-900">{hotelReport.total_teams}</div>
+                  <div className="text-[11px] text-gray-500 mt-1">Total Teams</div>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+                  <div className="text-xl font-bold text-green-600">{hotelReport.total_assigned}</div>
+                  <div className="text-[11px] text-gray-500 mt-1">Hotel Assigned</div>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+                  <div className="text-xl font-bold text-amber-600">{hotelReport.total_unassigned}</div>
+                  <div className="text-[11px] text-gray-500 mt-1">Unassigned</div>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+                  <div className="text-xl font-bold text-blue-600">{hotelReport.total_local}</div>
+                  <div className="text-[11px] text-gray-500 mt-1">Local Teams</div>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+                  <div className="text-xl font-bold text-cyan-600">{hotelReport.event_nights}</div>
+                  <div className="text-[11px] text-gray-500 mt-1">Event Nights</div>
+                </div>
+              </div>
+
+              {/* Hotel Breakdown */}
+              {hotelReport.hotels?.map((h: any) => (
+                <div key={h.hotel_id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 px-5 py-4 border-b border-blue-100">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-lg">{h.hotel_name}</h3>
+                        <div className="flex items-center gap-4 mt-1 flex-wrap">
+                          {h.contact_name && (
+                            <span className="text-xs text-blue-600 font-medium">Rep: {h.contact_name} {h.contact_email ? `(${h.contact_email})` : ''}</span>
+                          )}
+                          {h.rate_description && (
+                            <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">{h.rate_description}</span>
+                          )}
+                          {h.booking_code && (
+                            <span className="text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">Code: {h.booking_code}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-blue-600">{h.teams_assigned}</div>
+                        <div className="text-[10px] text-gray-500">teams</div>
+                      </div>
+                    </div>
+                    {/* Key metrics */}
+                    <div className="grid grid-cols-4 gap-3 mt-3">
+                      <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
+                        <div className="text-sm font-bold text-gray-900">{h.total_players}</div>
+                        <div className="text-[10px] text-gray-500">Players</div>
+                      </div>
+                      <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
+                        <div className="text-sm font-bold text-gray-900">{h.estimated_rooms}</div>
+                        <div className="text-[10px] text-gray-500">Est. Rooms</div>
+                      </div>
+                      <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
+                        <div className="text-sm font-bold text-gray-900">{h.estimated_nights}</div>
+                        <div className="text-[10px] text-gray-500">Room Nights</div>
+                      </div>
+                      <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
+                        <div className="text-sm font-bold text-gray-900">{h.room_block_count || '—'}</div>
+                        <div className="text-[10px] text-gray-500">Block Size</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Teams list */}
+                  {h.teams?.length > 0 && (
+                    <div className="divide-y divide-gray-50">
+                      {h.teams.map((t: any, i: number) => (
+                        <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm text-gray-900 truncate">{t.team_name}</span>
+                              <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.age_group}</span>
+                              {t.division && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{t.division}</span>}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {t.manager_name && <span>{t.manager_name}</span>}
+                              {t.manager_email && <span className="ml-2 text-gray-400">{t.manager_email}</span>}
+                              {t.manager_phone && <span className="ml-2 text-gray-400">{t.manager_phone}</span>}
+                            </div>
+                          </div>
+                          <div className="text-right ml-3">
+                            <div className="text-sm font-bold text-gray-900">{t.roster_count}</div>
+                            <div className="text-[10px] text-gray-400">players</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {h.teams?.length === 0 && (
+                    <div className="px-5 py-4 text-center text-sm text-gray-400">No teams assigned yet</div>
+                  )}
+                </div>
+              ))}
+
+              {/* Unassigned Teams */}
+              {hotelReport.unassigned_teams?.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                  <div className="bg-amber-50 px-5 py-4 border-b border-amber-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-amber-800">Unassigned Teams</h3>
+                        <p className="text-xs text-amber-600 mt-0.5">These teams have not been assigned a hotel yet</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-amber-600">{hotelReport.unassigned_teams.length}</div>
+                        <div className="text-[10px] text-gray-500">teams</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {hotelReport.unassigned_teams.map((t: any, i: number) => (
+                      <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-gray-900">{t.team_name}</span>
+                            <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.age_group}</span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {t.manager_name && <span>{t.manager_name}</span>}
+                            {t.manager_email && <span className="ml-2 text-gray-400">{t.manager_email}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

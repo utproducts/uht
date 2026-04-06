@@ -12,6 +12,7 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Schedule Builder', href: '/dashboard/admin/schedule', icon: '\u{1F4C5}' },
     { name: 'Financials', href: '/dashboard/admin/financials', icon: '\u{1F4B0}' },
     { name: 'Communications', href: '/dashboard/admin/comms', icon: '\u{1F4E7}' },
+    { name: 'Hotels', href: '/dashboard/admin/hotels', icon: '\u{1F3E8}' },
     { name: 'Sponsors', href: '/dashboard/admin/sponsors', icon: '\u{1F91D}' },
     { name: 'Book Ice', href: '/dashboard/admin/ice', icon: '\u{26F8}' },
     { name: 'Settings', href: '/dashboard/admin/settings', icon: '\u{2699}' },
