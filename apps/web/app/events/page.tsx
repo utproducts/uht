@@ -98,24 +98,41 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [step, setStep] = useState<'auth' | 'select' | 'payment'>(isLoggedIn ? 'select' : 'auth');
 
-  // Fetch user's teams if logged in
+  // Fetch user's teams — check localStorage first, then API
   useEffect(() => {
     if (!isLoggedIn) return;
     (async () => {
+      let teams: { id: string; name: string }[] = [];
+
+      // Check localStorage for locally-created teams
+      try {
+        const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+        if (Array.isArray(local) && local.length > 0) {
+          teams = local.map((t: any) => ({ id: t.id, name: t.name }));
+        }
+      } catch {}
+
+      // Also try API
       try {
         const res = await fetch(`${API}/teams/my-teams`, {
           headers: { Authorization: `Bearer ${auth!.token}` },
         });
         if (res.ok) {
           const json = await res.json();
-          const teams = (json.data || []).map((t: any) => ({ id: t.id, name: t.name }));
-          setUserTeams(teams);
-          if (teams.length === 1) {
-            setSelectedTeam(teams[0].id);
-            setStep('payment');
+          const apiTeams = (json.data || []).map((t: any) => ({ id: t.id, name: t.name }));
+          // Merge, avoiding duplicates
+          const existingIds = new Set(teams.map(t => t.id));
+          for (const t of apiTeams) {
+            if (!existingIds.has(t.id)) teams.push(t);
           }
         }
       } catch {}
+
+      setUserTeams(teams);
+      if (teams.length === 1) {
+        setSelectedTeam(teams[0].id);
+        setStep('payment');
+      }
       setLoadingTeams(false);
     })();
   }, [isLoggedIn]);
@@ -201,13 +218,13 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
                   </div>
                   <h4 className="font-semibold text-[#1d1d1f] mb-1">No Teams Found</h4>
                   <p className="text-sm text-[#6e6e73] mb-5">
-                    You don&apos;t have any teams yet. Create or join a team to register for events.
+                    You don&apos;t have any teams yet. Create a team to register for events.
                   </p>
                   <a
-                    href="/dashboard"
+                    href={`/create-team?redirect=/events${event.slug ? `%3Fregister%3D${event.slug}` : ''}`}
                     className="inline-block px-6 py-3 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-colors"
                   >
-                    Go to Dashboard
+                    Create a Team
                   </a>
                 </div>
               ) : (

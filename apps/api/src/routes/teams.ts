@@ -231,7 +231,7 @@ teamRoutes.get('/:id', authMiddleware, async (c) => {
 });
 
 // ==================
-// Create team
+// Create team (full — with coach/manager/league info)
 // ==================
 const createTeamSchema = z.object({
   name: z.string().min(1),
@@ -242,36 +242,40 @@ const createTeamSchema = z.object({
   usaHockeyRosterUrl: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
+  website: z.string().optional(),
+  hometownLeague: z.string().optional(),
+  teamType: z.string().optional(),
+  seasonRecord: z.string().optional(),
+  headCoachName: z.string().optional(),
+  headCoachEmail: z.string().optional(),
+  headCoachPhone: z.string().optional(),
+  managerName: z.string().optional(),
+  managerEmail: z.string().optional(),
+  managerPhone: z.string().optional(),
 });
 
-teamRoutes.post('/', authMiddleware, requireRole('admin', 'organization', 'coach', 'manager'), zValidator('json', createTeamSchema), async (c) => {
+teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
   const data = c.req.valid('json');
-  const user = c.get('user');
   const db = c.env.DB;
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
-    INSERT INTO teams (id, organization_id, name, age_group, division_level, usa_hockey_team_id, usa_hockey_roster_url, city, state)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO teams (id, organization_id, name, age_group, division_level,
+      usa_hockey_team_id, usa_hockey_roster_url, city, state,
+      website, hometown_league, team_type, season_record,
+      head_coach_name, head_coach_email, head_coach_phone,
+      manager_name, manager_email, manager_phone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, data.organizationId || null, data.name, data.ageGroup,
     data.divisionLevel || null, data.usaHockeyTeamId || null,
-    data.usaHockeyRosterUrl || null, data.city || null, data.state || null
+    data.usaHockeyRosterUrl || null, data.city || null, data.state || null,
+    data.website || null, data.hometownLeague || null,
+    data.teamType || null, data.seasonRecord || null,
+    data.headCoachName || null, data.headCoachEmail || null, data.headCoachPhone || null,
+    data.managerName || null, data.managerEmail || null, data.managerPhone || null
   ).run();
-
-  // Auto-assign creator as coach or manager based on role
-  if (user.roles.includes('coach')) {
-    await db.prepare(`
-      INSERT INTO team_coaches (id, team_id, user_id, role, assigned_by)
-      VALUES (?, ?, ?, 'head', ?)
-    `).bind(crypto.randomUUID().replace(/-/g, ''), teamId, user.id, user.id).run();
-  } else if (user.roles.includes('manager')) {
-    await db.prepare(`
-      INSERT INTO team_managers (id, team_id, user_id)
-      VALUES (?, ?, ?)
-    `).bind(crypto.randomUUID().replace(/-/g, ''), teamId, user.id).run();
-  }
 
   return c.json({ success: true, data: { id: teamId } }, 201);
 });
