@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
+const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
 
 interface EventItem {
   id: string;
@@ -158,15 +159,19 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
   // Hotels state
   const [hotels, setHotels] = useState<EventHotel[]>([]);
+  const [suggestedHotels, setSuggestedHotels] = useState<any[]>([]);
   const [loadingHotels, setLoadingHotels] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [showAddManual, setShowAddManual] = useState(false);
   const [newHotel, setNewHotel] = useState({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
   const [addingHotel, setAddingHotel] = useState(false);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Load hotels when in edit mode
+  // Load hotels + suggestions when in edit mode
   useEffect(() => {
     if (isEdit && event?.id) {
       setLoadingHotels(true);
@@ -177,11 +182,40 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     }
   }, [isEdit, event?.id]);
 
+  // Load suggestions when hotels tab opens
+  useEffect(() => {
+    if (activeTab === 'hotels' && isEdit && event?.id && suggestedHotels.length === 0) {
+      setLoadingSuggestions(true);
+      fetch(`${HOTEL_API}/suggest/${event.id}`).then(r => r.json()).then(json => {
+        if (json.success) setSuggestedHotels(json.data);
+        setLoadingSuggestions(false);
+      }).catch(() => setLoadingSuggestions(false));
+    }
+  }, [activeTab, isEdit, event?.id]);
+
   const toggleArrayItem = (field: 'age_groups' | 'divisions', item: string) => {
     setForm(prev => ({
       ...prev,
       [field]: prev[field].includes(item) ? prev[field].filter((i: string) => i !== item) : [...prev[field], item],
     }));
+  };
+
+  const handleLinkHotel = async (masterHotelId: string) => {
+    if (!event?.id) return;
+    setLinkingId(masterHotelId);
+    try {
+      const res = await fetch(`${HOTEL_API}/link/${event.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ master_hotel_id: masterHotelId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setHotels(prev => [...prev, json.data]);
+        setSuggestedHotels(prev => prev.map(h => h.id === masterHotelId ? { ...h, already_linked: true } : h));
+      }
+    } catch (e) { /* ignore */ }
+    setLinkingId(null);
   };
 
   const handleAddHotel = async () => {
@@ -197,6 +231,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       if (json.success) {
         setHotels(prev => [...prev, json.data]);
         setNewHotel({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
+        setShowAddManual(false);
       }
     } catch (e) { /* ignore */ }
     setAddingHotel(false);
@@ -206,6 +241,12 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, { method: 'DELETE' });
       setHotels(prev => prev.filter(h => h.id !== hotelId));
+      // Un-mark from suggestions
+      setSuggestedHotels(prev => prev.map(h => {
+        const linked = hotels.find(eh => eh.id === hotelId);
+        if (linked && (linked as any).master_hotel_id === h.id) return { ...h, already_linked: false };
+        return h;
+      }));
     } catch (e) { /* ignore */ }
   };
 
@@ -489,91 +530,129 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
           {activeTab === 'hotels' && (
             <>
-              <div className="text-sm text-gray-500 mb-2">
-                Manage hotel options that teams can choose from during registration.
+              {/* Linked Hotels for this Event */}
+              <div>
+                <p className="text-sm font-semibold text-gray-800 mb-2">Event Hotels ({hotels.length})</p>
+                {loadingHotels ? (
+                  <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600" /></div>
+                ) : hotels.length > 0 ? (
+                  <div className="space-y-2">
+                    {hotels.map(h => (
+                      <div key={h.id} className="flex items-start gap-3 bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center shrink-0 mt-0.5">
+                          <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{h.hotel_name}</p>
+                          {h.rate_description && <p className="text-xs text-cyan-700 font-medium">{h.rate_description}</p>}
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                            {(h.city || h.state) && <span className="text-xs text-gray-500">{[h.city, h.state].filter(Boolean).join(', ')}</span>}
+                            {h.phone && <span className="text-xs text-gray-500">{h.phone}</span>}
+                            {h.booking_code && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Code: {h.booking_code}</span>}
+                          </div>
+                          {((h as any).contact_name || (h as any).contact_email) && (
+                            <div className="flex flex-wrap gap-x-3 mt-1.5 pt-1.5 border-t border-gray-100">
+                              <span className="text-xs text-gray-600 font-medium">Rep: {(h as any).contact_name || 'N/A'}</span>
+                              {(h as any).contact_email && <span className="text-xs text-cyan-600">{(h as any).contact_email}</span>}
+                              {(h as any).contact_phone && <span className="text-xs text-gray-500">{(h as any).contact_phone}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => handleDeleteHotel(h.id)} className="p-1.5 hover:bg-red-50 rounded-lg transition text-red-400 hover:text-red-600 shrink-0" title="Remove from event">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl p-5 text-center text-sm border border-dashed border-gray-300">
+                    <p className="text-gray-400 mb-1">No hotels assigned to this event yet</p>
+                    <p className="text-gray-400 text-xs">Select from suggested hotels below or add manually</p>
+                  </div>
+                )}
               </div>
 
-              {/* Existing Hotels */}
-              {loadingHotels ? (
-                <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600" /></div>
-              ) : hotels.length > 0 ? (
-                <div className="space-y-2">
-                  {hotels.map(h => (
-                    <div key={h.id} className="flex items-start gap-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900">{h.hotel_name}</p>
-                        {h.rate_description && <p className="text-xs text-cyan-700 font-medium">{h.rate_description}</p>}
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                          {h.address && <p className="text-xs text-gray-500">{h.address}</p>}
-                          {(h.city || h.state) && <p className="text-xs text-gray-500">{[h.city, h.state].filter(Boolean).join(', ')}</p>}
-                          {h.phone && <p className="text-xs text-gray-500">{h.phone}</p>}
-                          {h.booking_code && <p className="text-xs text-gray-500">Code: {h.booking_code}</p>}
-                          {h.booking_url && <a href={h.booking_url} target="_blank" rel="noreferrer" className="text-xs text-cyan-600 underline">Booking Link</a>}
+              {/* Suggested Hotels from Master Database */}
+              <div>
+                <p className="text-sm font-semibold text-gray-800 mb-2">
+                  Suggested Hotels
+                  <span className="text-xs font-normal text-gray-400 ml-2">
+                    based on event location ({event?.city}, {event?.state})
+                  </span>
+                </p>
+                {loadingSuggestions ? (
+                  <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-600" /></div>
+                ) : suggestedHotels.filter(h => !h.already_linked).length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {suggestedHotels.filter(h => !h.already_linked).map(h => (
+                      <div key={h.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-200 hover:border-cyan-300 transition">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{h.hotel_name}</p>
+                          <p className="text-[10px] text-gray-500">{h.city}, {h.state}</p>
+                          {h.default_rate_description && <p className="text-[10px] text-cyan-700">{h.default_rate_description}</p>}
                         </div>
+                        <button onClick={() => handleLinkHotel(h.id)} disabled={linkingId === h.id}
+                          className="px-2.5 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 shrink-0">
+                          {linkingId === h.id ? '...' : '+ Add'}
+                        </button>
                       </div>
-                      <button onClick={() => handleDeleteHotel(h.id)} className="p-1.5 hover:bg-red-50 rounded-lg transition text-red-400 hover:text-red-600 shrink-0">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-400 text-sm border border-dashed border-gray-300">No hotels added yet</div>
-              )}
+                    ))}
+                  </div>
+                ) : suggestedHotels.length > 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-2">All available hotels already added</p>
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-2">No hotels in database for this area yet</p>
+                )}
+              </div>
 
-              {/* Add Hotel Form */}
-              <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-semibold text-gray-800">Add Hotel</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Hotel Name *</label>
-                    <input type="text" value={newHotel.hotel_name} onChange={e => setNewHotel({ ...newHotel, hotel_name: e.target.value })}
-                      placeholder="e.g. Hilton Rosemont" className={inputCls} />
+              {/* Manual Add (collapsed by default) */}
+              <div>
+                {!showAddManual ? (
+                  <button onClick={() => setShowAddManual(true)}
+                    className="text-sm text-cyan-600 hover:text-cyan-700 font-medium transition">
+                    + Add hotel manually
+                  </button>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-gray-800">Add Hotel Manually</p>
+                      <button onClick={() => setShowAddManual(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>Hotel Name *</label>
+                        <input type="text" value={newHotel.hotel_name} onChange={e => setNewHotel({ ...newHotel, hotel_name: e.target.value })}
+                          placeholder="e.g. Hilton Rosemont" className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Rate / Description</label>
+                        <input type="text" value={newHotel.rate_description} onChange={e => setNewHotel({ ...newHotel, rate_description: e.target.value })}
+                          placeholder="e.g. $129/night - Group Rate" className={inputCls} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className={labelCls}>City</label>
+                        <input type="text" value={newHotel.city} onChange={e => setNewHotel({ ...newHotel, city: e.target.value })}
+                          placeholder="Rosemont" className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>State</label>
+                        <input type="text" value={newHotel.state} onChange={e => setNewHotel({ ...newHotel, state: e.target.value })}
+                          placeholder="IL" className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Phone</label>
+                        <input type="tel" value={newHotel.phone} onChange={e => setNewHotel({ ...newHotel, phone: e.target.value })}
+                          placeholder="(847) 555-0123" className={inputCls} />
+                      </div>
+                    </div>
+                    <button onClick={handleAddHotel} disabled={!newHotel.hotel_name || addingHotel}
+                      className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition disabled:opacity-50">
+                      {addingHotel ? 'Adding...' : 'Add Hotel'}
+                    </button>
                   </div>
-                  <div>
-                    <label className={labelCls}>Rate / Description</label>
-                    <input type="text" value={newHotel.rate_description} onChange={e => setNewHotel({ ...newHotel, rate_description: e.target.value })}
-                      placeholder="e.g. $129/night - Group Rate" className={inputCls} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className={labelCls}>Address</label>
-                    <input type="text" value={newHotel.address} onChange={e => setNewHotel({ ...newHotel, address: e.target.value })}
-                      placeholder="123 Main St" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>City</label>
-                    <input type="text" value={newHotel.city} onChange={e => setNewHotel({ ...newHotel, city: e.target.value })}
-                      placeholder="Rosemont" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>State</label>
-                    <input type="text" value={newHotel.state} onChange={e => setNewHotel({ ...newHotel, state: e.target.value })}
-                      placeholder="IL" className={inputCls} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className={labelCls}>Phone</label>
-                    <input type="tel" value={newHotel.phone} onChange={e => setNewHotel({ ...newHotel, phone: e.target.value })}
-                      placeholder="(847) 555-0123" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Booking Code</label>
-                    <input type="text" value={newHotel.booking_code} onChange={e => setNewHotel({ ...newHotel, booking_code: e.target.value })}
-                      placeholder="UHT2026" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Booking URL</label>
-                    <input type="url" value={newHotel.booking_url} onChange={e => setNewHotel({ ...newHotel, booking_url: e.target.value })}
-                      placeholder="https://..." className={inputCls} />
-                  </div>
-                </div>
-                <button onClick={handleAddHotel} disabled={!newHotel.hotel_name || addingHotel}
-                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition disabled:opacity-50">
-                  {addingHotel ? 'Adding...' : 'Add Hotel'}
-                </button>
+                )}
               </div>
             </>
           )}
