@@ -257,6 +257,7 @@ const updateEventSchema = z.object({
   rules_url: z.string().nullable().optional(),
   logo_url: z.string().nullable().optional(),
   banner_url: z.string().nullable().optional(),
+  multi_event_discount_pct: z.number().nullable().optional(),
 });
 
 eventRoutes.patch('/admin/update/:id', zValidator('json', updateEventSchema), async (c) => {
@@ -322,6 +323,7 @@ const createEventSimpleSchema = z.object({
   banner_url: z.string().nullable().optional(),
   hide_availability: z.number().optional(),
   show_participants: z.number().optional(),
+  multi_event_discount_pct: z.number().nullable().optional(),
 });
 
 eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), async (c) => {
@@ -335,8 +337,8 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
     INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, venue_id, status,
       description, information, price_cents, deposit_cents, slots_count, age_groups, divisions,
       season, timezone, registration_open_date, registration_deadline, scorekeeper_pin,
-      rules_url, logo_url, banner_url, hide_availability, show_participants)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      rules_url, logo_url, banner_url, hide_availability, show_participants, multi_event_discount_pct)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, data.name, slug, data.city, data.state, data.start_date, data.end_date,
     data.tournament_id || null, data.venue_id || null, data.status || 'draft',
@@ -346,7 +348,7 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
     data.season || null, data.timezone || 'Central (CST)',
     data.registration_open_date || null, data.registration_deadline || null, pin,
     data.rules_url || null, data.logo_url || null, data.banner_url || null,
-    data.hide_availability || 0, data.show_participants ?? 1
+    data.hide_availability || 0, data.show_participants ?? 1, data.multi_event_discount_pct || 0
   ).run();
 
   return c.json({ success: true, data: { id, slug, scorekeeper_pin: pin } }, 201);
@@ -411,6 +413,26 @@ eventRoutes.post('/admin/duplicate/:id', async (c) => {
 });
 
 // ==================
+// CONSUMER: Get upcoming events for upsell (excluding current event)
+// ==================
+eventRoutes.get('/upcoming-for-upsell/:eventId', optionalAuth, async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  const result = await db.prepare(`
+    SELECT id, name, city, state, start_date, end_date, price_cents, deposit_cents, multi_event_discount_pct, logo_url
+    FROM events
+    WHERE id != ? AND status IN ('registration_open', 'active')
+    ORDER BY start_date ASC
+  `).bind(eventId).all();
+
+  return c.json({
+    success: true,
+    data: result.results || [],
+  });
+});
+
+// ==================
 // CONSUMER: Register team for an event (from events page)
 // ==================
 const consumerRegisterSchema = z.object({
@@ -424,14 +446,21 @@ const consumerRegisterSchema = z.object({
   email: z.string().email(),
   phone: z.string().optional(),
   headCoachName: z.string().optional(),
-  paymentChoice: z.enum(['pay_now', 'pay_later']),
+  paymentChoice: z.enum(['pay_now', 'pay_deposit', 'pay_later']),
+  additionalEventIds: z.array(z.string()).optional(),
 });
 
 eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Verify event exists and is open for registration
+  // Collect all event IDs to register for
+  const eventIds = [data.eventId];
+  if (data.additionalEventIds && data.additionalEventIds.length > 0) {
+    eventIds.push(...data.additionalEventIds);
+  }
+
+  // Verify primary event exists and is open for registration
   const event = await db.prepare(
     'SELECT id, name, city, state, start_date, end_date, status, price_cents, deposit_cents FROM events WHERE id = ?'
   ).bind(data.eventId).first<any>();
@@ -443,7 +472,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     return c.json({ success: false, error: 'Registration is not open for this event' }, 400);
   }
 
-  // Check if team is already registered for this event
+  // Check if team is already registered for primary event
   const existing = await db.prepare(
     "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status != 'denied'"
   ).bind(data.eventId, data.teamName).first();
@@ -452,8 +481,39 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     return c.json({ success: false, error: 'This team is already registered for this event' }, 409);
   }
 
-  // Create registration with 'pending' status
+  // Verify all additional events exist and are open
+  const additionalEvents: any[] = [];
+  if (data.additionalEventIds && data.additionalEventIds.length > 0) {
+    for (const addEventId of data.additionalEventIds) {
+      const addEvent = await db.prepare(
+        'SELECT id, name, city, state, start_date, end_date, status FROM events WHERE id = ?'
+      ).bind(addEventId).first<any>();
+
+      if (!addEvent) {
+        return c.json({ success: false, error: `Event ${addEventId} not found` }, 404);
+      }
+      if (addEvent.status !== 'registration_open' && addEvent.status !== 'active') {
+        return c.json({ success: false, error: `Registration is not open for event ${addEvent.name}` }, 400);
+      }
+
+      // Check if team is already registered for this additional event
+      const addExisting = await db.prepare(
+        "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status != 'denied'"
+      ).bind(addEventId, data.teamName).first();
+
+      if (addExisting) {
+        return c.json({ success: false, error: `This team is already registered for ${addEvent.name}` }, 409);
+      }
+
+      additionalEvents.push(addEvent);
+    }
+  }
+
+  // Create registration for primary event with 'pending' status
+  const regIds: string[] = [];
   const regId = crypto.randomUUID().replace(/-/g, '');
+  regIds.push(regId);
+
   await db.prepare(`
     INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
@@ -463,6 +523,22 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     data.email, data.phone || null,
     data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid'
   ).run();
+
+  // Create registrations for additional events
+  for (const addEvent of additionalEvents) {
+    const addRegId = crypto.randomUUID().replace(/-/g, '');
+    regIds.push(addRegId);
+
+    await db.prepare(`
+      INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    `).bind(
+      addRegId, addEvent.id, data.teamName, data.ageGroup, data.division || null,
+      data.managerFirstName || null, data.managerLastName || null,
+      data.email, data.phone || null,
+      data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid'
+    ).run();
+  }
 
   // Send confirmation email
   const startDate = new Date(event.start_date + 'T12:00:00');
@@ -493,10 +569,14 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   return c.json({
     success: true,
     data: {
-      id: regId,
+      primaryRegistrationId: regId,
+      allRegistrationIds: regIds,
+      eventsRegistered: eventIds.length,
       status: 'pending',
       email_sent: emailResult.success,
-      message: 'Registration received! You will receive a confirmation email shortly. Our team reviews registrations within 24-48 hours.',
+      message: eventIds.length > 1
+        ? `Registered for ${eventIds.length} events! You will receive a confirmation email shortly. Our team reviews registrations within 24-48 hours.`
+        : 'Registration received! You will receive a confirmation email shortly. Our team reviews registrations within 24-48 hours.',
     },
   }, 201);
 });

@@ -77,300 +77,8 @@ function cityGradient(city: string): string {
   return 'from-[#003e79] to-[#001f3f]';
 }
 
-/* ── Check if user is logged in ── */
-function getAuthUser(): { token: string; user: any } | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const token = localStorage.getItem('uht_token');
-    const userStr = localStorage.getItem('uht_user');
-    if (token && userStr) return { token, user: JSON.parse(userStr) };
-  } catch {}
-  return null;
-}
-
-/* ── Registration Modal ── */
-function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }) {
-  const auth = getAuthUser();
-  const isLoggedIn = !!auth;
-
-  const [userTeams, setUserTeams] = useState<{ id: string; name: string }[]>([]);
-  const [loadingTeams, setLoadingTeams] = useState(isLoggedIn);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [step, setStep] = useState<'auth' | 'select' | 'payment'>(isLoggedIn ? 'select' : 'auth');
-  const [submittingReg, setSubmittingReg] = useState(false);
-  const [registrationResult, setRegistrationResult] = useState<string | null>(null);
-  const [registrationError, setRegistrationError] = useState<string | null>(null);
-
-  // Fetch user's teams — check localStorage first, then API
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    (async () => {
-      let teams: { id: string; name: string }[] = [];
-
-      // Check localStorage for locally-created teams
-      try {
-        const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-        if (Array.isArray(local) && local.length > 0) {
-          teams = local.map((t: any) => ({ id: t.id, name: t.name }));
-        }
-      } catch {}
-
-      // Also try API
-      try {
-        const res = await fetch(`${API}/teams/my-teams`, {
-          headers: { Authorization: `Bearer ${auth!.token}` },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          const apiTeams = (json.data || []).map((t: any) => ({ id: t.id, name: t.name }));
-          // Merge, avoiding duplicates
-          const existingIds = new Set(teams.map(t => t.id));
-          for (const t of apiTeams) {
-            if (!existingIds.has(t.id)) teams.push(t);
-          }
-        }
-      } catch {}
-
-      setUserTeams(teams);
-      if (teams.length === 1) {
-        setSelectedTeam(teams[0].id);
-        setStep('payment');
-      }
-      setLoadingTeams(false);
-    })();
-  }, [isLoggedIn]);
-
-  const selectedTeamObj = userTeams.find(t => t.id === selectedTeam);
-  const selectedTeamName = selectedTeamObj?.name;
-
-  const handleRegister = async (paymentChoice: 'pay_now' | 'pay_later') => {
-    if (!selectedTeam || !selectedTeamName) return;
-    setSubmittingReg(true);
-    setRegistrationError(null);
-
-    try {
-      const user = auth?.user;
-      const res = await fetch(`${API}/events/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: event.id,
-          teamId: selectedTeam,
-          teamName: selectedTeamName,
-          ageGroup: (selectedTeamObj as any)?.ageGroup || 'Unknown',
-          email: user?.email || 'unknown@email.com',
-          managerFirstName: user?.name?.split(' ')[0] || undefined,
-          managerLastName: user?.name?.split(' ').slice(1).join(' ') || undefined,
-          paymentChoice,
-        }),
-      });
-      const json = await res.json() as any;
-      if (json.success) {
-        setRegistrationResult(json.data.message || 'Registration submitted! Check your email for confirmation.');
-      } else {
-        setRegistrationError(json.error || 'Registration failed. Please try again.');
-      }
-    } catch (err) {
-      setRegistrationError('Network error. Please try again.');
-    }
-    setSubmittingReg(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      {/* modal */}
-      <div className="relative bg-white rounded-2xl shadow-elevated max-w-md w-full overflow-hidden">
-        {/* Header with event logo */}
-        <div className={`bg-gradient-to-br ${cityGradient(event.city)} p-6 text-center relative overflow-hidden`}>
-          {/* watermark */}
-          {event.logo_url && (
-            <img
-              src={event.logo_url}
-              alt=""
-              className="absolute inset-0 w-full h-full object-contain opacity-[0.08] scale-150 pointer-events-none"
-            />
-          )}
-          <div className="relative z-10">
-            {event.logo_url && (
-              <img src={event.logo_url} alt="" className="w-20 h-20 object-contain mx-auto mb-3 drop-shadow-lg" />
-            )}
-            <h3 className="text-white font-bold text-lg">{event.name.replace(/^\w+\s*-\s*/, '')}</h3>
-            <p className="text-white/70 text-sm mt-1">
-              {event.city}, {event.state} · {formatDateRange(event.start_date, event.end_date)}
-            </p>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {/* ── Step: Not logged in ── */}
-          {step === 'auth' && (
-            <>
-              <div className="text-center mb-6">
-                <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-7 h-7 text-[#6e6e73]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                  </svg>
-                </div>
-                <h4 className="font-semibold text-[#1d1d1f] text-lg mb-1">Sign in to Register</h4>
-                <p className="text-sm text-[#6e6e73]">
-                  You need an account to register your team for this tournament.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <a
-                  href={`/login?redirect=/events&register=${event.slug}`}
-                  className="block w-full py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-colors shadow-sm text-center"
-                >
-                  Sign In
-                </a>
-                <a
-                  href={`/register?redirect=/events&register=${event.slug}`}
-                  className="block w-full py-3.5 rounded-xl font-semibold text-[#1d1d1f] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition-colors text-center"
-                >
-                  Create Account
-                </a>
-              </div>
-            </>
-          )}
-
-          {/* ── Step: Loading teams ── */}
-          {step !== 'auth' && loadingTeams && (
-            <div className="text-center py-8">
-              <div className="w-8 h-8 border-2 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-[#6e6e73]">Loading your teams...</p>
-            </div>
-          )}
-
-          {/* ── Step: Select team (multi-team) ── */}
-          {step === 'select' && !loadingTeams && (
-            <>
-              {userTeams.length === 0 ? (
-                <div className="text-center py-4">
-                  <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">🏒</span>
-                  </div>
-                  <h4 className="font-semibold text-[#1d1d1f] mb-1">No Teams Found</h4>
-                  <p className="text-sm text-[#6e6e73] mb-5">
-                    You don&apos;t have any teams yet. Create a team to register for events.
-                  </p>
-                  <a
-                    href={`/create-team?redirect=/events${event.slug ? `%3Fregister%3D${event.slug}` : ''}`}
-                    className="inline-block px-6 py-3 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-colors"
-                  >
-                    Create a Team
-                  </a>
-                </div>
-              ) : (
-                <>
-                  <h4 className="font-semibold text-[#1d1d1f] mb-1">Select Your Team</h4>
-                  <p className="text-sm text-[#6e6e73] mb-4">Choose which team to register for this event.</p>
-                  <div className="space-y-2 mb-6">
-                    {userTeams.map(team => (
-                      <button
-                        key={team.id}
-                        onClick={() => setSelectedTeam(team.id)}
-                        className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
-                          selectedTeam === team.id
-                            ? 'border-[#00ccff] bg-[#00ccff]/5'
-                            : 'border-[#e8e8ed] hover:border-[#d1d1d6]'
-                        }`}
-                      >
-                        <span className="font-medium text-[#1d1d1f]">{team.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => selectedTeam && setStep('payment')}
-                    disabled={!selectedTeam}
-                    className="w-full py-3 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Continue
-                  </button>
-                </>
-              )}
-            </>
-          )}
-
-          {/* ── Step: Payment ── */}
-          {step === 'payment' && !loadingTeams && (
-            <>
-              {registrationResult ? (
-                <div className="text-center py-4">
-                  <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  </div>
-                  <h4 className="font-semibold text-[#1d1d1f] text-lg mb-1">Registration Submitted!</h4>
-                  <p className="text-sm text-[#6e6e73] mb-2">
-                    {registrationResult}
-                  </p>
-                  <p className="text-xs text-[#86868b]">You can close this window.</p>
-                </div>
-              ) : (
-              <>
-              <h4 className="font-semibold text-[#1d1d1f] mb-1">Complete Registration</h4>
-              {selectedTeamName && (
-                <p className="text-sm text-[#6e6e73] mb-1">
-                  Team: <span className="font-medium text-[#1d1d1f]">{selectedTeamName}</span>
-                </p>
-              )}
-              {event.price_cents && (
-                <p className="text-sm text-[#6e6e73] mb-5">
-                  Entry Fee: <span className="font-semibold text-[#1d1d1f]">{formatPrice(event.price_cents)}</span>
-                </p>
-              )}
-
-              {registrationError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{registrationError}</div>
-              )}
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => handleRegister('pay_now')}
-                  disabled={submittingReg}
-                  className="w-full py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-50 transition-colors shadow-sm"
-                >
-                  {submittingReg ? 'Submitting...' : `Pay Now — ${formatPrice(event.price_cents)}`}
-                </button>
-                <button
-                  onClick={() => handleRegister('pay_later')}
-                  disabled={submittingReg}
-                  className="w-full py-3.5 rounded-xl font-semibold text-[#1d1d1f] bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-50 transition-colors"
-                >
-                  {submittingReg ? 'Submitting...' : 'Pay Later'}
-                </button>
-              </div>
-              </>
-              )}
-
-              {userTeams.length > 1 && (
-                <button
-                  onClick={() => { setStep('select'); setSelectedTeam(null); }}
-                  className="w-full text-center text-sm text-[#6e6e73] hover:text-[#1d1d1f] mt-4"
-                >
-                  ← Choose a different team
-                </button>
-              )}
-            </>
-          )}
-
-          <button
-            onClick={onClose}
-            className="w-full text-center text-sm text-[#86868b] hover:text-[#1d1d1f] mt-4 transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Event Card ── */
-function EventCard({ event, onRegister }: { event: Event; onRegister: (e: Event) => void }) {
+function EventCard({ event }: { event: Event }) {
   const ageGroups = parseJsonArray(event.age_groups);
   const isUpcoming = event.status === 'registration_open' || event.status === 'active';
   const isPast = event.status === 'completed';
@@ -467,12 +175,13 @@ function EventCard({ event, onRegister }: { event: Event; onRegister: (e: Event)
               >
                 View Details
               </a>
-              <button
-                onClick={(e) => { e.preventDefault(); onRegister(event); }}
-                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] active:scale-95 transition-all shadow-sm"
+              <a
+                href={`/register?event=${event.slug}&eventId=${event.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] active:scale-95 transition-all shadow-sm inline-block"
               >
                 Register
-              </button>
+              </a>
             </>
           ) : (
             <a
@@ -496,31 +205,16 @@ export default function EventsPage() {
   const [cityFilter, setCityFilter] = useState('');
   const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [registerEvent, setRegisterEvent] = useState<Event | null>(null);
-  const [pendingRegisterSlug, setPendingRegisterSlug] = useState<string | null>(null);
-
-  // On mount, check URL for ?register=<slug> (redirect back from login)
+  // On mount, check URL for ?register=<slug> (redirect to new registration page)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const slug = params.get('register');
     if (slug) {
-      setPendingRegisterSlug(slug);
-      // Clean the URL so the param doesn't persist on refresh
-      const clean = window.location.pathname;
-      window.history.replaceState({}, '', clean);
+      // Clean the URL and redirect to registration page once events load
+      window.history.replaceState({}, '', window.location.pathname);
+      // We'll redirect once events are loaded below
     }
   }, []);
-
-  // Once events load, auto-open the register modal if we have a pending slug
-  useEffect(() => {
-    if (pendingRegisterSlug && events.length > 0) {
-      const match = events.find(e => e.slug === pendingRegisterSlug);
-      if (match) {
-        setRegisterEvent(match);
-      }
-      setPendingRegisterSlug(null);
-    }
-  }, [pendingRegisterSlug, events]);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -699,20 +393,12 @@ export default function EventsPage() {
               <EventCard
                 key={event.id}
                 event={event}
-                onRegister={(ev) => setRegisterEvent(ev)}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Registration Modal */}
-      {registerEvent && (
-        <RegisterModal
-          event={registerEvent}
-          onClose={() => setRegisterEvent(null)}
-        />
-      )}
     </div>
   );
 }

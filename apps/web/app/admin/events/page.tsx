@@ -35,6 +35,7 @@ interface EventItem {
   banner_url: string | null;
   price_cents: number | null;
   deposit_cents: number | null;
+  multi_event_discount_pct: number | null;
   registration_open_date: string | null;
   registration_deadline: string | null;
 }
@@ -142,6 +143,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     description: event?.description || '',
     price_cents: event?.price_cents ? String(event.price_cents / 100) : '',
     deposit_cents: event?.deposit_cents ? String(event.deposit_cents / 100) : '',
+    multi_event_discount_pct: event?.multi_event_discount_pct ? String(event.multi_event_discount_pct) : '',
     slots_count: event?.slots_count ? String(event.slots_count) : '100',
     age_groups: event?.age_groups ? JSON.parse(event.age_groups) as string[] : [] as string[],
     divisions: event?.divisions ? JSON.parse(event.divisions) as string[] : [] as string[],
@@ -268,6 +270,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
         description: form.description || null,
         price_cents: form.price_cents ? Math.round(parseFloat(form.price_cents) * 100) : null,
         deposit_cents: form.deposit_cents ? Math.round(parseFloat(form.deposit_cents) * 100) : null,
+        multi_event_discount_pct: form.multi_event_discount_pct ? parseInt(form.multi_event_discount_pct) : 0,
         slots_count: form.slots_count ? parseInt(form.slots_count) : 100,
         age_groups: form.age_groups.length > 0 ? JSON.stringify(form.age_groups) : null,
         divisions: form.divisions.length > 0 ? JSON.stringify(form.divisions) : null,
@@ -421,6 +424,12 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   <label className={labelCls}>Deposit ($)</label>
                   <input type="number" step="0.01" value={form.deposit_cents} onChange={e => setForm({ ...form, deposit_cents: e.target.value })}
                     placeholder="350.00" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Multi-Event Discount %</label>
+                  <input type="number" min="0" max="100" value={form.multi_event_discount_pct} onChange={e => setForm({ ...form, multi_event_discount_pct: e.target.value })}
+                    placeholder="10" className={inputCls} />
+                  <p className="text-xs text-gray-400 mt-1">Discount when team registers for 2+ events</p>
                 </div>
                 <div>
                   <label className={labelCls}>Max Slots</label>
