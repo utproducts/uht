@@ -4,27 +4,27 @@ import { useState, useEffect } from 'react';
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
-      <p className="text-sm text-gray-500 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-[#003e79]">{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+      <p className="text-sm text-[#86868b] mb-1">{label}</p>
+      <p className="text-2xl font-bold text-[#1d1d1f]">{value}</p>
+      {sub && <p className="text-xs text-[#86868b] mt-1">{sub}</p>}
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-lg font-semibold text-[#003e79] mb-3">{children}</h2>;
+  return <h2 className="text-base font-bold text-[#1d1d1f] mb-3">{children}</h2>;
 }
 
 function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
-    <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+    <div className="overflow-x-auto bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-gray-600">
-          <tr>{headers.map((h, i) => <th key={i} className="px-4 py-2 font-medium">{h}</th>)}</tr>
+        <thead className="bg-[#fafafa] text-left text-[#6e6e73]">
+          <tr>{headers.map((h, i) => <th key={i} className="px-4 py-3 font-medium text-xs uppercase tracking-wider">{h}</th>)}</tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
-          {rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="px-4 py-2">{c}</td>)}</tr>)}
+        <tbody className="divide-y divide-[#f0f0f2]">
+          {rows.map((r, i) => <tr key={i} className="hover:bg-[#fafafa] transition-colors">{r.map((c, j) => <td key={j} className="px-4 py-3 text-[#1d1d1f]">{c}</td>)}</tr>)}
         </tbody>
       </table>
     </div>
@@ -35,8 +35,8 @@ function CapBar({ label, cur, max }: { label: string; cur: number; max: number }
   const pct = Math.round((cur / max) * 100);
   return (
     <div className="mb-3">
-      <div className="flex justify-between text-sm mb-1"><span>{label}</span><span>{cur}/{max}</span></div>
-      <div className="h-2 bg-gray-200 rounded-full"><div className="h-2 bg-[#00ccff] rounded-full" style={{ width: pct + '%' }} /></div>
+      <div className="flex justify-between text-sm mb-1.5"><span className="text-[#1d1d1f] font-medium">{label}</span><span className="text-[#86868b]">{cur}/{max}</span></div>
+      <div className="h-2 bg-[#f0f0f2] rounded-full"><div className="h-2 bg-gradient-to-r from-[#003e79] to-[#00ccff] rounded-full transition-all" style={{ width: pct + '%' }} /></div>
     </div>
   );
 }
@@ -93,14 +93,13 @@ function AdminDash() {
       <SectionTitle>Quick Actions</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Create Event', href: '/admin/events', icon: '🏆' },
-          { label: 'View Sponsors', href: '/admin/sponsors', icon: '🤝' },
-          { label: 'Manage Ice', href: '/admin/ice', icon: '⛸' },
-          { label: 'View FAQ', href: '/faq', icon: '❓' },
+          { label: 'Create Event', href: '/admin/events' },
+          { label: 'View Sponsors', href: '/admin/sponsors' },
+          { label: 'Manage Ice', href: '/admin/ice' },
+          { label: 'View FAQ', href: '/faq' },
         ].map(a => (
-          <a key={a.label} href={a.href} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition text-center">
-            <div className="text-2xl mb-1">{a.icon}</div>
-            <div className="text-sm font-medium text-gray-800">{a.label}</div>
+          <a key={a.label} href={a.href} className="bg-white rounded-2xl border border-[#e8e8ed] p-4 hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] hover:-translate-y-0.5 transition-all text-center shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+            <div className="text-sm font-semibold text-[#003e79]">{a.label}</div>
           </a>
         ))}
       </div>
@@ -124,7 +123,7 @@ function AdminDash() {
           })
         } />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">No upcoming events</div>
+        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 text-center text-[#86868b]">No upcoming events</div>
       )}
 
       {/* Sponsor Deals */}
@@ -234,28 +233,27 @@ function CoachDash() {
       {/* My Teams */}
       <div className="flex items-center justify-between">
         <SectionTitle>My Teams</SectionTitle>
-        <a href="/create-team" className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
+        <a href="/create-team" className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
           + Create Team
         </a>
       </div>
 
       {teams.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-          <div className="text-4xl mb-3">🏒</div>
-          <h3 className="text-lg font-bold text-gray-700 mb-2">No Teams Yet</h3>
-          <p className="text-sm text-gray-400 mb-5">Create your first team to start registering for tournaments.</p>
-          <a href="/create-team" className="inline-block px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
+        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-12 text-center shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+          <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">No Teams Yet</h3>
+          <p className="text-sm text-[#86868b] mb-5">Create your first team to start registering for tournaments.</p>
+          <a href="/create-team" className="inline-block px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
             Create Your First Team
           </a>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {teams.map((team: any) => (
-            <div key={team.id} className="bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-md transition">
+            <div key={team.id} className="bg-white rounded-2xl border border-[#e8e8ed] p-5 hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] transition-all shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-bold text-gray-900 text-lg">{team.name}</h3>
-                  <p className="text-sm text-gray-500 mt-0.5">
+                  <h3 className="font-bold text-[#1d1d1f] text-lg">{team.name}</h3>
+                  <p className="text-sm text-[#6e6e73] mt-0.5">
                     {team.age_group}{team.division_level ? ` · ${team.division_level}` : ''}
                   </p>
                 </div>
@@ -265,34 +263,34 @@ function CoachDash() {
               </div>
 
               {(team.city || team.state) && (
-                <p className="text-sm text-gray-500 mb-2">
+                <p className="text-sm text-[#6e6e73] mb-2">
                   📍 {[team.city, team.state].filter(Boolean).join(', ')}
                 </p>
               )}
 
               {team.head_coach_name && (
-                <p className="text-sm text-gray-500 mb-1">
-                  🧑‍🏫 Coach: <span className="font-medium text-gray-700">{team.head_coach_name}</span>
+                <p className="text-sm text-[#6e6e73] mb-1">
+                  🧑‍🏫 Coach: <span className="font-medium text-[#1d1d1f]">{team.head_coach_name}</span>
                 </p>
               )}
 
               {team.season_record && (
-                <p className="text-sm text-gray-500 mb-1">
-                  📊 Record: <span className="font-medium text-gray-700">{team.season_record}</span>
+                <p className="text-sm text-[#6e6e73] mb-1">
+                  📊 Record: <span className="font-medium text-[#1d1d1f]">{team.season_record}</span>
                 </p>
               )}
 
               {team.hometown_league && (
-                <p className="text-sm text-gray-500 mb-1">
-                  🏟️ League: <span className="font-medium text-gray-700">{team.hometown_league}</span>
+                <p className="text-sm text-[#6e6e73] mb-1">
+                  🏟️ League: <span className="font-medium text-[#1d1d1f]">{team.hometown_league}</span>
                 </p>
               )}
 
               <div className="flex gap-2 mt-4">
-                <a href="/events" className="flex-1 text-center px-3 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 font-semibold rounded-xl text-xs transition">
+                <a href="/events" className="flex-1 text-center px-3 py-2 bg-[#f0f7ff] hover:bg-[#e0efff] text-[#003e79] font-semibold rounded-lg text-xs transition-colors">
                   Register for Event
                 </a>
-                <button className="px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-600 font-medium rounded-xl text-xs transition">
+                <button className="px-3 py-2 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-medium rounded-lg text-xs transition-colors">
                   Edit Team
                 </button>
               </div>
@@ -305,14 +303,13 @@ function CoachDash() {
       <SectionTitle>Quick Actions</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Browse Events', href: '/events', icon: '🏆' },
-          { label: 'Create Team', href: '/create-team', icon: '🏒' },
-          { label: 'My Schedule', href: '/dashboard/coach/schedule', icon: '📅' },
-          { label: 'My Roster', href: '/dashboard/coach/roster', icon: '📋' },
+          { label: 'Browse Events', href: '/events' },
+          { label: 'Create Team', href: '/create-team' },
+          { label: 'My Schedule', href: '/dashboard/coach/schedule' },
+          { label: 'My Roster', href: '/dashboard/coach/roster' },
         ].map(a => (
-          <a key={a.label} href={a.href} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition text-center">
-            <div className="text-2xl mb-1">{a.icon}</div>
-            <div className="text-sm font-medium text-gray-800">{a.label}</div>
+          <a key={a.label} href={a.href} className="bg-white rounded-2xl border border-[#e8e8ed] p-4 hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] hover:-translate-y-0.5 transition-all text-center shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+            <div className="text-sm font-semibold text-[#003e79]">{a.label}</div>
           </a>
         ))}
       </div>
@@ -336,7 +333,7 @@ function ManagerDash() {
         ['Sam Patel', 'Complete', 'Pending', 'Paid'],
       ]} />
       <SectionTitle>Team Communications</SectionTitle>
-      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4 space-y-3">
         <p className="text-sm"><span className="font-medium">Schedule Update:</span> Saturday games moved to Rink 2</p>
         <p className="text-sm"><span className="font-medium">Reminder:</span> Jerseys due by Friday</p>
       </div>
@@ -360,9 +357,9 @@ function ParentDash() {
         ['Sun Feb 16', '11:00 AM', 'Presidents Day', 'TBD', 'TBD'],
       ]} />
       <SectionTitle>Hotel Info</SectionTitle>
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4">
         <p className="font-medium text-sm">Courtyard by Marriott Shelton</p>
-        <p className="text-sm text-gray-500">780 Bridgeport Ave, Shelton CT</p>
+        <p className="text-sm text-[#6e6e73]">780 Bridgeport Ave, Shelton CT</p>
         <p className="text-sm text-[#00ccff] mt-1">Block rate: $139/night - Code: UHT2025</p>
       </div>
     </div>
@@ -406,7 +403,7 @@ function RefereeDash() {
         ['Sun Feb 16', '9:00 AM', 'Rink 1', 'Semifinal 2', 'Center'],
       ]} />
       <SectionTitle>Availability</SectionTitle>
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4">
         <p className="text-sm mb-2">Spring Showdown (Mar 21-23): <span className="text-green-600 font-medium">Available</span></p>
         <p className="text-sm">Summer Slapshot (Jun 13-15): <span className="text-yellow-600 font-medium">Pending</span></p>
       </div>
@@ -431,14 +428,14 @@ export default function DashboardContent({ role }: { role: string }) {
   if (!Dashboard) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">Unknown role: {role}</p>
+        <p className="text-[#6e6e73]">Unknown role: {role}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-[#003e79] mb-6 capitalize">{role} Dashboard</h1>
+      <h1 className="text-2xl font-bold text-[#1d1d1f] mb-6 capitalize">{role} Dashboard</h1>
       <Dashboard />
     </div>
   );

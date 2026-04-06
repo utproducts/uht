@@ -188,7 +188,7 @@ function EventCard({ event }: { event: Event }) {
   return (
     <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] ${isPast ? 'opacity-75 hover:opacity-100' : ''}`}>
       {/* Card Header — gradient with logo */}
-      <div className={`relative bg-gradient-to-br ${cityGradient(event.city)} h-48 flex items-center justify-center overflow-hidden`}>
+      <div className={`relative bg-gradient-to-br ${cityGradient(event.city)} h-52 flex items-center justify-center overflow-hidden`}>
         {/* Soft blurred shapes */}
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl" />
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl" />
@@ -199,11 +199,11 @@ function EventCard({ event }: { event: Event }) {
             <img
               src={event.logo_url}
               alt={event.name}
-              className="w-28 h-28 object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-300"
+              className="w-36 h-36 object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-300"
             />
           ) : (
-            <div className="w-28 h-28 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
-              <span className="text-4xl">🏒</span>
+            <div className="w-36 h-36 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
+              <span className="text-5xl">🏒</span>
             </div>
           )}
         </div>
@@ -265,6 +265,11 @@ function EventCard({ event }: { event: Event }) {
               </span>
             )}
           </div>
+        )}
+
+        {/* Info snippet */}
+        {event.information && (
+          <p className="text-sm text-[#86868b] mt-3 line-clamp-2 leading-relaxed">{event.information}</p>
         )}
 
         {/* Actions */}

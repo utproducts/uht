@@ -2,66 +2,66 @@
 import { usePathname } from 'next/navigation';
 import RoleSwitcher from '../components/RoleSwitcher';
 
-const ROLE_NAV: Record<string, { label: string; items: { name: string; href: string; icon: string }[] }> = {
+const ROLE_NAV: Record<string, { label: string; items: { name: string; href: string }[] }> = {
   admin: { label: 'Admin', items: [
-    { name: 'Overview', href: '/dashboard/admin', icon: '\u{1F4CA}' },
-    { name: 'Events', href: '/admin/events', icon: '\u{1F3C6}' },
-    { name: 'Teams', href: '/admin/teams', icon: '\u{1F465}' },
-    { name: 'Users', href: '/admin/users', icon: '\u{1F464}' },
-    { name: 'Registrations', href: '/admin/registrations', icon: '\u{1F4DD}' },
-    { name: 'Schedule Builder', href: '/admin/schedule', icon: '\u{1F4C5}' },
-    { name: 'Financials', href: '/admin/financials', icon: '\u{1F4B0}' },
-    { name: 'Communications', href: '/admin/comms', icon: '\u{1F4E7}' },
-    { name: 'Hotels', href: '/admin/hotels', icon: '\u{1F3E8}' },
-    { name: 'Sponsors', href: '/admin/sponsors', icon: '\u{1F91D}' },
-    { name: 'Book Ice', href: '/admin/ice', icon: '\u{26F8}' },
-    { name: 'Settings', href: '/admin/settings', icon: '\u{2699}' },
+    { name: 'Overview', href: '/dashboard/admin' },
+    { name: 'Events', href: '/admin/events' },
+    { name: 'Teams', href: '/admin/teams' },
+    { name: 'Users', href: '/admin/users' },
+    { name: 'Registrations', href: '/admin/registrations' },
+    { name: 'Schedule Builder', href: '/admin/schedule' },
+    { name: 'Financials', href: '/admin/financials' },
+    { name: 'Communications', href: '/admin/comms' },
+    { name: 'Hotels', href: '/admin/hotels' },
+    { name: 'Sponsors', href: '/admin/sponsors' },
+    { name: 'Book Ice', href: '/admin/ice' },
+    { name: 'Settings', href: '/admin/settings' },
   ]},
   director: { label: 'Director', items: [
-    { name: 'Overview', href: '/dashboard/director', icon: '\u{1F4CA}' },
-    { name: 'My Events', href: '/dashboard/director/events', icon: '\u{1F3C6}' },
-    { name: 'Registrations', href: '/dashboard/director/registrations', icon: '\u{1F4DD}' },
-    { name: 'Scores', href: '/dashboard/director/scores', icon: '\u{1F3AF}' },
-    { name: 'Schedule', href: '/dashboard/director/schedule', icon: '\u{1F4C5}' },
-    { name: 'Comms', href: '/dashboard/director/comms', icon: '\u{1F4E7}' },
+    { name: 'Overview', href: '/dashboard/director' },
+    { name: 'My Events', href: '/dashboard/director/events' },
+    { name: 'Registrations', href: '/dashboard/director/registrations' },
+    { name: 'Scores', href: '/dashboard/director/scores' },
+    { name: 'Schedule', href: '/dashboard/director/schedule' },
+    { name: 'Comms', href: '/dashboard/director/comms' },
   ]},
   organization: { label: 'Organization', items: [
-    { name: 'Overview', href: '/dashboard/organization', icon: '\u{1F4CA}' },
-    { name: 'Teams', href: '/dashboard/organization/teams', icon: '\u{1F465}' },
-    { name: 'Coaches', href: '/dashboard/organization/coaches', icon: '\u{1F4CB}' },
-    { name: 'Rosters', href: '/dashboard/organization/rosters', icon: '\u{1F4C4}' },
-    { name: 'Events', href: '/dashboard/organization/events', icon: '\u{1F3C6}' },
+    { name: 'Overview', href: '/dashboard/organization' },
+    { name: 'Teams', href: '/dashboard/organization/teams' },
+    { name: 'Coaches', href: '/dashboard/organization/coaches' },
+    { name: 'Rosters', href: '/dashboard/organization/rosters' },
+    { name: 'Events', href: '/dashboard/organization/events' },
   ]},
   coach: { label: 'Coach', items: [
-    { name: 'Overview', href: '/dashboard/coach', icon: '\u{1F4CA}' },
-    { name: 'My Teams', href: '/dashboard/coach/teams', icon: '\u{1F465}' },
-    { name: 'Roster', href: '/dashboard/coach/roster', icon: '\u{1F4C4}' },
-    { name: 'Events', href: '/dashboard/coach/events', icon: '\u{1F3C6}' },
-    { name: 'Schedule', href: '/dashboard/coach/schedule', icon: '\u{1F4C5}' },
+    { name: 'Overview', href: '/dashboard/coach' },
+    { name: 'My Teams', href: '/dashboard/coach/teams' },
+    { name: 'Roster', href: '/dashboard/coach/roster' },
+    { name: 'Events', href: '/dashboard/coach/events' },
+    { name: 'Schedule', href: '/dashboard/coach/schedule' },
   ]},
   manager: { label: 'Manager', items: [
-    { name: 'Overview', href: '/dashboard/manager', icon: '\u{1F4CA}' },
-    { name: 'My Team', href: '/dashboard/manager/team', icon: '\u{1F465}' },
-    { name: 'Players', href: '/dashboard/manager/players', icon: '\u{1F464}' },
-    { name: 'Events', href: '/dashboard/manager/events', icon: '\u{1F3C6}' },
-    { name: 'Payments', href: '/dashboard/manager/payments', icon: '\u{1F4B3}' },
+    { name: 'Overview', href: '/dashboard/manager' },
+    { name: 'My Team', href: '/dashboard/manager/team' },
+    { name: 'Players', href: '/dashboard/manager/players' },
+    { name: 'Events', href: '/dashboard/manager/events' },
+    { name: 'Payments', href: '/dashboard/manager/payments' },
   ]},
   parent: { label: 'Parent / Player', items: [
-    { name: 'Overview', href: '/dashboard/parent', icon: '\u{1F4CA}' },
-    { name: 'My Teams', href: '/dashboard/parent/teams', icon: '\u{1F465}' },
-    { name: 'Schedule', href: '/dashboard/parent/schedule', icon: '\u{1F4C5}' },
-    { name: 'Results', href: '/dashboard/parent/results', icon: '\u{1F3C6}' },
-    { name: 'Stats', href: '/dashboard/parent/stats', icon: '\u{2B50}' },
+    { name: 'Overview', href: '/dashboard/parent' },
+    { name: 'My Teams', href: '/dashboard/parent/teams' },
+    { name: 'Schedule', href: '/dashboard/parent/schedule' },
+    { name: 'Results', href: '/dashboard/parent/results' },
+    { name: 'Stats', href: '/dashboard/parent/stats' },
   ]},
   scorekeeper: { label: 'Scorekeeper', items: [
-    { name: 'Active Games', href: '/dashboard/scorekeeper', icon: '\u{1F3D2}' },
-    { name: 'Assignments', href: '/dashboard/scorekeeper/assignments', icon: '\u{1F4C5}' },
-    { name: 'Completed', href: '/dashboard/scorekeeper/completed', icon: '\u{2705}' },
+    { name: 'Active Games', href: '/dashboard/scorekeeper' },
+    { name: 'Assignments', href: '/dashboard/scorekeeper/assignments' },
+    { name: 'Completed', href: '/dashboard/scorekeeper/completed' },
   ]},
   referee: { label: 'Referee', items: [
-    { name: 'Overview', href: '/dashboard/referee', icon: '\t{1F4CA}' },
-    { name: 'Assignments', href: '/dashboard/referee/assignments', icon: '\u{1F4C5}' },
-    { name: 'Reports', href: '/dashboard/referee/reports', icon: '\u{1F4DD}' },
+    { name: 'Overview', href: '/dashboard/referee' },
+    { name: 'Assignments', href: '/dashboard/referee/assignments' },
+    { name: 'Reports', href: '/dashboard/referee/reports' },
   ]},
 };
 
@@ -71,31 +71,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const nav = ROLE_NAV[roleKey] || ROLE_NAV.admin;
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7]">
-      <header className="bg-navy-700 h-14 flex items-center px-6 justify-between">
+    <div className="min-h-screen bg-[#fafafa]">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-[#003e79] to-[#005599] h-14 flex items-center px-6 justify-between shadow-sm">
         <a href="/" className="flex items-center gap-3">
           <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
           <span className="text-white font-semibold">Ultimate Tournaments</span>
         </a>
         <div className="flex items-center gap-4">
-          <span className="text-white/70 text-sm">{nav.label} Dashboard</span>
-          <a href="/login" className="text-white/50 text-sm hover:text-white transition-colors">Sign out</a>
+          <span className="text-white/60 text-sm font-medium">{nav.label} Dashboard</span>
+          <a href="/login" className="text-white/40 text-sm hover:text-white transition-colors">Sign out</a>
         </div>
       </header>
+
       <div className="flex">
-        <aside className="w-60 bg-white border-r border-gray-200 min-h-[calc(100vh-3.5rem)] p-4">
-          <nav className="space-y-1">
+        {/* Sidebar */}
+        <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3">
+          <p className="px-3 mb-3 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">{nav.label}</p>
+          <nav className="space-y-0.5">
             {nav.items.map((item) => {
               const isActive = pathname === item.href;
               return (
-                <a key={item.name} href={item.href} className={"flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors " + (isActive ? "bg-brand-50 text-brand-600 font-medium" : "text-[#1d1d1f] hover:bg-gray-50")}>
-                  <span className="text-base">{item.icon}</span>
-                  <span>{item.name}</span>
+                <a
+                  key={item.name}
+                  href={item.href}
+                  className={
+                    "block px-3 py-2 rounded-lg text-sm transition-colors " +
+                    (isActive
+                      ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
+                      : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
+                  }
+                >
+                  {item.name}
                 </a>
               );
             })}
           </nav>
         </aside>
+
+        {/* Main content */}
         <main className="flex-1 p-8">{children}</main>
       </div>
       <RoleSwitcher />
