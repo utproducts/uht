@@ -27,11 +27,11 @@ interface Event {
 function formatDateRange(start: string, end: string) {
   const s = new Date(start + 'T12:00:00');
   const e = new Date(end + 'T12:00:00');
-  const mo = s.toLocaleString('en-US', { month: 'short' });
+  const mo = s.toLocaleString('en-US', { month: 'long' });
   if (s.getMonth() === e.getMonth()) {
     return `${mo} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
   }
-  const mo2 = e.toLocaleString('en-US', { month: 'short' });
+  const mo2 = e.toLocaleString('en-US', { month: 'long' });
   return `${mo} ${s.getDate()} – ${mo2} ${e.getDate()}, ${s.getFullYear()}`;
 }
 
@@ -56,26 +56,26 @@ function statusLabel(status: string) {
   }
 }
 
-function statusColor(status: string) {
+function statusBadge(status: string) {
   switch (status) {
-    case 'registration_open': return 'bg-emerald-500 text-white';
-    case 'completed': return 'bg-gray-500 text-white';
-    case 'active': return 'bg-cyan-500 text-white';
-    case 'registration_closed': return 'bg-amber-500 text-white';
-    default: return 'bg-gray-400 text-white';
+    case 'registration_open': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'completed': return 'bg-gray-100 text-gray-600 border-gray-200';
+    case 'active': return 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'registration_closed': return 'bg-amber-50 text-amber-700 border-amber-200';
+    default: return 'bg-gray-100 text-gray-500 border-gray-200';
   }
 }
 
-/* ── city accent colors ── */
-function cityAccent(city: string): { bg: string; border: string; glow: string; text: string } {
+/* ── city gradient for hero accent ── */
+function cityGradient(city: string): string {
   const c = city.toLowerCase();
-  if (c.includes('chicago')) return { bg: 'from-blue-600/20 to-blue-900/40', border: 'border-blue-400/40', glow: 'shadow-blue-500/20', text: 'text-blue-300' };
-  if (c.includes('st. louis') || c.includes('st louis')) return { bg: 'from-red-600/20 to-red-900/40', border: 'border-red-400/40', glow: 'shadow-red-500/20', text: 'text-red-300' };
-  if (c.includes('south bend')) return { bg: 'from-green-600/20 to-green-900/40', border: 'border-green-400/40', glow: 'shadow-green-500/20', text: 'text-green-300' };
-  if (c.includes('ann arbor')) return { bg: 'from-yellow-600/20 to-amber-900/40', border: 'border-yellow-400/40', glow: 'shadow-yellow-500/20', text: 'text-yellow-300' };
-  if (c.includes('madison')) return { bg: 'from-red-700/20 to-red-950/40', border: 'border-red-500/40', glow: 'shadow-red-600/20', text: 'text-red-300' };
-  if (c.includes('holland')) return { bg: 'from-orange-600/20 to-orange-900/40', border: 'border-orange-400/40', glow: 'shadow-orange-500/20', text: 'text-orange-300' };
-  return { bg: 'from-cyan-600/20 to-cyan-900/40', border: 'border-cyan-400/40', glow: 'shadow-cyan-500/20', text: 'text-cyan-300' };
+  if (c.includes('chicago')) return 'from-[#003e79] via-[#005a9e] to-[#00ccff]';
+  if (c.includes('st. louis') || c.includes('st louis')) return 'from-[#1a3a5c] via-[#2a5a8c] to-[#00ccff]';
+  if (c.includes('south bend')) return 'from-[#0c4a1e] via-[#1a7a3a] to-[#00ccbb]';
+  if (c.includes('ann arbor')) return 'from-[#00274c] via-[#003d7a] to-[#00aaff]';
+  if (c.includes('madison')) return 'from-[#c5050c] via-[#e23a3a] to-[#ff6b6b]';
+  if (c.includes('holland')) return 'from-[#4a2c0f] via-[#8a5a2a] to-[#dda040]';
+  return 'from-[#003e79] via-[#005599] to-[#00ccff]';
 }
 
 function daysUntil(dateStr: string): number {
@@ -84,102 +84,93 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/* ── Featured Event (Next Upcoming) ── */
+/* ── Featured Event ── */
 function FeaturedEvent({ event }: { event: Event }) {
   const ageGroups = parseJsonArray(event.age_groups);
   const days = daysUntil(event.start_date);
-  const accent = cityAccent(event.city);
 
   return (
-    <div className="relative group">
-      {/* Glow effect behind card */}
-      <div className={`absolute -inset-1 bg-gradient-to-r from-[#00ccff] via-[#0088ff] to-[#00ccff] rounded-3xl blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500`} />
+    <div className="relative rounded-3xl overflow-hidden bg-white shadow-[0_2px_40px_-12px_rgba(0,62,121,0.15)]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+        {/* Left: Gradient visual */}
+        <div className={`relative bg-gradient-to-br ${cityGradient(event.city)} p-10 lg:p-14 flex flex-col justify-center min-h-[340px]`}>
+          {/* Soft decorative shapes */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/3 translate-x-1/3 blur-2xl" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl" />
 
-      <div className="relative bg-gradient-to-br from-[#0c1a2e] to-[#0a1525] rounded-2xl overflow-hidden border border-white/10">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">
-          {/* Left: Logo area */}
-          <div className={`lg:col-span-2 relative bg-gradient-to-br ${accent.bg} p-8 lg:p-10 flex items-center justify-center min-h-[280px]`}>
-            {/* Diagonal accents */}
-            <div className="absolute inset-0 bg-diagonal-stripes opacity-5" />
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-[#00ccff]/10 to-transparent" />
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-[#00ccff]/10 to-transparent" />
-
+          <div className="relative z-10 flex flex-col items-center lg:items-start text-center lg:text-left">
             {event.logo_url ? (
               <img
                 src={event.logo_url}
                 alt={event.name}
-                className="w-48 h-48 object-contain drop-shadow-[0_0_30px_rgba(0,204,255,0.3)] group-hover:scale-105 transition-transform duration-500"
+                className="w-36 h-36 object-contain drop-shadow-xl mb-6"
               />
             ) : (
-              <div className="w-48 h-48 rounded-3xl bg-white/5 backdrop-blur flex items-center justify-center border border-white/10">
-                <span className="text-6xl">🏒</span>
+              <div className="w-36 h-36 rounded-3xl bg-white/15 backdrop-blur flex items-center justify-center mb-6">
+                <span className="text-5xl">🏒</span>
               </div>
             )}
 
-            {/* "NEXT UP" badge */}
-            <div className="absolute top-4 left-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#00ccff] text-[#003e79]">
-                <span className="w-2 h-2 bg-[#003e79] rounded-full animate-pulse" />
-                Next Up
+            {/* Next Up tag */}
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold bg-white/20 backdrop-blur-sm text-white border border-white/20">
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              Next Up
+            </span>
+          </div>
+        </div>
+
+        {/* Right: Event details */}
+        <div className="p-10 lg:p-14 flex flex-col justify-center">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${statusBadge(event.status)}`}>
+              {statusLabel(event.status)}
+            </span>
+            {days > 0 && days <= 90 && (
+              <span className="text-sm font-medium text-[#003e79]/60">
+                {days} day{days !== 1 ? 's' : ''} away
               </span>
-            </div>
+            )}
           </div>
 
-          {/* Right: Event info */}
-          <div className="lg:col-span-3 p-8 lg:p-10 flex flex-col justify-center">
-            <div className="flex flex-wrap items-center gap-3 mb-3">
-              <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${statusColor(event.status)}`}>
-                {statusLabel(event.status)}
-              </span>
-              {days > 0 && days <= 60 && (
-                <span className="text-[#00ccff] text-sm font-semibold">
-                  {days} day{days !== 1 ? 's' : ''} away
+          <h2 className="text-3xl lg:text-4xl font-bold text-[#1d1d1f] leading-tight mb-4">{event.name}</h2>
+
+          <div className="space-y-2 mb-5">
+            <p className="flex items-center gap-2 text-[#6e6e73]">
+              <svg className="w-5 h-5 text-[#003e79]/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              {event.city}, {event.state}
+            </p>
+            <p className="flex items-center gap-2 text-[#6e6e73]">
+              <svg className="w-5 h-5 text-[#003e79]/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              {formatDateRange(event.start_date, event.end_date)}
+            </p>
+          </div>
+
+          {ageGroups.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {ageGroups.map(ag => (
+                <span key={ag} className="px-3 py-1 bg-[#f0f7ff] text-[#003e79] text-sm font-medium rounded-lg">
+                  {ag}
                 </span>
-              )}
+              ))}
             </div>
+          )}
 
-            <h2 className="text-3xl lg:text-4xl font-bold text-white leading-tight mb-3">{event.name}</h2>
-
-            <div className="flex flex-wrap items-center gap-4 text-white/60 mb-5">
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                {event.city}, {event.state}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                {formatDateRange(event.start_date, event.end_date)}
-              </span>
-            </div>
-
-            {/* Age group pills */}
-            {ageGroups.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-6">
-                {ageGroups.map(ag => (
-                  <span key={ag} className="px-3 py-1 bg-white/10 text-white/80 text-sm font-medium rounded-lg border border-white/10">
-                    {ag}
-                  </span>
-                ))}
-              </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <a
+              href={`/register?event=${event.slug}&eventId=${event.id}`}
+              className="px-8 py-3.5 rounded-full bg-[#003e79] text-white font-semibold text-base hover:bg-[#002d5a] active:scale-[0.98] transition-all shadow-md"
+            >
+              Register Now
+            </a>
+            <a
+              href={`/events/${event.slug}`}
+              className="px-6 py-3.5 rounded-full bg-white text-[#003e79] font-semibold text-base border border-[#d2d2d7] hover:bg-[#f5f5f7] active:scale-[0.98] transition-all"
+            >
+              View Details
+            </a>
+            {event.price_cents && (
+              <span className="text-[#86868b] text-sm">From <span className="text-[#1d1d1f] font-bold text-lg">{formatPrice(event.price_cents)}</span></span>
             )}
-
-            {/* Price + CTA */}
-            <div className="flex flex-wrap items-center gap-4">
-              <a
-                href={`/register?event=${event.slug}&eventId=${event.id}`}
-                className="px-8 py-3.5 rounded-xl bg-[#00ccff] text-[#003e79] font-bold text-base hover:bg-[#00e5ff] active:scale-95 transition-all shadow-lg shadow-[#00ccff]/25"
-              >
-                Register Now
-              </a>
-              <a
-                href={`/events/${event.slug}`}
-                className="px-6 py-3.5 rounded-xl bg-white/10 text-white font-semibold text-base hover:bg-white/20 transition-all border border-white/10"
-              >
-                View Details
-              </a>
-              {event.price_cents && (
-                <span className="text-white/50 text-sm">Starting at <span className="text-white font-bold text-lg">{formatPrice(event.price_cents)}</span></span>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -192,110 +183,118 @@ function EventCard({ event }: { event: Event }) {
   const ageGroups = parseJsonArray(event.age_groups);
   const isUpcoming = event.status === 'registration_open' || event.status === 'active';
   const isPast = event.status === 'completed';
-  const accent = cityAccent(event.city);
   const days = daysUntil(event.start_date);
 
   return (
-    <a
-      href={`/events/${event.slug}`}
-      className={`group relative block rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-1 ${isPast ? 'opacity-70 hover:opacity-100' : ''}`}
-    >
-      {/* Card glow on hover */}
-      <div className={`absolute -inset-0.5 bg-gradient-to-b from-[#00ccff]/0 to-[#00ccff]/0 group-hover:from-[#00ccff]/30 group-hover:to-transparent rounded-2xl blur-sm transition-all duration-300 opacity-0 group-hover:opacity-100`} />
+    <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] ${isPast ? 'opacity-75 hover:opacity-100' : ''}`}>
+      {/* Card Header — gradient with logo */}
+      <div className={`relative bg-gradient-to-br ${cityGradient(event.city)} h-48 flex items-center justify-center overflow-hidden`}>
+        {/* Soft blurred shapes */}
+        <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl" />
+        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl" />
 
-      <div className={`relative bg-gradient-to-b from-[#111c2e] to-[#0d1624] border ${accent.border} rounded-2xl overflow-hidden group-hover:border-[#00ccff]/50 transition-colors`}>
-        {/* Card Header */}
-        <div className={`relative bg-gradient-to-br ${accent.bg} h-44 flex items-center justify-center overflow-hidden`}>
-          <div className="absolute inset-0 bg-diagonal-stripes opacity-5" />
-
-          {/* Watermark */}
-          {event.logo_url && (
-            <img src={event.logo_url} alt="" className="absolute inset-0 w-full h-full object-contain opacity-[0.06] scale-[1.8] blur-[1px] pointer-events-none" />
+        {/* Logo */}
+        <div className="relative z-10">
+          {event.logo_url ? (
+            <img
+              src={event.logo_url}
+              alt={event.name}
+              className="w-28 h-28 object-contain drop-shadow-xl group-hover:scale-105 transition-transform duration-300"
+            />
+          ) : (
+            <div className="w-28 h-28 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
+              <span className="text-4xl">🏒</span>
+            </div>
           )}
+        </div>
 
-          {/* Logo */}
-          <div className="relative z-10">
-            {event.logo_url ? (
-              <img src={event.logo_url} alt={event.name} className="w-24 h-24 object-contain drop-shadow-[0_0_20px_rgba(0,204,255,0.2)] group-hover:scale-110 transition-transform duration-300" />
-            ) : (
-              <div className="w-24 h-24 rounded-2xl bg-white/5 backdrop-blur flex items-center justify-center border border-white/10">
-                <span className="text-3xl">🏒</span>
-              </div>
-            )}
-          </div>
+        {/* Status badge */}
+        <div className="absolute top-3 right-3 z-10">
+          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusBadge(event.status)} bg-white/90 backdrop-blur-sm`}>
+            {statusLabel(event.status)}
+          </span>
+        </div>
 
-          {/* Status badge */}
-          <div className="absolute top-3 right-3 z-10">
-            <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold ${statusColor(event.status)}`}>
-              {statusLabel(event.status)}
+        {/* Countdown */}
+        {isUpcoming && days > 0 && days <= 90 && (
+          <div className="absolute top-3 left-3 z-10">
+            <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/90 backdrop-blur-sm text-[#003e79]">
+              {days} day{days !== 1 ? 's' : ''}
             </span>
           </div>
+        )}
 
-          {/* Countdown */}
-          {isUpcoming && days > 0 && days <= 90 && (
-            <div className="absolute top-3 left-3 z-10">
-              <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-bold bg-black/40 backdrop-blur-sm text-[#00ccff] border border-[#00ccff]/30">
-                {days}d
-              </span>
-            </div>
-          )}
+        {/* Price */}
+        {event.price_cents && isUpcoming && (
+          <div className="absolute bottom-3 right-3 z-10">
+            <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-white/90 backdrop-blur-sm text-[#003e79]">
+              {formatPrice(event.price_cents)}
+            </span>
+          </div>
+        )}
+      </div>
 
-          {/* Bottom gradient */}
-          <div className="absolute bottom-0 inset-x-0 h-12 bg-gradient-to-t from-[#111c2e] to-transparent" />
+      {/* Card Body */}
+      <div className="p-5">
+        <h3 className="text-lg font-bold text-[#1d1d1f] leading-snug group-hover:text-[#003e79] transition-colors">
+          {event.name}
+        </h3>
+
+        <div className="mt-2 space-y-1">
+          <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
+            <svg className="w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            {event.city}, {event.state}
+          </p>
+          <p className="flex items-center gap-2 text-sm text-[#6e6e73]">
+            <svg className="w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            {formatDateRange(event.start_date, event.end_date)}
+          </p>
         </div>
 
-        {/* Card Body */}
-        <div className="p-5">
-          <h3 className="text-base font-bold text-white leading-snug group-hover:text-[#00ccff] transition-colors line-clamp-2">
-            {event.name}
-          </h3>
-
-          <div className="flex items-center gap-2 mt-2 text-white/50 text-sm">
-            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            <span>{event.city}, {event.state}</span>
-          </div>
-          <div className="flex items-center gap-2 mt-1 text-white/50 text-sm">
-            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-            <span>{formatDateRange(event.start_date, event.end_date)}</span>
-          </div>
-
-          {/* Age groups */}
-          {ageGroups.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {ageGroups.slice(0, 4).map(ag => (
-                <span key={ag} className="inline-block px-2 py-0.5 bg-white/5 text-white/60 text-[11px] font-medium rounded border border-white/10">
-                  {ag}
-                </span>
-              ))}
-              {ageGroups.length > 4 && (
-                <span className="inline-block px-2 py-0.5 bg-white/5 text-white/40 text-[11px] font-medium rounded border border-white/10">
-                  +{ageGroups.length - 4}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Bottom row */}
-          <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
-            {event.price_cents && isUpcoming ? (
-              <span className="text-white/40 text-xs">From <span className="text-white font-bold text-sm">{formatPrice(event.price_cents)}</span></span>
-            ) : (
-              <span />
+        {/* Age groups */}
+        {ageGroups.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {ageGroups.slice(0, 4).map(ag => (
+              <span key={ag} className="inline-block px-2.5 py-0.5 bg-[#f0f7ff] text-[#003e79] text-xs font-medium rounded-md">
+                {ag}
+              </span>
+            ))}
+            {ageGroups.length > 4 && (
+              <span className="inline-block px-2.5 py-0.5 bg-[#f5f5f7] text-[#86868b] text-xs font-medium rounded-md">
+                +{ageGroups.length - 4}
+              </span>
             )}
-            {isUpcoming ? (
-              <span
-                onClick={(e) => { e.preventDefault(); window.location.href = `/register?event=${event.slug}&eventId=${event.id}`; }}
-                className="px-4 py-2 rounded-lg text-xs font-bold text-[#003e79] bg-[#00ccff] hover:bg-[#00e5ff] active:scale-95 transition-all"
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-5 flex items-center gap-3">
+          {isUpcoming ? (
+            <>
+              <a
+                href={`/register?event=${event.slug}&eventId=${event.id}`}
+                className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all"
               >
                 Register
-              </span>
-            ) : (
-              <span className="text-white/40 text-xs font-medium">View Results →</span>
-            )}
-          </div>
+              </a>
+              <a
+                href={`/events/${event.slug}`}
+                className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
+              >
+                Details
+              </a>
+            </>
+          ) : (
+            <a
+              href={`/events/${event.slug}`}
+              className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-[#6e6e73] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition-colors"
+            >
+              View Results
+            </a>
+          )}
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -357,85 +356,66 @@ export default function EventsPage() {
     });
   }
 
-  // Separate featured (first upcoming) from rest
-  const featured = tab === 'upcoming' && filtered.length > 0 ? filtered[0] : null;
-  const gridEvents = tab === 'upcoming' && featured ? filtered.slice(1) : filtered;
+  const featured = tab === 'upcoming' && filtered.length > 0 && !search && !ageFilter ? filtered[0] : null;
+  const gridEvents = featured ? filtered.slice(1) : filtered;
 
   return (
-    <div className="min-h-screen bg-[#060d18]">
-      {/* ── Hero Section ── */}
-      <div className="relative overflow-hidden">
-        {/* Animated background elements */}
-        <div className="absolute inset-0">
-          {/* Ice rink lines */}
-          <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-[#00ccff]/10 to-transparent" />
-          <div className="absolute top-0 left-2/4 w-px h-full bg-gradient-to-b from-transparent via-[#00ccff]/5 to-transparent" />
-          <div className="absolute top-0 left-3/4 w-px h-full bg-gradient-to-b from-transparent via-[#00ccff]/10 to-transparent" />
+    <div className="min-h-screen bg-[#fafafa]">
+      {/* ── Hero ── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#003e79] via-[#005599] to-[#00ccff]">
+        {/* Soft decorative orbs */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#00ccff]/20 rounded-full translate-y-1/2 -translate-x-1/4 blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-white/5 rounded-full blur-2xl" />
 
-          {/* Diagonal slashes — hockey stick feel */}
-          <div className="absolute -top-20 -right-20 w-[500px] h-[200px] bg-gradient-to-l from-[#00ccff]/8 to-transparent rotate-[15deg]" />
-          <div className="absolute -top-10 -right-32 w-[400px] h-[100px] bg-gradient-to-l from-[#0088ff]/5 to-transparent rotate-[15deg]" />
-
-          {/* Center ice circle */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] border border-[#00ccff]/5 rounded-full" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] border border-[#00ccff]/3 rounded-full" />
-
-          {/* Top gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#060d18] via-transparent to-[#060d18]" />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-14 pb-8">
-          {/* Title area */}
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6 mb-8">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-1.5 h-8 bg-[#00ccff] rounded-full" />
-                <span className="text-[#00ccff] text-sm font-bold uppercase tracking-widest">2025–26 Season</span>
-              </div>
-              <h1 className="text-5xl sm:text-6xl font-extrabold text-white leading-none tracking-tight">
-                Tournaments
-              </h1>
-              <p className="text-white/40 mt-3 text-lg max-w-xl">
-                Elite youth hockey events across the Midwest. Find your next tournament and register today.
-              </p>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 bg-white/5 rounded-xl p-1 border border-white/10 self-start">
-              <button
-                onClick={() => setTab('upcoming')}
-                className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  tab === 'upcoming'
-                    ? 'bg-[#00ccff] text-[#003e79] shadow-lg shadow-[#00ccff]/25'
-                    : 'text-white/50 hover:text-white'
-                }`}
-              >
-                Upcoming
-              </button>
-              <button
-                onClick={() => setTab('past')}
-                className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  tab === 'past'
-                    ? 'bg-[#00ccff] text-[#003e79] shadow-lg shadow-[#00ccff]/25'
-                    : 'text-white/50 hover:text-white'
-                }`}
-              >
-                Past Events
-              </button>
-            </div>
+        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-16 pb-20">
+          <div className="max-w-2xl">
+            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">2025–26 Season</p>
+            <h1 className="text-5xl sm:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
+              Find Your Next Tournament
+            </h1>
+            <p className="text-white/70 mt-4 text-lg leading-relaxed max-w-lg">
+              Elite youth hockey events across the Midwest. Browse, compare, and register your team.
+            </p>
           </div>
 
-          {/* Featured Event */}
-          {featured && !search && !ageFilter && (
-            <FeaturedEvent event={featured} />
-          )}
+          {/* Tabs */}
+          <div className="mt-10 flex gap-1 bg-white/15 backdrop-blur-sm rounded-full p-1 w-fit border border-white/10">
+            <button
+              onClick={() => setTab('upcoming')}
+              className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all ${
+                tab === 'upcoming'
+                  ? 'bg-white text-[#003e79] shadow-md'
+                  : 'text-white/70 hover:text-white'
+              }`}
+            >
+              Upcoming Events
+            </button>
+            <button
+              onClick={() => setTab('past')}
+              className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all ${
+                tab === 'past'
+                  ? 'bg-white text-[#003e79] shadow-md'
+                  : 'text-white/70 hover:text-white'
+              }`}
+            >
+              Past Events
+            </button>
+          </div>
+        </div>
+
+        {/* Curved bottom edge */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full" preserveAspectRatio="none">
+            <path d="M0 60V0c240 40 480 60 720 60s480-20 720-60v60H0z" fill="#fafafa" />
+          </svg>
         </div>
       </div>
 
-      {/* ── Filters Bar ── */}
-      <div className="sticky top-0 z-30 border-y border-white/5 bg-[#060d18]/90 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-3.5">
-          <div className="flex flex-wrap gap-3 items-center">
+      {/* ── Filters ── */}
+      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-[#e8e8ed]">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-4">
+          <div className="flex flex-wrap gap-2.5 items-center">
             {/* City chips */}
             <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
               {['All', 'Chicago', 'St. Louis', 'South Bend', 'Ann Arbor', 'Madison', 'Holland'].map(city => {
@@ -444,10 +424,10 @@ export default function EventsPage() {
                   <button
                     key={city}
                     onClick={() => setCityFilter(city === 'All' ? '' : city)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                    className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                       active
-                        ? 'bg-[#00ccff] text-[#003e79] shadow-sm shadow-[#00ccff]/25'
-                        : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70 border border-white/10'
+                        ? 'bg-[#003e79] text-white shadow-sm'
+                        : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed] hover:text-[#1d1d1f]'
                     }`}
                   >
                     {city === 'All' ? 'All Cities' : city}
@@ -456,14 +436,13 @@ export default function EventsPage() {
               })}
             </div>
 
-            <div className="hidden sm:block w-px h-6 bg-white/10" />
+            <div className="hidden sm:block w-px h-6 bg-[#e8e8ed]" />
 
             {/* Age filter */}
             <select
               value={ageFilter}
               onChange={e => setAgeFilter(e.target.value)}
-              className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white/5 text-white/50 border border-white/10 focus:outline-none focus:border-[#00ccff]/50 appearance-none cursor-pointer"
-              style={{ backgroundImage: 'none' }}
+              className="px-4 py-2 rounded-full text-sm font-medium bg-[#f5f5f7] text-[#6e6e73] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 cursor-pointer"
             >
               <option value="">All Ages</option>
               <option value="Mite">Mite</option>
@@ -477,46 +456,52 @@ export default function EventsPage() {
             {/* Search */}
             <div className="flex-1 min-w-[160px]">
               <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 <input
                   type="search"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search..."
-                  className="w-full pl-9 pr-4 py-1.5 rounded-full text-xs font-medium bg-white/5 text-white placeholder:text-white/30 border border-white/10 focus:outline-none focus:border-[#00ccff]/50 transition-colors"
+                  placeholder="Search events..."
+                  className="w-full pl-10 pr-4 py-2 rounded-full text-sm bg-[#f5f5f7] text-[#1d1d1f] placeholder:text-[#86868b] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
                 />
               </div>
             </div>
 
-            <span className="text-xs text-white/30 ml-auto tabular-nums">
+            <span className="text-sm text-[#86868b] ml-auto tabular-nums">
               {filtered.length} event{filtered.length !== 1 ? 's' : ''}
             </span>
           </div>
         </div>
       </div>
 
-      {/* ── Events Grid ── */}
+      {/* ── Content ── */}
       <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-10">
+        {/* Featured */}
+        {featured && (
+          <div className="mb-12">
+            <FeaturedEvent event={featured} />
+          </div>
+        )}
+
         {/* Section label */}
-        {featured && !search && !ageFilter && tab === 'upcoming' && gridEvents.length > 0 && (
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-5 bg-[#00ccff]/60 rounded-full" />
-            <h2 className="text-white/60 text-sm font-semibold uppercase tracking-wider">More Tournaments</h2>
-            <div className="flex-1 h-px bg-white/5" />
+        {featured && gridEvents.length > 0 && (
+          <div className="flex items-center gap-4 mb-8">
+            <h2 className="text-xl font-bold text-[#1d1d1f]">More Tournaments</h2>
+            <div className="flex-1 h-px bg-[#e8e8ed]" />
           </div>
         )}
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="rounded-2xl overflow-hidden bg-[#111c2e] border border-white/5 animate-pulse">
-                <div className="h-44 bg-gradient-to-br from-white/5 to-white/[0.02]" />
+              <div key={i} className="rounded-2xl overflow-hidden bg-white shadow-sm border border-[#e8e8ed] animate-pulse">
+                <div className="h-48 bg-gradient-to-br from-[#e8e8ed] to-[#f5f5f7]" />
                 <div className="p-5 space-y-3">
-                  <div className="h-5 bg-white/5 rounded w-3/4" />
-                  <div className="h-4 bg-white/5 rounded w-1/2" />
+                  <div className="h-5 bg-[#f5f5f7] rounded-lg w-3/4" />
+                  <div className="h-4 bg-[#f5f5f7] rounded-lg w-1/2" />
                   <div className="flex gap-2 mt-3">
-                    <div className="h-5 w-12 bg-white/5 rounded" />
-                    <div className="h-5 w-12 bg-white/5 rounded" />
+                    <div className="h-6 w-16 bg-[#f5f5f7] rounded-md" />
+                    <div className="h-6 w-16 bg-[#f5f5f7] rounded-md" />
                   </div>
                 </div>
               </div>
@@ -524,11 +509,11 @@ export default function EventsPage() {
           </div>
         ) : gridEvents.length === 0 && !featured ? (
           <div className="text-center py-24">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[#f0f7ff] flex items-center justify-center">
               <span className="text-4xl">🏒</span>
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">No events found</h3>
-            <p className="text-white/40 max-w-md mx-auto">
+            <h3 className="text-xl font-bold text-[#1d1d1f] mb-2">No events found</h3>
+            <p className="text-[#6e6e73] max-w-md mx-auto">
               {tab === 'upcoming'
                 ? 'New tournaments are being added — check back soon!'
                 : 'Try adjusting your filters to find past events.'}
@@ -542,6 +527,9 @@ export default function EventsPage() {
           </div>
         )}
       </div>
+
+      {/* Bottom spacer */}
+      <div className="h-16" />
     </div>
   );
 }
