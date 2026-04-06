@@ -77,19 +77,48 @@ function cityGradient(city: string): string {
   return 'from-[#003e79] to-[#001f3f]';
 }
 
+/* ── Check if user is logged in ── */
+function getAuthUser(): { token: string; user: any } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const token = localStorage.getItem('uht_token');
+    const userStr = localStorage.getItem('uht_user');
+    if (token && userStr) return { token, user: JSON.parse(userStr) };
+  } catch {}
+  return null;
+}
+
 /* ── Registration Modal ── */
 function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }) {
-  // Mock teams for the user — in production this comes from auth context
-  const [userTeams] = useState([
-    { id: 't1', name: '10U A1 Dupage Black Bears' },
-    { id: 't2', name: '12U B2 Chicago Wolves' },
-  ]);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(
-    userTeams.length === 1 ? userTeams[0].id : null
-  );
-  const [step, setStep] = useState<'select' | 'payment'>(
-    userTeams.length === 1 ? 'payment' : 'select'
-  );
+  const auth = getAuthUser();
+  const isLoggedIn = !!auth;
+
+  const [userTeams, setUserTeams] = useState<{ id: string; name: string }[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(isLoggedIn);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [step, setStep] = useState<'auth' | 'select' | 'payment'>(isLoggedIn ? 'select' : 'auth');
+
+  // Fetch user's teams if logged in
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/teams/my-teams`, {
+          headers: { Authorization: `Bearer ${auth!.token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const teams = (json.data || []).map((t: any) => ({ id: t.id, name: t.name }));
+          setUserTeams(teams);
+          if (teams.length === 1) {
+            setSelectedTeam(teams[0].id);
+            setStep('payment');
+          }
+        }
+      } catch {}
+      setLoadingTeams(false);
+    })();
+  }, [isLoggedIn]);
 
   const selectedTeamName = userTeams.find(t => t.id === selectedTeam)?.name;
 
@@ -122,36 +151,98 @@ function RegisterModal({ event, onClose }: { event: Event; onClose: () => void }
         </div>
 
         <div className="p-6">
-          {step === 'select' && (
+          {/* ── Step: Not logged in ── */}
+          {step === 'auth' && (
             <>
-              <h4 className="font-semibold text-[#1d1d1f] mb-1">Select Your Team</h4>
-              <p className="text-sm text-[#6e6e73] mb-4">Choose which team to register for this event.</p>
-              <div className="space-y-2 mb-6">
-                {userTeams.map(team => (
-                  <button
-                    key={team.id}
-                    onClick={() => setSelectedTeam(team.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
-                      selectedTeam === team.id
-                        ? 'border-[#00ccff] bg-[#00ccff]/5'
-                        : 'border-[#e8e8ed] hover:border-[#d1d1d6]'
-                    }`}
-                  >
-                    <span className="font-medium text-[#1d1d1f]">{team.name}</span>
-                  </button>
-                ))}
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-7 h-7 text-[#6e6e73]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                  </svg>
+                </div>
+                <h4 className="font-semibold text-[#1d1d1f] text-lg mb-1">Sign in to Register</h4>
+                <p className="text-sm text-[#6e6e73]">
+                  You need an account to register your team for this tournament.
+                </p>
               </div>
-              <button
-                onClick={() => selectedTeam && setStep('payment')}
-                disabled={!selectedTeam}
-                className="w-full py-3 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                Continue
-              </button>
+
+              <div className="space-y-3">
+                <a
+                  href={`/login?redirect=/events&register=${event.slug}`}
+                  className="block w-full py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-colors shadow-sm text-center"
+                >
+                  Sign In
+                </a>
+                <a
+                  href={`/register?redirect=/events&register=${event.slug}`}
+                  className="block w-full py-3.5 rounded-xl font-semibold text-[#1d1d1f] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition-colors text-center"
+                >
+                  Create Account
+                </a>
+              </div>
             </>
           )}
 
-          {step === 'payment' && (
+          {/* ── Step: Loading teams ── */}
+          {step !== 'auth' && loadingTeams && (
+            <div className="text-center py-8">
+              <div className="w-8 h-8 border-2 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-sm text-[#6e6e73]">Loading your teams...</p>
+            </div>
+          )}
+
+          {/* ── Step: Select team (multi-team) ── */}
+          {step === 'select' && !loadingTeams && (
+            <>
+              {userTeams.length === 0 ? (
+                <div className="text-center py-4">
+                  <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">🏒</span>
+                  </div>
+                  <h4 className="font-semibold text-[#1d1d1f] mb-1">No Teams Found</h4>
+                  <p className="text-sm text-[#6e6e73] mb-5">
+                    You don&apos;t have any teams yet. Create or join a team to register for events.
+                  </p>
+                  <a
+                    href="/dashboard"
+                    className="inline-block px-6 py-3 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-colors"
+                  >
+                    Go to Dashboard
+                  </a>
+                </div>
+              ) : (
+                <>
+                  <h4 className="font-semibold text-[#1d1d1f] mb-1">Select Your Team</h4>
+                  <p className="text-sm text-[#6e6e73] mb-4">Choose which team to register for this event.</p>
+                  <div className="space-y-2 mb-6">
+                    {userTeams.map(team => (
+                      <button
+                        key={team.id}
+                        onClick={() => setSelectedTeam(team.id)}
+                        className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
+                          selectedTeam === team.id
+                            ? 'border-[#00ccff] bg-[#00ccff]/5'
+                            : 'border-[#e8e8ed] hover:border-[#d1d1d6]'
+                        }`}
+                      >
+                        <span className="font-medium text-[#1d1d1f]">{team.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => selectedTeam && setStep('payment')}
+                    disabled={!selectedTeam}
+                    className="w-full py-3 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Continue
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── Step: Payment ── */}
+          {step === 'payment' && !loadingTeams && (
             <>
               <h4 className="font-semibold text-[#1d1d1f] mb-1">Complete Registration</h4>
               {selectedTeamName && (
