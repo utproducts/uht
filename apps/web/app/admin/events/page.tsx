@@ -73,8 +73,250 @@ const locationIcon = (city: string) => {
   return '📍';
 };
 
+// --- Standard age groups & divisions ---
+const STANDARD_AGE_GROUPS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', '16u/JV', '18u/Var.'];
+const STANDARD_DIVISIONS = ['AA', 'A', 'BB', 'B', 'CC', 'C', 'D1', 'D2', 'D3', 'House'];
+const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+
+// --- Event Form Modal ---
+function EventFormModal({ event, tournaments, onClose, onSaved }: {
+  event: EventItem | null; // null = create mode
+  tournaments: { id: string; name: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEdit = !!event;
+  const [form, setForm] = useState({
+    name: event?.name || '',
+    city: event?.city || '',
+    state: event?.state || 'IL',
+    start_date: event?.start_date || '',
+    end_date: event?.end_date || '',
+    tournament_id: (event as any)?.tournament_id || '',
+    status: event?.status || 'draft',
+    information: event?.information || '',
+    price_cents: event ? ((event as any).price_cents ? String((event as any).price_cents / 100) : '') : '',
+    deposit_cents: event ? ((event as any).deposit_cents ? String((event as any).deposit_cents / 100) : '') : '',
+    slots_count: event?.slots_count ? String(event.slots_count) : '100',
+    age_groups: event?.age_groups ? JSON.parse(event.age_groups) as string[] : [] as string[],
+    divisions: event?.divisions ? JSON.parse(event.divisions) as string[] : [] as string[],
+    registration_open_date: (event as any)?.registration_open_date || '',
+    registration_deadline: (event as any)?.registration_deadline || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const toggleArrayItem = (field: 'age_groups' | 'divisions', item: string) => {
+    setForm(prev => ({
+      ...prev,
+      [field]: prev[field].includes(item) ? prev[field].filter((i: string) => i !== item) : [...prev[field], item],
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!form.name || !form.city || !form.start_date || !form.end_date) return;
+    setSaving(true);
+    setResult('idle');
+    try {
+      const body: any = {
+        name: form.name,
+        city: form.city,
+        state: form.state,
+        start_date: form.start_date,
+        end_date: form.end_date,
+        tournament_id: form.tournament_id || null,
+        status: form.status,
+        information: form.information || null,
+        price_cents: form.price_cents ? Math.round(parseFloat(form.price_cents) * 100) : null,
+        deposit_cents: form.deposit_cents ? Math.round(parseFloat(form.deposit_cents) * 100) : null,
+        slots_count: form.slots_count ? parseInt(form.slots_count) : 100,
+        age_groups: form.age_groups.length > 0 ? JSON.stringify(form.age_groups) : null,
+        divisions: form.divisions.length > 0 ? JSON.stringify(form.divisions) : null,
+        registration_open_date: form.registration_open_date || null,
+        registration_deadline: form.registration_deadline || null,
+      };
+
+      const url = isEdit ? `${API_BASE}/admin/update/${event!.id}` : `${API_BASE}/admin/create`;
+      const method = isEdit ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const json = await res.json();
+      if (json.success) {
+        setResult('success');
+        setTimeout(() => { onSaved(); onClose(); }, 600);
+      } else {
+        throw new Error(json.error || 'Save failed');
+      }
+    } catch (e: any) {
+      setResult('error');
+      setErrorMsg(e.message || 'Failed to save');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl z-10">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Event' : 'Create Event'}</h3>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Event Name + Tournament */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Event Name *</label>
+              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Chi-Town Showdown 2026" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tournament Template</label>
+              <select value={form.tournament_id} onChange={e => setForm({ ...form, tournament_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
+                <option value="">None</option>
+                {tournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Location */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
+              <input type="text" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
+                placeholder="Chicago" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+              <select value={form.state} onChange={e => setForm({ ...form, state: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
+                {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Dates */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+              <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reg. Opens</label>
+              <input type="date" value={form.registration_open_date} onChange={e => setForm({ ...form, registration_open_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reg. Deadline</label>
+              <input type="date" value={form.registration_deadline} onChange={e => setForm({ ...form, registration_deadline: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+          </div>
+
+          {/* Status + Pricing */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="registration_open">Registration Open</option>
+                <option value="registration_closed">Registration Closed</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
+              <input type="number" step="0.01" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: e.target.value })}
+                placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Deposit ($)</label>
+              <input type="number" step="0.01" value={form.deposit_cents} onChange={e => setForm({ ...form, deposit_cents: e.target.value })}
+                placeholder="0.00" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Max Slots</label>
+              <input type="number" value={form.slots_count} onChange={e => setForm({ ...form, slots_count: e.target.value })}
+                placeholder="100" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+            </div>
+          </div>
+
+          {/* Age Groups */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Age Groups</label>
+            <div className="flex flex-wrap gap-2">
+              {STANDARD_AGE_GROUPS.map(ag => (
+                <button key={ag} type="button" onClick={() => toggleArrayItem('age_groups', ag)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    form.age_groups.includes(ag) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>{ag}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Divisions */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Divisions</label>
+            <div className="flex flex-wrap gap-2">
+              {STANDARD_DIVISIONS.map(d => (
+                <button key={d} type="button" onClick={() => toggleArrayItem('divisions', d)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    form.divisions.includes(d) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>{d}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Information */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Event Information</label>
+            <textarea value={form.information} onChange={e => setForm({ ...form, information: e.target.value })}
+              rows={3} placeholder="Additional event details shown publicly..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none resize-none" />
+          </div>
+
+          {result === 'error' && (
+            <div className="px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{errorMsg}</div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">Cancel</button>
+          <button onClick={handleSave} disabled={saving || result === 'success' || !form.name || !form.city || !form.start_date || !form.end_date}
+            className={`flex-1 px-4 py-2.5 font-semibold rounded-xl text-sm transition ${
+              result === 'success' ? 'bg-green-500 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+            } ${saving || !form.name || !form.city || !form.start_date || !form.end_date ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            {result === 'success' ? 'Saved!' : saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Event'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Event Card ---
-function EventCard({ event, onViewDetails }: { event: EventItem; onViewDetails: (id: string) => void }) {
+function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { event: EventItem; onViewDetails: (id: string) => void; onEdit: (e: EventItem) => void; onDuplicate: (id: string) => void; onDelete: (e: EventItem) => void }) {
   const days = daysUntil(event.start_date);
   const isPast = days < 0;
   const ageGroups = event.age_groups ? JSON.parse(event.age_groups) : [];
@@ -150,11 +392,14 @@ function EventCard({ event, onViewDetails }: { event: EventItem; onViewDetails: 
           >
             View Details
           </button>
-          <button className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-xs transition">
+          <button onClick={() => onEdit(event)} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-xs transition">
             Edit
           </button>
-          <button className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-lg text-xs transition" title="Duplicate">
+          <button onClick={() => onDuplicate(event.id)} className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-lg text-xs transition" title="Duplicate">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+          </button>
+          <button onClick={() => onDelete(event)} className="px-2 py-1.5 bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-600 rounded-lg text-xs transition" title="Delete">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
           </button>
         </div>
       </div>
@@ -713,6 +958,12 @@ export default function AdminEventsPage() {
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
+  const [tournaments, setTournaments] = useState<{ id: string; name: string }[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<EventItem | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const reloadEvents = () => setRefreshKey(k => k + 1);
 
   useEffect(() => {
     setLoading(true);
@@ -723,7 +974,36 @@ export default function AdminEventsPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [filter]);
+  }, [filter, refreshKey]);
+
+  // Fetch tournaments for form dropdown
+  useEffect(() => {
+    fetch(`${API_BASE}/admin/tournaments`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setTournaments(json.data.map((t: any) => ({ id: t.id, name: t.name }))); })
+      .catch(() => {});
+  }, []);
+
+  const handleDuplicate = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/duplicate/${id}`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        reloadEvents();
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/delete/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) {
+        setDeleteConfirm(null);
+        reloadEvents();
+      }
+    } catch (e) { console.error(e); }
+  };
 
   // Get unique months from events for month filter
   const months = Array.from(new Set(events.map(e => getMonthKey(e.start_date)))).sort();
@@ -762,6 +1042,37 @@ export default function AdminEventsPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Create/Edit Form Modal */}
+      {editingEvent && (
+        <EventFormModal
+          event={editingEvent === 'create' ? null : editingEvent}
+          tournaments={tournaments}
+          onClose={() => setEditingEvent(null)}
+          onSaved={reloadEvents}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Event</h3>
+              <p className="text-sm text-gray-500 mb-1">Are you sure you want to delete</p>
+              <p className="text-sm font-semibold text-gray-900 mb-4">{deleteConfirm.name}?</p>
+              <p className="text-xs text-red-500 mb-5">This will also delete all {deleteConfirm.registration_count} registration(s). This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">Cancel</button>
+                <button onClick={() => handleDelete(deleteConfirm.id)} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl text-sm transition">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gray-900 text-white py-6">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
@@ -769,7 +1080,7 @@ export default function AdminEventsPage() {
             <h1 className="text-2xl font-extrabold">Event Management</h1>
             <p className="text-sm text-gray-400 mt-1">Ultimate Tournaments</p>
           </div>
-          <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
+          <button onClick={() => setEditingEvent('create')} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
             + Create Event
           </button>
         </div>
@@ -867,7 +1178,7 @@ export default function AdminEventsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
             {filtered.map((event) => (
-              <EventCard key={event.id} event={event} onViewDetails={setSelectedEventId} />
+              <EventCard key={event.id} event={event} onViewDetails={setSelectedEventId} onEdit={setEditingEvent} onDuplicate={handleDuplicate} onDelete={setDeleteConfirm} />
             ))}
           </div>
         )}

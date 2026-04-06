@@ -227,6 +227,171 @@ eventRoutes.get('/admin/tournaments', async (c) => {
 });
 
 // ==================
+// ADMIN: Update event
+// ==================
+const updateEventSchema = z.object({
+  name: z.string().min(1).optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  start_date: z.string().optional(),
+  end_date: z.string().optional(),
+  status: z.string().optional(),
+  tournament_id: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  information: z.string().nullable().optional(),
+  price_cents: z.number().nullable().optional(),
+  deposit_cents: z.number().nullable().optional(),
+  slots_count: z.number().nullable().optional(),
+  is_sold_out: z.number().optional(),
+  show_participants: z.number().optional(),
+  registration_open_date: z.string().nullable().optional(),
+  registration_deadline: z.string().nullable().optional(),
+  age_groups: z.string().nullable().optional(),
+  divisions: z.string().nullable().optional(),
+  season: z.string().nullable().optional(),
+});
+
+eventRoutes.patch('/admin/update/:id', zValidator('json', updateEventSchema), async (c) => {
+  const id = c.req.param('id');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const existing = await db.prepare('SELECT id FROM events WHERE id = ?').bind(id).first();
+  if (!existing) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  const setClauses: string[] = [];
+  const params: (string | number | null)[] = [];
+
+  for (const [key, val] of Object.entries(data)) {
+    if (val !== undefined) {
+      setClauses.push(`${key} = ?`);
+      params.push(val as any);
+    }
+  }
+
+  if (setClauses.length === 0) return c.json({ success: false, error: 'No fields to update' }, 400);
+
+  // Auto-update slug if name changes
+  if (data.name) {
+    const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    setClauses.push('slug = ?');
+    params.push(slug);
+  }
+
+  setClauses.push("updated_at = datetime('now')");
+  params.push(id);
+
+  await db.prepare(`UPDATE events SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+  const updated = await db.prepare('SELECT * FROM events WHERE id = ?').bind(id).first();
+  return c.json({ success: true, data: updated });
+});
+
+// ==================
+// ADMIN: Create event (simple)
+// ==================
+const createEventSimpleSchema = z.object({
+  name: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  start_date: z.string(),
+  end_date: z.string(),
+  tournament_id: z.string().nullable().optional(),
+  status: z.string().optional(),
+  description: z.string().nullable().optional(),
+  information: z.string().nullable().optional(),
+  price_cents: z.number().nullable().optional(),
+  deposit_cents: z.number().nullable().optional(),
+  slots_count: z.number().nullable().optional(),
+  age_groups: z.string().nullable().optional(),
+  divisions: z.string().nullable().optional(),
+  season: z.string().nullable().optional(),
+  registration_open_date: z.string().nullable().optional(),
+  registration_deadline: z.string().nullable().optional(),
+});
+
+eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const pin = String(Math.floor(1000 + Math.random() * 9000));
+
+  await db.prepare(`
+    INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, status,
+      description, information, price_cents, deposit_cents, slots_count, age_groups, divisions,
+      season, registration_open_date, registration_deadline, scorekeeper_pin)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id, data.name, slug, data.city, data.state, data.start_date, data.end_date,
+    data.tournament_id || null, data.status || 'draft',
+    data.description || null, data.information || null,
+    data.price_cents || null, data.deposit_cents || null, data.slots_count || 100,
+    data.age_groups || null, data.divisions || null,
+    data.season || null, data.registration_open_date || null, data.registration_deadline || null, pin
+  ).run();
+
+  return c.json({ success: true, data: { id, slug, scorekeeper_pin: pin } }, 201);
+});
+
+// ==================
+// ADMIN: Delete event
+// ==================
+eventRoutes.delete('/admin/delete/:id', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+
+  const existing = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(id).first<any>();
+  if (!existing) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // Delete registrations first
+  await db.prepare('DELETE FROM event_registrations WHERE event_id = ?').bind(id).run();
+  // Delete the event
+  await db.prepare('DELETE FROM events WHERE id = ?').bind(id).run();
+
+  return c.json({ success: true, data: { deleted: existing.name } });
+});
+
+// ==================
+// ADMIN: Duplicate event (simple copy)
+// ==================
+eventRoutes.post('/admin/duplicate/:id', async (c) => {
+  const sourceId = c.req.param('id');
+  const db = c.env.DB;
+
+  const source = await db.prepare('SELECT * FROM events WHERE id = ?').bind(sourceId).first<any>();
+  if (!source) return c.json({ success: false, error: 'Source event not found' }, 404);
+
+  const newId = crypto.randomUUID().replace(/-/g, '');
+  const newPin = String(Math.floor(1000 + Math.random() * 9000));
+
+  // Bump dates by 1 year
+  const bumpYear = (d: string) => {
+    if (!d) return null;
+    const dt = new Date(d + 'T12:00:00');
+    dt.setFullYear(dt.getFullYear() + 1);
+    return dt.toISOString().split('T')[0];
+  };
+
+  const newStart = bumpYear(source.start_date);
+  const newEnd = bumpYear(source.end_date);
+  const newSlug = source.slug + '-' + (newStart ? newStart.slice(0, 4) : 'copy');
+
+  await db.prepare(`
+    INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, status,
+      description, information, price_cents, deposit_cents, slots_count, age_groups, divisions,
+      season, scorekeeper_pin, source_event_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    newId, source.name, newSlug, source.city, source.state, newStart, newEnd,
+    source.tournament_id, source.description, source.information,
+    source.price_cents, source.deposit_cents, source.slots_count || 100,
+    source.age_groups, source.divisions, source.season, newPin, sourceId
+  ).run();
+
+  return c.json({ success: true, data: { id: newId, slug: newSlug, start_date: newStart, end_date: newEnd, scorekeeper_pin: newPin } }, 201);
+});
+
+// ==================
 // ADMIN: Update registration (payment, hotel assignment, notes)
 // ==================
 const updateRegistrationSchema = z.object({
