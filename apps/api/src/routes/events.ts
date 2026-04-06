@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
+import { sendApprovalEmail } from '../lib/approval-email';
 
 export const eventRoutes = new Hono<{ Bindings: Env }>();
 
@@ -425,11 +426,12 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Verify registration exists
-  const existing = await db.prepare('SELECT id FROM event_registrations WHERE id = ?').bind(regId).first();
+  // Verify registration exists and get current status for email trigger
+  const existing = await db.prepare('SELECT id, status, event_id FROM event_registrations WHERE id = ?').bind(regId).first<{ id: string; status: string; event_id: string }>();
   if (!existing) {
     return c.json({ success: false, error: 'Registration not found' }, 404);
   }
+  const previousStatus = existing.status;
 
   // Build dynamic SET clause
   const setClauses: string[] = [];
@@ -470,7 +472,51 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
   await db.prepare(`UPDATE event_registrations SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
 
   // Return updated registration
-  const updated = await db.prepare('SELECT * FROM event_registrations WHERE id = ?').bind(regId).first();
+  const updated = await db.prepare('SELECT * FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+
+  // If status just changed to 'approved', send acceptance email
+  if (data.status === 'approved' && previousStatus !== 'approved' && updated) {
+    try {
+      // Get event details for the email
+      const event = await db.prepare('SELECT name, city, state, start_date, end_date, price_cents FROM events WHERE id = ?')
+        .bind(existing.event_id).first<any>();
+
+      if (event && updated.email1) {
+        const startDate = new Date(event.start_date + 'T12:00:00');
+        const eventDateStr = startDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+
+        // Collect CC emails (manager email2, coach emails if available)
+        const ccEmails: string[] = [];
+        if (updated.email2) ccEmails.push(updated.email2);
+
+        const emailResult = await sendApprovalEmail(c.env, {
+          recipientEmail: updated.email1,
+          recipientName: updated.manager_first_name
+            ? `${updated.manager_first_name} ${updated.manager_last_name || ''}`.trim()
+            : updated.team_name,
+          ccEmails,
+          teamName: updated.team_name,
+          ageGroup: updated.age_group,
+          division: updated.division || undefined,
+          eventName: event.name,
+          eventDate: eventDateStr,
+          eventCity: `${event.city}, ${event.state}`,
+          paymentStatus: updated.payment_status || 'unpaid',
+          priceCents: event.price_cents || undefined,
+        });
+
+        // Include email status in response
+        (updated as any).email_sent = emailResult.success;
+        if (!emailResult.success) {
+          (updated as any).email_error = emailResult.error;
+        }
+      }
+    } catch (emailErr: any) {
+      console.error('Approval email error:', emailErr);
+      (updated as any).email_sent = false;
+      (updated as any).email_error = emailErr.message;
+    }
+  }
 
   return c.json({ success: true, data: updated });
 });
