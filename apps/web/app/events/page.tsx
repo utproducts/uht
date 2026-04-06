@@ -422,6 +422,30 @@ export default function EventsPage() {
   const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [registerEvent, setRegisterEvent] = useState<Event | null>(null);
+  const [pendingRegisterSlug, setPendingRegisterSlug] = useState<string | null>(null);
+
+  // On mount, check URL for ?register=<slug> (redirect back from login)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get('register');
+    if (slug) {
+      setPendingRegisterSlug(slug);
+      // Clean the URL so the param doesn't persist on refresh
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    }
+  }, []);
+
+  // Once events load, auto-open the register modal if we have a pending slug
+  useEffect(() => {
+    if (pendingRegisterSlug && events.length > 0) {
+      const match = events.find(e => e.slug === pendingRegisterSlug);
+      if (match) {
+        setRegisterEvent(match);
+      }
+      setPendingRegisterSlug(null);
+    }
+  }, [pendingRegisterSlug, events]);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
