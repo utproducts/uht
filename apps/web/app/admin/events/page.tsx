@@ -612,12 +612,18 @@ function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { ev
       <div className="p-4">
         {/* Header Row */}
         <div className="flex items-start justify-between mb-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <span className="text-base">{locationIcon(event.city)}</span>
+          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+            {event.logo_url ? (
+              <img src={event.logo_url} alt="" className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-100 shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-50 to-blue-50 border border-gray-100 flex items-center justify-center shrink-0">
+                <span className="text-base">{locationIcon(event.city)}</span>
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
               <h3 className="text-sm font-bold text-gray-900 truncate leading-tight">{event.tournament_name || event.name}</h3>
+              <p className="text-xs text-gray-500 truncate">{event.name}</p>
             </div>
-            <p className="text-xs text-gray-500 truncate">{event.name}</p>
           </div>
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ml-2 ${statusColor(event.status)}`}>
             {statusLabel(event.status)}
