@@ -320,6 +320,155 @@ schedulingRoutes.delete('/events/:eventId/games', authMiddleware, requireRole('a
 });
 
 // ==========================================
+// UPDATE SINGLE GAME
+// ==========================================
+const updateGameSchema = z.object({
+  home_team_id: z.string().nullable().optional(),
+  away_team_id: z.string().nullable().optional(),
+  rink_id: z.string().nullable().optional(),
+  start_time: z.string().nullable().optional(),
+  end_time: z.string().nullable().optional(),
+  game_type: z.enum(['pool', 'quarterfinal', 'semifinal', 'consolation', 'championship', 'placement']).optional(),
+  pool_name: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  status: z.enum(['scheduled', 'warmup', 'in_progress', 'intermission', 'final', 'cancelled', 'forfeit']).optional(),
+});
+
+schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateGameSchema), async (c) => {
+  const gameId = c.req.param('gameId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Verify game exists
+  const game = await db.prepare('SELECT * FROM games WHERE id = ?').bind(gameId).first();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  // Build dynamic update
+  const updates: string[] = [];
+  const values: any[] = [];
+
+  if (data.home_team_id !== undefined) { updates.push('home_team_id = ?'); values.push(data.home_team_id); }
+  if (data.away_team_id !== undefined) { updates.push('away_team_id = ?'); values.push(data.away_team_id); }
+  if (data.rink_id !== undefined) { updates.push('rink_id = ?'); values.push(data.rink_id); }
+  if (data.start_time !== undefined) { updates.push('start_time = ?'); values.push(data.start_time); }
+  if (data.end_time !== undefined) { updates.push('end_time = ?'); values.push(data.end_time); }
+  if (data.game_type !== undefined) { updates.push('game_type = ?'); values.push(data.game_type); }
+  if (data.pool_name !== undefined) { updates.push('pool_name = ?'); values.push(data.pool_name); }
+  if (data.notes !== undefined) { updates.push('notes = ?'); values.push(data.notes); }
+  if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
+
+  if (updates.length === 0) {
+    return c.json({ success: false, error: 'No fields to update' }, 400);
+  }
+
+  updates.push("updated_at = datetime('now')");
+  values.push(gameId);
+
+  await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+
+  // Return updated game with team names
+  const updated = await db.prepare(`
+    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at ON at.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    WHERE g.id = ?
+  `).bind(gameId).first();
+
+  return c.json({ success: true, data: updated });
+});
+
+// ==========================================
+// SWAP TWO GAMES (swap time slots and rinks)
+// ==========================================
+const swapGamesSchema = z.object({
+  gameId1: z.string(),
+  gameId2: z.string(),
+});
+
+schedulingRoutes.post('/games/swap', authMiddleware, requireRole('admin', 'director'), zValidator('json', swapGamesSchema), async (c) => {
+  const { gameId1, gameId2 } = c.req.valid('json');
+  const db = c.env.DB;
+
+  const game1 = await db.prepare('SELECT * FROM games WHERE id = ?').bind(gameId1).first<any>();
+  const game2 = await db.prepare('SELECT * FROM games WHERE id = ?').bind(gameId2).first<any>();
+
+  if (!game1 || !game2) return c.json({ success: false, error: 'One or both games not found' }, 404);
+
+  // Swap start_time, end_time, rink_id, and game_number
+  await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(game2.start_time, game2.end_time, game2.rink_id, game2.game_number, gameId1).run();
+  await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(game1.start_time, game1.end_time, game1.rink_id, game1.game_number, gameId2).run();
+
+  return c.json({ success: true, message: 'Games swapped' });
+});
+
+// ==========================================
+// DELETE SINGLE GAME
+// ==========================================
+schedulingRoutes.delete('/games/:gameId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+
+  const game = await db.prepare('SELECT * FROM games WHERE id = ?').bind(gameId).first();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  await db.prepare('DELETE FROM games WHERE id = ?').bind(gameId).run();
+  return c.json({ success: true, message: 'Game deleted' });
+});
+
+// ==========================================
+// ADD SINGLE GAME
+// ==========================================
+const addGameSchema = z.object({
+  event_id: z.string(),
+  event_division_id: z.string(),
+  home_team_id: z.string().nullable(),
+  away_team_id: z.string().nullable(),
+  rink_id: z.string().nullable().optional(),
+  start_time: z.string(),
+  end_time: z.string().optional(),
+  game_type: z.enum(['pool', 'quarterfinal', 'semifinal', 'consolation', 'championship', 'placement']),
+  pool_name: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+schedulingRoutes.post('/games', authMiddleware, requireRole('admin', 'director'), zValidator('json', addGameSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Get next game number for this event
+  const maxGame = await db.prepare('SELECT MAX(game_number) as max_num FROM games WHERE event_id = ?').bind(data.event_id).first<any>();
+  const gameNumber = (maxGame?.max_num || 0) + 1;
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const event = await db.prepare('SELECT venue_id FROM events WHERE id = ?').bind(data.event_id).first<any>();
+
+  await db.prepare(`
+    INSERT INTO games (id, event_id, event_division_id, home_team_id, away_team_id, venue_id, rink_id,
+      game_number, start_time, end_time, game_type, pool_name, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)
+  `).bind(
+    id, data.event_id, data.event_division_id, data.home_team_id, data.away_team_id,
+    event?.venue_id || null, data.rink_id || null, gameNumber, data.start_time, data.end_time || null,
+    data.game_type, data.pool_name || null, data.notes || null
+  ).run();
+
+  const created = await db.prepare(`
+    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at ON at.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    WHERE g.id = ?
+  `).bind(id).first();
+
+  return c.json({ success: true, data: created });
+});
+
+// ==========================================
 // POOL CREATION
 // ==========================================
 
