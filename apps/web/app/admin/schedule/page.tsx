@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
+// Dev auth header — TODO: replace with real JWT auth when login is wired up
+const devHeaders = { 'X-Dev-Bypass': 'true' };
+const authFetch = (url: string, opts: RequestInit = {}) =>
+  fetch(url, { ...opts, headers: { ...devHeaders, ...(opts.headers || {}) } });
+
 // Types
 interface Event {
   id: string;
@@ -42,10 +47,10 @@ interface Game {
   id: string;
   event_id: string;
   event_division_id: string;
-  home_team_id: string;
-  away_team_id: string;
-  home_team_name: string;
-  away_team_name: string;
+  home_team_id: string | null;
+  away_team_id: string | null;
+  home_team_name: string | null;
+  away_team_name: string | null;
   venue_id: string;
   rink_id: string | null;
   rink_name: string | null;
@@ -57,6 +62,7 @@ interface Game {
   home_score: number | null;
   away_score: number | null;
   status: string;
+  notes: string | null;
 }
 
 interface Venue {
@@ -133,69 +139,164 @@ function ScheduleMatrix({
 
   const teamMap = new Map(divisionRegs.map((r, idx) => [r.team_id, idx + 1]));
   const divisionGames = games.filter(g => g.event_division_id === division.id);
+  const poolGames = divisionGames.filter(g => g.game_type === 'pool');
+  const bracketGames = divisionGames.filter(g => g.game_type !== 'pool');
 
-  // Build matrix: for each team, for each day, find opponent
+  // Detect pools from game data
+  const poolNames = Array.from(new Set(poolGames.map(g => g.pool_name).filter(Boolean))) as string[];
+
+  // Build matrix: for each team, for each day, find ALL opponents (can be multiple)
   const rows = divisionRegs.map(reg => {
-    const row: (string | null)[] = [];
+    const teamNum = teamMap.get(reg.team_id) || 0;
+    const row: { opponents: string[]; types: string[] }[] = [];
     dayHeaders.forEach(header => {
-      const gameForTeam = divisionGames.find(
+      const gamesForTeam = poolGames.filter(
         g =>
           g.start_time?.startsWith(header.date) &&
           (g.home_team_id === reg.team_id || g.away_team_id === reg.team_id)
       );
-      if (gameForTeam) {
-        const opponentId = gameForTeam.home_team_id === reg.team_id ? gameForTeam.away_team_id : gameForTeam.home_team_id;
-        const opponentNum = teamMap.get(opponentId);
-        row.push(opponentNum ? String(opponentNum) : null);
-      } else {
-        row.push(null);
+      const opponents: string[] = [];
+      const types: string[] = [];
+      for (const game of gamesForTeam) {
+        const opponentId = game.home_team_id === reg.team_id ? game.away_team_id : game.home_team_id;
+        const opponentNum = opponentId ? teamMap.get(opponentId) : null;
+        opponents.push(opponentNum ? String(opponentNum) : '?');
+        types.push(game.pool_name?.includes('Crossover') ? 'crossover' : 'pool');
       }
+      row.push({ opponents, types });
     });
-    return { reg, row };
+    // Find pool assignment
+    const teamPool = poolGames.find(g =>
+      (g.home_team_id === reg.team_id || g.away_team_id === reg.team_id) && g.pool_name && !g.pool_name.includes('Crossover')
+    )?.pool_name || '';
+    return { reg, row, teamNum, teamPool };
   });
 
+  // Game type badge colors
+  const gameTypeBg: Record<string, string> = {
+    championship: 'bg-amber-500',
+    semifinal: 'bg-[#003e79]',
+    consolation: 'bg-[#6e6e73]',
+    placement: 'bg-[#86868b]',
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr>
-            <th className="bg-[#fafafa] text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left sticky left-0 z-10 w-32">
-              Team
-            </th>
-            {dayHeaders.map(header => (
-              <th
-                key={header.date}
-                className="bg-[#fafafa] text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-3 py-3 text-center min-w-12"
-              >
-                {header.label}
+    <div className="space-y-4">
+      {/* Pool Play Matrix */}
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 overflow-x-auto">
+        <div className="flex items-center gap-3 mb-4">
+          <h4 className="font-semibold text-[#1d1d1f] text-sm">Pool Play</h4>
+          {poolNames.length > 0 && (
+            <div className="flex gap-2">
+              {poolNames.filter(p => !p.includes('Crossover')).map(p => (
+                <span key={p} className="inline-block px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] text-[10px] font-semibold rounded-full">{p}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th className="bg-[#fafafa] text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-3 py-3 text-center w-8">#</th>
+              <th className="bg-[#fafafa] text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left sticky left-0 z-10 w-40">
+                Team
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ reg, row }) => (
-            <tr key={reg.id} className="border-t border-[#e8e8ed] hover:bg-[#fafafa]">
-              <td className="px-4 py-3 text-[#1d1d1f] font-semibold sticky left-0 z-10 bg-white">
-                {reg.team_name}
-              </td>
-              {row.map((opponent, idx) => (
-                <td
-                  key={idx}
-                  className="px-3 py-3 text-center text-[#3d3d3d] border-l border-[#e8e8ed]"
+              <th className="bg-[#fafafa] text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-2 py-3 text-center w-16">Pool</th>
+              {dayHeaders.map(header => (
+                <th
+                  key={header.date}
+                  className="bg-[#fafafa] text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-3 py-3 text-center min-w-16"
                 >
-                  {opponent ? (
-                    <span className="inline-block w-8 h-8 flex items-center justify-center bg-[#003e79] text-white rounded-full text-xs font-semibold">
-                      {opponent}
-                    </span>
-                  ) : (
-                    <span className="text-[#86868b]">—</span>
-                  )}
-                </td>
+                  {header.label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map(({ reg, row, teamNum, teamPool }) => (
+              <tr key={reg.id} className="border-t border-[#e8e8ed] hover:bg-[#fafafa]">
+                <td className="px-3 py-3 text-center">
+                  <span className="inline-flex items-center justify-center w-6 h-6 bg-[#003e79] text-white rounded-full text-[10px] font-bold">
+                    {teamNum}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[#1d1d1f] font-semibold sticky left-0 z-10 bg-white text-sm">
+                  {reg.team_name}
+                </td>
+                <td className="px-2 py-3 text-center text-[10px] text-[#6e6e73] font-medium">
+                  {teamPool ? teamPool.replace('Pool ', '') : '—'}
+                </td>
+                {row.map((cell, idx) => (
+                  <td
+                    key={idx}
+                    className="px-3 py-3 text-center text-[#3d3d3d] border-l border-[#e8e8ed]"
+                  >
+                    {cell.opponents.length > 0 ? (
+                      <div className="flex items-center justify-center gap-1">
+                        {cell.opponents.map((opp, oi) => (
+                          <span
+                            key={oi}
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold ${
+                              cell.types[oi] === 'crossover'
+                                ? 'bg-[#00ccff] text-white'
+                                : 'bg-[#003e79] text-white'
+                            }`}
+                          >
+                            {opp}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[#86868b]">—</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-3 flex gap-4 text-[10px] text-[#86868b]">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-[#003e79]"></span> Pool Game
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-3 rounded-full bg-[#00ccff]"></span> Crossover
+          </span>
+        </div>
+      </div>
+
+      {/* Bracket Games */}
+      {bracketGames.length > 0 && (
+        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6">
+          <h4 className="font-semibold text-[#1d1d1f] text-sm mb-4">Bracket Play</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {bracketGames
+              .sort((a, b) => {
+                const order = ['semifinal', 'championship', 'consolation', 'placement'];
+                return order.indexOf(a.game_type) - order.indexOf(b.game_type);
+              })
+              .map(game => (
+                <div key={game.id} className="border border-[#e8e8ed] rounded-xl p-4 flex items-center gap-4">
+                  <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-bold text-white ${gameTypeBg[game.game_type] || 'bg-[#003e79]'}`}>
+                    {game.game_type === 'championship' ? 'CHAMP' : game.game_type === 'semifinal' ? 'SEMI' : game.game_type === 'consolation' ? 'CONS' : 'PLACE'}
+                  </span>
+                  <div className="flex-1">
+                    <div className="font-semibold text-[#1d1d1f] text-sm">
+                      {game.home_team_name && game.away_team_name
+                        ? `${game.home_team_name} vs ${game.away_team_name}`
+                        : game.notes || 'TBD vs TBD'}
+                    </div>
+                    <div className="text-[10px] text-[#86868b] mt-0.5">
+                      Game #{game.game_number}
+                      {game.start_time && ` · ${new Date(game.start_time).toLocaleString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`}
+                      {game.rink_name && ` · ${game.rink_name}`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -260,7 +361,12 @@ function GameListView({ games, divisions }: { games: Game[]; divisions: Division
                 </td>
                 <td className="px-6 py-4 text-[#3d3d3d]">{game.rink_name || '—'}</td>
                 <td className="px-6 py-4 text-[#3d3d3d]">
-                  {game.home_team_name} vs {game.away_team_name}
+                  {game.home_team_name && game.away_team_name
+                    ? `${game.home_team_name} vs ${game.away_team_name}`
+                    : game.notes || 'TBD vs TBD'}
+                  {game.game_type !== 'pool' && (
+                    <span className="ml-2 text-[10px] font-semibold text-[#003e79] uppercase">{game.game_type}</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-[#6e6e73] text-xs">
                   {div ? `${div.age_group} - ${div.division_level}` : '—'}
@@ -304,7 +410,7 @@ export default function AdminSchedulePage() {
 
   // Load data
   useEffect(() => {
-    Promise.all([fetch(`${API_BASE}/events`).then(r => r.json()), fetch(`${API_BASE}/venues`).then(r => r.json())])
+    Promise.all([authFetch(`${API_BASE}/events`).then(r => r.json()), authFetch(`${API_BASE}/venues`).then(r => r.json())])
       .then(([evJson, venJson]) => {
         if (evJson.success && Array.isArray(evJson.data)) {
           setEvents(evJson.data);
@@ -328,16 +434,16 @@ export default function AdminSchedulePage() {
     }
 
     Promise.all([
-      fetch(`${API_BASE}/events/${selectedEvent.id}/divisions`).then(r => r.json()),
-      fetch(`${API_BASE}/events/${selectedEvent.id}/registrations`).then(r => r.json()),
-      fetch(`${API_BASE}/events/${selectedEvent.id}/games`).then(r => r.json()),
-      selectedEvent.venue_id ? fetch(`${API_BASE}/venues/${selectedEvent.venue_id}/rinks`).then(r => r.json()) : Promise.resolve({ data: [] }),
+      authFetch(`${API_BASE}/events/${selectedEvent.slug}`).then(r => r.json()),
+      authFetch(`${API_BASE}/registrations/event/${selectedEvent.id}`).then(r => r.json()),
+      authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/games`).then(r => r.json()),
+      selectedEvent.venue_id ? authFetch(`${API_BASE}/venues/${selectedEvent.venue_id}/rinks`).then(r => r.json()) : Promise.resolve({ data: [] }),
     ])
-      .then(([divJson, regJson, gameJson, rinkJson]) => {
-        if (divJson.success && Array.isArray(divJson.data)) {
-          setDivisions(divJson.data);
-          if (divJson.data.length > 0 && !selectedDivision) {
-            setSelectedDivision(divJson.data[0].id);
+      .then(([eventJson, regJson, gameJson, rinkJson]) => {
+        if (eventJson.success && eventJson.data?.divisions && Array.isArray(eventJson.data.divisions)) {
+          setDivisions(eventJson.data.divisions);
+          if (eventJson.data.divisions.length > 0 && !selectedDivision) {
+            setSelectedDivision(eventJson.data.divisions[0].id);
           }
         }
         if (regJson.success && Array.isArray(regJson.data)) {
@@ -367,21 +473,28 @@ export default function AdminSchedulePage() {
 
     setGenerating(true);
     try {
-      const res = await fetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/generate`, {
+      // Save schedule rules first so the generator uses our config
+      await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/rules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          num_rinks: numRinks,
-          game_duration_minutes: gameDuration,
-          between_games_minutes: betweenGames,
-          first_game_time: firstGameTime,
-          last_game_time: lastGameTime,
+          rules: [
+            { ruleType: 'game_duration_minutes', ruleValue: String(gameDuration), priority: 10 },
+            { ruleType: 'min_rest_minutes', ruleValue: String(betweenGames), priority: 10 },
+            { ruleType: 'first_game_time', ruleValue: firstGameTime, priority: 10 },
+            { ruleType: 'last_game_time', ruleValue: lastGameTime, priority: 10 },
+          ],
         }),
+      });
+
+      const res = await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
       const json = await res.json();
       if (json.success) {
         // Reload games
-        const gameRes = await fetch(`${API_BASE}/events/${selectedEvent.id}/games`);
+        const gameRes = await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/games`);
         const gameJson = await gameRes.json();
         if (gameJson.success && Array.isArray(gameJson.data)) {
           setGames(gameJson.data);
@@ -401,7 +514,7 @@ export default function AdminSchedulePage() {
     if (!confirm('Clear all games for this event? This cannot be undone.')) return;
 
     try {
-      const res = await fetch(`${API_BASE}/events/${selectedEvent.id}/games`, { method: 'DELETE' });
+      const res = await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/games`, { method: 'DELETE' });
       const json = await res.json();
       if (json.success) {
         setGames([]);
@@ -418,12 +531,12 @@ export default function AdminSchedulePage() {
     if (!confirm('Publish this schedule? Teams will be notified.')) return;
 
     try {
-      const res = await fetch(`${API_BASE}/events/${selectedEvent.id}/publish-schedule`, { method: 'POST' });
+      const res = await authFetch(`${API_BASE}/events/${selectedEvent.id}/publish-schedule`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
         // Reload
         if (selectedEvent) {
-          const gameRes = await fetch(`${API_BASE}/events/${selectedEvent.id}/games`);
+          const gameRes = await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/games`);
           const gameJson = await gameRes.json();
           if (gameJson.success) setGames(gameJson.data);
         }
@@ -632,14 +745,18 @@ export default function AdminSchedulePage() {
 
             {/* Stats */}
             {games.length > 0 && (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 text-center">
                   <div className="text-2xl font-bold text-[#003e79]">{totalGames}</div>
                   <div className="text-xs text-[#86868b] mt-1 uppercase tracking-widest font-semibold">Total Games</div>
                 </div>
                 <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 text-center">
-                  <div className="text-2xl font-bold text-[#003e79]">{gamesPerDay}</div>
-                  <div className="text-xs text-[#86868b] mt-1 uppercase tracking-widest font-semibold">Games Per Day</div>
+                  <div className="text-2xl font-bold text-[#003e79]">{games.filter(g => g.game_type === 'pool').length}</div>
+                  <div className="text-xs text-[#86868b] mt-1 uppercase tracking-widest font-semibold">Pool Games</div>
+                </div>
+                <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 text-center">
+                  <div className="text-2xl font-bold text-[#003e79]">{games.filter(g => g.game_type !== 'pool').length}</div>
+                  <div className="text-xs text-[#86868b] mt-1 uppercase tracking-widest font-semibold">Bracket Games</div>
                 </div>
                 <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 text-center">
                   <div className="text-2xl font-bold text-[#003e79]">{approvedTeams}</div>
