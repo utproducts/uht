@@ -109,11 +109,11 @@ function DatePicker({ selectedDates, onToggleDate }: { selectedDates: Set<string
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <button onClick={prev} className="p-1.5 rounded-full hover:bg-gray-100 transition">
+        <button onClick={prev} className="p-1.5 rounded-full hover:bg-[#fafafa] transition">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         </button>
-        <span className="text-sm font-bold text-gray-900">{monthLabel}</span>
-        <button onClick={next} className="p-1.5 rounded-full hover:bg-gray-100 transition">
+        <span className="text-sm font-bold text-[#1d1d1f]">{monthLabel}</span>
+        <button onClick={next} className="p-1.5 rounded-full hover:bg-[#fafafa] transition">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
         </button>
       </div>
@@ -139,7 +139,7 @@ function DatePicker({ selectedDates, onToggleDate }: { selectedDates: Set<string
               className={`aspect-square flex items-center justify-center rounded text-xs transition
                 ${isPast ? 'text-gray-200 cursor-default' : ''}
                 ${isSelected ? 'bg-cyan-600 text-white font-bold' : ''}
-                ${!isSelected && !isPast ? (isWeekend ? 'text-cyan-700 hover:bg-cyan-50' : 'text-gray-700 hover:bg-gray-100') : ''}
+                ${!isSelected && !isPast ? (isWeekend ? 'text-cyan-700 hover:bg-cyan-50' : 'text-[#3d3d3d] hover:bg-[#fafafa]') : ''}
               `}
             >
               {day}
@@ -148,8 +148,8 @@ function DatePicker({ selectedDates, onToggleDate }: { selectedDates: Set<string
         })}
       </div>
       <div className="flex gap-2 mt-3">
-        <button onClick={selectWeekdays} className="text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700 transition">+ Weekdays</button>
-        <button onClick={selectWeekends} className="text-[11px] px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded font-medium text-gray-700 transition">+ Weekends</button>
+        <button onClick={selectWeekdays} className="text-[11px] px-2 py-1 bg-[#fafafa] hover:bg-[#e8e8ed] rounded font-medium text-[#3d3d3d] transition">+ Weekdays</button>
+        <button onClick={selectWeekends} className="text-[11px] px-2 py-1 bg-[#fafafa] hover:bg-[#e8e8ed] rounded font-medium text-[#3d3d3d] transition">+ Weekends</button>
         {selectedDates.size > 0 && (
           <button onClick={clearAll} className="text-[11px] px-2 py-1 text-red-500 hover:text-red-700 font-medium transition">Clear All</button>
         )}
@@ -239,14 +239,14 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
-      <h3 className="text-lg font-bold text-gray-900 mb-1">Generate Time Slots</h3>
-      <p className="text-sm text-gray-500 mb-4">Pick a template, select dates, and generate.</p>
+      <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Generate Time Slots</h3>
+      <p className="text-sm text-[#86868b] mb-4">Pick a template, select dates, and generate.</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Template + Settings */}
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Template</label>
+            <label className="block text-xs font-semibold text-[#6e6e73] mb-2 uppercase tracking-wide">Template</label>
             <div className="grid grid-cols-2 gap-2">
               {TEMPLATES.map((tmpl) => (
                 <button
@@ -254,12 +254,12 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
                   onClick={() => handleTemplateChange(tmpl)}
                   className={`p-3 rounded-xl border-2 text-left transition ${
                     selectedTemplate.name === tmpl.name
-                      ? 'border-cyan-600 bg-cyan-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-[#003e79] bg-cyan-50'
+                      : 'border-[#e8e8ed] hover:border-[#e8e8ed]'
                   }`}
                 >
-                  <div className={`text-sm font-bold ${selectedTemplate.name === tmpl.name ? 'text-cyan-700' : 'text-gray-900'}`}>{tmpl.name}</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5">{tmpl.description}</div>
+                  <div className={`text-sm font-bold ${selectedTemplate.name === tmpl.name ? 'text-cyan-700' : 'text-[#1d1d1f]'}`}>{tmpl.name}</div>
+                  <div className="text-[11px] text-[#86868b] mt-0.5">{tmpl.description}</div>
                 </button>
               ))}
             </div>
@@ -267,34 +267,34 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
 
           {/* Time settings */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+            <label className="block text-xs font-semibold text-[#6e6e73] mb-2 uppercase tracking-wide">
               Settings {!isCustom && <span className="text-gray-400 normal-case font-normal">- from template</span>}
             </label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] text-gray-500 mb-1">Start Time</label>
+                <label className="block text-[11px] text-[#86868b] mb-1">Start Time</label>
                 <input type="time" value={startTime} onChange={(e) => { setStartTime(e.target.value); if (!isCustom) setSelectedTemplate(TEMPLATES[5]); }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-[11px] text-gray-500 mb-1">End Time</label>
+                <label className="block text-[11px] text-[#86868b] mb-1">End Time</label>
                 <input type="time" value={endTime} onChange={(e) => { setEndTime(e.target.value); if (!isCustom) setSelectedTemplate(TEMPLATES[5]); }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-[11px] text-gray-500 mb-1">Duration</label>
+                <label className="block text-[11px] text-[#86868b] mb-1">Duration</label>
                 <input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-[11px] text-gray-500 mb-1">Buffer (min)</label>
+                <label className="block text-[11px] text-[#86868b] mb-1">Buffer (min)</label>
                 <input type="number" value={buffer} onChange={(e) => setBuffer(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
               </div>
               <div className="col-span-2">
-                <label className="block text-[11px] text-gray-500 mb-1">Price per Slot ($)</label>
+                <label className="block text-[11px] text-[#86868b] mb-1">Price per Slot ($)</label>
                 <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
               </div>
             </div>
           </div>
@@ -303,14 +303,14 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
         {/* Right: Date Picker */}
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Select Dates</label>
+            <label className="block text-xs font-semibold text-[#6e6e73] mb-2 uppercase tracking-wide">Select Dates</label>
             <DatePicker selectedDates={selectedDates} onToggleDate={toggleDate} />
           </div>
 
           {/* Selected dates summary */}
           {sortedDates.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-3">
-              <div className="text-xs font-semibold text-gray-600 mb-2">
+            <div className="bg-[#f5f5f7] rounded-xl p-3">
+              <div className="text-xs font-semibold text-[#6e6e73] mb-2">
                 {sortedDates.length} date{sortedDates.length !== 1 ? 's' : ''} selected - {slotsPerDay} slot{slotsPerDay !== 1 ? 's' : ''}/day - {sortedDates.length * slotsPerDay} total slots
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -321,7 +321,7 @@ function SlotGenerator({ onGenerated }: { onGenerated: () => void }) {
                   const isWeekend = dow === 0 || dow === 6;
                   return (
                     <span key={d} className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium ${
-                      isWeekend ? 'bg-cyan-100 text-cyan-700' : 'bg-gray-200 text-gray-700'
+                      isWeekend ? 'bg-cyan-100 text-cyan-700' : 'bg-[#e8e8ed] text-[#3d3d3d]'
                     }`}>
                       {label}
                       <button onClick={() => toggleDate(d)} className="hover:text-red-500 ml-0.5">&times;</button>
@@ -362,7 +362,7 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
 
   if (dates.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
+      <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-[#86868b]">
         No slots found. Use the generator above to create some.
       </div>
     );
@@ -371,7 +371,7 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="text-lg font-bold text-gray-900">Ice Slots</h3>
+        <h3 className="text-lg font-bold text-[#1d1d1f]">Ice Slots</h3>
         <button onClick={onRefresh} className="text-sm text-cyan-600 hover:text-cyan-800 font-medium">
           Refresh
         </button>
@@ -383,33 +383,33 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
           });
           return (
             <div key={date}>
-              <div className="bg-gray-50 px-4 py-2 text-xs font-bold text-gray-600 uppercase tracking-wide sticky top-0">
+              <div className="bg-[#f5f5f7] px-4 py-2 text-xs font-bold text-[#6e6e73] uppercase tracking-wide sticky top-0">
                 {dateLabel} - {grouped[date].length} slot{grouped[date].length !== 1 ? 's' : ''}
               </div>
               {grouped[date].map((slot) => (
-                <div key={slot.id} className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between hover:bg-gray-50">
+                <div key={slot.id} className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between hover:bg-[#f5f5f7]">
                   <div className="flex items-center gap-3">
                     <span className={`inline-block w-2 h-2 rounded-full ${
                       slot.status === 'available' ? 'bg-green-400' :
                       slot.status === 'booked' ? 'bg-blue-400' :
                       slot.status === 'held' ? 'bg-amber-400' : 'bg-gray-400'
                     }`} />
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-[#1d1d1f]">
                       {fmt(slot.start_time)} - {fmt(slot.end_time)}
                     </span>
-                    <span className="text-xs text-gray-500">{slot.duration_minutes}min</span>
+                    <span className="text-xs text-[#86868b]">{slot.duration_minutes}min</span>
                     <span className="text-sm font-semibold text-green-600">${(slot.price_cents / 100).toFixed(0)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     {slot.booked_by_name && (
-                      <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                      <span className="text-xs text-[#6e6e73] bg-[#fafafa] px-2 py-1 rounded">
                         {slot.booked_by_name}
                       </span>
                     )}
                     <span className={`text-xs font-medium px-2 py-1 rounded ${
                       slot.status === 'available' ? 'bg-green-100 text-green-700' :
                       slot.status === 'booked' ? 'bg-blue-100 text-blue-700' :
-                      slot.status === 'held' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'
+                      slot.status === 'held' ? 'bg-amber-100 text-amber-700' : 'bg-[#fafafa] text-[#3d3d3d]'
                     }`}>
                       {slot.status}
                     </span>
@@ -434,7 +434,7 @@ function SlotsTable({ slots, onDelete, onRefresh }: { slots: Slot[]; onDelete: (
 function BookingsTable({ bookings }: { bookings: Booking[] }) {
   if (bookings.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
+      <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-[#86868b]">
         No bookings yet.
       </div>
     );
@@ -443,36 +443,36 @@ function BookingsTable({ bookings }: { bookings: Booking[] }) {
   return (
     <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
       <div className="p-4 border-b border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900">Bookings ({bookings.length})</h3>
+        <h3 className="text-lg font-bold text-[#1d1d1f]">Bookings ({bookings.length})</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left">
+          <thead className="bg-[#f5f5f7] text-left">
             <tr>
-              <th className="px-4 py-2 font-semibold text-gray-600">Date</th>
-              <th className="px-4 py-2 font-semibold text-gray-600">Time</th>
-              <th className="px-4 py-2 font-semibold text-gray-600">Name</th>
-              <th className="px-4 py-2 font-semibold text-gray-600">Email</th>
-              <th className="px-4 py-2 font-semibold text-gray-600">Phone</th>
-              <th className="px-4 py-2 font-semibold text-gray-600">Amount</th>
-              <th className="px-4 py-2 font-semibold text-gray-600">Status</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Date</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Time</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Name</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Email</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Phone</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Amount</th>
+              <th className="px-4 py-2 font-semibold text-[#6e6e73]">Status</th>
             </tr>
           </thead>
           <tbody>
             {bookings.map((b) => (
-              <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50">
+              <tr key={b.id} className="border-b border-gray-50 hover:bg-[#f5f5f7]">
                 <td className="px-4 py-2.5 whitespace-nowrap">
                   {new Date(b.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap">{fmt(b.start_time)} - {fmt(b.end_time)}</td>
                 <td className="px-4 py-2.5 font-medium">{b.booked_by_name}</td>
-                <td className="px-4 py-2.5 text-gray-600">{b.booked_by_email}</td>
-                <td className="px-4 py-2.5 text-gray-600">{b.booked_by_phone}</td>
+                <td className="px-4 py-2.5 text-[#6e6e73]">{b.booked_by_email}</td>
+                <td className="px-4 py-2.5 text-[#6e6e73]">{b.booked_by_phone}</td>
                 <td className="px-4 py-2.5 font-semibold text-green-600">${(b.price_cents / 100).toFixed(0)}</td>
                 <td className="px-4 py-2.5">
                   <span className={`text-xs font-medium px-2 py-1 rounded ${
                     b.status === 'booked' ? 'bg-blue-100 text-blue-700' :
-                    b.status === 'held' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'
+                    b.status === 'held' ? 'bg-amber-100 text-amber-700' : 'bg-[#fafafa] text-[#3d3d3d]'
                   }`}>
                     {b.status}
                   </span>
@@ -540,11 +540,11 @@ export default function AdminIcePage() {
   const revenue = slots.filter((s) => s.status === 'booked').reduce((sum, s) => sum + s.price_cents, 0);
 
   return (
-    <div className="bg-gray-100 min-h-full">
+    <div className="bg-[#fafafa] min-h-full">
       {/* Header */}
       <div className="max-w-6xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Ice Booking Admin</h1>
+          <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Ice Booking Admin</h1>
           <p className="text-sm text-gray-400 mt-0.5">Rosemont Outdoor Rink</p>
         </div>
         <a href="/book-ice" className="text-sm text-cyan-600 hover:text-cyan-700 font-medium">
@@ -556,31 +556,31 @@ export default function AdminIcePage() {
       <div className="max-w-6xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{totalSlots}</div>
-            <div className="text-xs text-gray-500 mt-1">Total Slots</div>
+            <div className="text-2xl font-bold text-[#1d1d1f]">{totalSlots}</div>
+            <div className="text-xs text-[#86868b] mt-1">Total Slots</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-green-600">{available}</div>
-            <div className="text-xs text-gray-500 mt-1">Available</div>
+            <div className="text-xs text-[#86868b] mt-1">Available</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">{booked}</div>
-            <div className="text-xs text-gray-500 mt-1">Booked</div>
+            <div className="text-xs text-[#86868b] mt-1">Booked</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-green-600">${(revenue / 100).toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Revenue</div>
+            <div className="text-xs text-[#86868b] mt-1">Revenue</div>
           </div>
         </div>
       </div>
 
       {/* Tab Switcher */}
       <div className="max-w-6xl mx-auto px-6 mt-6">
-        <div className="flex gap-1 bg-gray-200 rounded-xl p-1 w-fit">
+        <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
           <button
             onClick={() => setTab('slots')}
             className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
-              tab === 'slots' ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+              tab === 'slots' ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
             Manage Slots
@@ -588,7 +588,7 @@ export default function AdminIcePage() {
           <button
             onClick={() => setTab('bookings')}
             className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
-              tab === 'bookings' ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+              tab === 'bookings' ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
             Bookings ({bookings.length})
@@ -600,7 +600,7 @@ export default function AdminIcePage() {
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
           </div>
         ) : tab === 'slots' ? (
           <>
@@ -609,14 +609,14 @@ export default function AdminIcePage() {
             {/* Filters */}
             <div className="flex gap-3 items-end">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Filter by Date</label>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Filter by Date</label>
                 <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Status</label>
                 <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                  className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm bg-white">
                   <option value="">All</option>
                   <option value="available">Available</option>
                   <option value="booked">Booked</option>
@@ -625,7 +625,7 @@ export default function AdminIcePage() {
               </div>
               {(dateFilter || statusFilter) && (
                 <button onClick={() => { setDateFilter(''); setStatusFilter(''); }}
-                  className="text-sm text-gray-500 hover:text-gray-700 font-medium pb-2">
+                  className="text-sm text-[#86868b] hover:text-[#3d3d3d] font-medium pb-2">
                   Clear
                 </button>
               )}

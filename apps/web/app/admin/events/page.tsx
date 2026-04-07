@@ -85,12 +85,12 @@ const daysUntil = (d: string) => {
 const statusColor = (status: string) => {
   switch (status) {
     case 'registration_open': return 'bg-green-100 text-green-700';
-    case 'published': return 'bg-blue-100 text-blue-700';
+    case 'published': return 'bg-[#f0f7ff] text-[#003e79]';
     case 'active': return 'bg-cyan-100 text-cyan-700';
-    case 'completed': return 'bg-gray-100 text-gray-600';
+    case 'completed': return 'bg-[#fafafa] text-[#6e6e73]';
     case 'cancelled': return 'bg-red-100 text-red-700';
     case 'draft': return 'bg-amber-100 text-amber-700';
-    default: return 'bg-gray-100 text-gray-600';
+    default: return 'bg-[#fafafa] text-[#6e6e73]';
   }
 };
 
@@ -102,16 +102,6 @@ const statusLabel = (status: string) => {
   }
 };
 
-const locationIcon = (city: string) => {
-  if (city.includes('Chicago') || city.includes('Rosemont')) return '🌆';
-  if (city.includes('St. Louis') || city.includes('St Louis')) return '🏛️';
-  if (city.includes('South Bend') || city.includes('Notre Dame')) return '☘️';
-  if (city.includes('Ann Arbor')) return '〽️';
-  if (city.includes('Madison')) return '🦡';
-  if (city.includes('Dells')) return '🌊';
-  if (city.includes('Holland')) return '🌷';
-  return '📍';
-};
 
 // --- Standard age groups & divisions ---
 const STANDARD_AGE_GROUPS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', '16u/JV', '18u/Var.'];
@@ -309,8 +299,8 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     }
   };
 
-  const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none";
-  const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+  const inputCls = "w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none";
+  const labelCls = "block text-sm font-medium text-[#3d3d3d] mb-1";
 
   const currentYear = new Date().getFullYear();
   const seasonOptions = SEASONS.flatMap(s => [currentYear, currentYear + 1].map(y => `${s}-${y}`));
@@ -318,22 +308,22 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl z-10">
+        <div className="sticky top-0 bg-white border-b border-[#e8e8ed] px-6 py-4 rounded-t-2xl z-10">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Event' : 'Create Event'}</h3>
-            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            <h3 className="text-lg font-bold text-[#1d1d1f]">{isEdit ? 'Edit Event' : 'Create Event'}</h3>
+            <button onClick={onClose} className="p-1.5 hover:bg-[#fafafa] rounded-lg transition">
+              <svg className="w-5 h-5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
           {/* Tabs */}
           <div className="flex gap-1">
             <button onClick={() => setActiveTab('details')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'details' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'details' ? 'bg-cyan-600 text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
               Event Details
             </button>
             {isEdit && (
               <button onClick={() => setActiveTab('hotels')}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'hotels' ? 'bg-cyan-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'hotels' ? 'bg-cyan-600 text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
                 Hotels ({hotels.length})
               </button>
             )}
@@ -429,7 +419,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   <label className={labelCls}>Multi-Event Discount %</label>
                   <input type="number" min="0" max="100" value={form.multi_event_discount_pct} onChange={e => setForm({ ...form, multi_event_discount_pct: e.target.value })}
                     placeholder="10" className={inputCls} />
-                  <p className="text-xs text-gray-400 mt-1">Discount when team registers for 2+ events</p>
+                  <p className="text-xs text-[#86868b] mt-1">Discount when team registers for 2+ events</p>
                 </div>
                 <div>
                   <label className={labelCls}>Max Slots</label>
@@ -476,12 +466,12 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
               {/* Age Groups */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Age Groups</label>
+                <label className="block text-sm font-medium text-[#3d3d3d] mb-2">Age Groups</label>
                 <div className="flex flex-wrap gap-2">
                   {STANDARD_AGE_GROUPS.map(ag => (
                     <button key={ag} type="button" onClick={() => toggleArrayItem('age_groups', ag)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                        form.age_groups.includes(ag) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        form.age_groups.includes(ag) ? 'bg-cyan-600 text-white' : 'bg-[#fafafa] text-[#6e6e73] hover:bg-[#e8e8ed]'
                       }`}>{ag}</button>
                   ))}
                 </div>
@@ -489,12 +479,12 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
               {/* Divisions */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Divisions</label>
+                <label className="block text-sm font-medium text-[#3d3d3d] mb-2">Divisions</label>
                 <div className="flex flex-wrap gap-2">
                   {STANDARD_DIVISIONS.map(d => (
                     <button key={d} type="button" onClick={() => toggleArrayItem('divisions', d)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                        form.divisions.includes(d) ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        form.divisions.includes(d) ? 'bg-cyan-600 text-white' : 'bg-[#fafafa] text-[#6e6e73] hover:bg-[#e8e8ed]'
                       }`}>{d}</button>
                   ))}
                 </div>
@@ -504,18 +494,18 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
               <div className="flex flex-wrap gap-4 py-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.show_participants === 1} onChange={e => setForm({ ...form, show_participants: e.target.checked ? 1 : 0 })}
-                    className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
-                  <span className="text-sm text-gray-700">Show Participants</span>
+                    className="w-4 h-4 rounded border-[#e8e8ed] text-cyan-600 focus:ring-[#003e79]/20" />
+                  <span className="text-sm text-[#3d3d3d]">Show Participants</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.hide_availability === 1} onChange={e => setForm({ ...form, hide_availability: e.target.checked ? 1 : 0 })}
-                    className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
-                  <span className="text-sm text-gray-700">Hide Availability</span>
+                    className="w-4 h-4 rounded border-[#e8e8ed] text-cyan-600 focus:ring-[#003e79]/20" />
+                  <span className="text-sm text-[#3d3d3d]">Hide Availability</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.is_sold_out === 1} onChange={e => setForm({ ...form, is_sold_out: e.target.checked ? 1 : 0 })}
-                    className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500" />
-                  <span className="text-sm text-gray-700">Sold Out</span>
+                    className="w-4 h-4 rounded border-[#e8e8ed] text-cyan-600 focus:ring-[#003e79]/20" />
+                  <span className="text-sm text-[#3d3d3d]">Sold Out</span>
                 </label>
               </div>
 
@@ -541,29 +531,29 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
             <>
               {/* Linked Hotels for this Event */}
               <div>
-                <p className="text-sm font-semibold text-gray-800 mb-2">Event Hotels ({hotels.length})</p>
+                <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Event Hotels ({hotels.length})</p>
                 {loadingHotels ? (
-                  <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600" /></div>
+                  <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>
                 ) : hotels.length > 0 ? (
                   <div className="space-y-2">
                     {hotels.map(h => (
-                      <div key={h.id} className="flex items-start gap-3 bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
+                      <div key={h.id} className="flex items-start gap-3 bg-white rounded-xl p-3 border border-[#e8e8ed] shadow-sm">
                         <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center shrink-0 mt-0.5">
                           <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900">{h.hotel_name}</p>
+                          <p className="text-sm font-semibold text-[#1d1d1f]">{h.hotel_name}</p>
                           {h.rate_description && <p className="text-xs text-cyan-700 font-medium">{h.rate_description}</p>}
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                            {(h.city || h.state) && <span className="text-xs text-gray-500">{[h.city, h.state].filter(Boolean).join(', ')}</span>}
-                            {h.phone && <span className="text-xs text-gray-500">{h.phone}</span>}
-                            {h.booking_code && <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Code: {h.booking_code}</span>}
+                            {(h.city || h.state) && <span className="text-xs text-[#86868b]">{[h.city, h.state].filter(Boolean).join(', ')}</span>}
+                            {h.phone && <span className="text-xs text-[#86868b]">{h.phone}</span>}
+                            {h.booking_code && <span className="text-xs text-[#86868b] bg-[#fafafa] px-1.5 py-0.5 rounded">Code: {h.booking_code}</span>}
                           </div>
                           {((h as any).contact_name || (h as any).contact_email) && (
-                            <div className="flex flex-wrap gap-x-3 mt-1.5 pt-1.5 border-t border-gray-100">
-                              <span className="text-xs text-gray-600 font-medium">Rep: {(h as any).contact_name || 'N/A'}</span>
+                            <div className="flex flex-wrap gap-x-3 mt-1.5 pt-1.5 border-t border-[#e8e8ed]">
+                              <span className="text-xs text-[#6e6e73] font-medium">Rep: {(h as any).contact_name || 'N/A'}</span>
                               {(h as any).contact_email && <span className="text-xs text-cyan-600">{(h as any).contact_email}</span>}
-                              {(h as any).contact_phone && <span className="text-xs text-gray-500">{(h as any).contact_phone}</span>}
+                              {(h as any).contact_phone && <span className="text-xs text-[#86868b]">{(h as any).contact_phone}</span>}
                             </div>
                           )}
                         </div>
@@ -574,30 +564,30 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 rounded-xl p-5 text-center text-sm border border-dashed border-gray-300">
-                    <p className="text-gray-400 mb-1">No hotels assigned to this event yet</p>
-                    <p className="text-gray-400 text-xs">Select from suggested hotels below or add manually</p>
+                  <div className="bg-[#f5f5f7] rounded-xl p-5 text-center text-sm border border-dashed border-[#e8e8ed]">
+                    <p className="text-[#86868b] mb-1">No hotels assigned to this event yet</p>
+                    <p className="text-[#86868b] text-xs">Select from suggested hotels below or add manually</p>
                   </div>
                 )}
               </div>
 
               {/* Suggested Hotels from Master Database */}
               <div>
-                <p className="text-sm font-semibold text-gray-800 mb-2">
+                <p className="text-sm font-semibold text-[#1d1d1f] mb-2">
                   Suggested Hotels
-                  <span className="text-xs font-normal text-gray-400 ml-2">
+                  <span className="text-xs font-normal text-[#86868b] ml-2">
                     based on event location ({event?.city}, {event?.state})
                   </span>
                 </p>
                 {loadingSuggestions ? (
-                  <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-600" /></div>
+                  <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#003e79]" /></div>
                 ) : suggestedHotels.filter(h => !h.already_linked).length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {suggestedHotels.filter(h => !h.already_linked).map(h => (
-                      <div key={h.id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-200 hover:border-cyan-300 transition">
+                      <div key={h.id} className="flex items-center gap-2 bg-[#f5f5f7] rounded-xl p-2.5 border border-[#e8e8ed] hover:border-cyan-300 transition">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-900 truncate">{h.hotel_name}</p>
-                          <p className="text-[10px] text-gray-500">{h.city}, {h.state}</p>
+                          <p className="text-xs font-semibold text-[#1d1d1f] truncate">{h.hotel_name}</p>
+                          <p className="text-[10px] text-[#86868b]">{h.city}, {h.state}</p>
                           {h.default_rate_description && <p className="text-[10px] text-cyan-700">{h.default_rate_description}</p>}
                         </div>
                         <button onClick={() => handleLinkHotel(h.id)} disabled={linkingId === h.id}
@@ -608,9 +598,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     ))}
                   </div>
                 ) : suggestedHotels.length > 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-2">All available hotels already added</p>
+                  <p className="text-xs text-[#86868b] text-center py-2">All available hotels already added</p>
                 ) : (
-                  <p className="text-xs text-gray-400 text-center py-2">No hotels in database for this area yet</p>
+                  <p className="text-xs text-[#86868b] text-center py-2">No hotels in database for this area yet</p>
                 )}
               </div>
 
@@ -622,10 +612,10 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     + Add hotel manually
                   </button>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+                  <div className="bg-white border border-[#e8e8ed] rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-gray-800">Add Hotel Manually</p>
-                      <button onClick={() => setShowAddManual(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                      <p className="text-sm font-semibold text-[#1d1d1f]">Add Hotel Manually</p>
+                      <button onClick={() => setShowAddManual(false)} className="text-xs text-[#86868b] hover:text-[#6e6e73]">Cancel</button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
@@ -671,8 +661,8 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
           )}
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex gap-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">Cancel</button>
+        <div className="sticky bottom-0 bg-white border-t border-[#e8e8ed] px-6 py-4 rounded-b-2xl flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">Cancel</button>
           <button onClick={handleSave} disabled={saving || result === 'success' || !form.name || !form.city || !form.start_date || !form.end_date}
             className={`flex-1 px-4 py-2.5 font-semibold rounded-xl text-sm transition ${
               result === 'success' ? 'bg-green-500 text-white' : 'bg-cyan-600 hover:bg-cyan-700 text-white'
@@ -702,15 +692,15 @@ function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { ev
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-start gap-2.5 flex-1 min-w-0">
             {event.logo_url ? (
-              <img src={event.logo_url} alt="" className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-100 shrink-0" />
+              <img src={event.logo_url} alt="" className="w-10 h-10 rounded-lg object-contain bg-[#f5f5f7] border border-[#e8e8ed] shrink-0" />
             ) : (
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-50 to-blue-50 border border-gray-100 flex items-center justify-center shrink-0">
-                <span className="text-base">{locationIcon(event.city)}</span>
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-50 to-blue-50 border border-[#e8e8ed] flex items-center justify-center shrink-0">
+                <span className="text-base"></span>
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-bold text-gray-900 truncate leading-tight">{event.tournament_name || event.name}</h3>
-              <p className="text-xs text-gray-500 truncate">{event.name}</p>
+              <h3 className="text-sm font-bold text-[#1d1d1f] truncate leading-tight">{event.tournament_name || event.name}</h3>
+              <p className="text-xs text-[#86868b] truncate">{event.name}</p>
             </div>
           </div>
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ml-2 ${statusColor(event.status)}`}>
@@ -719,17 +709,17 @@ function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { ev
         </div>
 
         {/* Date + Location */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-xs text-gray-600">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-xs text-[#6e6e73]">
           <div className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            <svg className="w-3.5 h-3.5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             <span className="font-medium">{fmtDate(event.start_date)} - {fmtDate(event.end_date)}</span>
           </div>
           <div className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            <svg className="w-3.5 h-3.5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             <span>{event.city}, {event.state}</span>
           </div>
           {!isPast && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${days <= 7 ? 'bg-red-50 text-red-600' : days <= 30 ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${days <= 7 ? 'bg-red-50 text-red-600' : days <= 30 ? 'bg-amber-50 text-amber-600' : 'bg-[#f5f5f7] text-[#86868b]'}`}>
               {days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `${days}d`}
             </span>
           )}
@@ -737,17 +727,17 @@ function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { ev
 
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="bg-gray-50 rounded-lg p-2 text-center">
-            <div className="text-lg font-bold text-blue-600">{event.registration_count}</div>
-            <div className="text-[10px] text-gray-500 font-medium">Teams</div>
+          <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
+            <div className="text-lg font-bold text-[#003e79]">{event.registration_count}</div>
+            <div className="text-[10px] text-[#86868b] font-medium">Teams</div>
           </div>
-          <div className="bg-gray-50 rounded-lg p-2 text-center">
+          <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
             <div className="text-lg font-bold text-green-600">${revenue > 0 ? revenue.toLocaleString() : '0'}</div>
-            <div className="text-[10px] text-gray-500 font-medium">Revenue</div>
+            <div className="text-[10px] text-[#86868b] font-medium">Revenue</div>
           </div>
-          <div className="bg-gray-50 rounded-lg p-2 text-center">
-            <div className="text-lg font-bold text-gray-900">{event.slots_count || 100}</div>
-            <div className="text-[10px] text-gray-500 font-medium">Slots</div>
+          <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
+            <div className="text-lg font-bold text-[#1d1d1f]">{event.slots_count || 100}</div>
+            <div className="text-[10px] text-[#86868b] font-medium">Slots</div>
           </div>
         </div>
 
@@ -761,20 +751,20 @@ function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { ev
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-1.5 pt-3 border-t border-gray-100">
+        <div className="flex gap-1.5 pt-3 border-t border-[#e8e8ed]">
           <button
             onClick={() => onViewDetails(event.id)}
             className="flex-1 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-xs transition"
           >
             View Details
           </button>
-          <button onClick={() => onEdit(event)} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-xs transition">
+          <button onClick={() => onEdit(event)} className="px-3 py-1.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-lg text-xs transition">
             Edit
           </button>
-          <button onClick={() => onDuplicate(event.id)} className="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-lg text-xs transition" title="Duplicate">
+          <button onClick={() => onDuplicate(event.id)} className="px-2 py-1.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#86868b] rounded-lg text-xs transition" title="Duplicate">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
           </button>
-          <button onClick={() => onDelete(event)} className="px-2 py-1.5 bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-600 rounded-lg text-xs transition" title="Delete">
+          <button onClick={() => onDelete(event)} className="px-2 py-1.5 bg-[#fafafa] hover:bg-red-100 text-[#86868b] hover:text-red-600 rounded-lg text-xs transition" title="Delete">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
           </button>
         </div>
@@ -790,7 +780,7 @@ const paymentStatusColor = (s: string) => {
     case 'partial': return 'bg-amber-100 text-amber-700';
     case 'refunded': return 'bg-red-100 text-red-700';
     case 'comp': return 'bg-purple-100 text-purple-700';
-    default: return 'bg-gray-100 text-gray-600';
+    default: return 'bg-[#fafafa] text-[#6e6e73]';
   }
 };
 
@@ -865,39 +855,39 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl">
+        <div className="sticky top-0 bg-white border-b border-[#e8e8ed] px-6 py-4 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">{reg.team_name}</h3>
-              <p className="text-sm text-gray-500">{reg.age_group} {reg.division ? `· ${reg.division}` : ''}</p>
+              <h3 className="text-lg font-bold text-[#1d1d1f]">{reg.team_name}</h3>
+              <p className="text-sm text-[#86868b]">{reg.age_group} {reg.division ? `· ${reg.division}` : ''}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            <button onClick={onClose} className="p-1.5 hover:bg-[#fafafa] rounded-lg transition">
+              <svg className="w-5 h-5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
         </div>
 
         <div className="px-6 py-5 space-y-6">
           {/* Manager Info (read-only) */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contact Info</div>
-            <div className="text-sm text-gray-700">
+          <div className="bg-[#f5f5f7] rounded-xl p-4">
+            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-2">Contact Info</div>
+            <div className="text-sm text-[#3d3d3d]">
               <span className="font-medium">{reg.manager_first_name} {reg.manager_last_name}</span>
-              {reg.email1 && <span className="block text-gray-500">{reg.email1}</span>}
-              {reg.phone && <span className="block text-gray-500">{reg.phone}</span>}
+              {reg.email1 && <span className="block text-[#86868b]">{reg.email1}</span>}
+              {reg.phone && <span className="block text-[#86868b]">{reg.phone}</span>}
             </div>
           </div>
 
           {/* Payment Section */}
           <div>
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Payment</div>
+            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-3">Payment</div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Status</label>
                 <select
                   value={paymentStatus}
                   onChange={(e) => setPaymentStatus(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none"
                 >
                   <option value="unpaid">Unpaid</option>
                   <option value="paid">Paid</option>
@@ -907,23 +897,23 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+                <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Amount ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none"
                 />
               </div>
             </div>
             <div className="mt-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+              <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Payment Method</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none"
               >
                 <option value="">Not specified</option>
                 <option value="credit_card">Credit Card</option>
@@ -937,21 +927,21 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
 
           {/* Hotel Section */}
           <div>
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Hotel Assignment</div>
+            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-3">Hotel Assignment</div>
 
             {/* Show team preferences */}
             {prefs.length > 0 && (
-              <div className="bg-blue-50 rounded-xl p-3 mb-3">
-                <div className="text-xs font-semibold text-blue-600 mb-1.5">Team Preferences</div>
+              <div className="bg-[#f0f7ff] rounded-xl p-3 mb-3">
+                <div className="text-xs font-semibold text-[#003e79] mb-1.5">Team Preferences</div>
                 <div className="space-y-1">
                   {prefs.map((p: string, i: number) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-blue-200 text-blue-700 text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
-                      <span className="text-gray-700">{p}</span>
+                      <span className="w-5 h-5 rounded-full bg-[#e0ecf7] text-[#003e79] text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+                      <span className="text-[#3d3d3d]">{p}</span>
                       {!hotelAssigned && (
                         <button
                           onClick={() => setHotelAssigned(p)}
-                          className="ml-auto text-[10px] px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full font-medium transition"
+                          className="ml-auto text-[10px] px-2 py-0.5 bg-[#f0f7ff] hover:bg-[#e0ecf7] text-[#003e79] rounded-full font-medium transition"
                         >
                           Assign
                         </button>
@@ -963,17 +953,17 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
             )}
 
             {reg.hotel_choice === 'Local Team' && (
-              <div className="bg-gray-50 rounded-xl p-3 mb-3 text-sm text-gray-600">
+              <div className="bg-[#f5f5f7] rounded-xl p-3 mb-3 text-sm text-[#6e6e73]">
                 <span className="font-medium">Local Team</span> — no hotel needed
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Hotel</label>
+              <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Assigned Hotel</label>
               <select
                 value={hotelAssigned}
                 onChange={(e) => setHotelAssigned(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+                className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none"
               >
                 <option value="">Not assigned</option>
                 {hotels.map((h) => (
@@ -985,13 +975,13 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Admin Notes</label>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-2">Admin Notes</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Internal notes about this team..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none resize-none"
+              className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none resize-none"
             />
           </div>
         </div>
@@ -1004,8 +994,8 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
         )}
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex gap-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">
+        <div className="sticky bottom-0 bg-white border-t border-[#e8e8ed] px-6 py-4 rounded-b-2xl flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">
             Cancel
           </button>
           <button
@@ -1073,13 +1063,13 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
   if (loading) {
     return (
       <div className="flex justify-center py-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
       </div>
     );
   }
 
   if (!event) {
-    return <div className="text-center py-20 text-gray-500">Event not found.</div>;
+    return <div className="text-center py-20 text-[#86868b]">Event not found.</div>;
   }
 
   const ageGroups = event.age_groups ? JSON.parse(event.age_groups) : [];
@@ -1111,10 +1101,10 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
           <div className="flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-2xl">{locationIcon(event.city)}</span>
-                <h1 className="text-2xl font-extrabold text-gray-900">{event.name}</h1>
+                <span className="text-2xl"></span>
+                <h1 className="text-2xl font-extrabold text-[#1d1d1f]">{event.name}</h1>
               </div>
-              <p className="text-gray-500">
+              <p className="text-[#86868b]">
                 {fmtDateFull(event.start_date)} - {fmtDateFull(event.end_date)} &middot; {event.city}, {event.state}
               </p>
             </div>
@@ -1125,17 +1115,17 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
 
           {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-blue-50 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">{registrations.length}</div>
-              <div className="text-xs text-blue-500 font-medium mt-1">Teams Registered</div>
+            <div className="bg-[#f0f7ff] rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-[#003e79]">{registrations.length}</div>
+              <div className="text-xs text-[#003e79] font-medium mt-1">Teams Registered</div>
             </div>
             <div className="bg-green-50 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-green-600">${(totalRevenue / 100).toLocaleString()}</div>
               <div className="text-xs text-green-500 font-medium mt-1">Revenue</div>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-gray-900">{event.slots_count || 100}</div>
-              <div className="text-xs text-gray-500 font-medium mt-1">Max Slots</div>
+            <div className="bg-[#f5f5f7] rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-[#1d1d1f]">{event.slots_count || 100}</div>
+              <div className="text-xs text-[#86868b] font-medium mt-1">Max Slots</div>
             </div>
             <div className="bg-cyan-50 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-cyan-600">{ageGroups.length}</div>
@@ -1146,13 +1136,13 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-200 rounded-xl p-1 w-fit mb-6">
+      <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit mb-6">
         {(['overview', 'participants', 'hotels', 'schedules'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
-              tab === t ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+              tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
             {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'hotels' ? 'Hotel Report' : 'Schedules'}
@@ -1166,15 +1156,15 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
           {/* Info */}
           {event.information && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">Event Information</h3>
-              <p className="text-gray-700 leading-relaxed">{event.information}</p>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-3">Event Information</h3>
+              <p className="text-[#3d3d3d] leading-relaxed">{event.information}</p>
             </div>
           )}
 
           {/* Age Groups + Divisions */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">Age Groups</h3>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-3">Age Groups</h3>
               <div className="flex flex-wrap gap-2">
                 {ageGroups.map((ag: string) => {
                   const count = grouped[ag]?.length || 0;
@@ -1188,10 +1178,10 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
               </div>
             </div>
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">Divisions</h3>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-3">Divisions</h3>
               <div className="flex flex-wrap gap-2">
                 {divisions.map((d: string) => (
-                  <span key={d} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">{d}</span>
+                  <span key={d} className="px-3 py-1.5 bg-[#fafafa] text-[#3d3d3d] rounded-full text-sm font-medium">{d}</span>
                 ))}
               </div>
             </div>
@@ -1200,17 +1190,17 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
           {/* Registration Summary by Age Group */}
           {summary.length > 0 && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">Registration Breakdown</h3>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-3">Registration Breakdown</h3>
               <div className="space-y-2">
                 {summary.map((s: any) => {
                   const pct = Math.min(100, (s.team_count / (event.slots_count || 100)) * 100 * (ageGroups.length || 1));
                   return (
                     <div key={s.age_group} className="flex items-center gap-3">
-                      <span className="w-20 text-sm font-medium text-gray-700">{s.age_group}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <span className="w-20 text-sm font-medium text-[#3d3d3d]">{s.age_group}</span>
+                      <div className="flex-1 bg-[#fafafa] rounded-full h-3 overflow-hidden">
                         <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                       </div>
-                      <span className="text-sm font-bold text-gray-900 w-16 text-right">{s.team_count} teams</span>
+                      <span className="text-sm font-bold text-[#1d1d1f] w-16 text-right">{s.team_count} teams</span>
                       <span className="text-sm text-green-600 font-medium w-20 text-right">${(s.revenue_cents / 100).toLocaleString()}</span>
                     </div>
                   );
@@ -1240,44 +1230,44 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
             const groupWaitlisted = grouped[ageGroup].filter((r: any) => r.status === 'waitlisted').length;
             return (
             <div key={ageGroup} className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-gray-50 px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="font-bold text-gray-900">{ageGroup}</h3>
+              <div className="bg-[#f5f5f7] px-5 py-3 border-b border-[#e8e8ed] flex items-center justify-between">
+                <h3 className="font-bold text-[#1d1d1f]">{ageGroup}</h3>
                 <div className="flex items-center gap-3">
                   {groupPending > 0 && <span className="text-[11px] text-orange-600 font-medium">{groupPending} pending</span>}
                   <span className="text-[11px] text-green-600 font-medium">{groupApproved} approved</span>
                   {groupWaitlisted > 0 && <span className="text-[11px] text-amber-600 font-medium">{groupWaitlisted} waitlisted</span>}
-                  <span className="text-[11px] text-blue-600 font-medium">{groupPaid}/{grouped[ageGroup].length} paid</span>
-                  <span className="text-sm text-gray-500 font-medium">{grouped[ageGroup].length} team{grouped[ageGroup].length !== 1 ? 's' : ''}</span>
+                  <span className="text-[11px] text-[#003e79] font-medium">{groupPaid}/{grouped[ageGroup].length} paid</span>
+                  <span className="text-sm text-[#86868b] font-medium">{grouped[ageGroup].length} team{grouped[ageGroup].length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50/50 text-left">
+                  <thead className="bg-[#f5f5f7] text-left">
                     <tr>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Team</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Manager</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Contact</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Division</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Status</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Payment</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600">Hotel</th>
-                      <th className="px-4 py-2.5 font-semibold text-gray-600 w-16"></th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Team</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Manager</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Contact</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Status</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Payment</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Hotel</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-16"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {grouped[ageGroup].map((reg: any) => (
-                      <tr key={reg.id} className={"border-b border-gray-50 hover:bg-gray-50 transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
-                        <td className="px-4 py-3 font-medium text-gray-900">{reg.team_name}</td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">
+                      <tr key={reg.id} className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
+                        <td className="px-4 py-3 font-medium text-[#1d1d1f]">{reg.team_name}</td>
+                        <td className="px-4 py-3 text-[#6e6e73] text-xs">
                           {reg.manager_first_name ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim() : '-'}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-gray-600 text-xs">{reg.email1}</div>
-                          {reg.phone && <div className="text-gray-400 text-[11px]">{reg.phone}</div>}
+                          <div className="text-[#6e6e73] text-xs">{reg.email1}</div>
+                          {reg.phone && <div className="text-[#86868b] text-[11px]">{reg.phone}</div>}
                         </td>
                         <td className="px-4 py-3">
                           {reg.division ? (
-                            <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-700 rounded">{reg.division}</span>
+                            <span className="text-xs font-medium px-2 py-0.5 bg-[#fafafa] text-[#3d3d3d] rounded">{reg.division}</span>
                           ) : '-'}
                         </td>
                         <td className="px-4 py-3">
@@ -1305,7 +1295,7 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                                 handleRegSaved(reg);
                               }
                             }}
-                            className={`text-xs font-semibold rounded-lg px-2 py-1.5 border-0 cursor-pointer focus:ring-2 focus:ring-cyan-500 outline-none transition ${
+                            className={`text-xs font-semibold rounded-lg px-2 py-1.5 border-0 cursor-pointer focus:ring-2 focus:ring-[#003e79]/20 outline-none transition ${
                               reg.status === 'approved' ? 'bg-green-100 text-green-700' :
                               reg.status === 'denied' ? 'bg-red-100 text-red-700' :
                               reg.status === 'waitlisted' ? 'bg-amber-100 text-amber-700' :
@@ -1324,31 +1314,31 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                               {paymentStatusLabel(reg.payment_status || 'unpaid')}
                             </span>
                             {reg.payment_amount_cents ? (
-                              <span className="text-xs font-medium text-gray-700">${(reg.payment_amount_cents / 100).toLocaleString()}</span>
+                              <span className="text-xs font-medium text-[#3d3d3d]">${(reg.payment_amount_cents / 100).toLocaleString()}</span>
                             ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           {reg.hotel_assigned ? (
                             <div>
-                              <span className="text-xs font-medium text-blue-700">{reg.hotel_assigned}</span>
+                              <span className="text-xs font-medium text-[#003e79]">{reg.hotel_assigned}</span>
                               <span className="block text-[10px] text-green-600 font-medium">Assigned</span>
                             </div>
                           ) : reg.hotel_choice === 'Local Team' ? (
-                            <span className="text-xs text-gray-500">Local Team</span>
+                            <span className="text-xs text-[#86868b]">Local Team</span>
                           ) : reg.hotel_pref_1 ? (
                             <div>
-                              <span className="text-xs text-gray-500 truncate block max-w-[120px]">{reg.hotel_pref_1}</span>
+                              <span className="text-xs text-[#86868b] truncate block max-w-[120px]">{reg.hotel_pref_1}</span>
                               <span className="text-[10px] text-amber-500 font-medium">Needs assignment</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400">-</span>
+                            <span className="text-xs text-[#86868b]">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => setEditingReg(reg)}
-                            className="p-1.5 hover:bg-cyan-50 text-gray-400 hover:text-cyan-600 rounded-lg transition"
+                            className="p-1.5 hover:bg-cyan-50 text-[#86868b] hover:text-cyan-600 rounded-lg transition"
                             title="Edit registration"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
@@ -1369,10 +1359,10 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
         <div className="space-y-6">
           {loadingReport ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
             </div>
           ) : !hotelReport ? (
-            <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
+            <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-[#86868b]">
               <p>Unable to load hotel report.</p>
             </div>
           ) : (
@@ -1380,24 +1370,24 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
               {/* Report Header Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-white rounded-xl shadow-sm p-4 text-center">
-                  <div className="text-xl font-bold text-gray-900">{hotelReport.total_teams}</div>
-                  <div className="text-[11px] text-gray-500 mt-1">Total Teams</div>
+                  <div className="text-xl font-bold text-[#1d1d1f]">{hotelReport.total_teams}</div>
+                  <div className="text-[11px] text-[#86868b] mt-1">Total Teams</div>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm p-4 text-center">
                   <div className="text-xl font-bold text-green-600">{hotelReport.total_assigned}</div>
-                  <div className="text-[11px] text-gray-500 mt-1">Hotel Assigned</div>
+                  <div className="text-[11px] text-[#86868b] mt-1">Hotel Assigned</div>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm p-4 text-center">
                   <div className="text-xl font-bold text-amber-600">{hotelReport.total_unassigned}</div>
-                  <div className="text-[11px] text-gray-500 mt-1">Unassigned</div>
+                  <div className="text-[11px] text-[#86868b] mt-1">Unassigned</div>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm p-4 text-center">
-                  <div className="text-xl font-bold text-blue-600">{hotelReport.total_local}</div>
-                  <div className="text-[11px] text-gray-500 mt-1">Local Teams</div>
+                  <div className="text-xl font-bold text-[#003e79]">{hotelReport.total_local}</div>
+                  <div className="text-[11px] text-[#86868b] mt-1">Local Teams</div>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm p-4 text-center">
                   <div className="text-xl font-bold text-cyan-600">{hotelReport.event_nights}</div>
-                  <div className="text-[11px] text-gray-500 mt-1">Event Nights</div>
+                  <div className="text-[11px] text-[#86868b] mt-1">Event Nights</div>
                 </div>
               </div>
 
@@ -1407,10 +1397,10 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                   <div className="bg-gradient-to-r from-blue-50 to-cyan-50 px-5 py-4 border-b border-blue-100">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-bold text-gray-900 text-lg">{h.hotel_name}</h3>
+                        <h3 className="font-bold text-[#1d1d1f] text-lg">{h.hotel_name}</h3>
                         <div className="flex items-center gap-4 mt-1 flex-wrap">
                           {h.contact_name && (
-                            <span className="text-xs text-blue-600 font-medium">Rep: {h.contact_name} {h.contact_email ? `(${h.contact_email})` : ''}</span>
+                            <span className="text-xs text-[#003e79] font-medium">Rep: {h.contact_name} {h.contact_email ? `(${h.contact_email})` : ''}</span>
                           )}
                           {h.rate_description && (
                             <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full">{h.rate_description}</span>
@@ -1421,58 +1411,58 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold text-blue-600">{h.teams_assigned}</div>
-                        <div className="text-[10px] text-gray-500">teams</div>
+                        <div className="text-2xl font-bold text-[#003e79]">{h.teams_assigned}</div>
+                        <div className="text-[10px] text-[#86868b]">teams</div>
                       </div>
                     </div>
                     {/* Key metrics */}
                     <div className="grid grid-cols-4 gap-3 mt-3">
                       <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
-                        <div className="text-sm font-bold text-gray-900">{h.total_players}</div>
-                        <div className="text-[10px] text-gray-500">Players</div>
+                        <div className="text-sm font-bold text-[#1d1d1f]">{h.total_players}</div>
+                        <div className="text-[10px] text-[#86868b]">Players</div>
                       </div>
                       <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
-                        <div className="text-sm font-bold text-gray-900">{h.estimated_rooms}</div>
-                        <div className="text-[10px] text-gray-500">Est. Rooms</div>
+                        <div className="text-sm font-bold text-[#1d1d1f]">{h.estimated_rooms}</div>
+                        <div className="text-[10px] text-[#86868b]">Est. Rooms</div>
                       </div>
                       <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
-                        <div className="text-sm font-bold text-gray-900">{h.estimated_nights}</div>
-                        <div className="text-[10px] text-gray-500">Room Nights</div>
+                        <div className="text-sm font-bold text-[#1d1d1f]">{h.estimated_nights}</div>
+                        <div className="text-[10px] text-[#86868b]">Room Nights</div>
                       </div>
                       <div className="bg-white/70 rounded-lg px-3 py-2 text-center">
-                        <div className="text-sm font-bold text-gray-900">{h.room_block_count || '—'}</div>
-                        <div className="text-[10px] text-gray-500">Block Size</div>
+                        <div className="text-sm font-bold text-[#1d1d1f]">{h.room_block_count || '—'}</div>
+                        <div className="text-[10px] text-[#86868b]">Block Size</div>
                       </div>
                     </div>
                   </div>
 
                   {/* Teams list */}
                   {h.teams?.length > 0 && (
-                    <div className="divide-y divide-gray-50">
+                    <div className="divide-y divide-[#e8e8ed]">
                       {h.teams.map((t: any, i: number) => (
-                        <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+                        <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-[#f5f5f7] transition">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm text-gray-900 truncate">{t.team_name}</span>
-                              <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.age_group}</span>
-                              {t.division && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{t.division}</span>}
+                              <span className="font-semibold text-sm text-[#1d1d1f] truncate">{t.team_name}</span>
+                              <span className="text-[10px] bg-[#fafafa] text-[#6e6e73] px-2 py-0.5 rounded-full">{t.age_group}</span>
+                              {t.division && <span className="text-[10px] bg-[#f0f7ff] text-[#003e79] px-2 py-0.5 rounded-full">{t.division}</span>}
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5">
+                            <div className="text-xs text-[#86868b] mt-0.5">
                               {t.manager_name && <span>{t.manager_name}</span>}
-                              {t.manager_email && <span className="ml-2 text-gray-400">{t.manager_email}</span>}
-                              {t.manager_phone && <span className="ml-2 text-gray-400">{t.manager_phone}</span>}
+                              {t.manager_email && <span className="ml-2 text-[#86868b]">{t.manager_email}</span>}
+                              {t.manager_phone && <span className="ml-2 text-[#86868b]">{t.manager_phone}</span>}
                             </div>
                           </div>
                           <div className="text-right ml-3">
-                            <div className="text-sm font-bold text-gray-900">{t.roster_count}</div>
-                            <div className="text-[10px] text-gray-400">players</div>
+                            <div className="text-sm font-bold text-[#1d1d1f]">{t.roster_count}</div>
+                            <div className="text-[10px] text-[#86868b]">players</div>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
                   {h.teams?.length === 0 && (
-                    <div className="px-5 py-4 text-center text-sm text-gray-400">No teams assigned yet</div>
+                    <div className="px-5 py-4 text-center text-sm text-[#86868b]">No teams assigned yet</div>
                   )}
                 </div>
               ))}
@@ -1488,21 +1478,21 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-amber-600">{hotelReport.unassigned_teams.length}</div>
-                        <div className="text-[10px] text-gray-500">teams</div>
+                        <div className="text-[10px] text-[#86868b]">teams</div>
                       </div>
                     </div>
                   </div>
-                  <div className="divide-y divide-gray-50">
+                  <div className="divide-y divide-[#e8e8ed]">
                     {hotelReport.unassigned_teams.map((t: any, i: number) => (
-                      <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+                      <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-[#f5f5f7]">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm text-gray-900">{t.team_name}</span>
-                            <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.age_group}</span>
+                            <span className="font-semibold text-sm text-[#1d1d1f]">{t.team_name}</span>
+                            <span className="text-[10px] bg-[#fafafa] text-[#6e6e73] px-2 py-0.5 rounded-full">{t.age_group}</span>
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
+                          <div className="text-xs text-[#86868b] mt-0.5">
                             {t.manager_name && <span>{t.manager_name}</span>}
-                            {t.manager_email && <span className="ml-2 text-gray-400">{t.manager_email}</span>}
+                            {t.manager_email && <span className="ml-2 text-[#86868b]">{t.manager_email}</span>}
                           </div>
                         </div>
                       </div>
@@ -1516,9 +1506,9 @@ function EventDetail({ eventId, onBack }: { eventId: string; onBack: () => void 
       )}
 
       {tab === 'schedules' && (
-        <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
-          <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-          <p className="font-medium text-gray-600">Schedules coming soon</p>
+        <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-[#86868b]">
+          <svg className="w-12 h-12 mx-auto text-[#86868b] mb-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+          <p className="font-medium text-[#6e6e73]">Schedules coming soon</p>
           <p className="text-sm mt-1">Game schedules and bracket management will be available here.</p>
         </div>
       )}
@@ -1619,7 +1609,7 @@ export default function AdminEventsPage() {
 
   if (selectedEventId) {
     return (
-      <div className="bg-gray-100 min-h-full">
+      <div className="bg-[#fafafa] min-h-full">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <EventDetail eventId={selectedEventId} onBack={() => setSelectedEventId(null)} />
         </div>
@@ -1628,7 +1618,7 @@ export default function AdminEventsPage() {
   }
 
   return (
-    <div className="bg-gray-100 min-h-full">
+    <div className="bg-[#fafafa] min-h-full">
       {/* Create/Edit Form Modal */}
       {editingEvent && (
         <EventFormModal
@@ -1648,12 +1638,12 @@ export default function AdminEventsPage() {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Event</h3>
-              <p className="text-sm text-gray-500 mb-1">Are you sure you want to delete</p>
-              <p className="text-sm font-semibold text-gray-900 mb-4">{deleteConfirm.name}?</p>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Delete Event</h3>
+              <p className="text-sm text-[#86868b] mb-1">Are you sure you want to delete</p>
+              <p className="text-sm font-semibold text-[#1d1d1f] mb-4">{deleteConfirm.name}?</p>
               <p className="text-xs text-red-500 mb-5">This will also delete all {deleteConfirm.registration_count} registration(s). This cannot be undone.</p>
               <div className="flex gap-3">
-                <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">Cancel</button>
+                <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">Cancel</button>
                 <button onClick={() => handleDelete(deleteConfirm.id)} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl text-sm transition">Delete</button>
               </div>
             </div>
@@ -1664,7 +1654,7 @@ export default function AdminEventsPage() {
       {/* Header */}
       <div className="max-w-7xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Event Management</h1>
+          <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Event Management</h1>
         </div>
         <button onClick={() => setEditingEvent('create')} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
           + Create Event
@@ -1675,16 +1665,16 @@ export default function AdminEventsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{events.length}</div>
-            <div className="text-xs text-gray-500 mt-1">{filter === 'upcoming' ? 'Upcoming' : filter === 'past' ? 'Past' : 'Total'} Events</div>
+            <div className="text-2xl font-bold text-[#1d1d1f]">{events.length}</div>
+            <div className="text-xs text-[#86868b] mt-1">{filter === 'upcoming' ? 'Upcoming' : filter === 'past' ? 'Past' : 'Total'} Events</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{totalTeams}</div>
-            <div className="text-xs text-gray-500 mt-1">Teams Registered</div>
+            <div className="text-2xl font-bold text-[#003e79]">{totalTeams}</div>
+            <div className="text-xs text-[#86868b] mt-1">Teams Registered</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-green-600">${(totalRevenue / 100).toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Total Revenue</div>
+            <div className="text-xs text-[#86868b] mt-1">Total Revenue</div>
           </div>
         </div>
       </div>
@@ -1693,13 +1683,13 @@ export default function AdminEventsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-6 space-y-3">
         <div className="flex items-center gap-4 flex-wrap">
           {/* Filter Toggle */}
-          <div className="flex gap-1 bg-gray-200 rounded-xl p-1">
+          <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1">
             {(['upcoming', 'past', 'all'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => { setFilter(f); setMonthFilter('all'); }}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                  filter === f ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+                  filter === f ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
                 }`}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -1714,7 +1704,7 @@ export default function AdminEventsPage() {
               placeholder="Search events..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+              className="w-full px-4 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none"
             />
           </div>
         </div>
@@ -1722,11 +1712,11 @@ export default function AdminEventsPage() {
         {/* Month Filter */}
         {months.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1">Month:</span>
+            <span className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mr-1">Month:</span>
             <button
               onClick={() => setMonthFilter('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeMonth === 'all' ? 'bg-cyan-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'
+                activeMonth === 'all' ? 'bg-cyan-600 text-white shadow' : 'bg-white text-[#6e6e73] hover:bg-[#fafafa] shadow-sm'
               }`}
             >
               All
@@ -1738,7 +1728,7 @@ export default function AdminEventsPage() {
                   key={m}
                   onClick={() => setMonthFilter(m)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    activeMonth === m ? 'bg-cyan-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'
+                    activeMonth === m ? 'bg-cyan-600 text-white shadow' : 'bg-white text-[#6e6e73] hover:bg-[#fafafa] shadow-sm'
                   }`}
                 >
                   {getMonthLabel(m)} <span className="opacity-60">({count})</span>
@@ -1753,12 +1743,12 @@ export default function AdminEventsPage() {
       <div className="max-w-7xl mx-auto px-6 py-6">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-            <p className="text-gray-500 font-medium">No {filter} events found</p>
+            <svg className="w-16 h-16 mx-auto text-[#86868b] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+            <p className="text-[#86868b] font-medium">No {filter} events found</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">

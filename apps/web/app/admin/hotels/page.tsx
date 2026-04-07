@@ -105,15 +105,15 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
     }
   };
 
-  const fieldClass = "w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none";
-  const labelClass = "block text-xs font-semibold text-gray-600 mb-1";
+  const fieldClass = "w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none";
+  const labelClass = "block text-xs font-semibold text-[#6e6e73] mb-1";
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-2xl flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Edit Hotel' : 'Add New Hotel'}</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+        <div className="sticky top-0 bg-white border-b border-[#e8e8ed] px-6 py-4 rounded-t-2xl flex items-center justify-between">
+          <h2 className="text-lg font-bold text-[#1d1d1f]">{isEdit ? 'Edit Hotel' : 'Add New Hotel'}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#fafafa] text-[#86868b] hover:text-[#6e6e73] transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -123,7 +123,7 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
 
           {/* Hotel Info */}
           <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-3">Hotel Information</h3>
+            <h3 className="text-sm font-bold text-[#1d1d1f] mb-3">Hotel Information</h3>
             <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className={labelClass}>Hotel Name *</label>
@@ -164,8 +164,8 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
 
           {/* Default Booking Info */}
           <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-3">Default Booking Details</h3>
-            <p className="text-xs text-gray-500 mb-3">These are used as defaults when linking this hotel to events. They can be overridden per-event.</p>
+            <h3 className="text-sm font-bold text-[#1d1d1f] mb-3">Default Booking Details</h3>
+            <p className="text-xs text-[#86868b] mb-3">These are used as defaults when linking this hotel to events. They can be overridden per-event.</p>
             <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className={labelClass}>Default Rate Description</label>
@@ -180,8 +180,8 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
 
           {/* Hotel Rep Contact */}
           <div>
-            <h3 className="text-sm font-bold text-gray-900 mb-3">Hotel Representative</h3>
-            <p className="text-xs text-gray-500 mb-3">This contact will be used for coach/manager introductions when teams are assigned to this hotel.</p>
+            <h3 className="text-sm font-bold text-[#1d1d1f] mb-3">Hotel Representative</h3>
+            <p className="text-xs text-[#86868b] mb-3">This contact will be used for coach/manager introductions when teams are assigned to this hotel.</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Contact Name</label>
@@ -209,8 +209,8 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 rounded-b-2xl flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">Cancel</button>
+        <div className="sticky bottom-0 bg-white border-t border-[#e8e8ed] px-6 py-4 rounded-b-2xl flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition disabled:opacity-50">
             {saving ? 'Saving...' : isEdit ? 'Update Hotel' : 'Add Hotel'}
           </button>
@@ -231,23 +231,23 @@ function HotelCard({ hotel, onEdit, onDelete }: {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl shadow-sm border border-[#e8e8ed] hover:shadow-md transition-shadow">
       <div className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-gray-900 text-sm truncate">{hotel.hotel_name}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h3 className="font-bold text-[#1d1d1f] text-sm truncate">{hotel.hotel_name}</h3>
+            <p className="text-xs text-[#86868b] mt-0.5">
               {hotel.address ? `${hotel.address}, ` : ''}{hotel.city}, {hotel.state} {hotel.zip || ''}
             </p>
           </div>
           <div className="flex items-center gap-1 ml-2">
-            <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition" title="Edit">
+            <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-[#86868b] hover:text-[#003e79] transition" title="Edit">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
             </button>
-            <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition" title="Remove">
+            <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-[#86868b] hover:text-red-600 transition" title="Remove">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
             </button>
-            <button onClick={() => setExpanded(!expanded)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition" title="Details">
+            <button onClick={() => setExpanded(!expanded)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#fafafa] text-[#86868b] hover:text-[#6e6e73] transition" title="Details">
               <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
             </button>
           </div>
@@ -256,7 +256,7 @@ function HotelCard({ hotel, onEdit, onDelete }: {
         {/* Quick info row */}
         <div className="flex items-center gap-3 mt-2 flex-wrap">
           {hotel.phone && (
-            <span className="text-xs text-gray-500 flex items-center gap-1">
+            <span className="text-xs text-[#86868b] flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
               {hotel.phone}
             </span>
@@ -276,26 +276,26 @@ function HotelCard({ hotel, onEdit, onDelete }: {
 
       {/* Expanded Details */}
       {expanded && (
-        <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50 space-y-3">
+        <div className="border-t border-[#e8e8ed] px-4 py-3 bg-[#f5f5f7] space-y-3">
           {/* Booking Details */}
           <div>
-            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Booking Details</h4>
+            <h4 className="text-xs font-bold text-[#86868b] uppercase tracking-wide mb-1.5">Booking Details</h4>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-gray-400">Rate:</span>{' '}
-                <span className="text-gray-700">{hotel.default_rate_description || '—'}</span>
+                <span className="text-[#86868b]">Rate:</span>{' '}
+                <span className="text-[#3d3d3d]">{hotel.default_rate_description || '—'}</span>
               </div>
               <div>
-                <span className="text-gray-400">Booking URL:</span>{' '}
+                <span className="text-[#86868b]">Booking URL:</span>{' '}
                 {hotel.default_booking_url ? (
                   <a href={hotel.default_booking_url} target="_blank" rel="noopener" className="text-cyan-600 hover:underline">Link</a>
-                ) : <span className="text-gray-700">—</span>}
+                ) : <span className="text-[#3d3d3d]">—</span>}
               </div>
               <div>
-                <span className="text-gray-400">Website:</span>{' '}
+                <span className="text-[#86868b]">Website:</span>{' '}
                 {hotel.website ? (
                   <a href={hotel.website} target="_blank" rel="noopener" className="text-cyan-600 hover:underline">Link</a>
-                ) : <span className="text-gray-700">—</span>}
+                ) : <span className="text-[#3d3d3d]">—</span>}
               </div>
             </div>
           </div>
@@ -303,12 +303,12 @@ function HotelCard({ hotel, onEdit, onDelete }: {
           {/* Hotel Rep */}
           {(hotel.contact_name || hotel.contact_email || hotel.contact_phone) && (
             <div>
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Hotel Representative</h4>
+              <h4 className="text-xs font-bold text-[#86868b] uppercase tracking-wide mb-1.5">Hotel Representative</h4>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><span className="text-gray-400">Name:</span> <span className="text-gray-700">{hotel.contact_name || '—'}</span></div>
-                <div><span className="text-gray-400">Title:</span> <span className="text-gray-700">{hotel.contact_title || '—'}</span></div>
-                <div><span className="text-gray-400">Email:</span> <span className="text-gray-700">{hotel.contact_email || '—'}</span></div>
-                <div><span className="text-gray-400">Phone:</span> <span className="text-gray-700">{hotel.contact_phone || '—'}</span></div>
+                <div><span className="text-[#86868b]">Name:</span> <span className="text-[#3d3d3d]">{hotel.contact_name || '—'}</span></div>
+                <div><span className="text-[#86868b]">Title:</span> <span className="text-[#3d3d3d]">{hotel.contact_title || '—'}</span></div>
+                <div><span className="text-[#86868b]">Email:</span> <span className="text-[#3d3d3d]">{hotel.contact_email || '—'}</span></div>
+                <div><span className="text-[#86868b]">Phone:</span> <span className="text-[#3d3d3d]">{hotel.contact_phone || '—'}</span></div>
               </div>
             </div>
           )}
@@ -316,8 +316,8 @@ function HotelCard({ hotel, onEdit, onDelete }: {
           {/* Notes */}
           {hotel.notes && (
             <div>
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Notes</h4>
-              <p className="text-xs text-gray-600">{hotel.notes}</p>
+              <h4 className="text-xs font-bold text-[#86868b] uppercase tracking-wide mb-1">Notes</h4>
+              <p className="text-xs text-[#6e6e73]">{hotel.notes}</p>
             </div>
           )}
         </div>
@@ -392,7 +392,7 @@ export default function AdminHotelsPage() {
   const sortedCityKeys = Object.keys(groupedByCity).sort();
 
   return (
-    <div className="bg-gray-100 min-h-full">
+    <div className="bg-[#fafafa] min-h-full">
       {/* Form Modal */}
       {editingHotel && (
         <HotelFormModal
@@ -410,12 +410,12 @@ export default function AdminHotelsPage() {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-1">Remove Hotel</h3>
-              <p className="text-sm text-gray-500 mb-1">Are you sure you want to remove</p>
-              <p className="text-sm font-semibold text-gray-900 mb-4">{deleteConfirm.hotel_name}?</p>
-              <p className="text-xs text-gray-400 mb-5">This is a soft delete — the hotel can be restored later.</p>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Remove Hotel</h3>
+              <p className="text-sm text-[#86868b] mb-1">Are you sure you want to remove</p>
+              <p className="text-sm font-semibold text-[#1d1d1f] mb-4">{deleteConfirm.hotel_name}?</p>
+              <p className="text-xs text-[#86868b] mb-5">This is a soft delete — the hotel can be restored later.</p>
               <div className="flex gap-3">
-                <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">Cancel</button>
+                <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">Cancel</button>
                 <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl text-sm transition">Remove</button>
               </div>
             </div>
@@ -426,8 +426,8 @@ export default function AdminHotelsPage() {
       {/* Header */}
       <div className="max-w-7xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Hotel Management</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Master hotel database for all tournament cities</p>
+          <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Hotel Management</h1>
+          <p className="text-sm text-[#86868b] mt-0.5">Master hotel database for all tournament cities</p>
         </div>
         <button onClick={() => setEditingHotel('create')} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
           + Add Hotel
@@ -438,16 +438,16 @@ export default function AdminHotelsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{hotels.length}</div>
-            <div className="text-xs text-gray-500 mt-1">Total Hotels</div>
+            <div className="text-2xl font-bold text-[#1d1d1f]">{hotels.length}</div>
+            <div className="text-xs text-[#86868b] mt-1">Total Hotels</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{cityGroups.length}</div>
-            <div className="text-xs text-gray-500 mt-1">Cities Covered</div>
+            <div className="text-2xl font-bold text-[#003e79]">{cityGroups.length}</div>
+            <div className="text-xs text-[#86868b] mt-1">Cities Covered</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-green-600">{hotels.filter(h => h.contact_name).length}</div>
-            <div className="text-xs text-gray-500 mt-1">With Hotel Rep</div>
+            <div className="text-xs text-[#86868b] mt-1">With Hotel Rep</div>
           </div>
         </div>
       </div>
@@ -456,11 +456,11 @@ export default function AdminHotelsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-6 space-y-3">
         <div className="flex items-center gap-4 flex-wrap">
           {/* View Toggle */}
-          <div className="flex gap-1 bg-gray-200 rounded-xl p-1">
+          <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1">
             <button
               onClick={() => setView('cards')}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                view === 'cards' ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+                view === 'cards' ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
               All Hotels
@@ -468,7 +468,7 @@ export default function AdminHotelsPage() {
             <button
               onClick={() => setView('cities')}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                view === 'cities' ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+                view === 'cities' ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
               By City
@@ -514,13 +514,13 @@ export default function AdminHotelsPage() {
       <div className="max-w-7xl mx-auto px-6 py-6">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 7.5h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" /></svg>
-            <p className="text-gray-500 font-medium">No hotels found</p>
-            <p className="text-sm text-gray-400 mt-1">Add your first hotel to get started</p>
+            <p className="text-[#86868b] font-medium">No hotels found</p>
+            <p className="text-sm text-[#86868b] mt-1">Add your first hotel to get started</p>
           </div>
         ) : view === 'cities' ? (
           /* By-City View */
@@ -529,8 +529,8 @@ export default function AdminHotelsPage() {
               <div key={cityKey}>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-base">📍</span>
-                  <h2 className="text-lg font-bold text-gray-900">{cityKey}</h2>
-                  <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">{groupedByCity[cityKey].length} hotel{groupedByCity[cityKey].length !== 1 ? 's' : ''}</span>
+                  <h2 className="text-lg font-bold text-[#1d1d1f]">{cityKey}</h2>
+                  <span className="text-xs bg-[#e8e8ed] text-[#6e6e73] px-2 py-0.5 rounded-full font-medium">{groupedByCity[cityKey].length} hotel{groupedByCity[cityKey].length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {groupedByCity[cityKey].map(hotel => (

@@ -14,10 +14,10 @@ interface LookupValue {
 type Category = 'age_group' | 'division' | 'league' | 'team_type';
 
 const CATEGORY_LABELS: Record<Category, { title: string; description: string; icon: string }> = {
-  age_group: { title: 'Age Groups', description: 'Age divisions available for team registration', icon: '👦' },
-  division: { title: 'Division Levels', description: 'Skill/competition level tiers (AA, Gold, Silver, etc.)', icon: '🏆' },
-  league: { title: 'Hometown Leagues', description: 'Local leagues teams can belong to', icon: '🏒' },
-  team_type: { title: 'Team Types', description: 'How the team was formed (Draft, Tryout, etc.)', icon: '📋' },
+  age_group: { title: 'Age Groups', description: 'Age divisions available for team registration', icon: '' },
+  division: { title: 'Division Levels', description: 'Skill/competition level tiers (AA, Gold, Silver, etc.)', icon: '' },
+  league: { title: 'Hometown Leagues', description: 'Local leagues teams can belong to', icon: '' },
+  team_type: { title: 'Team Types', description: 'How the team was formed (Draft, Tryout, etc.)', icon: '' },
 };
 
 const CATEGORIES: Category[] = ['age_group', 'division', 'league', 'team_type'];
@@ -129,10 +129,10 @@ export default function AdminSettingsPage() {
   const activeCount = lookups.filter(l => l.is_active).length;
 
   return (
-    <div className="bg-gray-100 min-h-full">
+    <div className="bg-[#fafafa] min-h-full">
       <div className="max-w-7xl mx-auto px-6 pt-6 pb-2">
-        <h1 className="text-2xl font-extrabold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage the dropdown options available across the platform</p>
+        <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Settings</h1>
+        <p className="text-sm text-[#86868b] mt-1">Manage the dropdown options available across the platform</p>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
@@ -147,7 +147,7 @@ export default function AdminSettingsPage() {
                 className={"flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all " +
                   (activeTab === cat
                     ? "bg-[#003e79] text-white shadow-md"
-                    : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200")}
+                    : "bg-white text-[#6e6e73] hover:bg-[#f5f5f7] border border-[#e8e8ed]")}
               >
                 <span>{info.icon}</span>
                 <span>{info.title}</span>
@@ -160,20 +160,20 @@ export default function AdminSettingsPage() {
           {/* Category Header */}
           <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-[#1d1d1f] flex items-center gap-2">
                 <span className="text-2xl">{catInfo.icon}</span>
                 {catInfo.title}
               </h2>
-              <p className="text-sm text-gray-500 mt-0.5">{catInfo.description}</p>
+              <p className="text-sm text-[#86868b] mt-0.5">{catInfo.description}</p>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-400">{activeCount} active</span>
-              <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+              <span className="text-sm text-[#86868b]">{activeCount} active</span>
+              <label className="flex items-center gap-2 text-sm text-[#86868b] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showInactive}
                   onChange={e => setShowInactive(e.target.checked)}
-                  className="rounded border-gray-300"
+                  className="rounded border-[#e8e8ed]"
                 />
                 Show inactive
               </label>
@@ -181,7 +181,7 @@ export default function AdminSettingsPage() {
           </div>
 
           {/* Add New */}
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+          <div className="px-6 py-4 bg-[#f5f5f7] border-b border-gray-100">
             <div className="flex gap-3">
               <input
                 type="text"
@@ -189,7 +189,7 @@ export default function AdminSettingsPage() {
                 onChange={e => setNewValue(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
                 placeholder={`Add new ${catInfo.title.toLowerCase().replace(/s$/, '')}...`}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff]/30 focus:border-[#00ccff]"
+                className="flex-1 px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff]/30 focus:border-[#00ccff]"
               />
               <button
                 onClick={handleAdd}
@@ -197,7 +197,7 @@ export default function AdminSettingsPage() {
                 className={"px-6 py-2.5 rounded-xl text-sm font-semibold transition-all " +
                   (newValue.trim() && !adding
                     ? "bg-[#00ccff] text-white hover:bg-[#00b8e6] shadow-sm"
-                    : "bg-gray-200 text-gray-400 cursor-not-allowed")}
+                    : "bg-[#e8e8ed] text-[#86868b] cursor-not-allowed")}
               >
                 {adding ? 'Adding...' : 'Add'}
               </button>
@@ -208,18 +208,18 @@ export default function AdminSettingsPage() {
           {loading ? (
             <div className="p-12 text-center">
               <div className="w-8 h-8 border-2 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm text-gray-400">Loading...</p>
+              <p className="text-sm text-[#86868b]">Loading...</p>
             </div>
           ) : lookups.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-sm text-gray-400">No items found. Add one above.</p>
+              <p className="text-sm text-[#86868b]">No items found. Add one above.</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-[#e8e8ed]">
               {lookups.map((item, idx) => (
                 <div
                   key={item.id}
-                  className={"flex items-center gap-3 px-6 py-3 group hover:bg-gray-50 transition-colors " +
+                  className={"flex items-center gap-3 px-6 py-3 group hover:bg-[#f5f5f7] transition-colors " +
                     (!item.is_active ? "opacity-50" : "")}
                 >
                   {/* Sort order arrows */}
@@ -227,14 +227,14 @@ export default function AdminSettingsPage() {
                     <button
                       onClick={() => handleReorder(item.id, 'up')}
                       disabled={idx === 0}
-                      className="text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      className="text-[#86868b] hover:text-[#6e6e73] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
                     </button>
                     <button
                       onClick={() => handleReorder(item.id, 'down')}
                       disabled={idx === lookups.length - 1}
-                      className="text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                      className="text-[#86868b] hover:text-[#6e6e73] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
@@ -253,11 +253,11 @@ export default function AdminSettingsPage() {
                           className="flex-1 px-3 py-1.5 rounded-lg border border-[#00ccff] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff]/30"
                         />
                         <button onClick={() => handleUpdate(item.id)} className="px-3 py-1.5 rounded-lg bg-[#00ccff] text-white text-xs font-semibold hover:bg-[#00b8e6]">Save</button>
-                        <button onClick={() => setEditId(null)} className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-xs font-semibold hover:bg-gray-200">Cancel</button>
+                        <button onClick={() => setEditId(null)} className="px-3 py-1.5 rounded-lg bg-[#fafafa] text-[#86868b] text-xs font-semibold hover:bg-[#e8e8ed]">Cancel</button>
                       </div>
                     ) : (
                       <span
-                        className="text-sm font-medium text-gray-900 cursor-pointer hover:text-[#00ccff] transition-colors"
+                        className="text-sm font-medium text-[#1d1d1f] cursor-pointer hover:text-[#00ccff] transition-colors"
                         onClick={() => { setEditId(item.id); setEditValue(item.value); }}
                         title="Click to edit"
                       >
@@ -267,7 +267,7 @@ export default function AdminSettingsPage() {
                   </div>
 
                   {/* Sort order badge */}
-                  <span className="text-xs text-gray-300 w-8 text-center">{item.sort_order}</span>
+                  <span className="text-xs text-[#86868b] w-8 text-center">{item.sort_order}</span>
 
                   {/* Active/Inactive toggle */}
                   <button
@@ -275,7 +275,7 @@ export default function AdminSettingsPage() {
                     className={"px-3 py-1 rounded-full text-xs font-semibold transition-all " +
                       (item.is_active
                         ? "bg-emerald-50 text-emerald-600 hover:bg-red-50 hover:text-red-500"
-                        : "bg-gray-100 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600")}
+                        : "bg-[#fafafa] text-[#86868b] hover:bg-emerald-50 hover:text-emerald-600")}
                     title={item.is_active ? 'Click to deactivate' : 'Click to reactivate'}
                   >
                     {item.is_active ? 'Active' : 'Inactive'}
@@ -286,7 +286,7 @@ export default function AdminSettingsPage() {
           )}
         </div>
 
-        <p className="text-xs text-gray-400 mt-4 text-center">
+        <p className="text-xs text-[#86868b] mt-4 text-center">
           Changes are saved instantly and reflected in the team registration form.
           Deactivated items are hidden from dropdowns but preserved for historical data.
         </p>

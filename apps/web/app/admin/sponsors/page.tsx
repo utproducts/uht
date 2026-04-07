@@ -48,9 +48,9 @@ interface Package {
 }
 
 const tierColors: Record<string, string> = {
-  platinum: 'bg-gray-200 text-gray-800',
+  platinum: 'bg-[#e8e8ed] text-[#1d1d1f]',
   gold: 'bg-amber-100 text-amber-800',
-  silver: 'bg-gray-100 text-gray-600',
+  silver: 'bg-[#fafafa] text-[#6e6e73]',
   bronze: 'bg-orange-100 text-orange-700',
   custom: 'bg-cyan-100 text-cyan-700',
 };
@@ -58,13 +58,13 @@ const tierColors: Record<string, string> = {
 const statusColors: Record<string, string> = {
   active: 'bg-green-100 text-green-700',
   pending: 'bg-amber-100 text-amber-700',
-  expired: 'bg-gray-100 text-gray-600',
+  expired: 'bg-[#fafafa] text-[#6e6e73]',
   cancelled: 'bg-red-100 text-red-700',
 };
 
 const paymentColors: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
-  unpaid: 'bg-gray-100 text-gray-600',
+  unpaid: 'bg-[#fafafa] text-[#6e6e73]',
   partial: 'bg-amber-100 text-amber-700',
   refunded: 'bg-red-100 text-red-700',
 };
@@ -96,11 +96,11 @@ export default function AdminSponsorsPage() {
   const pendingRevenue = sponsorships.filter(s => s.payment_status === 'unpaid').reduce((sum, s) => sum + (s.amount_cents || 0), 0);
 
   return (
-    <div className="bg-gray-100 min-h-full">
+    <div className="bg-[#fafafa] min-h-full">
       {/* Header */}
       <div className="max-w-7xl mx-auto px-6 pt-6 pb-2 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Sponsor Management</h1>
+          <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Sponsor Management</h1>
         </div>
         <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition">
           + Add Sponsor
@@ -111,33 +111,33 @@ export default function AdminSponsorsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{totalSponsors}</div>
-            <div className="text-xs text-gray-500 mt-1">Total Sponsors</div>
+            <div className="text-2xl font-bold text-[#1d1d1f]">{totalSponsors}</div>
+            <div className="text-xs text-[#86868b] mt-1">Total Sponsors</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{activeDeals}</div>
-            <div className="text-xs text-gray-500 mt-1">Active Deals</div>
+            <div className="text-2xl font-bold text-[#003e79]">{activeDeals}</div>
+            <div className="text-xs text-[#86868b] mt-1">Active Deals</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-green-600">${(totalRevenue / 100).toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Collected Revenue</div>
+            <div className="text-xs text-[#86868b] mt-1">Collected Revenue</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
             <div className="text-2xl font-bold text-amber-600">${(pendingRevenue / 100).toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Pending Revenue</div>
+            <div className="text-xs text-[#86868b] mt-1">Pending Revenue</div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-6 mt-6">
-        <div className="flex gap-1 bg-gray-200 rounded-xl p-1 w-fit">
+        <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
           {(['overview', 'sponsors', 'packages'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
-                tab === t ? 'bg-white text-gray-900 shadow' : 'text-gray-600 hover:text-gray-900'
+                tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
               {t === 'overview' ? 'All Sponsorships' : t === 'sponsors' ? `Sponsors (${totalSponsors})` : `Packages (${packages.length})`}
@@ -149,7 +149,7 @@ export default function AdminSponsorsPage() {
       <div className="max-w-7xl mx-auto px-6 py-6">
         {loading ? (
           <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
           </div>
         ) : (
           <>
@@ -158,44 +158,44 @@ export default function AdminSponsorsPage() {
               <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-left">
+                    <thead className="bg-[#f5f5f7] text-left">
                       <tr>
-                        <th className="px-5 py-3 font-semibold text-gray-600">Sponsor</th>
-                        <th className="px-5 py-3 font-semibold text-gray-600">Package</th>
-                        <th className="px-5 py-3 font-semibold text-gray-600">Type</th>
-                        <th className="px-5 py-3 font-semibold text-gray-600">Amount</th>
-                        <th className="px-5 py-3 font-semibold text-gray-600">Status</th>
-                        <th className="px-5 py-3 font-semibold text-gray-600">Payment</th>
+                        <th className="px-5 py-3 font-semibold text-[#6e6e73]">Sponsor</th>
+                        <th className="px-5 py-3 font-semibold text-[#6e6e73]">Package</th>
+                        <th className="px-5 py-3 font-semibold text-[#6e6e73]">Type</th>
+                        <th className="px-5 py-3 font-semibold text-[#6e6e73]">Amount</th>
+                        <th className="px-5 py-3 font-semibold text-[#6e6e73]">Status</th>
+                        <th className="px-5 py-3 font-semibold text-[#6e6e73]">Payment</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sponsorships.map(ss => (
-                        <tr key={ss.id} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                        <tr key={ss.id} className="border-b border-gray-50 hover:bg-[#f5f5f7] transition">
                           <td className="px-5 py-3">
-                            <div className="font-medium text-gray-900">{ss.sponsor_name}</div>
-                            {ss.website && <div className="text-[11px] text-gray-400">{ss.website.replace(/https?:\/\//, '')}</div>}
+                            <div className="font-medium text-[#1d1d1f]">{ss.sponsor_name}</div>
+                            {ss.website && <div className="text-[11px] text-[#86868b]">{ss.website.replace(/https?:\/\//, '')}</div>}
                           </td>
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierColors[ss.tier] || tierColors.custom}`}>
                                 {ss.tier.toUpperCase()}
                               </span>
-                              <span className="text-gray-700 text-xs">{ss.package_name}</span>
+                              <span className="text-[#3d3d3d] text-xs">{ss.package_name}</span>
                             </div>
                           </td>
-                          <td className="px-5 py-3 text-xs text-gray-600">
+                          <td className="px-5 py-3 text-xs text-[#6e6e73]">
                             {ss.event_name ? (
                               <div>
-                                <span className="font-medium text-gray-800">{ss.event_name}</span>
-                                {ss.city && <span className="block text-[11px] text-gray-400">{ss.city}, {ss.state}</span>}
+                                <span className="font-medium text-[#1d1d1f]">{ss.event_name}</span>
+                                {ss.city && <span className="block text-[11px] text-[#86868b]">{ss.city}, {ss.state}</span>}
                               </div>
                             ) : ss.season ? (
                               <span className="font-medium">{ss.season} Season</span>
                             ) : (
-                              <span className="text-gray-400">General</span>
+                              <span className="text-[#86868b]">General</span>
                             )}
                           </td>
-                          <td className="px-5 py-3 font-semibold text-gray-900">
+                          <td className="px-5 py-3 font-semibold text-[#1d1d1f]">
                             ${(ss.amount_cents / 100).toLocaleString()}
                           </td>
                           <td className="px-5 py-3">
@@ -211,7 +211,7 @@ export default function AdminSponsorsPage() {
                         </tr>
                       ))}
                       {sponsorships.length === 0 && (
-                        <tr><td colSpan={6} className="px-5 py-12 text-center text-gray-400">No sponsorships yet</td></tr>
+                        <tr><td colSpan={6} className="px-5 py-12 text-center text-[#86868b]">No sponsorships yet</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -230,7 +230,7 @@ export default function AdminSponsorsPage() {
                       <div className="p-5">
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <h3 className="text-lg font-bold text-gray-900">{sp.name}</h3>
+                            <h3 className="text-lg font-bold text-[#1d1d1f]">{sp.name}</h3>
                             {sp.website && (
                               <a href={sp.website} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 hover:underline">
                                 {sp.website.replace(/https?:\/\//, '')}
@@ -250,34 +250,34 @@ export default function AdminSponsorsPage() {
 
                         {/* Contact */}
                         {sp.contact_name && (
-                          <div className="bg-gray-50 rounded-lg p-3 mb-3 text-xs">
-                            <div className="font-medium text-gray-800">{sp.contact_name}</div>
-                            {sp.contact_email && <div className="text-gray-500">{sp.contact_email}</div>}
-                            {sp.contact_phone && <div className="text-gray-500">{sp.contact_phone}</div>}
+                          <div className="bg-[#f5f5f7] rounded-lg p-3 mb-3 text-xs">
+                            <div className="font-medium text-[#1d1d1f]">{sp.contact_name}</div>
+                            {sp.contact_email && <div className="text-[#86868b]">{sp.contact_email}</div>}
+                            {sp.contact_phone && <div className="text-[#86868b]">{sp.contact_phone}</div>}
                           </div>
                         )}
 
                         {/* Stats */}
                         <div className="grid grid-cols-2 gap-2 mb-3">
-                          <div className="bg-gray-50 rounded-lg p-2 text-center">
-                            <div className="text-lg font-bold text-blue-600">{sp.sponsorship_count}</div>
-                            <div className="text-[10px] text-gray-500">Sponsorships</div>
+                          <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
+                            <div className="text-lg font-bold text-[#003e79]">{sp.sponsorship_count}</div>
+                            <div className="text-[10px] text-[#86868b]">Sponsorships</div>
                           </div>
-                          <div className="bg-gray-50 rounded-lg p-2 text-center">
+                          <div className="bg-[#f5f5f7] rounded-lg p-2 text-center">
                             <div className="text-lg font-bold text-green-600">${((sp.total_paid_cents || 0) / 100).toLocaleString()}</div>
-                            <div className="text-[10px] text-gray-500">Paid</div>
+                            <div className="text-[10px] text-[#86868b]">Paid</div>
                           </div>
                         </div>
 
                         {sp.notes && (
-                          <p className="text-xs text-gray-500 italic mb-3">{sp.notes}</p>
+                          <p className="text-xs text-[#86868b] italic mb-3">{sp.notes}</p>
                         )}
 
-                        <div className="flex gap-2 pt-3 border-t border-gray-100">
+                        <div className="flex gap-2 pt-3 border-t border-[#e8e8ed]">
                           <button className="flex-1 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-lg text-xs transition">
                             View Details
                           </button>
-                          <button className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-xs transition">
+                          <button className="px-3 py-1.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-lg text-xs transition">
                             Edit
                           </button>
                         </div>
@@ -293,23 +293,23 @@ export default function AdminSponsorsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {packages.sort((a, b) => b.price_cents - a.price_cents).map(pkg => (
                   <div key={pkg.id} className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    <div className={`p-5 ${pkg.tier === 'platinum' ? 'bg-gradient-to-br from-gray-100 to-gray-200' : pkg.tier === 'gold' ? 'bg-gradient-to-br from-amber-50 to-yellow-100' : 'bg-gray-50'}`}>
+                    <div className={`p-5 ${pkg.tier === 'platinum' ? 'bg-gradient-to-br from-gray-100 to-gray-200' : pkg.tier === 'gold' ? 'bg-gradient-to-br from-amber-50 to-yellow-100' : 'bg-[#f5f5f7]'}`}>
                       <div className="flex items-center justify-between mb-2">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierColors[pkg.tier] || tierColors.custom}`}>
                           {pkg.tier.toUpperCase()}
                         </span>
-                        <span className="text-xs text-gray-500">{pkg.is_seasonal ? 'Season' : 'Per Event'}</span>
+                        <span className="text-xs text-[#86868b]">{pkg.is_seasonal ? 'Season' : 'Per Event'}</span>
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900">{pkg.name}</h3>
-                      <div className="text-2xl font-extrabold text-gray-900 mt-1">
+                      <h3 className="text-lg font-bold text-[#1d1d1f]">{pkg.name}</h3>
+                      <div className="text-2xl font-extrabold text-[#1d1d1f] mt-1">
                         ${(pkg.price_cents / 100).toLocaleString()}
                       </div>
                     </div>
                     <div className="p-4 flex gap-2">
-                      <button className="flex-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg text-xs transition">
+                      <button className="flex-1 px-3 py-1.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-lg text-xs transition">
                         Edit Package
                       </button>
-                      <span className="px-3 py-1.5 text-xs text-gray-500 flex items-center">
+                      <span className="px-3 py-1.5 text-xs text-[#86868b] flex items-center">
                         {sponsorships.filter(s => s.package_name === pkg.name).length} active
                       </span>
                     </div>

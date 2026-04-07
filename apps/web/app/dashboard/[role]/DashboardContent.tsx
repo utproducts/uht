@@ -76,7 +76,7 @@ function AdminDash() {
   }, []);
 
   if (loadingStats) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" /></div>;
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
   }
 
   return (
@@ -218,7 +218,7 @@ function CoachDash() {
   }, []);
 
   if (loading) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" /></div>;
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
   }
 
   return (
