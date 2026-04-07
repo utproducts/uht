@@ -165,12 +165,14 @@ directorRoutes.get('/my-events', authMiddleware, requireRole('director'), async 
   try {
     const events = await db
       .prepare(
-        `SELECT e.id, e.name, e.venue_name, e.start_date, e.end_date, e.status,
-                (SELECT COUNT(DISTINCT event_division_id) FROM games WHERE event_id = e.id) as division_count,
-                ed.created_at as assigned_at
-         FROM event_directors ed
-         JOIN events e ON e.id = ed.event_id
-         WHERE ed.user_id = ?
+        `SELECT e.id, e.name, e.city, e.state, e.start_date, e.end_date, e.status,
+                v.name as venue_name,
+                (SELECT COUNT(DISTINCT ed2.id) FROM event_divisions ed2 WHERE ed2.event_id = e.id) as division_count,
+                edr.created_at as assigned_at
+         FROM event_directors edr
+         JOIN events e ON e.id = edr.event_id
+         LEFT JOIN venues v ON v.id = e.venue_id
+         WHERE edr.user_id = ?
          ORDER BY e.start_date DESC`
       )
       .bind(user.id)

@@ -17,8 +17,8 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     const mockUser: AuthUser = {
       id: 'dev-admin-001',
       email: 'admin@ultimatetournaments.com',
-      roles: ['admin'],
-      firstName: 'Dev',
+      roles: ['admin', 'director'],
+      firstName: 'Chad',
       lastName: 'Admin',
     };
     c.set('user', mockUser);

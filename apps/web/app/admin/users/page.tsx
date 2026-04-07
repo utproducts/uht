@@ -9,12 +9,12 @@ const ROLES = ['admin', 'director', 'organization', 'coach', 'manager', 'parent'
 interface User {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string;
+  firstName: string;
+  lastName: string;
   phone: string | null;
-  roles: string; // comma-separated
-  is_active: number;
-  created_at: string;
+  roles: string[]; // array of role strings
+  isActive: boolean;
+  createdAt: string;
 }
 
 interface PaginationInfo {
@@ -151,11 +151,11 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
 // ==================
 function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
-    firstName: user.first_name,
-    lastName: user.last_name,
+    firstName: user.firstName,
+    lastName: user.lastName,
     email: user.email,
     phone: user.phone || '',
-    roles: user.roles.split(',').map(r => r.trim()).filter(Boolean),
+    roles: Array.isArray(user.roles) ? user.roles : [],
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -336,7 +336,7 @@ export default function AdminUsersPage() {
       const res = await fetch(`${API_BASE}/${user.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: user.is_active === 1 ? 0 : 1 }),
+        body: JSON.stringify({ is_active: user.isActive ? 0 : 1 }),
       });
       const json = await res.json();
       if (json.success) {
@@ -354,9 +354,8 @@ export default function AdminUsersPage() {
   // Role breakdown
   const roleCounts: Record<string, number> = {};
   users.forEach(u => {
-    u.roles.split(',').forEach(role => {
-      const r = role.trim();
-      if (r) roleCounts[r] = (roleCounts[r] || 0) + 1;
+    (u.roles || []).forEach(role => {
+      if (role) roleCounts[role] = (roleCounts[role] || 0) + 1;
     });
   });
 
@@ -462,13 +461,13 @@ export default function AdminUsersPage() {
                   {users.map(user => (
                     <tr key={user.id} className="hover:bg-[#fafafa]/50 transition">
                       <td className="px-5 py-3">
-                        <div className="font-semibold text-sm text-[#1d1d1f]">{user.first_name} {user.last_name}</div>
+                        <div className="font-semibold text-sm text-[#1d1d1f]">{user.firstName} {user.lastName}</div>
                       </td>
                       <td className="px-5 py-3 text-sm text-[#6e6e73]">{user.email}</td>
                       <td className="px-5 py-3 text-sm text-[#6e6e73]">{user.phone || '—'}</td>
                       <td className="px-5 py-3">
                         <div className="flex flex-wrap gap-1.5">
-                          {user.roles.split(',').map(role => {
+                          {(user.roles || []).map(role => {
                             const r = role.trim();
                             return r ? (
                               <span key={r} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#f0f7ff] text-[#003e79]">
@@ -480,10 +479,10 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-5 py-3 text-center">
                         <div className="flex items-center justify-center">
-                          <div className={`w-2.5 h-2.5 rounded-full ${user.is_active === 1 ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <div className={`w-2.5 h-2.5 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-red-500'}`} />
                         </div>
                       </td>
-                      <td className="px-5 py-3 text-sm text-[#6e6e73]">{formatDate(user.created_at)}</td>
+                      <td className="px-5 py-3 text-sm text-[#6e6e73]">{formatDate(user.createdAt)}</td>
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -496,7 +495,7 @@ export default function AdminUsersPage() {
                           <button
                             onClick={() => toggleUserStatus(user)}
                             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-amber-50 text-[#86868b] hover:text-amber-600 transition"
-                            title={user.is_active === 1 ? 'Deactivate' : 'Activate'}
+                            title={user.isActive ? 'Deactivate' : 'Activate'}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
                           </button>
@@ -514,17 +513,17 @@ export default function AdminUsersPage() {
                 <div key={user.id} className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-[#1d1d1f]">{user.first_name} {user.last_name}</h3>
+                      <h3 className="font-semibold text-[#1d1d1f]">{user.firstName} {user.lastName}</h3>
                       <p className="text-sm text-[#6e6e73] mt-0.5">{user.email}</p>
                       {user.phone && <p className="text-sm text-[#6e6e73]">{user.phone}</p>}
                     </div>
-                    <div className={`w-3 h-3 rounded-full ${user.is_active === 1 ? 'bg-green-500' : 'bg-red-500'} flex-shrink-0`} />
+                    <div className={`w-3 h-3 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-red-500'} flex-shrink-0`} />
                   </div>
 
                   <div className="mb-3">
                     <p className="text-xs text-[#86868b] font-semibold mb-2">Roles</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {user.roles.split(',').map(role => {
+                      {(user.roles || []).map(role => {
                         const r = role.trim();
                         return r ? (
                           <span key={r} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[#f0f7ff] text-[#003e79]">
@@ -536,7 +535,7 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-[#86868b] mb-3">
-                    <span>Created {formatDate(user.created_at)}</span>
+                    <span>Created {formatDate(user.createdAt)}</span>
                   </div>
 
                   <div className="flex gap-2 pt-3 border-t border-[#e8e8ed]">
@@ -550,7 +549,7 @@ export default function AdminUsersPage() {
                       onClick={() => toggleUserStatus(user)}
                       className="flex-1 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-medium text-sm rounded-lg transition"
                     >
-                      {user.is_active === 1 ? 'Deactivate' : 'Activate'}
+                      {user.isActive ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
                 </div>
