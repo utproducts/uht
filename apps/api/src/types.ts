@@ -9,6 +9,9 @@ export interface Env {
   SENDGRID_API_KEY: string;
   TEXTMAGIC_USERNAME: string;
   TEXTMAGIC_API_KEY: string;
+  TWILIO_ACCOUNT_SID: string;
+  TWILIO_AUTH_TOKEN: string;
+  TWILIO_PHONE_NUMBER: string;
   CLAUDE_API_KEY: string;
   JWT_SECRET: string;
   USA_HOCKEY_API_KEY: string;
