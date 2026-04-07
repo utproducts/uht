@@ -562,8 +562,11 @@ function generateBracketGames(pools: Pool[], totalTeams: number): BracketGame[] 
   const brackets: BracketGame[] = [];
 
   if (totalTeams === 3) {
-    // Championship: 1st vs 2nd
-    brackets.push({ gameType: 'championship', label: '1st vs 2nd — Championship' });
+    // 3-game guarantee: 2 pool games + bracket games
+    // #2 vs #3 play-in, then winner vs #1 championship
+    // This gives every team at least 3 games (#2 may get 4 if they win play-in)
+    brackets.push({ gameType: 'semifinal', label: '2nd vs 3rd — Play-In' });
+    brackets.push({ gameType: 'championship', label: '1st vs Play-In Winner — Championship' });
     return brackets;
   }
 
