@@ -20,6 +20,7 @@ import { playerRoutes } from './routes/players';
 import { cityInviteRoutes } from './routes/city-invites';
 import { hotelRoutes } from './routes/hotels';
 import { lookupRoutes } from './routes/lookups';
+import { userRoutes } from './routes/users';
 import type { Env } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -72,6 +73,7 @@ app.route('/api/chatbot', chatbotRoutes);
 app.route('/api/city-invites', cityInviteRoutes);
 app.route('/api/hotels', hotelRoutes);
 app.route('/api/lookups', lookupRoutes);
+app.route('/api/users', userRoutes);
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));
