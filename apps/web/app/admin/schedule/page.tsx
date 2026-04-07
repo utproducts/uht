@@ -714,16 +714,21 @@ export default function AdminSchedulePage() {
   const [view, setView] = useState<'matrix' | 'list'>('matrix');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [selectedDivision, setSelectedDivision] = useState<string | null>(null); // null = show all
 
   // Modals
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [showAddGame, setShowAddGame] = useState(false);
 
   // Config
+  const [showConfig, setShowConfig] = useState(false);
   const [gameDuration, setGameDuration] = useState(50);
   const [betweenGames, setBetweenGames] = useState(10);
   const [firstGameTime, setFirstGameTime] = useState('12:00');
   const [lastGameTime, setLastGameTime] = useState('21:00');
+
+  // Per-rink availability: { [rinkId]: { firstGame, lastGame, blocked: [{start, end}] } }
+  const [rinkAvailability, setRinkAvailability] = useState<Record<string, { firstGame: string; lastGame: string; blocked: { start: string; end: string }[] }>>({});
 
   // Reload games helper
   const reloadGames = useCallback(async () => {
@@ -749,6 +754,8 @@ export default function AdminSchedulePage() {
       setDivisions([]);
       setRegistrations([]);
       setGames([]);
+      setSelectedDivision(null);
+      setRinkAvailability({});
       return;
     }
 
@@ -809,17 +816,25 @@ export default function AdminSchedulePage() {
 
     setGenerating(true);
     try {
+      // Build rules including per-rink availability
+      const rules = [
+        { ruleType: 'game_duration_minutes', ruleValue: String(gameDuration), priority: 10 },
+        { ruleType: 'min_rest_minutes', ruleValue: String(betweenGames), priority: 10 },
+        { ruleType: 'first_game_time', ruleValue: firstGameTime, priority: 10 },
+        { ruleType: 'last_game_time', ruleValue: lastGameTime, priority: 10 },
+      ];
+      // Add per-rink availability rules
+      for (const [rinkId, avail] of Object.entries(rinkAvailability)) {
+        rules.push({ ruleType: 'rink_first_game', ruleValue: JSON.stringify({ rinkId, time: avail.firstGame }), priority: 10 });
+        rules.push({ ruleType: 'rink_last_game', ruleValue: JSON.stringify({ rinkId, time: avail.lastGame }), priority: 10 });
+        if (avail.blocked.length > 0) {
+          rules.push({ ruleType: 'rink_blocked_times', ruleValue: JSON.stringify({ rinkId, blocked: avail.blocked }), priority: 10 });
+        }
+      }
       await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/rules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rules: [
-            { ruleType: 'game_duration_minutes', ruleValue: String(gameDuration), priority: 10 },
-            { ruleType: 'min_rest_minutes', ruleValue: String(betweenGames), priority: 10 },
-            { ruleType: 'first_game_time', ruleValue: firstGameTime, priority: 10 },
-            { ruleType: 'last_game_time', ruleValue: lastGameTime, priority: 10 },
-          ],
-        }),
+        body: JSON.stringify({ rules }),
       });
       const res = await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/generate`, {
         method: 'POST',
@@ -845,11 +860,30 @@ export default function AdminSchedulePage() {
     setGames([]);
   };
 
+  // Initialize rink availability when rinks load
+  useEffect(() => {
+    if (venueRinks.length > 0) {
+      setRinkAvailability(prev => {
+        const next = { ...prev };
+        for (const rink of venueRinks) {
+          if (!next[rink.id]) {
+            next[rink.id] = { firstGame: firstGameTime, lastGame: lastGameTime, blocked: [] };
+          }
+        }
+        return next;
+      });
+    }
+  }, [venueRinks]);
+
   // Computed
   const dayHeaders = selectedEvent ? getDayHeaders(selectedEvent.start_date, selectedEvent.end_date) : [];
   const approvedTeams = registrations.filter(r => r.status === 'approved').length;
   const poolGameCount = games.filter(g => g.game_type === 'pool').length;
   const bracketGameCount = games.filter(g => g.game_type !== 'pool').length;
+
+  // Filtered divisions/games based on selection
+  const filteredDivisions = selectedDivision ? divisions.filter(d => d.id === selectedDivision) : divisions;
+  const filteredGames = selectedDivision ? games.filter(g => g.event_division_id === selectedDivision) : games;
 
   if (loading) {
     return (
@@ -908,46 +942,155 @@ export default function AdminSchedulePage() {
           <>
             {/* Divisions */}
             <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
-              <h2 className="text-lg font-bold text-[#1d1d1f] mb-4">Divisions</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-[#1d1d1f]">Divisions</h2>
+                {selectedDivision && (
+                  <button
+                    onClick={() => setSelectedDivision(null)}
+                    className="text-sm text-[#003e79] font-semibold hover:underline"
+                  >
+                    Show All Divisions
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {divisions.map(div => {
                   const count = registrations.filter(r => r.event_division_id === div.id && r.status === 'approved').length;
                   const divGames = games.filter(g => g.event_division_id === div.id);
+                  const isActive = selectedDivision === div.id;
                   return (
-                    <div key={div.id} className="border border-[#e8e8ed] rounded-xl p-4">
-                      <div className="font-semibold text-[#1d1d1f] text-sm">{div.age_group} — {div.division_level}</div>
+                    <button
+                      key={div.id}
+                      onClick={() => setSelectedDivision(isActive ? null : div.id)}
+                      className={`border rounded-xl p-4 text-left transition cursor-pointer ${
+                        isActive
+                          ? 'border-[#003e79] bg-[#f0f7ff] ring-2 ring-[#003e79]/20'
+                          : 'border-[#e8e8ed] hover:border-[#003e79]/30 hover:bg-[#fafafa]'
+                      }`}
+                    >
+                      <div className={`font-semibold text-sm ${isActive ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>{div.age_group} — {div.division_level}</div>
                       <div className="text-xs text-[#6e6e73] mt-1">{count} teams · {divGames.length} games</div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
+              {selectedDivision && (
+                <div className="mt-3 text-xs text-[#86868b]">
+                  Showing only <span className="font-semibold text-[#003e79]">{divisions.find(d => d.id === selectedDivision)?.age_group} — {divisions.find(d => d.id === selectedDivision)?.division_level}</span>. Click again or &ldquo;Show All&rdquo; to reset.
+                </div>
+              )}
             </div>
 
-            {/* Config */}
-            <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
-              <h2 className="text-lg font-bold text-[#1d1d1f] mb-4">Schedule Config</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: 'Game Duration (min)', value: gameDuration, set: setGameDuration, min: 10, max: 180 },
-                  { label: 'Between Games (min)', value: betweenGames, set: setBetweenGames, min: 0, max: 60 },
-                ].map(cfg => (
-                  <div key={cfg.label}>
-                    <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-2">{cfg.label}</label>
-                    <input type="number" min={cfg.min} max={cfg.max} value={cfg.value} onChange={e => cfg.set(parseInt(e.target.value) || cfg.min)}
-                      className="w-full border border-[#e8e8ed] rounded-xl p-2 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+            {/* Config — collapsible */}
+            <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)]">
+              <button
+                onClick={() => setShowConfig(!showConfig)}
+                className="w-full flex items-center justify-between p-6 text-left hover:bg-[#fafafa] transition rounded-2xl"
+              >
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-[#1d1d1f]">Schedule Config</h2>
+                  <span className="text-xs text-[#86868b]">{gameDuration}min games · {betweenGames}min rest · {firstGameTime}–{lastGameTime}</span>
+                </div>
+                <svg className={`w-5 h-5 text-[#86868b] transition-transform ${showConfig ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+
+              {showConfig && (
+                <div className="px-6 pb-6 space-y-6">
+                  {/* Global Config */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#3d3d3d] mb-3">Default Settings</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[
+                        { label: 'Game Duration (min)', value: gameDuration, set: setGameDuration, min: 10, max: 180 },
+                        { label: 'Between Games (min)', value: betweenGames, set: setBetweenGames, min: 0, max: 60 },
+                      ].map(cfg => (
+                        <div key={cfg.label}>
+                          <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-2">{cfg.label}</label>
+                          <input type="number" min={cfg.min} max={cfg.max} value={cfg.value} onChange={e => cfg.set(parseInt(e.target.value) || cfg.min)}
+                            className="w-full border border-[#e8e8ed] rounded-xl p-2 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                        </div>
+                      ))}
+                      <div>
+                        <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-2">First Game</label>
+                        <input type="time" value={firstGameTime} onChange={e => setFirstGameTime(e.target.value)}
+                          className="w-full border border-[#e8e8ed] rounded-xl p-2 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-2">Last Game</label>
+                        <input type="time" value={lastGameTime} onChange={e => setLastGameTime(e.target.value)}
+                          className="w-full border border-[#e8e8ed] rounded-xl p-2 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                      </div>
+                    </div>
                   </div>
-                ))}
-                <div>
-                  <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-2">First Game</label>
-                  <input type="time" value={firstGameTime} onChange={e => setFirstGameTime(e.target.value)}
-                    className="w-full border border-[#e8e8ed] rounded-xl p-2 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+
+                  {/* Per-Rink Availability */}
+                  {venueRinks.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#3d3d3d] mb-3">Per-Rink Availability</h3>
+                      <p className="text-xs text-[#86868b] mb-4">Set different time windows for each rink. Add blocked time ranges for public skating, maintenance, etc.</p>
+                      <div className="space-y-4">
+                        {venueRinks.map(rink => {
+                          const avail = rinkAvailability[rink.id] || { firstGame: firstGameTime, lastGame: lastGameTime, blocked: [] };
+                          const updateRink = (updates: Partial<typeof avail>) => {
+                            setRinkAvailability(prev => ({ ...prev, [rink.id]: { ...avail, ...updates } }));
+                          };
+                          return (
+                            <div key={rink.id} className="border border-[#e8e8ed] rounded-xl p-4">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="w-8 h-8 rounded-lg bg-[#003e79] text-white flex items-center justify-center text-xs font-bold">{rink.name.charAt(0)}</div>
+                                <div>
+                                  <div className="font-semibold text-[#1d1d1f] text-sm">{rink.name}</div>
+                                  {rink.surface_size && <div className="text-[10px] text-[#86868b]">{rink.surface_size}</div>}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-[10px] text-[#86868b] uppercase tracking-widest font-semibold mb-1">First Game</label>
+                                  <input type="time" value={avail.firstGame} onChange={e => updateRink({ firstGame: e.target.value })}
+                                    className="w-full border border-[#e8e8ed] rounded-lg p-2 text-sm text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-[#86868b] uppercase tracking-widest font-semibold mb-1">Last Game</label>
+                                  <input type="time" value={avail.lastGame} onChange={e => updateRink({ lastGame: e.target.value })}
+                                    className="w-full border border-[#e8e8ed] rounded-lg p-2 text-sm text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                                </div>
+                                <div className="col-span-2 md:col-span-1">
+                                  <label className="block text-[10px] text-[#86868b] uppercase tracking-widest font-semibold mb-1">Blocked Times</label>
+                                  {avail.blocked.map((block, bi) => (
+                                    <div key={bi} className="flex items-center gap-1 mb-1">
+                                      <input type="time" value={block.start} onChange={e => {
+                                        const newBlocked = [...avail.blocked];
+                                        newBlocked[bi] = { ...newBlocked[bi], start: e.target.value };
+                                        updateRink({ blocked: newBlocked });
+                                      }} className="flex-1 border border-[#e8e8ed] rounded-lg p-1.5 text-xs text-[#1d1d1f] outline-none" />
+                                      <span className="text-[10px] text-[#86868b]">to</span>
+                                      <input type="time" value={block.end} onChange={e => {
+                                        const newBlocked = [...avail.blocked];
+                                        newBlocked[bi] = { ...newBlocked[bi], end: e.target.value };
+                                        updateRink({ blocked: newBlocked });
+                                      }} className="flex-1 border border-[#e8e8ed] rounded-lg p-1.5 text-xs text-[#1d1d1f] outline-none" />
+                                      <button onClick={() => {
+                                        const newBlocked = avail.blocked.filter((_, i) => i !== bi);
+                                        updateRink({ blocked: newBlocked });
+                                      }} className="text-red-400 hover:text-red-600 text-sm font-bold px-1">&times;</button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    onClick={() => updateRink({ blocked: [...avail.blocked, { start: '12:00', end: '13:00' }] })}
+                                    className="text-[10px] text-[#003e79] font-semibold hover:underline mt-1"
+                                  >
+                                    + Add blocked time
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-2">Last Game</label>
-                  <input type="time" value={lastGameTime} onChange={e => setLastGameTime(e.target.value)}
-                    className="w-full border border-[#e8e8ed] rounded-xl p-2 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Stats */}
@@ -1019,7 +1162,7 @@ export default function AdminSchedulePage() {
 
                   {view === 'matrix' && (
                     <div className="space-y-6">
-                      {divisions.map(div => (
+                      {filteredDivisions.map(div => (
                         <div key={div.id}>
                           <h3 className="font-semibold text-[#1d1d1f] mb-3">{div.age_group} — {div.division_level}</h3>
                           <ScheduleMatrix
@@ -1034,7 +1177,7 @@ export default function AdminSchedulePage() {
                     </div>
                   )}
 
-                  {view === 'list' && <GameListView games={games} divisions={divisions} onClickGame={setEditingGame} />}
+                  {view === 'list' && <GameListView games={filteredGames} divisions={filteredDivisions} onClickGame={setEditingGame} />}
                 </>
               )}
             </div>

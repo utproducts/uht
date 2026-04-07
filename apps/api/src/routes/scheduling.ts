@@ -92,8 +92,10 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
   // Get schedule rules
   const rules = await db.prepare('SELECT * FROM schedule_rules WHERE event_id = ?').bind(eventId).all<any>();
   const ruleMap: Record<string, string> = {};
+  const ruleList: any[] = [];
   for (const rule of rules.results || []) {
     ruleMap[rule.rule_type] = rule.rule_value;
+    ruleList.push(rule);
   }
 
   // Get available rinks
@@ -113,20 +115,41 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
   const firstGameTime = ruleMap['first_game_time'] || '08:00';
   const lastGameTime = ruleMap['last_game_time'] || '20:00';
 
+  // Parse per-rink availability rules
+  const rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number }[] }> = {};
+  for (const rule of ruleList) {
+    try {
+      if (rule.rule_type === 'rink_first_game') {
+        const data = JSON.parse(rule.rule_value);
+        if (!rinkConfig[data.rinkId]) rinkConfig[data.rinkId] = { firstMinute: parseTime(firstGameTime), lastMinute: parseTime(lastGameTime), blocked: [] };
+        rinkConfig[data.rinkId].firstMinute = parseTime(data.time);
+      } else if (rule.rule_type === 'rink_last_game') {
+        const data = JSON.parse(rule.rule_value);
+        if (!rinkConfig[data.rinkId]) rinkConfig[data.rinkId] = { firstMinute: parseTime(firstGameTime), lastMinute: parseTime(lastGameTime), blocked: [] };
+        rinkConfig[data.rinkId].lastMinute = parseTime(data.time);
+      } else if (rule.rule_type === 'rink_blocked_times') {
+        const data = JSON.parse(rule.rule_value);
+        if (!rinkConfig[data.rinkId]) rinkConfig[data.rinkId] = { firstMinute: parseTime(firstGameTime), lastMinute: parseTime(lastGameTime), blocked: [] };
+        rinkConfig[data.rinkId].blocked = (data.blocked || []).map((b: any) => ({ start: parseTime(b.start), end: parseTime(b.end) }));
+      }
+    } catch (_) { /* skip malformed rules */ }
+  }
+
   // Event date range
   const startDate = new Date(event.start_date);
   const endDate = new Date(event.end_date);
   const eventDays = getEventDays(startDate, endDate);
 
   // Global time slot tracker — tracks which rink+time combos are used
-  // to prevent double-booking
+  // to prevent double-booking, with per-rink availability support
   const timeSlotTracker = new TimeSlotTracker(
     eventDays,
     parseTime(firstGameTime),
     parseTime(lastGameTime),
     gameDurationMinutes,
     minRestMinutes,
-    venueRinks
+    venueRinks,
+    rinkConfig
   );
 
   // Process each division
@@ -790,22 +813,47 @@ class TimeSlotTracker {
   private gameDuration: number;
   private restTime: number;
   private rinks: any[];
+  private rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number }[] }>;
 
-  constructor(days: Date[], firstMinute: number, lastMinute: number, gameDuration: number, restTime: number, rinks: any[]) {
+  constructor(
+    days: Date[], firstMinute: number, lastMinute: number, gameDuration: number, restTime: number, rinks: any[],
+    rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number }[] }> = {}
+  ) {
     this.days = days;
     this.firstMinute = firstMinute;
     this.lastMinute = lastMinute;
     this.gameDuration = gameDuration;
     this.restTime = restTime;
     this.rinks = rinks.length > 0 ? rinks : [{ id: null, name: 'Default' }];
+    this.rinkConfig = rinkConfig;
 
-    // Initialize all slots
+    // Initialize all slots — use per-rink first game time if configured
     for (const day of days) {
       for (const rink of this.rinks) {
         const key = `${day.toISOString().split('T')[0]}|${rink.id}`;
-        this.slotIndex.set(key, firstMinute);
+        const rc = rink.id ? this.rinkConfig[rink.id] : null;
+        this.slotIndex.set(key, rc ? rc.firstMinute : firstMinute);
       }
     }
+  }
+
+  // Check if a time slot overlaps with any blocked window for this rink
+  private isBlocked(rinkId: string | null, startMinutes: number): boolean {
+    if (!rinkId) return false;
+    const rc = this.rinkConfig[rinkId];
+    if (!rc || !rc.blocked) return false;
+    const endMinutes = startMinutes + this.gameDuration;
+    for (const block of rc.blocked) {
+      // Overlap check: game starts before block ends AND game ends after block starts
+      if (startMinutes < block.end && endMinutes > block.start) return true;
+    }
+    return false;
+  }
+
+  // Get the last game minute for a specific rink
+  private getRinkLastMinute(rinkId: string | null): number {
+    if (rinkId && this.rinkConfig[rinkId]) return this.rinkConfig[rinkId].lastMinute;
+    return this.lastMinute;
   }
 
   getNextSlot(allowedDays: Date[]): { date: Date; startMinutes: number; rinkId: string | null } | null {
@@ -815,9 +863,26 @@ class TimeSlotTracker {
     for (const day of allowedDays) {
       for (const rink of this.rinks) {
         const key = `${day.toISOString().split('T')[0]}|${rink.id}`;
-        const nextMinute = this.slotIndex.get(key) || this.firstMinute;
+        let nextMinute = this.slotIndex.get(key) || this.firstMinute;
+        const rinkLast = this.getRinkLastMinute(rink.id);
 
-        if (nextMinute + this.gameDuration <= this.lastMinute + this.gameDuration) {
+        // Skip past any blocked windows
+        let safety = 0;
+        while (this.isBlocked(rink.id, nextMinute) && safety < 100) {
+          // Jump to end of the blocking window
+          const rc = rink.id ? this.rinkConfig[rink.id] : null;
+          if (rc) {
+            for (const block of rc.blocked) {
+              if (nextMinute < block.end && nextMinute + this.gameDuration > block.start) {
+                nextMinute = block.end + this.restTime;
+                break;
+              }
+            }
+          }
+          safety++;
+        }
+
+        if (nextMinute + this.gameDuration <= rinkLast + this.gameDuration) {
           if (!best || nextMinute < best.startMinutes || (nextMinute === best.startMinutes && day < best.date)) {
             best = { date: day, startMinutes: nextMinute, rinkId: rink.id, key };
           }
@@ -826,8 +891,22 @@ class TimeSlotTracker {
     }
 
     if (best) {
-      // Advance the slot
-      this.slotIndex.set(best.key, best.startMinutes + this.gameDuration + this.restTime);
+      // Advance the slot — and skip past any blocked windows for next time
+      let nextAvail = best.startMinutes + this.gameDuration + this.restTime;
+      // Pre-skip blocked windows for the next call
+      if (best.rinkId && this.rinkConfig[best.rinkId]) {
+        let safety = 0;
+        while (this.isBlocked(best.rinkId, nextAvail) && safety < 100) {
+          for (const block of this.rinkConfig[best.rinkId].blocked) {
+            if (nextAvail < block.end && nextAvail + this.gameDuration > block.start) {
+              nextAvail = block.end + this.restTime;
+              break;
+            }
+          }
+          safety++;
+        }
+      }
+      this.slotIndex.set(best.key, nextAvail);
       return { date: best.date, startMinutes: best.startMinutes, rinkId: best.rinkId };
     }
 
