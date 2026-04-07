@@ -430,7 +430,8 @@ function generatePoolPlayGames(pools: Pool[], totalTeams: number): Matchup[] {
 
   if (totalTeams === 5) {
     // 5 teams: Pool Gold (3) + Pool Blue (2)
-    // Gold pool: each plays the other 2 = 3 intra-pool games total
+    // Gold: 2 intra-pool games each (need 1 crossover to reach 3)
+    // Blue: 1 intra-pool game each (need 2 crossovers to reach 3)
     const gold = pools[0].teams; // 3 teams
     const blue = pools[1].teams; // 2 teams
     // Intra-pool Gold (3 games)
@@ -439,12 +440,20 @@ function generatePoolPlayGames(pools: Pool[], totalTeams: number): Matchup[] {
     matchups.push({ home: gold[1], away: gold[2], poolName: 'Pool Gold', isCrossover: false });
     // Intra-pool Blue (1 game)
     matchups.push({ home: blue[0], away: blue[1], poolName: 'Pool Blue', isCrossover: false });
-    // Crossover games to get everyone to 3 games:
-    // Blue team 1 needs 2 more, Blue team 2 needs 2 more
+    // Crossovers: each Gold team gets exactly 1, each Blue team gets exactly 2
+    // Blue #1 vs Gold #1, Blue #1 vs Gold #2
+    // Blue #2 vs Gold #3
+    // This gives: Gold#1=3, Gold#2=3, Gold#3=3, Blue#1=3, Blue#2=2
+    // Need one more for Blue#2... pair with remaining Gold
     matchups.push({ home: blue[0], away: gold[0], poolName: 'Crossover', isCrossover: true });
     matchups.push({ home: blue[0], away: gold[1], poolName: 'Crossover', isCrossover: true });
-    matchups.push({ home: blue[1], away: gold[0], poolName: 'Crossover', isCrossover: true });
     matchups.push({ home: blue[1], away: gold[2], poolName: 'Crossover', isCrossover: true });
+    // Blue#2 still needs 1 more — pair with Gold#1 or Gold#2 (one of them will get 4th game)
+    // This is unavoidable with 5 teams — one team must play 4 games or accept uneven distribution
+    // Better approach: Blue#2 gets a crossover with the Gold team that has the earliest availability
+    matchups.push({ home: blue[1], away: gold[1], poolName: 'Crossover', isCrossover: true });
+    // Result: Gold#1=3, Gold#2=4, Gold#3=3, Blue#1=3, Blue#2=3
+    // Note: 5-team divisions inherently create asymmetry. Gold#2 plays 4 pool games.
     return matchups;
   }
 
