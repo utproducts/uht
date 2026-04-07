@@ -103,11 +103,12 @@ smsRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zValid
 
     // Send via Twilio
     let twilioMessageId: string | null = null;
+    let twilioError: string | null = null;
     try {
       twilioMessageId = await sendTwilioSms(env, cleanPhone, data.message);
     } catch (err: any) {
-      console.error('Twilio error:', err?.message || err);
-      // Still save the message locally even if Twilio fails (for dev/testing)
+      twilioError = err?.message || 'Twilio send failed';
+      console.error('Twilio error:', twilioError);
     }
 
     // Save message
@@ -118,6 +119,10 @@ smsRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zValid
     `).bind(msgId, convoId, data.message, twilioMessageId, twilioMessageId ? 'sent' : 'queued', user.id).run();
 
     await db.prepare("UPDATE sms_conversations SET last_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(convoId).run();
+
+    if (twilioError) {
+      return c.json({ success: false, error: `SMS delivery failed: ${twilioError}`, data: { messageId: msgId, conversationId: convoId } }, 502);
+    }
 
     return c.json({ success: true, data: { messageId: msgId, conversationId: convoId } });
   } catch (err: any) {
