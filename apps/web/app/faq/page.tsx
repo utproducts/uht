@@ -277,24 +277,23 @@ export default function FAQPage() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden pt-16 pb-12">
-        {/* Gradient background with orbs */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] -z-10" />
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff]">
+        {/* Soft blurred orbs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#00ccff] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
+        <div className="absolute top-1/2 right-1/4 w-96 h-96 bg-[#003e79] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
+        <div className="absolute -bottom-8 right-1/3 w-96 h-96 bg-[#005599] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000" />
 
-        {/* Blurred orbs */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#00ccff] rounded-full opacity-20 blur-3xl -z-10" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#003e79] rounded-full opacity-20 blur-3xl -z-10" />
-
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h1 className="text-5xl font-bold text-white mb-4 leading-tight">Frequently Asked Questions</h1>
-          <p className="text-white/80 max-w-2xl mx-auto mb-10 text-lg">
-            Find answers to common questions about Ultimate Hockey Tournaments. Can't find what you're looking for?
-            We're here to help.
+        <div className="max-w-4xl mx-auto px-4 py-16 sm:py-20 text-center relative z-10">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold uppercase tracking-tight text-white">
+            Frequently Asked <span className="text-[#00ccff]">Questions.</span>
+          </h1>
+          <p className="mt-4 text-lg text-white/80 max-w-2xl mx-auto">
+            Find answers to common questions about Ultimate Hockey Tournaments. Can&apos;t find what you&apos;re looking for? We&apos;re here to help.
           </p>
 
           {/* Search Input */}
-          <div className="max-w-xl mx-auto relative">
+          <div className="mt-8 max-w-xl mx-auto relative">
             <svg
               className="w-5 h-5 text-white/60 absolute left-4 top-1/2 -translate-y-1/2"
               fill="none"
@@ -334,20 +333,20 @@ export default function FAQPage() {
           )}
         </div>
 
-        {/* Curved SVG transition */}
-        <svg
-          className="absolute bottom-0 left-0 right-0 w-full h-auto"
-          viewBox="0 0 1200 120"
-          preserveAspectRatio="none"
-          style={{ marginBottom: '-1px' }}
-        >
-          <path
-            d="M0,64 C300,96 900,32 1200,64 L1200,120 L0,120 Z"
-            fill="#fafafa"
-            fillOpacity="1"
-          />
-        </svg>
-      </div>
+        {/* Curved SVG bottom edge */}
+        <div className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 bg-[#fafafa]">
+          <svg
+            viewBox="0 0 1200 120"
+            preserveAspectRatio="none"
+            className="w-full h-full"
+          >
+            <path
+              d="M0,50 Q300,0 600,50 T1200,50 L1200,120 L0,120 Z"
+              fill="#fafafa"
+            />
+          </svg>
+        </div>
+      </section>
 
       {/* Category Filter Pills */}
       <div className="max-w-4xl mx-auto px-4 pt-12 mb-8">

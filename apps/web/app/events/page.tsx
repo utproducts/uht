@@ -84,102 +84,8 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/* ── Featured Event ── */
-function FeaturedEvent({ event }: { event: Event }) {
-  const ageGroups = parseJsonArray(event.age_groups);
-  const days = daysUntil(event.start_date);
-
-  return (
-    <div className="relative rounded-3xl overflow-hidden bg-white shadow-[0_2px_40px_-12px_rgba(0,62,121,0.15)]">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-        {/* Left: Gradient visual */}
-        <div className={`relative bg-gradient-to-br ${cityGradient(event.city)} p-10 lg:p-14 flex flex-col justify-center min-h-[340px]`}>
-          {/* Soft decorative shapes */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/3 translate-x-1/3 blur-2xl" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/3 -translate-x-1/3 blur-2xl" />
-
-          <div className="relative z-10 flex flex-col items-center lg:items-start text-center lg:text-left">
-            {event.logo_url ? (
-              <img
-                src={event.logo_url}
-                alt={event.name}
-                className="w-36 h-36 object-contain drop-shadow-xl mb-6"
-              />
-            ) : (
-              <div className="w-36 h-36 rounded-3xl bg-white/15 backdrop-blur flex items-center justify-center mb-6">
-                <span className="text-5xl">🏒</span>
-              </div>
-            )}
-
-            {/* Next Up tag */}
-            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold bg-white/20 backdrop-blur-sm text-white border border-white/20">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              Next Up
-            </span>
-          </div>
-        </div>
-
-        {/* Right: Event details */}
-        <div className="p-10 lg:p-14 flex flex-col justify-center">
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${statusBadge(event.status)}`}>
-              {statusLabel(event.status)}
-            </span>
-            {days > 0 && days <= 90 && (
-              <span className="text-sm font-medium text-[#003e79]/60">
-                {days} day{days !== 1 ? 's' : ''} away
-              </span>
-            )}
-          </div>
-
-          <h2 className="text-3xl lg:text-4xl font-bold text-[#1d1d1f] leading-tight mb-4">{event.name}</h2>
-
-          <div className="space-y-2 mb-5">
-            <p className="flex items-center gap-2 text-[#3d3d3d]">
-              <svg className="w-5 h-5 text-[#003e79]/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              {event.city}, {event.state}
-            </p>
-            <p className="flex items-center gap-2 text-[#3d3d3d]">
-              <svg className="w-5 h-5 text-[#003e79]/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              {formatDateRange(event.start_date, event.end_date)}
-            </p>
-          </div>
-
-          {ageGroups.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-6">
-              {ageGroups.map(ag => (
-                <span key={ag} className="px-3 py-1 bg-[#f0f7ff] text-[#003e79] text-sm font-medium rounded-lg">
-                  {ag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-4">
-            <a
-              href={`/register?event=${event.slug}&eventId=${event.id}`}
-              className="px-8 py-3.5 rounded-full bg-[#003e79] text-white font-semibold text-base hover:bg-[#002d5a] active:scale-[0.98] transition-all shadow-md"
-            >
-              Register Now
-            </a>
-            <a
-              href={`/events/${event.slug}`}
-              className="px-6 py-3.5 rounded-full bg-white text-[#003e79] font-semibold text-base border border-[#d2d2d7] hover:bg-[#f5f5f7] active:scale-[0.98] transition-all"
-            >
-              View Details
-            </a>
-            {event.price_cents && (
-              <span className="text-[#86868b] text-sm">From <span className="text-[#1d1d1f] font-bold text-lg">{formatPrice(event.price_cents)}</span></span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Event Card ── */
-function EventCard({ event }: { event: Event }) {
+function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
   const ageGroups = parseJsonArray(event.age_groups);
   const isUpcoming = event.status === 'registration_open' || event.status === 'active';
   const isPast = event.status === 'completed';
@@ -215,14 +121,21 @@ function EventCard({ event }: { event: Event }) {
           </span>
         </div>
 
-        {/* Countdown */}
-        {isUpcoming && days > 0 && days <= 90 && (
+        {/* Next Up badge or Countdown */}
+        {isNextUp ? (
+          <div className="absolute top-3 left-3 z-10">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-white/95 backdrop-blur-sm text-[#003e79] shadow-sm">
+              <span className="w-1.5 h-1.5 bg-[#00ccff] rounded-full animate-pulse" />
+              Next Up{days > 0 && days <= 90 ? ` · ${days}d` : ''}
+            </span>
+          </div>
+        ) : isUpcoming && days > 0 && days <= 90 ? (
           <div className="absolute top-3 left-3 z-10">
             <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/90 backdrop-blur-sm text-[#003e79]">
               {days} day{days !== 1 ? 's' : ''}
             </span>
           </div>
-        )}
+        ) : null}
 
         {/* Price */}
         {event.price_cents && isUpcoming && (
@@ -361,8 +274,7 @@ export default function EventsPage() {
     });
   }
 
-  const featured = tab === 'upcoming' && filtered.length > 0 && !search && !ageFilter ? filtered[0] : null;
-  const gridEvents = featured ? filtered.slice(1) : filtered;
+  const isNextUpFirst = tab === 'upcoming' && filtered.length > 0 && !search && !ageFilter;
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -481,21 +393,6 @@ export default function EventsPage() {
 
       {/* ── Content ── */}
       <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-10">
-        {/* Featured */}
-        {featured && (
-          <div className="mb-12">
-            <FeaturedEvent event={featured} />
-          </div>
-        )}
-
-        {/* Section label */}
-        {featured && gridEvents.length > 0 && (
-          <div className="flex items-center gap-4 mb-8">
-            <h2 className="text-xl font-bold text-[#1d1d1f]">More Tournaments</h2>
-            <div className="flex-1 h-px bg-[#e8e8ed]" />
-          </div>
-        )}
-
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -512,7 +409,7 @@ export default function EventsPage() {
               </div>
             ))}
           </div>
-        ) : gridEvents.length === 0 && !featured ? (
+        ) : filtered.length === 0 ? (
           <div className="text-center py-24">
             <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[#f0f7ff] flex items-center justify-center">
               <span className="text-4xl">🏒</span>
@@ -526,8 +423,8 @@ export default function EventsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {gridEvents.map(event => (
-              <EventCard key={event.id} event={event} />
+            {filtered.map((event, idx) => (
+              <EventCard key={event.id} event={event} isNextUp={isNextUpFirst && idx === 0} />
             ))}
           </div>
         )}

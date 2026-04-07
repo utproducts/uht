@@ -122,6 +122,10 @@ function InquiryModal({ packageName, onClose }: { packageName: string; onClose: 
             <select value={form.package} onChange={e => setForm({ ...form, package: e.target.value })}
               className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
               <option value="">Not sure yet</option>
+              <option value="Platinum">Platinum</option>
+              <option value="Gold">Gold</option>
+              <option value="Silver">Silver</option>
+              <option value="Bronze">Bronze</option>
               <option value="Custom Package">Custom Package</option>
             </select>
           </div>
@@ -264,6 +268,102 @@ export default function SponsorsPage() {
           ))}
         </div>
       </div>
+
+      {/* Sponsorship Packages */}
+      {packages.length > 0 && (
+        <div className="max-w-6xl mx-auto px-4 py-16">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-extrabold text-[#1d1d1f] mb-3">Sponsorship Packages</h2>
+            <p className="text-[#6e6e73] max-w-xl mx-auto">Choose a tier that fits your goals — or let us build something custom.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {(() => {
+              const tierOrder = ['platinum', 'gold', 'silver', 'bronze'];
+              const grouped: Record<string, SponsorPackage[]> = {};
+              packages.forEach(pkg => {
+                const t = pkg.tier.toLowerCase();
+                if (!grouped[t]) grouped[t] = [];
+                grouped[t].push(pkg);
+              });
+              const tierGradients: Record<string, string> = {
+                platinum: 'from-[#003e79] to-[#00ccff]',
+                gold: 'from-[#8B6914] to-[#D4A843]',
+                silver: 'from-[#4a4a4a] to-[#9e9e9e]',
+                bronze: 'from-[#6B3A1F] to-[#CD7F32]',
+              };
+              const tierLabels: Record<string, string> = {
+                platinum: 'Platinum',
+                gold: 'Gold',
+                silver: 'Silver',
+                bronze: 'Bronze',
+              };
+              return tierOrder
+                .filter(t => grouped[t] && grouped[t].length > 0)
+                .map(tier => {
+                  const pkg = grouped[tier][0];
+                  const benefits = pkg.benefits ? (() => { try { return JSON.parse(pkg.benefits); } catch { return []; } })() : [];
+                  return (
+                    <div key={tier} className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] hover:-translate-y-1 transition-all duration-300 flex flex-col">
+                      {/* Tier gradient header */}
+                      <div className={`bg-gradient-to-r ${tierGradients[tier] || 'from-[#003e79] to-[#00ccff]'} px-6 py-5 text-center`}>
+                        <h3 className="text-xl font-bold text-white">{tierLabels[tier] || tier}</h3>
+                        {pkg.is_seasonal ? (
+                          <p className="text-white/70 text-xs mt-1">Season-long partnership</p>
+                        ) : (
+                          <p className="text-white/70 text-xs mt-1">Per-event partnership</p>
+                        )}
+                      </div>
+
+                      {/* Pricing */}
+                      <div className="px-6 pt-6 pb-4 text-center border-b border-[#e8e8ed]">
+                        <div className="text-3xl font-extrabold text-[#1d1d1f]">
+                          ${(pkg.price_cents / 100).toLocaleString()}
+                        </div>
+                        <p className="text-xs text-[#86868b] mt-1">{pkg.is_seasonal ? 'per season' : 'per event'}</p>
+                      </div>
+
+                      {/* Benefits */}
+                      <div className="px-6 py-5 flex-1">
+                        {benefits.length > 0 ? (
+                          <ul className="space-y-2.5">
+                            {benefits.map((b: string, i: number) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-[#3d3d3d]">
+                                <svg className="w-4 h-4 text-[#00ccff] mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                {b}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-[#6e6e73]">{pkg.description}</p>
+                        )}
+                      </div>
+
+                      {/* CTA */}
+                      <div className="px-6 pb-6">
+                        <button
+                          onClick={() => openInquiry(pkg.name)}
+                          className="w-full px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] active:scale-[0.98] transition-all"
+                        >
+                          Get Started
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+            })()}
+          </div>
+
+          {/* Custom note */}
+          <p className="text-center text-[#6e6e73] mt-8 text-sm">
+            Need something different? Every package can be customized to fit your brand.{' '}
+            <button onClick={() => openInquiry('Custom Package')} className="text-[#003e79] font-semibold hover:underline">
+              Contact us
+            </button>{' '}
+            to discuss.
+          </p>
+        </div>
+      )}
 
       {/* Why Partner With Us */}
       <div className="bg-white py-16">
