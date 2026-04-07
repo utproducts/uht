@@ -439,14 +439,17 @@ scoringRoutes.get('/events/:eventId/live', async (c) => {
     LEFT JOIN venues v ON v.id = g.venue_id
     LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
     WHERE g.event_id = ?
-    AND (g.status IN ('in_progress', 'intermission', 'warmup')
-         OR (g.status = 'final' AND g.updated_at >= datetime('now', '-2 hours')))
+    AND (g.status IN ('in_progress', 'intermission', 'warmup', 'delayed')
+         OR (g.status = 'final' AND g.updated_at >= datetime('now', '-2 hours'))
+         OR (g.status = 'scheduled' AND g.delay_minutes > 0))
     ORDER BY
       CASE g.status
-        WHEN 'in_progress' THEN 0
-        WHEN 'intermission' THEN 1
-        WHEN 'warmup' THEN 2
-        WHEN 'final' THEN 3
+        WHEN 'delayed' THEN 0
+        WHEN 'in_progress' THEN 1
+        WHEN 'intermission' THEN 2
+        WHEN 'warmup' THEN 3
+        WHEN 'scheduled' THEN 4
+        WHEN 'final' THEN 5
       END,
       g.start_time ASC
   `).bind(eventId).all();
@@ -476,6 +479,74 @@ scoringRoutes.get('/events/:eventId/live', async (c) => {
       shots: shotsByGame[g.id] || [],
     })),
   });
+});
+
+// ==========================================
+// PUBLIC: Full schedule with delay cascade info
+// ==========================================
+scoringRoutes.get('/events/:eventId/schedule', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  const games = await db.prepare(`
+    SELECT g.id, g.game_number, g.start_time, g.end_time, g.game_type, g.pool_name,
+      g.home_score, g.away_score, g.period, g.status, g.delay_minutes, g.delay_note,
+      g.checked_in_at, g.rink_id, g.is_overtime, g.is_shootout,
+      ht.name as home_team_name, at2.name as away_team_name,
+      vr.name as rink_name, v.name as venue_name,
+      ed.age_group, ed.division_level,
+      glr_home.name as home_locker_room, glr_away.name as away_locker_room
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    LEFT JOIN game_locker_rooms glr_h ON glr_h.game_id = g.id AND glr_h.team_id = g.home_team_id
+    LEFT JOIN locker_rooms glr_home ON glr_home.id = glr_h.locker_room_id
+    LEFT JOIN game_locker_rooms glr_a ON glr_a.game_id = g.id AND glr_a.team_id = g.away_team_id
+    LEFT JOIN locker_rooms glr_away ON glr_away.id = glr_a.locker_room_id
+    WHERE g.event_id = ? AND g.status != 'cancelled'
+    ORDER BY g.start_time ASC, vr.name ASC
+  `).bind(eventId).all();
+
+  // Calculate cascading delays per rink
+  const gamesList = (games.results || []) as any[];
+  const rinkDelays: Record<string, number> = {}; // rinkId -> accumulated delay minutes
+
+  const enriched = gamesList.map((g: any) => {
+    const rinkKey = g.rink_id || 'unknown';
+
+    // If this game itself is delayed, set/update the rink delay
+    if (g.delay_minutes > 0) {
+      rinkDelays[rinkKey] = Math.max(rinkDelays[rinkKey] || 0, g.delay_minutes);
+    }
+
+    // If a game on this rink is final or in_progress, it's caught up — reduce cascaded delay
+    if (g.status === 'final' || g.status === 'in_progress') {
+      // Once a game is actively playing or done, we assume the rink is back on track
+      // unless this specific game has its own delay
+      if (!g.delay_minutes || g.delay_minutes === 0) {
+        rinkDelays[rinkKey] = 0;
+      }
+    }
+
+    const cascadedDelay = rinkDelays[rinkKey] || 0;
+    let adjustedStartTime = g.start_time;
+    if (cascadedDelay > 0 && g.status === 'scheduled') {
+      const original = new Date(g.start_time);
+      original.setMinutes(original.getMinutes() + cascadedDelay);
+      adjustedStartTime = original.toISOString();
+    }
+
+    return {
+      ...g,
+      cascaded_delay_minutes: cascadedDelay,
+      adjusted_start_time: adjustedStartTime,
+    };
+  });
+
+  return c.json({ success: true, data: enriched });
 });
 
 // ==========================================

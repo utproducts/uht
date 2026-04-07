@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { name: 'Financials', href: '/admin/financials' },
   { name: 'Communications', href: '/admin/comms' },
   { name: 'Hotels', href: '/admin/hotels' },
+  { name: 'Venues', href: '/admin/venues' },
   { name: 'Sponsors', href: '/admin/sponsors' },
   { name: 'Book Ice', href: '/admin/ice' },
   { name: 'Settings', href: '/admin/settings' },

@@ -119,7 +119,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   onSaved: () => void;
 }) {
   const isEdit = !!event;
-  const [activeTab, setActiveTab] = useState<'details' | 'hotels'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'hotels' | 'directors'>('details');
   const [form, setForm] = useState({
     name: event?.name || '',
     city: event?.city || '',
@@ -159,6 +159,14 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const [addingHotel, setAddingHotel] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
 
+  // Directors state
+  const [directors, setDirectors] = useState<any[]>([]);
+  const [directorOptions, setDirectorOptions] = useState<any[]>([]);
+  const [loadingDirectors, setLoadingDirectors] = useState(false);
+  const [loadingDirectorOptions, setLoadingDirectorOptions] = useState(false);
+  const [selectedDirectorId, setSelectedDirectorId] = useState('');
+  const [assigningDirector, setAssigningDirector] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -184,6 +192,32 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       }).catch(() => setLoadingSuggestions(false));
     }
   }, [activeTab, isEdit, event?.id]);
+
+  // Load directors when directors tab opens
+  useEffect(() => {
+    if (activeTab === 'directors' && isEdit && event?.id) {
+      setLoadingDirectors(true);
+      fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
+        headers: { 'X-Dev-Bypass': 'true' }
+      }).then(r => r.json()).then(json => {
+        if (json.success) setDirectors(json.data);
+        setLoadingDirectors(false);
+      }).catch(() => setLoadingDirectors(false));
+    }
+  }, [activeTab, isEdit, event?.id]);
+
+  // Load director options when directors tab opens
+  useEffect(() => {
+    if (activeTab === 'directors' && directorOptions.length === 0) {
+      setLoadingDirectorOptions(true);
+      fetch(`https://uht.chad-157.workers.dev/api/users?role=director`, {
+        headers: { 'X-Dev-Bypass': 'true' }
+      }).then(r => r.json()).then(json => {
+        if (json.success) setDirectorOptions(json.data);
+        setLoadingDirectorOptions(false);
+      }).catch(() => setLoadingDirectorOptions(false));
+    }
+  }, [activeTab]);
 
   const toggleArrayItem = (field: 'age_groups' | 'divisions', item: string) => {
     setForm(prev => ({
@@ -239,6 +273,35 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
         if (linked && (linked as any).master_hotel_id === h.id) return { ...h, already_linked: false };
         return h;
       }));
+    } catch (e) { /* ignore */ }
+  };
+
+  const handleAssignDirector = async () => {
+    if (!selectedDirectorId || !event?.id) return;
+    setAssigningDirector(true);
+    try {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        body: JSON.stringify({ user_id: selectedDirectorId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setDirectors(prev => [...prev, json.data]);
+        setSelectedDirectorId('');
+      }
+    } catch (e) { /* ignore */ }
+    setAssigningDirector(false);
+  };
+
+  const handleRemoveDirector = async (directorId: string) => {
+    if (!event?.id) return;
+    try {
+      await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors/${directorId}`, {
+        method: 'DELETE',
+        headers: { 'X-Dev-Bypass': 'true' }
+      });
+      setDirectors(prev => prev.filter(d => d.id !== directorId || d.user_id !== directorId));
     } catch (e) { /* ignore */ }
   };
 
@@ -322,10 +385,16 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
               Event Details
             </button>
             {isEdit && (
-              <button onClick={() => setActiveTab('hotels')}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'hotels' ? 'bg-cyan-600 text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
-                Hotels ({hotels.length})
-              </button>
+              <>
+                <button onClick={() => setActiveTab('hotels')}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'hotels' ? 'bg-cyan-600 text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
+                  Hotels ({hotels.length})
+                </button>
+                <button onClick={() => setActiveTab('directors')}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'directors' ? 'bg-cyan-600 text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
+                  Directors ({directors.length})
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -523,6 +592,63 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 <textarea value={form.information} onChange={e => setForm({ ...form, information: e.target.value })}
                   rows={3} placeholder="e.g. Mite-Midget: AA, A, B, C, D, House. 4 game guarantee!"
                   className={inputCls + ' resize-none'} />
+              </div>
+            </>
+          )}
+
+          {activeTab === 'directors' && (
+            <>
+              {/* Assigned Directors for this Event */}
+              <div>
+                <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Event Directors ({directors.length})</p>
+                {loadingDirectors ? (
+                  <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>
+                ) : directors.length > 0 ? (
+                  <div className="space-y-2 mb-4">
+                    {directors.map((d) => (
+                      <div key={d.id || d.user_id} className="flex items-center gap-3 bg-white rounded-xl p-3 border border-[#e8e8ed] shadow-sm">
+                        <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center shrink-0">
+                          <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-[#1d1d1f]">{d.name || d.email}</p>
+                          {d.email && <p className="text-xs text-[#86868b]">{d.email}</p>}
+                        </div>
+                        <button onClick={() => handleRemoveDirector(d.id || d.user_id)} className="p-1.5 hover:bg-red-50 rounded-lg transition text-red-400 hover:text-red-600 shrink-0" title="Remove director">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-[#f5f5f7] rounded-xl p-5 text-center text-sm border border-dashed border-[#e8e8ed] mb-4">
+                    <p className="text-[#86868b]">No directors assigned to this event yet</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Director */}
+              <div>
+                <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Assign Director</p>
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-[#3d3d3d] mb-1">Select Director</label>
+                    {loadingDirectorOptions ? (
+                      <div className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl bg-[#fafafa] text-sm text-[#86868b]">Loading...</div>
+                    ) : (
+                      <select value={selectedDirectorId} onChange={e => setSelectedDirectorId(e.target.value)} className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-cyan-500 outline-none">
+                        <option value="">-- Choose a director --</option>
+                        {directorOptions.map(d => (
+                          <option key={d.id} value={d.id}>{d.name || d.email}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <button onClick={handleAssignDirector} disabled={!selectedDirectorId || assigningDirector || loadingDirectorOptions}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    {assigningDirector ? 'Adding...' : 'Add Director'}
+                  </button>
+                </div>
               </div>
             </>
           )}

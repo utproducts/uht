@@ -33,7 +33,7 @@ interface LiveGame {
   id: string;
   game_number: number;
   game_type: string;
-  status: 'live' | 'intermission' | 'final' | 'scheduled';
+  status: 'live' | 'intermission' | 'final' | 'scheduled' | 'delayed' | 'warmup' | 'in_progress';
   home_team_id: string;
   away_team_id: string;
   home_team_name: string;
@@ -45,6 +45,12 @@ interface LiveGame {
   rink_name: string;
   age_group: string;
   division_level: string;
+  delay_minutes?: number;
+  delay_note?: string;
+  cascaded_delay_minutes?: number;
+  adjusted_start_time?: string;
+  home_locker_room?: string;
+  away_locker_room?: string;
   goals?: Goal[];
   shots?: Shot[];
 }
@@ -77,7 +83,7 @@ interface StatusBadgeProps {
 function StatusBadge({ status }: StatusBadgeProps) {
   const statusLower = status.toLowerCase();
 
-  if (statusLower === 'live') {
+  if (statusLower === 'live' || statusLower === 'in_progress') {
     return (
       <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg">
         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
@@ -90,6 +96,22 @@ function StatusBadge({ status }: StatusBadgeProps) {
     return (
       <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-lg">
         <span className="text-xs font-semibold text-yellow-700 uppercase tracking-widest">Intermission</span>
+      </div>
+    );
+  }
+
+  if (statusLower === 'delayed') {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+        <span className="text-xs font-semibold text-amber-700 uppercase tracking-widest">Delayed</span>
+      </div>
+    );
+  }
+
+  if (statusLower === 'warmup') {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+        <span className="text-xs font-semibold text-blue-700 uppercase tracking-widest">Warmup</span>
       </div>
     );
   }
@@ -184,7 +206,7 @@ function GameCard({ game }: GameCardProps) {
             <span className="text-xs text-[#86868b] uppercase tracking-widest font-semibold">
               {game.status === 'final' ? 'Final' : `P${game.period}`}
             </span>
-            {game.status === 'live' && (
+            {(game.status === 'live' || game.status === 'in_progress') && (
               <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
             )}
           </div>
@@ -197,12 +219,37 @@ function GameCard({ game }: GameCardProps) {
         </div>
       </div>
 
+      {/* Delay banner */}
+      {(game.delay_minutes && game.delay_minutes > 0 || game.cascaded_delay_minutes && game.cascaded_delay_minutes > 0) && (
+        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 flex items-center gap-2">
+          <span className="text-amber-600 text-sm">⚠️</span>
+          <span className="text-xs font-semibold text-amber-700">
+            {game.delay_minutes && game.delay_minutes > 0
+              ? `Delayed ${game.delay_minutes} min`
+              : `Est. ${game.cascaded_delay_minutes} min delay (cascaded)`}
+          </span>
+          {game.delay_note && (
+            <span className="text-xs text-amber-600 ml-1">— {game.delay_note}</span>
+          )}
+          {game.adjusted_start_time && game.adjusted_start_time !== game.start_time && (
+            <span className="text-xs text-amber-700 ml-auto font-medium">
+              Est. {formatTime(game.adjusted_start_time)}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Rink and time info */}
       <div className="px-4 py-3 border-t border-[#e8e8ed] bg-gray-50">
         <p className="text-xs text-[#86868b] mb-1">
           <span className="uppercase tracking-widest font-semibold">{game.rink_name}</span>
         </p>
-        <p className="text-xs text-[#3d3d3d]">{formatTime(game.start_time)}</p>
+        <p className="text-xs text-[#3d3d3d]">
+          {formatTime(game.start_time)}
+          {game.adjusted_start_time && game.adjusted_start_time !== game.start_time && (
+            <span className="ml-2 text-amber-600 line-through">{formatTime(game.start_time)}</span>
+          )}
+        </p>
       </div>
 
       {/* Expanded details */}
