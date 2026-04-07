@@ -69,56 +69,61 @@ const sendSmsSchema = z.object({
 });
 
 smsRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zValidator('json', sendSmsSchema), async (c) => {
-  const data = c.req.valid('json');
-  const user = c.get('user') as any;
-  const db = c.env.DB;
-  const env = c.env;
-
-  let convoId = data.conversationId;
-  let phone = data.phone;
-
-  // If conversation exists, get the phone number
-  if (convoId) {
-    const convo = await db.prepare('SELECT phone_number FROM sms_conversations WHERE id = ?').bind(convoId).first<{ phone_number: string }>();
-    if (convo) phone = convo.phone_number;
-  }
-
-  if (!phone) {
-    return c.json({ success: false, error: 'Phone number required' }, 400);
-  }
-
-  // Normalize phone
-  const cleanPhone = normalizePhone(phone);
-
-  // Create conversation if needed
-  if (!convoId) {
-    const resolved = await resolveContact(db, cleanPhone);
-    convoId = crypto.randomUUID().replace(/-/g, '');
-    await db.prepare(`
-      INSERT INTO sms_conversations (id, contact_id, phone_number, contact_name, last_message_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
-    `).bind(convoId, resolved.contactId, cleanPhone, resolved.displayName).run();
-  }
-
-  // Send via Twilio
-  let twilioMessageId: string | null = null;
   try {
-    twilioMessageId = await sendTwilioSms(env, cleanPhone, data.message);
-  } catch (err) {
-    console.error('Twilio error:', err);
-    // Still save the message locally even if Twilio fails (for dev/testing)
+    const data = c.req.valid('json');
+    const user = c.get('user') as any;
+    const db = c.env.DB;
+    const env = c.env;
+
+    let convoId = data.conversationId;
+    let phone = data.phone;
+
+    // If conversation exists, get the phone number
+    if (convoId) {
+      const convo = await db.prepare('SELECT phone_number FROM sms_conversations WHERE id = ?').bind(convoId).first<{ phone_number: string }>();
+      if (convo) phone = convo.phone_number;
+    }
+
+    if (!phone) {
+      return c.json({ success: false, error: 'Phone number required' }, 400);
+    }
+
+    // Normalize phone
+    const cleanPhone = normalizePhone(phone);
+
+    // Create conversation if needed
+    if (!convoId) {
+      const resolved = await resolveContact(db, cleanPhone);
+      convoId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO sms_conversations (id, contact_id, phone_number, contact_name, last_message_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+      `).bind(convoId, resolved.contactId, cleanPhone, resolved.displayName).run();
+    }
+
+    // Send via Twilio
+    let twilioMessageId: string | null = null;
+    try {
+      twilioMessageId = await sendTwilioSms(env, cleanPhone, data.message);
+    } catch (err: any) {
+      console.error('Twilio error:', err?.message || err);
+      // Still save the message locally even if Twilio fails (for dev/testing)
+    }
+
+    // Save message
+    const msgId = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO sms_messages (id, conversation_id, direction, body, textmagic_message_id, status, sent_by)
+      VALUES (?, ?, 'outbound', ?, ?, ?, ?)
+    `).bind(msgId, convoId, data.message, twilioMessageId, twilioMessageId ? 'sent' : 'queued', user.id).run();
+
+    await db.prepare("UPDATE sms_conversations SET last_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(convoId).run();
+
+    return c.json({ success: true, data: { messageId: msgId, conversationId: convoId } });
+  } catch (err: any) {
+    console.error('SMS send error:', err);
+    return c.json({ success: false, error: err?.message || 'Failed to send message' }, 500);
   }
-
-  // Save message
-  const msgId = crypto.randomUUID().replace(/-/g, '');
-  await db.prepare(`
-    INSERT INTO sms_messages (id, conversation_id, direction, body, textmagic_message_id, status, sent_by)
-    VALUES (?, ?, 'outbound', ?, ?, ?, ?)
-  `).bind(msgId, convoId, data.message, twilioMessageId, twilioMessageId ? 'sent' : 'queued', user.id).run();
-
-  await db.prepare("UPDATE sms_conversations SET last_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(convoId).run();
-
-  return c.json({ success: true, data: { messageId: msgId, conversationId: convoId } });
 });
 
 // ==================
