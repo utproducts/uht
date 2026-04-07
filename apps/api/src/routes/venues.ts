@@ -17,6 +17,14 @@ venueRoutes.get('/', async (c) => {
   return c.json({ success: true, data: result.results });
 });
 
+// Get rinks for a venue (used by schedule builder)
+venueRoutes.get('/:id/rinks', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+  const rinks = await db.prepare('SELECT * FROM venue_rinks WHERE venue_id = ? ORDER BY name ASC').bind(id).all();
+  return c.json({ success: true, data: rinks.results });
+});
+
 // Get venue with rinks
 venueRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');

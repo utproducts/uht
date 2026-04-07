@@ -607,7 +607,7 @@ function ScheduleMatrix({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {bracketGames
               .sort((a, b) => {
-                const order = ['semifinal', 'championship', 'consolation', 'placement'];
+                const order = ['semifinal', 'quarterfinal', 'placement', 'consolation', 'championship'];
                 return order.indexOf(a.game_type) - order.indexOf(b.game_type);
               })
               .map(game => (

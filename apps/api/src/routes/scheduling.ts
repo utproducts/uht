@@ -743,47 +743,45 @@ function generateBracketGames(pools: Pool[], totalTeams: number): BracketGame[] 
   }
 
   if (totalTeams === 4) {
-    // Single pool: 1v2 championship, 3v4 consolation
-    brackets.push({ gameType: 'championship', label: '1st vs 2nd — Championship' });
+    // Single pool: consolation first, then championship last
     brackets.push({ gameType: 'consolation', label: '3rd vs 4th — Consolation' });
+    brackets.push({ gameType: 'championship', label: '1st vs 2nd — Championship' });
     return brackets;
   }
 
   if (totalTeams === 5) {
-    // Cross-pool brackets based on combined standings
-    brackets.push({ gameType: 'championship', label: '1st vs 2nd — Championship' });
-    brackets.push({ gameType: 'consolation', label: '3rd vs 4th — Consolation' });
+    // Placement & consolation first, championship last
     brackets.push({ gameType: 'placement', label: '5th Place Game' });
+    brackets.push({ gameType: 'consolation', label: '3rd vs 4th — Consolation' });
+    brackets.push({ gameType: 'championship', label: '1st vs 2nd — Championship' });
     return brackets;
   }
 
   if (totalTeams === 6) {
-    // Cross-pool brackets: 1G vs 2B, 1B vs 2G (semis), then finals
-    // From Bible: 1gV2g (within gold playoff), 1bV2b (within blue playoff), 3gV3b (consolation)
-    // Actually from Bible: cross-pool — 1G vs 2B, 1B vs 2G for championship bracket
+    // Cross-pool brackets: semis first, then consolation, then championship last
     brackets.push({ gameType: 'semifinal', label: '1G vs 2B — Semifinal' });
     brackets.push({ gameType: 'semifinal', label: '1B vs 2G — Semifinal' });
-    brackets.push({ gameType: 'championship', label: 'Winners — Championship' });
     brackets.push({ gameType: 'consolation', label: '3G vs 3B — Consolation' });
+    brackets.push({ gameType: 'championship', label: 'Winners — Championship' });
     return brackets;
   }
 
   if (totalTeams === 7) {
     brackets.push({ gameType: 'semifinal', label: '1G vs 2B — Semifinal' });
     brackets.push({ gameType: 'semifinal', label: '1B vs 2G — Semifinal' });
-    brackets.push({ gameType: 'championship', label: 'Winners — Championship' });
     brackets.push({ gameType: 'consolation', label: 'Losers — Consolation' });
+    brackets.push({ gameType: 'championship', label: 'Winners — Championship' });
     return brackets;
   }
 
   if (totalTeams === 8) {
-    // 2 pools of 4, cross-pool brackets
+    // 2 pools of 4: semis → placement → consolation → championship (always last)
     brackets.push({ gameType: 'semifinal', label: '1G vs 2B — Semifinal' });
     brackets.push({ gameType: 'semifinal', label: '1B vs 2G — Semifinal' });
-    brackets.push({ gameType: 'championship', label: 'Winners — Championship' });
-    brackets.push({ gameType: 'consolation', label: 'Losers — 3rd Place' });
-    brackets.push({ gameType: 'placement', label: '3G vs 3B — 5th Place' });
     brackets.push({ gameType: 'placement', label: '4G vs 4B — 7th Place' });
+    brackets.push({ gameType: 'placement', label: '3G vs 3B — 5th Place' });
+    brackets.push({ gameType: 'consolation', label: 'Losers — 3rd Place' });
+    brackets.push({ gameType: 'championship', label: 'Winners — Championship' });
     return brackets;
   }
 
