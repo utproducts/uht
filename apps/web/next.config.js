@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
@@ -12,8 +13,9 @@ const nextConfig = {
       },
     ],
   },
-  // For Cloudflare Pages deployment
-  output: 'standalone',
+  // Static export for Cloudflare Pages
+  output: 'export',
+  trailingSlash: true,
 };
 
 module.exports = nextConfig;

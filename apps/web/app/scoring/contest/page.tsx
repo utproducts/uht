@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
-export default function ContestPage() {
-  const params = useParams();
-  const gameId = params.gameId as string;
+function ContestPageInner() {
+  const searchParams = useSearchParams();
+  const gameId = searchParams.get('gameId') || '';
 
   const [game, setGame] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -20,6 +20,7 @@ export default function ContestPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!gameId) { setLoading(false); return; }
     fetch(`${API_BASE}/scoring/games/${gameId}`)
       .then(r => r.json())
       .then(json => {
@@ -211,5 +212,17 @@ export default function ContestPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function ContestPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+        <div className="animate-pulse text-[#86868b]">Loading...</div>
+      </div>
+    }>
+      <ContestPageInner />
+    </Suspense>
   );
 }

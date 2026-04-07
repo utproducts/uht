@@ -605,7 +605,7 @@ async function notifyCoachesOnFinal(db: D1Database, env: Env, gameId: string) {
   if (coachPhones.length === 0) return;
 
   // Build the contest URL
-  const contestUrl = `https://uht-web.pages.dev/scoring/contest/${gameId}`;
+  const contestUrl = `https://uht-web.pages.dev/scoring/contest/?gameId=${gameId}`;
 
   for (const coach of coachPhones) {
     const message = `🏒 FINAL SCORE — ${game.age_group} ${game.division_level}\n` +

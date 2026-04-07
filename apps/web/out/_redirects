@@ -1,0 +1,2 @@
+# Serve the events detail page for any event slug
+/events/*  /events/_/index.html  200
