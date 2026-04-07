@@ -22,7 +22,7 @@ interface Slot {
   rink_name: string;
 }
 
-// âââ Calendar Component âââââââââââââââââââââââââââââââââââââââââ
+// Calendar Component
 function Calendar({
   selectedDate,
   onSelectDate,
@@ -57,17 +57,17 @@ function Calendar({
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
       {/* header */}
       <div className="flex items-center justify-between mb-4">
-        <button onClick={prev} className="p-2 rounded-full hover:bg-gray-100 transition">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <button onClick={prev} className="p-2 rounded-full hover:bg-[#f5f5f7] transition">
+          <svg className="w-5 h-5 text-[#1d1d1f]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h3 className="text-lg font-bold text-gray-900">{monthLabel}</h3>
-        <button onClick={next} className="p-2 rounded-full hover:bg-gray-100 transition">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <h3 className="text-lg font-bold text-[#1d1d1f]">{monthLabel}</h3>
+        <button onClick={next} className="p-2 rounded-full hover:bg-[#f5f5f7] transition">
+          <svg className="w-5 h-5 text-[#1d1d1f]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </button>
@@ -75,7 +75,7 @@ function Calendar({
       {/* day headers */}
       <div className="grid grid-cols-7 mb-1">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-          <div key={d} className="text-center text-xs font-semibold text-gray-500 py-1">
+          <div key={d} className="text-center text-xs font-semibold text-[#86868b] py-1">
             {d}
           </div>
         ))}
@@ -100,17 +100,17 @@ function Calendar({
               disabled={!hasSlots}
               onClick={() => onSelectDate(dateStr)}
               className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-sm transition
-                ${isSelected ? 'bg-cyan-600 text-white font-bold shadow-md' : ''}
-                ${hasAvailable && !isSelected ? 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 font-medium cursor-pointer' : ''}
+                ${isSelected ? 'bg-[#003e79] text-white font-bold shadow-md' : ''}
+                ${hasAvailable && !isSelected ? 'bg-[#f0f7ff] text-[#003e79] hover:bg-[#e0efff] font-medium cursor-pointer' : ''}
                 ${isSoldOut && !isSelected ? 'bg-red-50 text-red-400 cursor-pointer' : ''}
-                ${!hasSlots ? 'text-gray-300 cursor-default' : ''}
+                ${!hasSlots ? 'text-[#86868b] cursor-default' : ''}
               `}
             >
               {day}
               {hasSlots && (
                 <span className={`text-[10px] leading-none ${
-                  isSelected ? 'text-cyan-100' :
-                  isSoldOut ? 'text-red-400' : 'text-cyan-500'
+                  isSelected ? 'text-white' :
+                  isSoldOut ? 'text-red-400' : 'text-[#003e79]'
                 }`}>
                   {isSoldOut ? 'Full' : `${avail} left`}
                 </span>
@@ -123,7 +123,7 @@ function Calendar({
   );
 }
 
-// âââ Time Slot Picker âââââââââââââââââââââââââââââââââââââââââââ
+// Time Slot Picker
 function TimeSlotPicker({
   slots,
   selectedSlot,
@@ -137,14 +137,14 @@ function TimeSlotPicker({
 }) {
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center justify-center min-h-[120px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600" />
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 flex items-center justify-center min-h-[120px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" />
       </div>
     );
   }
   if (slots.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 text-center text-gray-500">
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 text-center text-[#6e6e73]">
         No time slots for this date.
       </div>
     );
@@ -161,12 +161,12 @@ function TimeSlotPicker({
   const takenSlots = slots.filter((s) => s.status !== 'available');
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-gray-900">Select a Time</h3>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 inline-block" /> Available ({availableSlots.length})</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> Booked ({takenSlots.length})</span>
+        <h3 className="text-lg font-bold text-[#1d1d1f]">Select a Time</h3>
+        <div className="flex items-center gap-3 text-xs text-[#6e6e73]">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Available ({availableSlots.length})</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#d0d0d5] inline-block" /> Booked ({takenSlots.length})</span>
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -178,18 +178,18 @@ function TimeSlotPicker({
               key={slot.id}
               disabled={isTaken}
               onClick={() => !isTaken && onSelect(slot)}
-              className={`p-3 rounded-xl border-2 text-center transition relative
-                ${isTaken ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60' : ''}
-                ${selected ? 'border-cyan-600 bg-cyan-50 shadow-md' : ''}
-                ${!isTaken && !selected ? 'border-gray-200 hover:border-cyan-300 hover:bg-gray-50' : ''}
+              className={`p-3 rounded-xl border transition relative
+                ${isTaken ? 'border-[#e8e8ed] bg-[#f5f5f7] cursor-not-allowed opacity-60' : ''}
+                ${selected ? 'border-[#003e79] bg-[#f0f7ff] shadow-md' : ''}
+                ${!isTaken && !selected ? 'border-[#e8e8ed] hover:border-[#003e79]/30 hover:bg-[#f5f5f7]' : ''}
               `}
             >
-              <div className={`font-bold ${isTaken ? 'text-gray-400' : selected ? 'text-cyan-700' : 'text-gray-900'}`}>
+              <div className={`font-bold ${isTaken ? 'text-[#86868b]' : selected ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>
                 {fmt(slot.start_time)}
               </div>
-              <div className={`text-xs ${isTaken ? 'text-gray-300' : 'text-gray-500'}`}>to {fmt(slot.end_time)}</div>
+              <div className={`text-xs ${isTaken ? 'text-[#d0d0d5]' : 'text-[#6e6e73]'}`}>to {fmt(slot.end_time)}</div>
               {isTaken ? (
-                <div className="text-xs font-semibold text-red-400 mt-1">Booked</div>
+                <div className="text-xs font-semibold text-red-500 mt-1">Booked</div>
               ) : (
                 <div className="text-sm font-semibold text-green-600 mt-1">${(slot.price_cents / 100).toFixed(0)}</div>
               )}
@@ -201,7 +201,7 @@ function TimeSlotPicker({
   );
 }
 
-// âââ Booking Form âââââââââââââââââââââââââââââââââââââââââââââââ
+// Booking Form
 function BookingForm({
   slot,
   onBack,
@@ -266,8 +266,8 @@ function BookingForm({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
-      <button onClick={onBack} className="text-cyan-600 hover:text-cyan-800 text-sm font-medium mb-4 flex items-center gap-1">
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
+      <button onClick={onBack} className="text-[#003e79] hover:text-[#002d5a] text-sm font-medium mb-4 flex items-center gap-1">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
@@ -275,16 +275,16 @@ function BookingForm({
       </button>
 
       {/* Order Summary */}
-      <div className="bg-gray-50 rounded-xl p-4 mb-6">
-        <h4 className="font-bold text-gray-900 mb-2">Booking Summary</h4>
-        <div className="space-y-1 text-sm text-gray-700">
+      <div className="bg-[#f5f5f7] rounded-xl p-4 mb-6">
+        <h4 className="font-bold text-[#1d1d1f] mb-2">Booking Summary</h4>
+        <div className="space-y-1 text-sm text-[#3d3d3d]">
           <div className="flex justify-between">
             <span>Date</span>
             <span className="font-medium">{dateLabel}</span>
           </div>
           <div className="flex justify-between">
             <span>Time</span>
-            <span className="font-medium">{fmt(slot.start_time)} â {fmt(slot.end_time)}</span>
+            <span className="font-medium">{fmt(slot.start_time)} – {fmt(slot.end_time)}</span>
           </div>
           <div className="flex justify-between">
             <span>Duration</span>
@@ -294,8 +294,8 @@ function BookingForm({
             <span>Location</span>
             <span className="font-medium">Rosemont Outdoor Rink</span>
           </div>
-          <hr className="my-2" />
-          <div className="flex justify-between text-base font-bold text-gray-900">
+          <hr className="my-2 border-[#e8e8ed]" />
+          <div className="flex justify-between text-base font-bold text-[#1d1d1f]">
             <span>Total</span>
             <span>${(slot.price_cents / 100).toFixed(0)}</span>
           </div>
@@ -305,44 +305,44 @@ function BookingForm({
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+          <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Full Name *</label>
           <input
             type="text"
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+            className="w-full px-4 py-2.5 border border-[#e8e8ed] rounded-xl focus:ring-2 focus:ring-[#003e79]/20 outline-none"
             placeholder="John Smith"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+          <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Email Address *</label>
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+            className="w-full px-4 py-2.5 border border-[#e8e8ed] rounded-xl focus:ring-2 focus:ring-[#003e79]/20 outline-none"
             placeholder="john@example.com"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+          <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Phone Number *</label>
           <input
             type="tel"
             required
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+            className="w-full px-4 py-2.5 border border-[#e8e8ed] rounded-xl focus:ring-2 focus:ring-[#003e79]/20 outline-none"
             placeholder="(555) 123-4567"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Rental</label>
+          <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Reason for Rental</label>
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none bg-white"
+            className="w-full px-4 py-2.5 border border-[#e8e8ed] rounded-xl focus:ring-2 focus:ring-[#003e79]/20 outline-none bg-white"
           >
             <option value="">Select a reason (optional)</option>
             <option value="Hockey Practice">Hockey Practice</option>
@@ -357,17 +357,17 @@ function BookingForm({
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
+          <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm border border-red-200">{error}</div>
         )}
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-3 px-6 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-400 text-white font-bold rounded-xl transition shadow-lg text-lg"
+          className="w-full py-3 px-6 bg-[#003e79] hover:bg-[#002d5a] disabled:bg-[#d0d0d5] text-white font-bold rounded-full transition shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] text-lg"
         >
           {submitting ? 'Processing...' : 'Continue to Payment'}
         </button>
-        <p className="text-xs text-gray-500 text-center">
+        <p className="text-xs text-[#86868b] text-center">
           You will be redirected to Stripe for secure payment processing.
         </p>
       </form>
@@ -375,7 +375,7 @@ function BookingForm({
   );
 }
 
-// âââ Main Page ââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Main Page
 export default function BookIcePage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [availableDates, setAvailableDates] = useState<Record<string, { available: number; total: number }>>({});
@@ -439,27 +439,28 @@ export default function BookIcePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-[#fafafa]">
       {/* Hero Section */}
-      <div className="relative py-16 sm:py-24">
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-cyan-900/40 to-blue-900/40" />
-        </div>
+      <div className="relative overflow-hidden py-20">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#003e79] via-[#005599] to-[#00ccff]"></div>
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#005599]/30 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#00ccff]/20 rounded-full blur-3xl"></div>
+
         <div className="relative max-w-4xl mx-auto px-4 text-center">
           <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-4">
             Book Ice Time
           </h1>
-          <p className="text-xl text-cyan-100 max-w-2xl mx-auto">
+          <p className="text-xl text-white/90 max-w-2xl mx-auto">
             Reserve your ice time at the Rosemont Outdoor Rink. Select a date, choose your time slot, and book online.
           </p>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 pb-20 -mt-8">
+      <div className="max-w-4xl mx-auto px-4 pb-20 -mt-12 relative z-10">
         {/* Cancelled banner */}
         {cancelled && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl mb-6 text-center">
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-2xl mb-6 text-center">
             Payment was cancelled. Your time slot has been released. Feel free to try again!
           </div>
         )}
@@ -482,20 +483,20 @@ export default function BookIcePage() {
 
         {/* Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12">
-          <div className="bg-white/10 backdrop-blur rounded-xl p-5 text-center">
-            <div className="text-3xl mb-2">â±ï¸</div>
-            <h4 className="font-bold text-white mb-1">1-Hour Sessions</h4>
-            <p className="text-sm text-gray-300">Each rental is a full 60-minute ice session</p>
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 text-center">
+            <div className="text-3xl mb-2">⏱️</div>
+            <h4 className="font-bold text-[#1d1d1f] mb-1">1-Hour Sessions</h4>
+            <p className="text-sm text-[#6e6e73]">Each rental is a full 60-minute ice session</p>
           </div>
-          <div className="bg-white/10 backdrop-blur rounded-xl p-5 text-center">
-            <div className="text-3xl mb-2">ð</div>
-            <h4 className="font-bold text-white mb-1">Rosemont, IL</h4>
-            <p className="text-sm text-gray-300">Outdoor rink in the heart of Rosemont</p>
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 text-center">
+            <div className="text-3xl mb-2">📍</div>
+            <h4 className="font-bold text-[#1d1d1f] mb-1">Rosemont, IL</h4>
+            <p className="text-sm text-[#6e6e73]">Outdoor rink in the heart of Rosemont</p>
           </div>
-          <div className="bg-white/10 backdrop-blur rounded-xl p-5 text-center">
-            <div className="text-3xl mb-2">ð</div>
-            <h4 className="font-bold text-white mb-1">Secure Payment</h4>
-            <p className="text-sm text-gray-300">All payments processed securely via Stripe</p>
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 text-center">
+            <div className="text-3xl mb-2">🔒</div>
+            <h4 className="font-bold text-[#1d1d1f] mb-1">Secure Payment</h4>
+            <p className="text-sm text-[#6e6e73]">All payments processed securely via Stripe</p>
           </div>
         </div>
       </div>

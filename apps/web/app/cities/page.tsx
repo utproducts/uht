@@ -82,16 +82,14 @@ const CITIES = [
 ];
 export default function CitiesPage() {
   return (
-    <div className="min-h-screen bg-[#f5f5f7]">
+    <div className="min-h-screen bg-[#fafafa]">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-navy-700">
-        <div className="absolute inset-0">
-          <img
-            src="https://images.unsplash.com/photo-1515703407324-5f753afd8be8?w=1920&q=80"
-            alt=""
-            className="w-full h-full object-cover opacity-25"
-          />
-        </div>
+      <section className="relative overflow-hidden bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff]">
+        {/* Soft blurred orbs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#00ccff] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
+        <div className="absolute top-1/2 right-1/4 w-96 h-96 bg-[#003e79] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
+        <div className="absolute -bottom-8 right-1/3 w-96 h-96 bg-[#005599] rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000" />
+
         <div className="section py-16 sm:py-20 text-center relative z-10">
           <h1
             className={
@@ -99,23 +97,37 @@ export default function CitiesPage() {
               ' text-4xl sm:text-5xl lg:text-6xl font-bold uppercase tracking-tight text-white'
             }
           >
-            Our <span className="text-brand-400">Cities.</span>
+            Our <span className="text-[#00ccff]">Cities.</span>
           </h1>
-          <p className="mt-4 text-lg text-white/70 max-w-2xl mx-auto">
+          <p className="mt-4 text-lg text-white/80 max-w-2xl mx-auto">
             Premier youth and adult hockey tournaments in the best hockey markets across the Midwest.
           </p>
+        </div>
+
+        {/* Curved SVG bottom edge */}
+        <div className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 bg-[#fafafa]">
+          <svg
+            viewBox="0 0 1200 120"
+            preserveAspectRatio="none"
+            className="w-full h-full"
+          >
+            <path
+              d="M0,50 Q300,0 600,50 T1200,50 L1200,120 L0,120 Z"
+              fill="#fafafa"
+            />
+          </svg>
         </div>
       </section>
 
       {/* City Cards Grid */}
-      <section className="bg-[#f5f5f7]">
+      <section className="bg-[#fafafa] pb-12">
         <div className="section">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {CITIES.map((city) => (
               <a
                 key={city.slug}
                 href={'/events?city=' + encodeURIComponent(city.name)}
-                className="card overflow-hidden group cursor-pointer"
+                className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden group cursor-pointer transition-all duration-300 hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] hover:-translate-y-1"
               >
                 {/* City Image */}
                 <div className="aspect-[16/10] relative overflow-hidden">
@@ -147,12 +159,12 @@ export default function CitiesPage() {
                     <p className="text-xs text-[#86868b] font-semibold uppercase tracking-wider mb-2">Arenas</p>
                     <div className="flex flex-wrap gap-1.5">
                       {city.arenas.map((arena) => (
-                        <span key={arena} className="badge text-xs">{arena}</span>
+                        <span key={arena} className="bg-[#f0f7ff] text-[#003e79] text-xs rounded-full px-3 py-1.5 font-medium">{arena}</span>
                       ))}
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center text-sm text-brand-500 font-medium">
+                  <div className="mt-4 flex items-center text-sm text-[#003e79] font-medium">
                     View events
                     <svg
                       className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform"
@@ -171,10 +183,10 @@ export default function CitiesPage() {
         </div>
       </section>
       {/* Invite UHT to Your City */}
-      <section className="bg-white">
+      <section className="bg-[#fafafa] py-16 sm:py-20">
         <div className="section">
           <div className="max-w-2xl mx-auto text-center mb-10">
-            <h2 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f]">
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">
               Invite UHT to your city.
             </h2>
             <p className="mt-3 text-lg text-[#6e6e73]">
@@ -188,7 +200,7 @@ export default function CitiesPage() {
             className="max-w-xl mx-auto"
             id="invite-form"
           >
-            <div className="card p-6 sm:p-8 space-y-5">
+            <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 sm:p-8 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-[#1d1d1f] mb-1.5">
@@ -199,7 +211,7 @@ export default function CitiesPage() {
                     id="name"
                     name="name"
                     required
-                    className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
                     placeholder="John Smith"
                   />
                 </div>
@@ -212,7 +224,7 @@ export default function CitiesPage() {
                     id="email"
                     name="email"
                     required
-                    className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
                     placeholder="john@email.com"
                   />
                 </div>
@@ -228,7 +240,7 @@ export default function CitiesPage() {
                     id="city"
                     name="city"
                     required
-                    className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
                     placeholder="Detroit"
                   />
                 </div>
@@ -241,7 +253,7 @@ export default function CitiesPage() {
                     id="state"
                     name="state"
                     required
-                    className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
                     placeholder="MI"
                   />
                 </div>
@@ -254,7 +266,7 @@ export default function CitiesPage() {
                 <select
                   id="role"
                   name="role"
-                  className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent bg-white"
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 bg-white"
                 >
                   <option value="parent">Hockey Parent</option>
                   <option value="coach">Coach / Team Manager</option>
@@ -272,7 +284,7 @@ export default function CitiesPage() {
                   type="text"
                   id="arenas"
                   name="arenas"
-                  className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent"
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
                   placeholder="List any rinks in your area"
                 />
               </div>
@@ -285,14 +297,14 @@ export default function CitiesPage() {
                   id="message"
                   name="message"
                   rows={3}
-                  className="w-full px-4 py-2.5 rounded-lg border border-[#d2d2d7] text-sm focus:outline-none focus:ring-2 focus:ring-[#00ccff] focus:border-transparent resize-none"
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 resize-none"
                   placeholder="Tell us about the hockey community, facilities, and why it would be a great fit..."
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full btn-primary text-base py-3"
+                className="w-full rounded-full bg-[#003e79] text-white font-medium text-base py-3 hover:bg-[#002d5f] transition-colors duration-200"
               >
                 Submit Invitation
               </button>

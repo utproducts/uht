@@ -27,11 +27,11 @@ interface ActiveSponsor {
 }
 
 const tierConfig: Record<string, { color: string; bg: string; border: string; icon: string; order: number }> = {
-  platinum: { color: 'text-gray-800', bg: 'bg-gradient-to-br from-gray-100 to-gray-200', border: 'border-gray-300 ring-2 ring-gray-300', icon: '💎', order: 0 },
-  gold: { color: 'text-amber-700', bg: 'bg-gradient-to-br from-amber-50 to-yellow-100', border: 'border-amber-300 ring-2 ring-amber-200', icon: '🥇', order: 1 },
-  silver: { color: 'text-gray-600', bg: 'bg-gradient-to-br from-gray-50 to-slate-100', border: 'border-gray-300', icon: '🥈', order: 2 },
-  bronze: { color: 'text-orange-700', bg: 'bg-gradient-to-br from-orange-50 to-amber-50', border: 'border-orange-200', icon: '🥉', order: 3 },
-  custom: { color: 'text-cyan-700', bg: 'bg-gradient-to-br from-cyan-50 to-blue-50', border: 'border-cyan-200', icon: '⭐', order: 4 },
+  platinum: { color: 'text-[#003e79]', bg: 'bg-[#f0f7ff]', border: 'border-[#e8e8ed]', icon: '💎', order: 0 },
+  gold: { color: 'text-[#003e79]', bg: 'bg-[#f0f7ff]', border: 'border-[#e8e8ed]', icon: '🥇', order: 1 },
+  silver: { color: 'text-[#003e79]', bg: 'bg-[#f0f7ff]', border: 'border-[#e8e8ed]', icon: '🥈', order: 2 },
+  bronze: { color: 'text-[#003e79]', bg: 'bg-[#f0f7ff]', border: 'border-[#e8e8ed]', icon: '🥉', order: 3 },
+  custom: { color: 'text-[#003e79]', bg: 'bg-[#f0f7ff]', border: 'border-[#e8e8ed]', icon: '⭐', order: 4 },
 };
 
 // --- Inquiry Form Modal ---
@@ -64,11 +64,11 @@ function InquiryModal({ packageName, onClose }: { packageName: string; onClose: 
   if (result === 'success') {
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center" onClick={e => e.stopPropagation()}>
+        <div className="bg-white rounded-2xl shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] w-full max-w-md p-8 text-center" onClick={e => e.stopPropagation()}>
           <div className="text-5xl mb-4">🎉</div>
-          <h3 className="text-xl font-extrabold text-gray-900 mb-2">Thank You!</h3>
-          <p className="text-gray-600 mb-6">We've received your inquiry and will be in touch within 24 hours.</p>
-          <button onClick={onClose} className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl transition">
+          <h3 className="text-xl font-extrabold text-[#1d1d1f] mb-2">Thank You!</h3>
+          <p className="text-[#3d3d3d] mb-6">We've received your inquiry and will be in touch within 24 hours.</p>
+          <button onClick={onClose} className="px-6 py-2.5 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full transition">
             Close
           </button>
         </div>
@@ -78,15 +78,15 @@ function InquiryModal({ packageName, onClose }: { packageName: string; onClose: 
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-2xl">
+      <div className="bg-white rounded-2xl shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-[#e8e8ed] px-6 py-4 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Sponsorship Inquiry</h3>
-              <p className="text-sm text-gray-500">We'll get back to you within 24 hours</p>
+              <h3 className="text-lg font-bold text-[#1d1d1f]">Sponsorship Inquiry</h3>
+              <p className="text-sm text-[#86868b]">We'll get back to you within 24 hours</p>
             </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            <button onClick={onClose} className="p-1.5 hover:bg-[#f5f5f7] rounded-lg transition">
+              <svg className="w-5 h-5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
         </div>
@@ -94,67 +94,61 @@ function InquiryModal({ packageName, onClose }: { packageName: string; onClose: 
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+              <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Name *</label>
               <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                placeholder="Your name" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+                placeholder="Your name" className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+              <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Company</label>
               <input type="text" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })}
-                placeholder="Company name" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+                placeholder="Company name" className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+            <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Email *</label>
             <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-              placeholder="you@company.com" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+              placeholder="you@company.com" className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Phone</label>
             <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-              placeholder="(555) 555-5555" className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none" />
+              placeholder="(555) 555-5555" className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Interested Package</label>
+            <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Interested Package</label>
             <select value={form.package} onChange={e => setForm({ ...form, package: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none">
+              className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
               <option value="">Not sure yet</option>
-              <option value="Platinum Partner">Platinum Partner ($10,000/season)</option>
-              <option value="Gold Sponsor">Gold Sponsor ($5,000/season)</option>
-              <option value="Silver Sponsor">Silver Sponsor ($2,500/season)</option>
-              <option value="Bronze Supporter">Bronze Supporter ($1,000/season)</option>
-              <option value="Single Event Sponsor">Single Event Sponsor ($2,000/event)</option>
-              <option value="Rink Board Sponsor">Rink Board Sponsor ($750/event)</option>
-              <option value="Custom">Custom Package</option>
+              <option value="Custom Package">Custom Package</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+            <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Message</label>
             <textarea value={form.message} onChange={e => setForm({ ...form, message: e.target.value })}
               rows={3} placeholder="Tell us about your goals and any questions you have..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none resize-none" />
+              className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none resize-none" />
           </div>
 
           {result === 'error' && (
             <div className="px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">
-              Something went wrong. Please try again or email johnny@ultimatetournament.com directly.
+              Something went wrong. Please try again or contact us directly.
             </div>
           )}
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-2xl flex gap-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition">
+        <div className="sticky bottom-0 bg-white border-t border-[#e8e8ed] px-6 py-4 rounded-b-2xl flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-[#f0f7ff] hover:bg-[#e0efff] text-[#003e79] font-semibold rounded-full text-sm transition">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={submitting || !form.name || !form.email}
-            className={`flex-1 px-4 py-2.5 font-semibold rounded-xl text-sm transition ${
-              !form.name || !form.email ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+            className={`flex-1 px-4 py-2.5 font-semibold rounded-full text-sm transition ${
+              !form.name || !form.email ? 'bg-[#d0d0d5] text-[#86868b] cursor-not-allowed' : 'bg-[#003e79] hover:bg-[#002d5a] text-white'
             } ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {submitting ? 'Sending...' : 'Send Inquiry'}
@@ -188,9 +182,6 @@ export default function SponsorsPage() {
     }).catch(() => setLoading(false));
   }, []);
 
-  const seasonalPackages = packages.filter(p => p.is_seasonal);
-  const eventPackages = packages.filter(p => !p.is_seasonal);
-
   // Group sponsors by tier
   const sponsorsByTier: Record<string, ActiveSponsor[]> = {};
   sponsors.forEach(s => {
@@ -201,37 +192,40 @@ export default function SponsorsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600" />
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#fafafa]">
       {inquiryOpen && <InquiryModal packageName={inquiryPackage} onClose={() => setInquiryOpen(false)} />}
 
       {/* Hero */}
-      <div className="bg-gray-900 text-white">
-        <div className="max-w-6xl mx-auto px-4 py-16 text-center">
+      <div className="relative overflow-hidden py-20">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#003e79] via-[#005599] to-[#00ccff]"></div>
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#005599]/30 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#00ccff]/20 rounded-full blur-3xl"></div>
+
+        <div className="relative max-w-6xl mx-auto px-4 text-center">
           <div className="text-5xl mb-4">🤝</div>
-          <h1 className="text-4xl font-extrabold mb-3">Partner With Ultimate Tournaments</h1>
-          <p className="text-lg text-gray-300 max-w-2xl mx-auto mb-6">
-            Put your brand in front of thousands of hockey families across the Midwest.
-            From season-long partnerships to single event sponsorships, we have opportunities for every budget.
+          <h1 className="text-4xl font-extrabold mb-3 text-white">Partner With Ultimate Tournaments</h1>
+          <p className="text-lg text-white/90 max-w-2xl mx-auto mb-8">
+            Everything we do is CUSTOM. Reach thousands of hockey families across 7 states with sponsorships tailored to your business.
           </p>
           <button
             onClick={() => openInquiry()}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl text-lg transition"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-white text-[#003e79] font-bold rounded-full text-lg hover:bg-[#f0f7ff] transition"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
-            Get In Touch
+            Start a Conversation
           </button>
         </div>
       </div>
 
       {/* Impact Stats */}
-      <div className="max-w-6xl mx-auto px-4 -mt-8">
+      <div className="max-w-6xl mx-auto px-4 -mt-12 relative z-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { num: '36+', label: 'Events Per Year', icon: '🏒' },
@@ -239,116 +233,132 @@ export default function SponsorsPage() {
             { num: '10K+', label: 'Families Reached', icon: '👨‍👩‍👧‍👦' },
             { num: '7', label: 'States Covered', icon: '🗺️' },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-xl shadow-lg p-5 text-center">
+            <div key={s.label} className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-5 text-center">
               <div className="text-2xl mb-1">{s.icon}</div>
-              <div className="text-2xl font-extrabold text-gray-900">{s.num}</div>
-              <div className="text-xs text-gray-500 font-medium mt-0.5">{s.label}</div>
+              <div className="text-2xl font-extrabold text-[#1d1d1f]">{s.num}</div>
+              <div className="text-xs text-[#86868b] font-medium mt-0.5">{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Sponsorship Packages - Season */}
+      {/* Current Partners */}
       <div className="max-w-6xl mx-auto px-4 py-16">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Season Sponsorship Packages</h2>
-          <p className="text-gray-500 max-w-xl mx-auto">Year-round visibility across all Ultimate Tournaments events. The best value for maximum brand exposure.</p>
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-extrabold text-[#1d1d1f] mb-3">Current Partners</h2>
+          <p className="text-[#6e6e73] max-w-xl mx-auto">These businesses help us create world-class hockey tournaments.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {seasonalPackages.sort((a, b) => b.price_cents - a.price_cents).map(pkg => {
-            const tc = tierConfig[pkg.tier] || tierConfig.custom;
-            const benefits = pkg.benefits ? JSON.parse(pkg.benefits) : [];
-            return (
-              <div key={pkg.id} className={`rounded-2xl border-2 ${tc.border} overflow-hidden flex flex-col`}>
-                <div className={`${tc.bg} p-5 text-center`}>
-                  <div className="text-3xl mb-2">{tc.icon}</div>
-                  <h3 className={`text-lg font-extrabold ${tc.color}`}>{pkg.name}</h3>
-                  <div className="text-3xl font-extrabold text-gray-900 mt-2">
-                    ${(pkg.price_cents / 100).toLocaleString()}
-                    <span className="text-sm font-medium text-gray-500">/season</span>
-                  </div>
-                </div>
-                <div className="bg-white p-5 flex-1 flex flex-col">
-                  <p className="text-sm text-gray-500 mb-4">{pkg.description}</p>
-                  <ul className="space-y-2 flex-1">
-                    {benefits.map((b: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                        <svg className="w-4 h-4 text-green-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => openInquiry(pkg.name)}
-                    className="mt-5 w-full text-center px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold rounded-xl text-sm transition"
-                  >
-                    Inquire Now
-                  </button>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[
+            'Knuckleheads Park',
+            'Hilton',
+            'Hampton Inn',
+            'Kalahari Resorts',
+            'Great Wolf Lodge',
+            'Pure Hockey'
+          ].map(partner => (
+            <div key={partner} className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6 text-center flex items-center justify-center min-h-[140px]">
+              <p className="font-semibold text-[#1d1d1f]">{partner}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Why Partner With Us */}
+      <div className="bg-white py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-extrabold text-[#1d1d1f] mb-3">Why Partner With Ultimate Tournaments</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="text-2xl">🎯</div>
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] mb-1">Targeted Reach</h3>
+                  <p className="text-[#6e6e73]">Access engaged hockey families across 7 states with 36+ events annually</p>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Event-Specific Sponsorships - Highlighted Section */}
-      <div className="bg-gradient-to-br from-cyan-900 to-blue-900 text-white py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-cyan-500/20 border border-cyan-400/30 rounded-full text-cyan-300 text-xs font-bold uppercase tracking-wider mb-4">
-              <span className="animate-pulse w-2 h-2 bg-cyan-400 rounded-full inline-block" />
-              New Opportunity
-            </div>
-            <h2 className="text-3xl font-extrabold mb-2">Sponsor a Specific Event</h2>
-            <p className="text-cyan-200 max-w-xl mx-auto">
-              Want to target a specific market? Choose individual events to sponsor and get concentrated brand exposure at tournaments in the cities that matter most to your business.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {eventPackages.sort((a, b) => b.price_cents - a.price_cents).map(pkg => {
-              const benefits = pkg.benefits ? JSON.parse(pkg.benefits) : [];
-              return (
-                <div key={pkg.id} className="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 p-6 hover:bg-white/15 transition">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-xl font-extrabold">{pkg.name}</h3>
-                      <p className="text-cyan-200 text-sm mt-1">{pkg.description}</p>
-                    </div>
-                    <div className="text-2xl font-extrabold whitespace-nowrap ml-4">
-                      ${(pkg.price_cents / 100).toLocaleString()}
-                      <span className="text-xs font-medium text-cyan-300 block text-right">/event</span>
-                    </div>
-                  </div>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
-                    {benefits.map((b: string, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-cyan-100">
-                        <svg className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => openInquiry(pkg.name)}
-                    className="mt-5 inline-flex items-center gap-1 text-cyan-300 hover:text-white text-sm font-semibold transition"
-                  >
-                    Inquire Now
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
-                  </button>
+              <div className="flex gap-4">
+                <div className="text-2xl">🏆</div>
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] mb-1">Premium Events</h3>
+                  <p className="text-[#6e6e73]">Associate your brand with quality competitive hockey tournaments</p>
                 </div>
-              );
-            })}
+              </div>
+              <div className="flex gap-4">
+                <div className="text-2xl">📊</div>
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] mb-1">Measurable Impact</h3>
+                  <p className="text-[#6e6e73]">Track brand visibility with 500+ teams and 10,000+ families</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="text-2xl">🎨</div>
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] mb-1">Custom Packages</h3>
+                  <p className="text-[#6e6e73]">Everything we do is custom. We work with you to create the perfect fit</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="text-2xl">🤝</div>
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] mb-1">Partnership Support</h3>
+                  <p className="text-[#6e6e73]">Dedicated support to maximize the value of your partnership</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <div className="text-2xl">📱</div>
+                <div>
+                  <h3 className="font-bold text-[#1d1d1f] mb-1">Digital Integration</h3>
+                  <p className="text-[#6e6e73]">Featured on our website and in communications with tournament participants</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Current Sponsors */}
+      {/* Contact CTA */}
+      <div className="max-w-4xl mx-auto px-4 py-16">
+        <div className="bg-white rounded-3xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-8 md:p-12 text-center">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-[#1d1d1f] mb-3">Ready to Partner?</h2>
+          <p className="text-[#6e6e73] mb-8 max-w-2xl mx-auto">
+            Let's build a custom sponsorship package that aligns with your business goals. Reach out to discuss your vision.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <button
+              onClick={() => openInquiry()}
+              className="px-8 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-bold rounded-full transition"
+            >
+              Send Inquiry
+            </button>
+            <a
+              href="tel:630-336-6160"
+              className="px-8 py-3 bg-[#f0f7ff] hover:bg-[#e0efff] text-[#003e79] font-bold rounded-full border border-[#e8e8ed] transition"
+            >
+              Call: 630-336-6160
+            </a>
+          </div>
+
+          <p className="text-[#86868b] text-sm">
+            Email: john@ultimatetournaments.net
+          </p>
+        </div>
+      </div>
+
+      {/* Current Sponsors List */}
       {sponsors.length > 0 && (
         <div className="max-w-6xl mx-auto px-4 py-16">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-extrabold text-gray-900 mb-2">Our Sponsors</h2>
-            <p className="text-gray-500">Thank you to the businesses that make Ultimate Tournaments possible.</p>
+            <h2 className="text-3xl font-extrabold text-[#1d1d1f] mb-2">All Sponsors</h2>
+            <p className="text-[#6e6e73]">Thank you to all our partners who make Ultimate Tournaments possible.</p>
           </div>
 
           {sortedTiers.map(tier => {
@@ -358,24 +368,24 @@ export default function SponsorsPage() {
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-xl">{tc.icon}</span>
                   <h3 className={`text-lg font-bold ${tc.color}`}>{tier.charAt(0).toUpperCase() + tier.slice(1)} Partners</h3>
-                  <div className="flex-1 border-t border-gray-200 ml-2" />
+                  <div className="flex-1 border-t border-[#e8e8ed] ml-2" />
                 </div>
                 <div className={`grid gap-4 ${tier === 'platinum' ? 'grid-cols-1' : tier === 'gold' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
                   {sponsorsByTier[tier].map(sp => (
-                    <div key={sp.id + sp.package_name} className={`${tc.bg} rounded-xl border ${tc.border.split(' ')[0]} p-5 ${tier === 'platinum' ? 'text-center py-8' : ''}`}>
+                    <div key={sp.id + sp.package_name} className={`${tc.bg} rounded-2xl border ${tc.border} shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-5 ${tier === 'platinum' ? 'text-center py-8' : ''}`}>
                       {sp.logo_url ? (
                         <img src={sp.logo_url} alt={sp.name} className="h-12 object-contain mb-3" />
                       ) : (
                         <div className={`${tier === 'platinum' ? 'text-2xl' : 'text-lg'} font-extrabold ${tc.color} mb-1`}>{sp.name}</div>
                       )}
                       {sp.website && (
-                        <a href={sp.website} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-600 hover:underline">{sp.website.replace(/https?:\/\//, '')}</a>
+                        <a href={sp.website} target="_blank" rel="noopener noreferrer" className="text-xs text-[#003e79] hover:underline">{sp.website.replace(/https?:\/\//, '')}</a>
                       )}
                       {sp.event_name && (
-                        <div className="text-[11px] text-gray-500 mt-1">Sponsoring: {sp.event_name}</div>
+                        <div className="text-[11px] text-[#86868b] mt-1">Sponsoring: {sp.event_name}</div>
                       )}
                       {sp.season && (
-                        <div className="text-[11px] text-gray-500 mt-1">{sp.season} Season</div>
+                        <div className="text-[11px] text-[#86868b] mt-1">{sp.season} Season</div>
                       )}
                     </div>
                   ))}
@@ -385,31 +395,6 @@ export default function SponsorsPage() {
           })}
         </div>
       )}
-
-      {/* CTA Footer */}
-      <div className="bg-gray-100 py-12">
-        <div className="max-w-3xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-extrabold text-gray-900 mb-3">Ready to Get Started?</h2>
-          <p className="text-gray-600 mb-6">
-            Contact us today to discuss a sponsorship package that fits your business goals.
-            Custom packages are also available.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => openInquiry()}
-              className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl transition"
-            >
-              Submit an Inquiry
-            </button>
-            <a
-              href="tel:+1-630-555-0100"
-              className="px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-xl border border-gray-300 transition"
-            >
-              Call Us
-            </a>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

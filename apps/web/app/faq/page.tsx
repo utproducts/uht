@@ -22,7 +22,7 @@ const faqData: FAQCategory[] = [
     items: [
       {
         question: 'How do I register my team?',
-        answer: 'Register through ultimatetournaments.com/upcoming-events. Select your event and click the blue "Register" button. You\'ll fill in your team details, select your age group and division, choose your hotel preferences, and submit payment or select the pay-later option.',
+        answer: 'Register through ultimatetournaments.com/upcoming-events. Select your event and click the "Register" button. You\'ll fill in your team details, select your age group and division, choose your hotel preferences, and submit payment or select the pay-later option.',
       },
       {
         question: 'What do I need to bring to the event?',
@@ -135,7 +135,7 @@ const faqData: FAQCategory[] = [
       },
       {
         question: 'What is the refund policy?',
-        answer: 'A full refund is available if cancelled 30+ days before the event. Cancellations within 30 days of the event risk losing the full payment amount.',
+        answer: 'A full refund is available if cancelled 30 or more days before the event. Cancellations within 30 days of the event risk losing the full payment amount.',
       },
     ],
   },
@@ -204,7 +204,7 @@ const faqData: FAQCategory[] = [
     items: [
       {
         question: 'What if I need a special game time or have other requests?',
-        answer: 'Let us know during registration using the notes section on the form, or email Johnny@ultimatetournament.com. We do our best to accommodate all reasonable requests.',
+        answer: 'Let us know during registration using the notes section on the form, or email john@ultimatetournaments.net. We do our best to accommodate all reasonable requests.',
       },
       {
         question: 'What rinks do you use?',
@@ -216,22 +216,25 @@ const faqData: FAQCategory[] = [
 
 function FAQAccordion({ item, isOpen, onToggle }: { item: FAQItem; isOpen: boolean; onToggle: () => void }) {
   return (
-    <div className={`border-b border-gray-100 last:border-0 ${isOpen ? 'bg-cyan-50/30' : ''}`}>
+    <div className={`border-b border-[#e8e8ed] last:border-0 ${isOpen ? 'bg-[#f9f9fb]' : ''}`}>
       <button
         onClick={onToggle}
-        className="w-full text-left px-5 py-4 flex items-center gap-3 hover:bg-gray-50 transition"
+        className="w-full text-left px-6 py-4 flex items-center gap-3 hover:bg-[#fafafa] transition"
       >
         <svg
-          className={`w-4 h-4 text-cyan-600 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
-          fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"
+          className={`w-5 h-5 text-[#003e79] shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          viewBox="0 0 24 24"
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
         </svg>
-        <span className="font-semibold text-gray-900 text-sm">{item.question}</span>
+        <span className="font-medium text-[#1d1d1f] text-sm">{item.question}</span>
       </button>
       {isOpen && (
-        <div className="px-5 pb-4 pl-12">
-          <p className="text-sm text-gray-600 leading-relaxed">{item.answer}</p>
+        <div className="px-6 pb-4 pl-14">
+          <p className="text-sm text-[#3d3d3d] leading-relaxed">{item.answer}</p>
         </div>
       )}
     </div>
@@ -253,14 +256,16 @@ export default function FAQPage() {
   };
 
   // Filter by search
-  const filteredCategories = faqData.map(cat => ({
-    ...cat,
-    items: cat.items.filter(item =>
-      !search ||
-      item.question.toLowerCase().includes(search.toLowerCase()) ||
-      item.answer.toLowerCase().includes(search.toLowerCase())
-    ),
-  })).filter(cat => cat.items.length > 0);
+  const filteredCategories = faqData
+    .map(cat => ({
+      ...cat,
+      items: cat.items.filter(item =>
+        !search ||
+        item.question.toLowerCase().includes(search.toLowerCase()) ||
+        item.answer.toLowerCase().includes(search.toLowerCase())
+      ),
+    }))
+    .filter(cat => cat.items.length > 0);
 
   // If active category filter
   const displayCategories = activeCategory
@@ -271,50 +276,88 @@ export default function FAQPage() {
   const matchCount = filteredCategories.reduce((sum, c) => sum + c.items.length, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Hero */}
-      <div className="bg-gray-900 text-white">
-        <div className="max-w-4xl mx-auto px-4 py-14 text-center">
-          <h1 className="text-4xl font-extrabold mb-3">Frequently Asked Questions</h1>
-          <p className="text-gray-300 max-w-xl mx-auto mb-8">
-            Everything you need to know about Ultimate Tournaments.
-            Can't find your answer? Reach out to us anytime.
+    <div className="min-h-screen bg-[#fafafa]">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden pt-16 pb-12">
+        {/* Gradient background with orbs */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] -z-10" />
+
+        {/* Blurred orbs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#00ccff] rounded-full opacity-20 blur-3xl -z-10" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#003e79] rounded-full opacity-20 blur-3xl -z-10" />
+
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h1 className="text-5xl font-bold text-white mb-4 leading-tight">Frequently Asked Questions</h1>
+          <p className="text-white/80 max-w-2xl mx-auto mb-10 text-lg">
+            Find answers to common questions about Ultimate Hockey Tournaments. Can't find what you're looking for?
+            We're here to help.
           </p>
 
-          {/* Search */}
-          <div className="max-w-lg mx-auto relative">
-            <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+          {/* Search Input */}
+          <div className="max-w-xl mx-auto relative">
+            <svg
+              className="w-5 h-5 text-white/60 absolute left-4 top-1/2 -translate-y-1/2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+              />
+            </svg>
             <input
               type="text"
               placeholder="Search questions..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-12 pr-4 py-3.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none text-sm"
+              className="w-full pl-12 pr-4 py-3.5 bg-white/15 backdrop-blur-md border border-white/20 rounded-full text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 text-sm"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             )}
           </div>
+
           {search && (
-            <p className="text-sm text-gray-400 mt-3">
+            <p className="text-sm text-white/70 mt-3">
               {matchCount} result{matchCount !== 1 ? 's' : ''} found
             </p>
           )}
         </div>
+
+        {/* Curved SVG transition */}
+        <svg
+          className="absolute bottom-0 left-0 right-0 w-full h-auto"
+          viewBox="0 0 1200 120"
+          preserveAspectRatio="none"
+          style={{ marginBottom: '-1px' }}
+        >
+          <path
+            d="M0,64 C300,96 900,32 1200,64 L1200,120 L0,120 Z"
+            fill="#fafafa"
+            fillOpacity="1"
+          />
+        </svg>
       </div>
 
-      {/* Category Nav */}
-      <div className="max-w-4xl mx-auto px-4 -mt-5 mb-2">
-        <div className="flex flex-wrap gap-2">
+      {/* Category Filter Pills */}
+      <div className="max-w-4xl mx-auto px-4 pt-12 mb-8">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setActiveCategory(null)}
-            className={`px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition shadow ${
-              !activeCategory ? 'bg-cyan-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+            className={`px-5 py-2.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${
+              !activeCategory
+                ? 'bg-[#003e79] text-white'
+                : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
             }`}
           >
             All ({totalQuestions})
@@ -323,8 +366,10 @@ export default function FAQPage() {
             <button
               key={cat.name}
               onClick={() => setActiveCategory(activeCategory === cat.name ? null : cat.name)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition shadow flex items-center gap-1.5 ${
-                activeCategory === cat.name ? 'bg-cyan-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+              className={`px-5 py-2.5 rounded-full text-xs font-semibold whitespace-nowrap transition flex items-center gap-2 ${
+                activeCategory === cat.name
+                  ? 'bg-[#003e79] text-white'
+                  : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
               }`}
             >
               <span>{cat.icon}</span>
@@ -335,19 +380,27 @@ export default function FAQPage() {
       </div>
 
       {/* FAQ Content */}
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 pb-12 space-y-6">
         {displayCategories.map(cat => (
-          <div key={cat.name} className="bg-white rounded-2xl shadow-lg overflow-hidden">
-            <div className="px-5 py-4 bg-gray-50 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{cat.icon}</span>
-                <div>
-                  <h2 className="font-bold text-gray-900">{cat.name}</h2>
-                  <p className="text-xs text-gray-500">{cat.description}</p>
+          <div
+            key={cat.name}
+            className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden"
+          >
+            {/* Category Header */}
+            <div className="px-6 py-5 border-b border-[#e8e8ed] bg-white">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{cat.icon}</span>
+                <div className="flex-1">
+                  <h2 className="font-semibold text-[#1d1d1f] text-lg">{cat.name}</h2>
+                  <p className="text-xs text-[#6e6e73] mt-0.5">{cat.description}</p>
                 </div>
-                <span className="ml-auto text-xs text-gray-400 font-medium">{cat.items.length} question{cat.items.length !== 1 ? 's' : ''}</span>
+                <span className="text-xs text-[#6e6e73] font-medium">
+                  {cat.items.length} question{cat.items.length !== 1 ? 's' : ''}
+                </span>
               </div>
             </div>
+
+            {/* FAQ Items */}
             <div>
               {cat.items.map((item, i) => {
                 const key = `${cat.name}-${i}`;
@@ -365,37 +418,54 @@ export default function FAQPage() {
         ))}
 
         {displayCategories.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <div className="text-4xl mb-3">🔍</div>
-            <p className="text-gray-500 font-medium">No questions match your search.</p>
-            <p className="text-sm text-gray-400 mt-1">Try different keywords or browse by category above.</p>
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-12 text-center">
+            <div className="text-5xl mb-4">🔍</div>
+            <p className="text-[#1d1d1f] font-semibold mb-2">No questions match your search</p>
+            <p className="text-sm text-[#6e6e73]">Try different keywords or browse all categories above.</p>
           </div>
         )}
       </div>
 
-      {/* Still Have Questions CTA */}
-      <div className="bg-gray-100 py-12">
-        <div className="max-w-3xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-extrabold text-gray-900 mb-3">Still Have Questions?</h2>
-          <p className="text-gray-600 mb-6">
-            We're here to help! Reach out to us and we'll get back to you as quickly as possible.
+      {/* Contact CTA Section */}
+      <div className="bg-white border-t border-[#e8e8ed]">
+        <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+          <h2 className="text-3xl font-bold text-[#1d1d1f] mb-3">Still Have Questions?</h2>
+          <p className="text-[#3d3d3d] mb-8 max-w-lg mx-auto">
+            Our team is here to help. Reach out to us via email or phone and we'll get back to you quickly.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="mailto:johnny@ultimatetournament.com"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl transition"
+              href="mailto:john@ultimatetournaments.net"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#003e79] hover:bg-[#002850] text-white font-semibold rounded-full transition"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
-              Email Johnny
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+                />
+              </svg>
+              Email Us
             </a>
             <a
-              href="tel:+1-630-555-0100"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 font-bold rounded-xl border border-gray-300 transition"
+              href="tel:630-336-6160"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#003e79] font-semibold rounded-full transition border border-[#e8e8ed]"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
-              Give Us a Call
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
+                />
+              </svg>
+              630-336-6160
             </a>
           </div>
+
+          <p className="text-sm text-[#6e6e73] mt-6">
+            Or mail us at: 477 Dunlay Street, Wood Dale, IL 60191
+          </p>
         </div>
       </div>
     </div>
