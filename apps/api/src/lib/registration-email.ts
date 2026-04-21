@@ -12,13 +12,34 @@ interface RegistrationConfirmationParams {
   headCoachName?: string;
   priceCents?: number;
   depositCents?: number;
+  /** Admin-customized field overrides from DB */
+  _overrides?: Record<string, string>;
 }
 
-function buildConfirmationHtml(params: RegistrationConfirmationParams): string {
+export function buildConfirmationHtml(params: Partial<RegistrationConfirmationParams> & { teamName: string; ageGroup: string; eventName: string; eventDate: string; eventCity: string }): string {
   const { teamName, ageGroup, division, eventName, eventDate, eventCity, headCoachName, priceCents, depositCents } = params;
+  const o = (params as any)._overrides as Record<string, string> | undefined;
   const divisionText = division ? ` - ${division}` : '';
   const priceStr = priceCents ? `$${(priceCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '';
   const depositStr = depositCents ? `$${(depositCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$350.00';
+
+  // Editable fields (use overrides or defaults)
+  const heading = o?.heading || 'Registration Received!';
+  const headingSubtitle = o?.heading_subtitle || "We've got your application";
+  const bodyText = (o?.body_text || 'You have successfully registered for the {eventName}!')
+    .replace(/\{eventName\}/g, eventName).replace(/\{teamName\}/g, teamName).replace(/\{ageGroup\}/g, ageGroup).replace(/\{division\}/g, division || '');
+  const nextStepsTitle = o?.next_steps_title || 'What happens next?';
+  const nextStepsText = o?.next_steps_text || 'Our team reviews all registrations and approves them within 24-48 hours. You\'ll receive a confirmation email once your spot is secured with details on payment and next steps.';
+  const preparationText = o?.preparation_text || 'In the meantime, please have the following ready:\n• Your approved USA Hockey roster\n• Hotel preferences for your team\n• Payment method (Credit Card, Venmo, or Check)';
+
+  // Convert preparation text newlines + bullets to HTML
+  const prepHtml = preparationText.split('\n').map((line: string) => {
+    line = line.trim();
+    if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
+      return `<p style="margin: 0 0 4px 0;">&bull; ${line.replace(/^[•\-*]\s*/, '')}</p>`;
+    }
+    return `<p style="margin: 0 0 8px 0;">${line}</p>`;
+  }).join('\n              ');
 
   return `
 <!DOCTYPE html>
@@ -33,16 +54,16 @@ function buildConfirmationHtml(params: RegistrationConfirmationParams): string {
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
 
-          <!-- Header -->
+          <!-- Header (locked) -->
           <tr>
             <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
               <img src="https://ultimatetournaments.com/storage/logo/uht-logo-white.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
-              <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">Registration Received!</h1>
-              <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">We've got your application</p>
+              <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">${heading}</h1>
+              <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">${headingSubtitle}</p>
             </td>
           </tr>
 
-          <!-- Event Badge -->
+          <!-- Event Badge (locked — dynamic data) -->
           <tr>
             <td style="padding: 24px 32px 0 32px;">
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px;">
@@ -68,19 +89,18 @@ function buildConfirmationHtml(params: RegistrationConfirmationParams): string {
             </td>
           </tr>
 
-          <!-- Body -->
+          <!-- Body (editable) -->
           <tr>
             <td style="padding: 24px 32px 0 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
-              <p style="margin: 0 0 16px 0;">You have successfully registered for the <strong>${eventName}</strong>!</p>
+              <p style="margin: 0 0 16px 0;">${bodyText}</p>
 
-              <!-- What Happens Next -->
+              <!-- What Happens Next (editable) -->
               <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; margin-bottom: 20px;">
                 <tr>
                   <td style="padding: 16px 20px;">
-                    <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #92400e;">What happens next?</p>
+                    <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #92400e;">${nextStepsTitle}</p>
                     <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">
-                      Our team reviews all registrations and <strong>approves them within 24-48 hours</strong>.
-                      You'll receive a confirmation email once your spot is secured with details on payment and next steps.
+                      ${nextStepsText}
                     </p>
                   </td>
                 </tr>
@@ -88,7 +108,7 @@ function buildConfirmationHtml(params: RegistrationConfirmationParams): string {
             </td>
           </tr>
 
-          <!-- Registration Summary -->
+          <!-- Registration Summary (locked — dynamic data) -->
           <tr>
             <td style="padding: 0 32px 24px 32px; font-size: 14px; color: #1d1d1f;">
               <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e8e8ed; border-radius: 12px; overflow: hidden;">
@@ -120,18 +140,15 @@ function buildConfirmationHtml(params: RegistrationConfirmationParams): string {
             </td>
           </tr>
 
-          <!-- Helpful Info -->
+          <!-- Helpful Info (editable) -->
           <tr>
             <td style="padding: 0 32px 32px 32px; font-size: 14px; line-height: 1.6; color: #6e6e73;">
-              <p style="margin: 0 0 8px 0;">In the meantime, please have the following ready:</p>
-              <p style="margin: 0 0 4px 0;">&bull; Your approved USA Hockey roster</p>
-              <p style="margin: 0 0 4px 0;">&bull; Hotel preferences for your team</p>
-              <p style="margin: 0 0 16px 0;">&bull; Payment method (Credit Card, Venmo, or Check)</p>
-              <p style="margin: 0;">Questions? Reply to this email or contact us at <a href="mailto:registration@ultimatetournaments.com" style="color: #00ccff; text-decoration: none;">registration@ultimatetournaments.com</a></p>
+              ${prepHtml}
+              <p style="margin: 16px 0 0 0;">Questions? Reply to this email or contact us at <a href="mailto:registration@ultimatetournaments.com" style="color: #00ccff; text-decoration: none;">registration@ultimatetournaments.com</a></p>
             </td>
           </tr>
 
-          <!-- Footer -->
+          <!-- Footer (locked) -->
           <tr>
             <td style="background-color: #f5f5f7; padding: 24px 32px; border-top: 1px solid #e8e8ed;">
               <p style="margin: 0; font-size: 13px; color: #86868b; text-align: center;">
@@ -161,7 +178,10 @@ export async function sendRegistrationConfirmationEmail(env: Env, params: Regist
     return { success: false, error: 'SendGrid API key not configured' };
   }
 
-  const subject = `You have successfully registered to the ${params.eventName} - Ultimate Tournaments`;
+  const o = params._overrides as Record<string, string> | undefined;
+  const subjectTemplate = o?.subject || 'You have successfully registered to the {eventName} - Ultimate Tournaments';
+  const subject = subjectTemplate
+    .replace(/\{eventName\}/g, params.eventName).replace(/\{teamName\}/g, params.teamName).replace(/\{ageGroup\}/g, params.ageGroup);
   const html = buildConfirmationHtml(params);
 
   const plainText = `You have successfully registered for the ${params.eventName}!\n\nTeam: ${params.teamName}\nAge Group: ${params.ageGroup}${params.division ? `\nDivision: ${params.division}` : ''}\nEvent: ${params.eventName}\nDate: ${params.eventDate}\nLocation: ${params.eventCity}\n\nWhat happens next?\nOur team reviews all registrations and approves them within 24-48 hours. You'll receive a confirmation email once your spot is secured.\n\nIn the meantime, please have the following ready:\n- Your approved USA Hockey roster\n- Hotel preferences for your team\n- Payment method\n\nQuestions? Contact registration@ultimatetournaments.com\n\nUltimate Hockey Tournaments\n477 Dunlay Street, Wood Dale, IL 60191`;
@@ -182,8 +202,8 @@ export async function sendRegistrationConfirmationEmail(env: Env, params: Regist
         reply_to: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
         subject,
         content: [
-          { type: 'text/html', value: html },
           { type: 'text/plain', value: plainText },
+          { type: 'text/html', value: html },
         ],
       }),
     });

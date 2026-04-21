@@ -72,7 +72,10 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       });
       const json = await res.json();
       if (json.success) { onSaved(); onClose(); }
-      else setError(json.error || 'Failed to create user');
+      else {
+        const errMsg = typeof json.error === 'string' ? json.error : JSON.stringify(json.error) || 'Failed to create user';
+        setError(errMsg);
+      }
     } catch (e) { setError('Network error'); }
     finally { setSaving(false); }
   };
@@ -190,7 +193,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
         }),
       });
       const json1 = await res1.json();
-      if (!json1.success) { setError(json1.error || 'Failed to update user'); setSaving(false); return; }
+      if (!json1.success) { setError(typeof json1.error === 'string' ? json1.error : 'Failed to update user'); setSaving(false); return; }
 
       // Update roles
       const res2 = await fetch(`${API_BASE}/${user.id}/roles`, {
@@ -200,7 +203,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
       });
       const json2 = await res2.json();
       if (json2.success) { onSaved(); onClose(); }
-      else setError(json2.error || 'Failed to update roles');
+      else setError(typeof json2.error === 'string' ? json2.error : 'Failed to update roles');
     } catch (e) { setError('Network error'); }
     finally { setSaving(false); }
   };

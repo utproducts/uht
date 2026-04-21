@@ -21,6 +21,7 @@ interface Event {
   deposit_cents: number | null;
   slots_count: number | null;
   is_sold_out: number;
+  schedule_published: number | null;
 }
 
 /* ── helpers ── */
@@ -47,6 +48,7 @@ function parseJsonArray(s: string | null): string[] {
 
 function statusLabel(status: string) {
   switch (status) {
+    case 'published':
     case 'registration_open': return 'Registration Open';
     case 'completed': return 'Completed';
     case 'active': return 'In Progress';
@@ -58,6 +60,7 @@ function statusLabel(status: string) {
 
 function statusBadge(status: string) {
   switch (status) {
+    case 'published':
     case 'registration_open': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     case 'completed': return 'bg-gray-100 text-gray-600 border-gray-200';
     case 'active': return 'bg-blue-50 text-blue-700 border-blue-200';
@@ -87,9 +90,10 @@ function daysUntil(dateStr: string): number {
 /* ── Event Card ── */
 function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
   const ageGroups = parseJsonArray(event.age_groups);
-  const isUpcoming = event.status === 'registration_open' || event.status === 'active';
+  const isUpcoming = event.status === 'registration_open' || event.status === 'published' || event.status === 'active';
   const isPast = event.status === 'completed';
   const days = daysUntil(event.start_date);
+  const scheduleLive = event.schedule_published === 1;
 
   return (
     <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] ${isPast ? 'opacity-75 hover:opacity-100' : ''}`}>
@@ -116,9 +120,16 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
 
         {/* Status badge */}
         <div className="absolute top-3 right-3 z-10">
-          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusBadge(event.status)} bg-white/90 backdrop-blur-sm`}>
-            {statusLabel(event.status)}
-          </span>
+          {scheduleLive ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border border-emerald-200 bg-emerald-50/95 backdrop-blur-sm text-emerald-700">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+              Schedule Live
+            </span>
+          ) : (
+            <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusBadge(event.status)} bg-white/90 backdrop-blur-sm`}>
+              {statusLabel(event.status)}
+            </span>
+          )}
         </div>
 
         {/* Next Up badge or Countdown */}
@@ -187,7 +198,37 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
 
         {/* Actions */}
         <div className="mt-5 flex items-center gap-3">
-          {isUpcoming ? (
+          {event.status === 'active' && scheduleLive ? (
+            <>
+              <a
+                href={`/events/${event.slug}/schedule`}
+                className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all"
+              >
+                View Schedule
+              </a>
+              <a
+                href={`/events/${event.slug}`}
+                className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
+              >
+                More Info
+              </a>
+            </>
+          ) : event.status === 'active' ? (
+            <>
+              <a
+                href={`/events/${event.slug}`}
+                className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all"
+              >
+                Status
+              </a>
+              <a
+                href={`/events/${event.slug}`}
+                className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
+              >
+                More Info
+              </a>
+            </>
+          ) : event.status === 'registration_open' || event.status === 'published' ? (
             <>
               <a
                 href={`/register?event=${event.slug}&eventId=${event.id}`}
@@ -199,15 +240,15 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
                 href={`/events/${event.slug}`}
                 className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
               >
-                Details
+                More Info
               </a>
             </>
           ) : (
             <a
               href={`/events/${event.slug}`}
-              className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-[#6e6e73] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition-colors"
+              className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
             >
-              View Results
+              More Info
             </a>
           )}
         </div>

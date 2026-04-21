@@ -563,17 +563,21 @@ export default function AdminCommsPage() {
           </div>
         </div>
       ) : (
-        /* Email Tab — placeholder for now */
+        /* Email Tab — redirect to dedicated email page */
         <div className="flex-1 mx-4 mb-4 bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] flex items-center justify-center">
           <div className="text-center p-8">
-            <div className="w-20 h-20 bg-[#fafafa] rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-10 h-10 text-[#86868b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <div className="w-20 h-20 bg-[#f0f7ff] rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-10 h-10 text-[#003e79]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="2" y="4" width="20" height="16" rx="2" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M22 7l-10 7L2 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <h3 className="font-semibold text-[#3d3d3d] text-lg">Email Campaigns</h3>
-            <p className="text-sm text-[#86868b] mt-1">Templates, mass email, open tracking — coming next</p>
+            <p className="text-sm text-[#86868b] mt-1 mb-4">Create, send, and track email campaigns with open/click analytics</p>
+            <a href="/admin/email" className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#003e79] text-white rounded-xl font-semibold hover:bg-[#002d5a] transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+              Go to Email Campaigns
+            </a>
           </div>
         </div>
       )}

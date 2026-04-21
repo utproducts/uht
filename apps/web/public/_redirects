@@ -1,0 +1,3 @@
+# Dynamic event detail pages — serve the static shell, client fetches by slug
+/events/*/schedule/  /events/_/schedule/index.html  200
+/events/*/  /events/_/index.html  200

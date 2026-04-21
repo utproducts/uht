@@ -244,15 +244,30 @@ hotelRoutes.get('/report/:eventId', async (c) => {
     SELECT * FROM event_hotels WHERE event_id = ? AND is_active = 1 ORDER BY sort_order ASC
   `).bind(eventId).all();
 
-  // Get all registrations with hotel assignments
-  const regs = await db.prepare(`
-    SELECT er.id, er.team_name, er.age_group, er.division, er.hotel_assigned, er.hotel_choice,
-      er.manager_first_name, er.manager_last_name, er.email1, er.email2, er.phone,
-      (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = er.id) as roster_count
-    FROM event_registrations er
-    WHERE er.event_id = ?
-    ORDER BY er.hotel_assigned ASC, er.team_name ASC
+  // Get registrations from normalized table (with fallback to legacy event_registrations)
+  let regs = await db.prepare(`
+    SELECT r.id, t.name as team_name, ed.age_group, ed.division_level as division,
+      r.hotel_assigned, NULL as hotel_choice,
+      NULL as manager_first_name, NULL as manager_last_name, NULL as email1, NULL as email2, NULL as phone,
+      0 as roster_count
+    FROM registrations r
+    LEFT JOIN teams t ON t.id = r.team_id
+    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+    WHERE r.event_id = ? AND r.status = 'approved'
+    ORDER BY t.name ASC
   `).bind(eventId).all();
+
+  // Fallback to legacy table if no normalized registrations
+  if (regs.results.length === 0) {
+    regs = await db.prepare(`
+      SELECT er.id, er.team_name, er.age_group, er.division, er.hotel_assigned, er.hotel_choice,
+        er.manager_first_name, er.manager_last_name, er.email1, er.email2, er.phone,
+        (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = er.id) as roster_count
+      FROM event_registrations er
+      WHERE er.event_id = ? AND er.status = 'approved'
+      ORDER BY er.hotel_assigned ASC, er.team_name ASC
+    `).bind(eventId).all();
+  }
 
   // Build hotel summary
   const hotelSummary = hotels.results.map((h: any) => {

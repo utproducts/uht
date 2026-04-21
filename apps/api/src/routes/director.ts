@@ -33,52 +33,45 @@ directorRoutes.post(
   '/events/:eventId/directors',
   authMiddleware,
   requireRole('admin'),
-  zValidator('json', z.object({ userId: z.string().min(1) })),
+  zValidator('json', z.object({
+    userId: z.string().min(1),
+    rinkIds: z.array(z.string()).optional(), // If empty/omitted, director covers all rinks
+  })),
   async (c) => {
     const eventId = c.req.param('eventId');
-    const { userId } = c.req.valid('json');
+    const { userId, rinkIds } = c.req.valid('json');
     const db = c.env.DB;
 
     try {
       // Verify event exists
-      const event = await db
-        .prepare('SELECT id FROM events WHERE id = ? LIMIT 1')
-        .bind(eventId)
-        .first();
-      if (!event) {
-        return c.json({ success: false, error: 'Event not found' }, 404);
-      }
+      const event = await db.prepare('SELECT id FROM events WHERE id = ? LIMIT 1').bind(eventId).first();
+      if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
 
       // Verify user exists
-      const user = await db
-        .prepare('SELECT id FROM users WHERE id = ? LIMIT 1')
-        .bind(userId)
-        .first();
-      if (!user) {
-        return c.json({ success: false, error: 'User not found' }, 404);
+      const user = await db.prepare('SELECT id FROM users WHERE id = ? LIMIT 1').bind(userId).first();
+      if (!user) return c.json({ success: false, error: 'User not found' }, 404);
+
+      // Auto-migrate: add rink_id if missing
+      try { await db.prepare("ALTER TABLE event_directors ADD COLUMN rink_id TEXT REFERENCES venue_rinks(id)").run(); } catch (_) {}
+
+      // Remove any existing assignments for this director+event (then re-insert)
+      await db.prepare('DELETE FROM event_directors WHERE event_id = ? AND user_id = ?').bind(eventId, userId).run();
+
+      if (rinkIds && rinkIds.length > 0) {
+        // Insert one row per rink
+        for (const rinkId of rinkIds) {
+          const id = crypto.randomUUID().replace(/-/g, '');
+          await db.prepare('INSERT INTO event_directors (id, event_id, user_id, rink_id) VALUES (?, ?, ?, ?)').bind(id, eventId, userId, rinkId).run();
+        }
+      } else {
+        // Insert one row with rink_id = NULL (covers all rinks)
+        const id = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare('INSERT INTO event_directors (id, event_id, user_id, rink_id) VALUES (?, ?, ?, ?)').bind(id, eventId, userId, null).run();
       }
 
-      // Check if already assigned
-      const existing = await db
-        .prepare('SELECT id FROM event_directors WHERE event_id = ? AND user_id = ? LIMIT 1')
-        .bind(eventId, userId)
-        .first();
-      if (existing) {
-        return c.json({ success: false, error: 'Director already assigned to this event' }, 409);
-      }
-
-      const id = crypto.randomUUID().replace(/-/g, '');
-      await db
-        .prepare('INSERT INTO event_directors (id, event_id, user_id) VALUES (?, ?, ?)')
-        .bind(id, eventId, userId)
-        .run();
-
-      return c.json({ success: true, data: { id } }, 201);
+      return c.json({ success: true, data: { userId, rinkIds: rinkIds || [] } }, 201);
     } catch (err: any) {
-      return c.json(
-        { success: false, error: err?.message || 'Failed to assign director' },
-        500
-      );
+      return c.json({ success: false, error: err?.message || 'Failed to assign director' }, 500);
     }
   }
 );
@@ -128,19 +121,44 @@ directorRoutes.get(
     const db = c.env.DB;
 
     try {
-      const directors = await db
+      // Auto-migrate: add rink_id if missing
+      try { await db.prepare("ALTER TABLE event_directors ADD COLUMN rink_id TEXT REFERENCES venue_rinks(id)").run(); } catch (_) {}
+
+      const rows = await db
         .prepare(
-          `SELECT ed.id, ed.event_id, ed.user_id, ed.created_at,
-                  u.first_name, u.last_name, u.email, u.phone
+          `SELECT ed.id, ed.event_id, ed.user_id, ed.rink_id, ed.created_at,
+                  u.first_name, u.last_name, u.email, u.phone,
+                  vr.name as rink_name
            FROM event_directors ed
            JOIN users u ON u.id = ed.user_id
+           LEFT JOIN venue_rinks vr ON vr.id = ed.rink_id
            WHERE ed.event_id = ?
            ORDER BY u.first_name ASC, u.last_name ASC`
         )
         .bind(eventId)
         .all();
 
-      return c.json({ success: true, data: directors.results || [] });
+      // Group by director: merge rink assignments into one object per director
+      const dirMap = new Map<string, any>();
+      for (const row of (rows.results || []) as any[]) {
+        const key = row.user_id;
+        if (!dirMap.has(key)) {
+          dirMap.set(key, {
+            user_id: row.user_id,
+            event_id: row.event_id,
+            name: [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email,
+            email: row.email,
+            phone: row.phone,
+            rinks: [],
+            created_at: row.created_at,
+          });
+        }
+        if (row.rink_id) {
+          dirMap.get(key).rinks.push({ id: row.rink_id, name: row.rink_name });
+        }
+      }
+
+      return c.json({ success: true, data: Array.from(dirMap.values()) });
     } catch (err: any) {
       return c.json(
         { success: false, error: err?.message || 'Failed to fetch directors' },

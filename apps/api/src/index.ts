@@ -10,6 +10,7 @@ import { contactRoutes } from './routes/contacts';
 import { emailRoutes } from './routes/email';
 import { smsRoutes } from './routes/sms';
 import { venueRoutes } from './routes/venues';
+import { cityRoutes } from './routes/cities';
 import { sponsorRoutes } from './routes/sponsors';
 import { iceBookingRoutes } from './routes/ice-booking';
 import { merchRoutes } from './routes/merch';
@@ -22,6 +23,9 @@ import { hotelRoutes } from './routes/hotels';
 import { lookupRoutes } from './routes/lookups';
 import { userRoutes } from './routes/users';
 import { directorRoutes } from './routes/director';
+import { analyticsRoutes } from './routes/analytics';
+import { financialRoutes } from './routes/financials';
+import { refereeRoutes } from './routes/referees';
 import type { Env } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -42,7 +46,7 @@ app.use('*', cors({
     return allowed.includes(origin ?? '') ? origin! : '';
   },
   credentials: true,
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Dev-Bypass'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Dev-Bypass', 'X-Scorekeeper-Pin'],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
 
@@ -67,6 +71,7 @@ app.route('/api/contacts', contactRoutes);
 app.route('/api/email', emailRoutes);
 app.route('/api/sms', smsRoutes);
 app.route('/api/venues', venueRoutes);
+app.route('/api/cities', cityRoutes);
 app.route('/api/sponsors', sponsorRoutes);
 app.route('/api/ice-booking', iceBookingRoutes);
 app.route('/api/merch', merchRoutes);
@@ -76,6 +81,47 @@ app.route('/api/hotels', hotelRoutes);
 app.route('/api/lookups', lookupRoutes);
 app.route('/api/users', userRoutes);
 app.route('/api/director', directorRoutes);
+app.route('/api/analytics', analyticsRoutes);
+app.route('/api/financials', financialRoutes);
+app.route('/api/referees', refereeRoutes);
+
+// Bulk import endpoint (admin only, for data migration)
+app.post('/api/import/bulk', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json() as { statements: string[]; disableFk?: boolean };
+
+  if (!body.statements || !Array.isArray(body.statements)) {
+    return c.json({ error: 'Missing statements array' }, 400);
+  }
+
+  // Optionally disable FK checks for migration
+  if (body.disableFk) {
+    await db.prepare('PRAGMA foreign_keys = OFF').run();
+  }
+
+  let success = 0;
+  let errors = 0;
+  const errorDetails: string[] = [];
+
+  for (const stmt of body.statements) {
+    try {
+      await db.prepare(stmt).run();
+      success++;
+    } catch (e: any) {
+      errors++;
+      if (errorDetails.length < 5) {
+        errorDetails.push(`${e.message}: ${stmt.substring(0, 100)}`);
+      }
+    }
+  }
+
+  // Re-enable FK checks
+  if (body.disableFk) {
+    await db.prepare('PRAGMA foreign_keys = ON').run();
+  }
+
+  return c.json({ success: true, data: { success, errors, errorDetails } });
+});
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not Found' }, 404));

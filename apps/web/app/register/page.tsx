@@ -12,6 +12,7 @@ interface EventData {
   multi_event_discount_pct: number | null; age_groups: string | null;
 }
 interface Team { id: string; name: string; age_group?: string; division_level?: string; head_coach_name?: string; }
+interface EventHotel { id: string; hotel_name: string; city: string; state: string; rate_description: string | null; booking_url: string | null; }
 interface UpsellEvent {
   id: string; name: string; city: string; state: string;
   start_date: string; end_date: string; price_cents: number | null;
@@ -97,8 +98,14 @@ export default function RegisterPage() {
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
-  // Steps: team → payment → upsell → submitting → confirmed
-  const [step, setStep] = useState<'team' | 'payment' | 'upsell' | 'submitting' | 'confirmed'>('team');
+  // Hotels
+  const [eventHotels, setEventHotels] = useState<EventHotel[]>([]);
+  const [hotelPicks, setHotelPicks] = useState<[string, string, string]>(['', '', '']);
+  const [loadingHotels, setLoadingHotels] = useState(false);
+  const [isLocalTeam, setIsLocalTeam] = useState(false);
+
+  // Steps: team → hotels → payment → upsell → submitting → confirmed
+  const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'upsell' | 'submitting' | 'confirmed'>('team');
   const [paymentChoice, setPaymentChoice] = useState<'pay_now' | 'pay_deposit' | 'pay_later' | null>(null);
 
   // Upsell
@@ -203,6 +210,47 @@ export default function RegisterPage() {
     })();
   }, []);
 
+  // Load hotels for the event
+  const loadEventHotels = async () => {
+    if (!event) return;
+    setLoadingHotels(true);
+    try {
+      const res = await fetch(`${API}/events/event-hotels/${event.id}`);
+      const json = await res.json() as any;
+      setEventHotels(json.data || []);
+    } catch { setEventHotels([]); }
+    setLoadingHotels(false);
+  };
+
+  // Handle team continue → go to hotels step
+  const handleTeamContinue = async () => {
+    if (!selectedTeam) return;
+    await loadEventHotels();
+    setStep('hotels');
+  };
+
+  // Handle hotel selection
+  const selectHotel = (slot: 0 | 1 | 2, hotelName: string) => {
+    setHotelPicks(prev => {
+      const next = [...prev] as [string, string, string];
+      // If this hotel is already in another slot, swap
+      const existingIdx = next.indexOf(hotelName);
+      if (existingIdx !== -1 && existingIdx !== slot) {
+        next[existingIdx] = next[slot]; // put whatever was in target slot into old slot
+      }
+      next[slot] = hotelName;
+      return next;
+    });
+  };
+
+  const removeHotel = (slot: 0 | 1 | 2) => {
+    setHotelPicks(prev => {
+      const next = [...prev] as [string, string, string];
+      next[slot] = '';
+      return next;
+    });
+  };
+
   // Load upsell events when entering upsell step
   const loadUpsellEvents = async () => {
     if (!event) return;
@@ -233,6 +281,9 @@ export default function RegisterPage() {
         managerLastName: auth.user?.name?.split(' ').slice(1).join(' ') || undefined,
         headCoachName: selectedTeam.head_coach_name || undefined,
         paymentChoice,
+        hotelChoice1: isLocalTeam ? 'Local Team' : hotelPicks[0] || undefined,
+        hotelChoice2: isLocalTeam ? undefined : hotelPicks[1] || undefined,
+        hotelChoice3: isLocalTeam ? undefined : hotelPicks[2] || undefined,
       };
       if (selectedUpsellIds.size > 0) {
         body.additionalEventIds = Array.from(selectedUpsellIds);
@@ -281,8 +332,8 @@ export default function RegisterPage() {
     : 0;
 
   // Step names
-  const stepNames = ['Select Team', 'Payment', 'More Events', 'Confirm'];
-  const stepIndex = step === 'team' ? 0 : step === 'payment' ? 1 : step === 'upsell' ? 2 : step === 'confirmed' || step === 'submitting' ? 3 : 0;
+  const stepNames = ['Team', 'Hotels', 'Payment', 'More Events', 'Confirm'];
+  const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'upsell' ? 3 : step === 'confirmed' || step === 'submitting' ? 4 : 0;
 
   if (loading) {
     return (
@@ -406,7 +457,7 @@ export default function RegisterPage() {
                     + Create New Team
                   </a>
                   <button
-                    onClick={() => selectedTeam && setStep('payment')}
+                    onClick={handleTeamContinue}
                     disabled={!selectedTeam}
                     className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
                   >
@@ -418,7 +469,163 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════ STEP 2: PAYMENT CHOICE ═══════════════════════════════════ */}
+        {/* ═══════════════════════════════════ STEP 2: HOTEL PREFERENCES ═══════════════════════════════════ */}
+        {step === 'hotels' && (
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Hotel Preferences</h2>
+            <p className="text-sm text-[#6e6e73] mb-6">
+              Select your top 3 hotel choices in priority order. We'll do our best to accommodate your first choice.
+            </p>
+
+            {loadingHotels ? (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-2 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm text-[#6e6e73]">Loading hotels...</p>
+              </div>
+            ) : eventHotels.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-[#6e6e73] mb-4">No hotel partners for this event yet.</p>
+              </div>
+            ) : (
+              <>
+                {/* Local team toggle */}
+                <button
+                  onClick={() => {
+                    setIsLocalTeam(!isLocalTeam);
+                    if (!isLocalTeam) setHotelPicks(['', '', '']);
+                  }}
+                  className={`w-full text-left p-4 rounded-xl border-2 mb-5 transition-all ${
+                    isLocalTeam ? 'border-[#003e79] bg-[#003e79]/5' : 'border-[#e8e8ed] hover:border-[#003e79]/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-[#1d1d1f]">We're a Local Team</p>
+                      <p className="text-sm text-[#6e6e73] mt-0.5">We don't need a hotel — we live nearby.</p>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                      isLocalTeam ? 'border-[#003e79] bg-[#003e79]' : 'border-[#d1d1d6]'
+                    }`}>
+                      {isLocalTeam && (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                    </div>
+                  </div>
+                </button>
+
+                {!isLocalTeam && (
+                  <>
+                    {/* Selected picks display */}
+                    <div className="space-y-3 mb-6">
+                      {[0, 1, 2].map(slot => {
+                        const pick = hotelPicks[slot];
+                        const hotel = eventHotels.find(h => h.hotel_name === pick);
+                        const label = slot === 0 ? '1st Choice' : slot === 1 ? '2nd Choice' : '3rd Choice';
+                        const colors = slot === 0 ? 'border-[#00ccff] bg-[#00ccff]/5' : slot === 1 ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-gray-50';
+
+                        return (
+                          <div key={slot} className={`p-4 rounded-xl border-2 ${pick ? colors : 'border-dashed border-[#d1d1d6] bg-[#fafafa]'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                  pick ? 'bg-[#003e79] text-white' : 'bg-[#e8e8ed] text-[#86868b]'
+                                }`}>
+                                  {slot + 1}
+                                </span>
+                                <div>
+                                  {hotel ? (
+                                    <>
+                                      <p className="font-semibold text-[#1d1d1f] text-sm">{hotel.hotel_name}</p>
+                                      <p className="text-xs text-[#6e6e73]">{hotel.city}, {hotel.state}{hotel.rate_description ? ` · ${hotel.rate_description}` : ''}</p>
+                                    </>
+                                  ) : (
+                                    <p className="text-sm text-[#86868b]">{label} — tap a hotel below</p>
+                                  )}
+                                </div>
+                              </div>
+                              {pick && (
+                                <button
+                                  onClick={() => removeHotel(slot as 0 | 1 | 2)}
+                                  className="w-7 h-7 rounded-full bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Hotel list to pick from */}
+                    <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider mb-3">Available Hotels</p>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {eventHotels.map(hotel => {
+                        const pickedSlot = hotelPicks.indexOf(hotel.hotel_name);
+                        const isPicked = pickedSlot !== -1;
+                        // Find next empty slot
+                        const nextEmpty = hotelPicks.findIndex(p => !p);
+
+                        return (
+                          <button
+                            key={hotel.id}
+                            onClick={() => {
+                              if (isPicked) {
+                                removeHotel(pickedSlot as 0 | 1 | 2);
+                              } else if (nextEmpty !== -1) {
+                                selectHotel(nextEmpty as 0 | 1 | 2, hotel.hotel_name);
+                              }
+                            }}
+                            disabled={!isPicked && nextEmpty === -1}
+                            className={`w-full text-left p-3.5 rounded-xl border transition-all ${
+                              isPicked
+                                ? 'border-[#003e79] bg-[#003e79]/5'
+                                : nextEmpty === -1
+                                  ? 'border-[#e8e8ed] bg-[#f5f5f7] opacity-50 cursor-not-allowed'
+                                  : 'border-[#e8e8ed] hover:border-[#003e79]/40 hover:bg-[#f5f5f7]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-[#1d1d1f] text-sm">{hotel.hotel_name}</p>
+                                <p className="text-xs text-[#6e6e73] mt-0.5">
+                                  {hotel.city}, {hotel.state}
+                                  {hotel.rate_description ? ` · ${hotel.rate_description}` : ''}
+                                </p>
+                              </div>
+                              {isPicked ? (
+                                <span className="w-6 h-6 rounded-full bg-[#003e79] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                  {pickedSlot + 1}
+                                </span>
+                              ) : nextEmpty !== -1 ? (
+                                <span className="text-xs text-[#00ccff] font-medium flex-shrink-0">+ Add</span>
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            <div className="flex items-center justify-between pt-6">
+              <button onClick={() => setStep('team')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
+                ← Back
+              </button>
+              <button
+                onClick={() => setStep('payment')}
+                disabled={!isLocalTeam && !hotelPicks[0] && eventHotels.length > 0}
+                className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════ STEP 3: PAYMENT CHOICE ═══════════════════════════════════ */}
         {step === 'payment' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Choose Payment Option</h2>
@@ -488,7 +695,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <button onClick={() => setStep('team')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
+              <button onClick={() => setStep('hotels')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
                 ← Back
               </button>
               <button
@@ -852,6 +1059,14 @@ export default function RegisterPage() {
                         {paymentChoice === 'pay_now' ? 'Pay in Full' : paymentChoice === 'pay_deposit' ? 'Deposit' : 'Pay Later'}
                       </span>
                     </div>
+                    {(isLocalTeam || hotelPicks[0]) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#6e6e73]">Hotel</span>
+                        <span className="font-medium text-[#1d1d1f] text-right max-w-[60%]">
+                          {isLocalTeam ? 'Local Team' : hotelPicks[0]}
+                        </span>
+                      </div>
+                    )}
                     {selectedUpsellIds.size > 0 && (
                       <div className="flex justify-between text-sm pt-2 border-t border-[#e8e8ed]">
                         <span className="text-[#6e6e73]">Additional Events</span>

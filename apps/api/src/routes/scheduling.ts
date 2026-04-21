@@ -22,6 +22,101 @@ export const schedulingRoutes = new Hono<{ Bindings: Env }>();
  * - 8 teams: 2 pools of 4, 3 intra-pool games, then cross-pool brackets
  */
 
+// ==========================================
+// AUTO-MIGRATE: Add staff assignment columns to games
+// ==========================================
+async function ensureStaffColumns(db: any) {
+  const cols = ['scorekeeper_id', 'director_id', 'ref1_id', 'ref2_id'];
+  for (const col of cols) {
+    try {
+      await db.prepare(`ALTER TABLE games ADD COLUMN ${col} TEXT`).run();
+    } catch (_) { /* column already exists */ }
+  }
+}
+
+// AUTO-MIGRATE: Add mhr_rating to registrations (pulled from USA Hockey)
+async function ensureMhrColumn(db: any) {
+  try {
+    await db.prepare('ALTER TABLE registrations ADD COLUMN mhr_rating INTEGER').run();
+  } catch (_) { /* column already exists */ }
+}
+
+// Get schedule progress summary for multiple events (batch)
+schedulingRoutes.get('/events/schedule-summary', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+
+  // Get game counts per event
+  const gameCounts = await db.prepare(`
+    SELECT event_id, COUNT(*) as game_count
+    FROM games
+    GROUP BY event_id
+  `).all();
+
+  // Get approved registration counts per event
+  const regCounts = await db.prepare(`
+    SELECT event_id, COUNT(*) as team_count
+    FROM registrations
+    WHERE status = 'approved'
+    GROUP BY event_id
+  `).all();
+
+  // Get division counts per event
+  const divCounts = await db.prepare(`
+    SELECT event_id, COUNT(*) as division_count
+    FROM event_divisions
+    GROUP BY event_id
+  `).all();
+
+  // Build summary map
+  const summary: Record<string, { games: number; teams: number; divisions: number }> = {};
+
+  (gameCounts.results as any[]).forEach((r: any) => {
+    if (!summary[r.event_id]) summary[r.event_id] = { games: 0, teams: 0, divisions: 0 };
+    summary[r.event_id].games = r.game_count;
+  });
+  (regCounts.results as any[]).forEach((r: any) => {
+    if (!summary[r.event_id]) summary[r.event_id] = { games: 0, teams: 0, divisions: 0 };
+    summary[r.event_id].teams = r.team_count;
+  });
+  (divCounts.results as any[]).forEach((r: any) => {
+    if (!summary[r.event_id]) summary[r.event_id] = { games: 0, teams: 0, divisions: 0 };
+    summary[r.event_id].divisions = r.division_count;
+  });
+
+  return c.json({ success: true, data: summary });
+});
+
+// Get MHR ratings for teams in an event
+schedulingRoutes.get('/events/:eventId/team-ratings', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  await ensureMhrColumn(db);
+  const result = await db.prepare(`
+    SELECT r.id as registration_id, r.team_id, r.mhr_rating, r.event_division_id,
+      t.name as team_name, t.city as team_city, t.state as team_state,
+      ed.age_group, ed.division_level
+    FROM registrations r
+    JOIN teams t ON t.id = r.team_id
+    JOIN event_divisions ed ON ed.id = r.event_division_id
+    WHERE r.event_id = ? AND r.status = 'approved'
+    ORDER BY ed.age_group, t.name
+  `).bind(eventId).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// Update MHR ratings for teams in an event
+schedulingRoutes.put('/events/:eventId/team-ratings', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  await ensureMhrColumn(db);
+  const body = await c.req.json() as { ratings: { registration_id: string; mhr_rating: number | null }[] };
+  for (const r of body.ratings) {
+    await db.prepare('UPDATE registrations SET mhr_rating = ? WHERE id = ? AND event_id = ?')
+      .bind(r.mhr_rating, r.registration_id, eventId).run();
+  }
+  return c.json({ success: true, message: `${body.ratings.length} ratings updated` });
+});
+
 // Get schedule rules for an event
 schedulingRoutes.get('/events/:eventId/rules', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
@@ -65,26 +160,44 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
+  try {
+
+  // Optional: generate for a single division only
+  let body: any = {};
+  try { body = await c.req.json(); } catch (_) {}
+  const targetDivisionId = body.division_id || null;
+
+  console.log('Generate schedule:', { eventId, targetDivisionId });
+
   // Get event details
   const event = await db.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first<any>();
   if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
 
-  // Get divisions with approved teams
-  const divisions = await db.prepare(`
-    SELECT ed.*,
-      (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = ed.id AND r.status = 'approved') as team_count
-    FROM event_divisions ed
-    WHERE ed.event_id = ?
-  `).bind(eventId).all<any>();
+  // Get divisions with approved teams (optionally filter to one division)
+  const divQuery = targetDivisionId
+    ? db.prepare(`
+        SELECT ed.*,
+          (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = ed.id AND r.status = 'approved') as team_count
+        FROM event_divisions ed
+        WHERE ed.event_id = ? AND ed.id = ?
+      `).bind(eventId, targetDivisionId)
+    : db.prepare(`
+        SELECT ed.*,
+          (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = ed.id AND r.status = 'approved') as team_count
+        FROM event_divisions ed
+        WHERE ed.event_id = ?
+      `).bind(eventId);
+  const divisions = await divQuery.all<any>();
 
-  // Get approved teams per division
+  // Get approved teams per division (with MHR ratings)
+  await ensureMhrColumn(db);
   const divisionTeams: Record<string, any[]> = {};
   for (const div of divisions.results || []) {
     const teams = await db.prepare(`
-      SELECT t.id, t.name FROM registrations r
+      SELECT t.id, t.name, r.mhr_rating FROM registrations r
       JOIN teams t ON t.id = r.team_id
       WHERE r.event_division_id = ? AND r.status = 'approved'
-      ORDER BY r.created_at
+      ORDER BY r.mhr_rating DESC, r.created_at
     `).bind(div.id).all<any>();
     divisionTeams[div.id] = teams.results || [];
   }
@@ -107,7 +220,6 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
   // SCHEDULE GENERATION
   // ==============================
   const games: any[] = [];
-  let gameNumber = 1;
 
   // Default config (overridable by event rules)
   const minRestMinutes = parseInt(ruleMap['min_rest_minutes'] || '60');
@@ -116,7 +228,7 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
   const lastGameTime = ruleMap['last_game_time'] || '20:00';
 
   // Parse per-rink availability rules
-  const rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number }[] }> = {};
+  const rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number; date: string | null }[] }> = {};
   for (const rule of ruleList) {
     try {
       if (rule.rule_type === 'rink_first_game') {
@@ -130,10 +242,56 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
       } else if (rule.rule_type === 'rink_blocked_times') {
         const data = JSON.parse(rule.rule_value);
         if (!rinkConfig[data.rinkId]) rinkConfig[data.rinkId] = { firstMinute: parseTime(firstGameTime), lastMinute: parseTime(lastGameTime), blocked: [] };
-        rinkConfig[data.rinkId].blocked = (data.blocked || []).map((b: any) => ({ start: parseTime(b.start), end: parseTime(b.end) }));
+        const newBlocks = (data.blocked || []).map((b: any) => ({ start: parseTime(b.start), end: parseTime(b.end), date: b.date || null }));
+        rinkConfig[data.rinkId].blocked.push(...newBlocks);
       }
     } catch (_) { /* skip malformed rules */ }
   }
+
+  // Clear existing schedule FIRST (before generating new games)
+  console.log('Step 1: Clearing old data...');
+  // Delete child records from all tables that reference games(id)
+  // Use subquery to target games by event (and optionally division)
+  const gameFilter = targetDivisionId
+    ? `game_id IN (SELECT id FROM games WHERE event_id = '${eventId}' AND event_division_id = '${targetDivisionId}')`
+    : `game_id IN (SELECT id FROM games WHERE event_id = '${eventId}')`;
+
+  // Child tables that reference games(id) WITHOUT ON DELETE CASCADE
+  // These must be manually deleted before deleting games
+  // From 0005_referees.sql:
+  //   referee_game_assignments → games(id) (no cascade)
+  // From 0006_scoring_overhaul.sql:
+  //   game_lineups, game_three_stars, goalie_game_stats, shootout_rounds,
+  //   game_period_scores, game_notes, game_coaches, game_officials → games(id) (no cascade)
+  // Note: scoresheets, game_locker_rooms, game_status_log have ON DELETE CASCADE — auto-handled
+  const childTables = [
+    'referee_game_assignments',
+    'game_lineups',
+    'game_three_stars',
+    'goalie_game_stats',
+    'shootout_rounds',
+    'game_period_scores',
+    'game_notes',
+    'game_coaches',
+    'game_officials',
+  ];
+  for (const table of childTables) {
+    try {
+      await db.prepare(`DELETE FROM ${table} WHERE ${gameFilter}`).run();
+    } catch (e: any) {
+      console.log(`  Child table ${table} cleanup: ${e?.message || 'skipped'}`);
+    }
+  }
+
+  if (targetDivisionId) {
+    await db.prepare('DELETE FROM pool_standings WHERE event_id = ? AND event_division_id = ?').bind(eventId, targetDivisionId).run();
+    await db.prepare('DELETE FROM games WHERE event_id = ? AND event_division_id = ?').bind(eventId, targetDivisionId).run();
+  } else {
+    await db.prepare('DELETE FROM pool_standings WHERE event_id = ?').bind(eventId).run();
+    await db.prepare('DELETE FROM games WHERE event_id = ?').bind(eventId).run();
+  }
+
+  console.log('Step 2: Old data cleared. Setting up time tracker...');
 
   // Event date range
   const startDate = new Date(event.start_date);
@@ -152,10 +310,113 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
     rinkConfig
   );
 
+  // Parse age-group-to-rink mapping from rules
+  // Rule type: 'age_group_rinks' with value like '{"ageGroup":"8U","rinkIds":["rink1","rink2"]}'
+  const ageGroupRinks: Record<string, string[]> = {};
+  for (const rule of ruleList) {
+    if (rule.rule_type === 'age_group_rinks') {
+      try {
+        const data = JSON.parse(rule.rule_value);
+        if (data.ageGroup && Array.isArray(data.rinkIds) && data.rinkIds.length > 0) {
+          ageGroupRinks[data.ageGroup] = data.rinkIds;
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Parse per-division game duration overrides from rules
+  // Rule type: 'division_game_duration' with value like '{"divisionId":"xxx","minutes":50}'
+  const divisionDurations: Record<string, number> = {};
+  for (const rule of ruleList) {
+    if (rule.rule_type === 'division_game_duration') {
+      try {
+        const data = JSON.parse(rule.rule_value);
+        if (data.divisionId && data.minutes) {
+          divisionDurations[data.divisionId] = parseInt(data.minutes);
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Parse MHR matchup limit rules
+  // Rule type: 'mhr_matchup_limit' with value like '{"max_spread":30}'
+  let mhrMaxSpread: number | null = null;
+  for (const rule of ruleList) {
+    if (rule.rule_type === 'mhr_matchup_limit') {
+      try {
+        const data = JSON.parse(rule.rule_value);
+        if (data.max_spread) mhrMaxSpread = parseInt(data.max_spread);
+      } catch (_) {}
+    }
+  }
+
+  // Parse team time restriction rules
+  // Rule type: 'team_time_restriction' with value like:
+  // '{"team_id":"xxx","restriction":"earliest_start","day":"2025-03-14","time":"19:00"}'
+  // or '{"team_id":"xxx","restriction":"latest_end","day":"2025-03-16","time":"14:00"}'
+  interface TeamTimeRestriction {
+    team_id: string;
+    restriction: 'earliest_start' | 'latest_end';
+    day: string;
+    time: string;
+    timeMinutes: number;
+  }
+  const teamTimeRestrictions: TeamTimeRestriction[] = [];
+  for (const rule of ruleList) {
+    if (rule.rule_type === 'team_time_restriction') {
+      try {
+        const data = JSON.parse(rule.rule_value);
+        if (data.team_id && data.restriction && data.time) {
+          teamTimeRestrictions.push({
+            team_id: data.team_id,
+            restriction: data.restriction,
+            day: data.day || null,
+            time: data.time,
+            timeMinutes: parseTime(data.time),
+          });
+        }
+      } catch (_) {}
+    }
+  }
+
+  // If generating for a single division, figure out the highest existing game_number
+  // so we can continue numbering from there
+  let gameNumber = 1;
+  if (targetDivisionId) {
+    const maxGame = await db.prepare('SELECT MAX(game_number) as maxNum FROM games WHERE event_id = ?').bind(eventId).first<any>();
+    gameNumber = (maxGame?.maxNum || 0) + 1;
+  }
+
+  // Helper: check if a time slot is valid for given teams based on time restrictions
+  function isSlotValidForTeams(teamIds: string[], day: string, startMinutes: number, endMinutes: number): boolean {
+    for (const ttr of teamTimeRestrictions) {
+      if (!teamIds.includes(ttr.team_id)) continue;
+      // If restriction is day-specific, only apply on that day
+      if (ttr.day && ttr.day !== day) continue;
+      if (ttr.restriction === 'earliest_start' && startMinutes < ttr.timeMinutes) return false;
+      if (ttr.restriction === 'latest_end' && endMinutes > ttr.timeMinutes) return false;
+    }
+    return true;
+  }
+
+  // Track overflow games (scheduled on non-preferred rink)
+  const overflowGameIds: string[] = [];
+
   // Process each division
   for (const div of divisions.results || []) {
     const teams = divisionTeams[div.id] || [];
     if (teams.length < 2) continue;
+
+    // Use per-division game duration if set, otherwise fall back to global
+    const divGameDuration = divisionDurations[div.id] || div.period_length_minutes * (div.num_periods || 3) || gameDurationMinutes;
+
+    // Get preferred rinks for this division's age group (if configured)
+    const preferredRinks = ageGroupRinks[div.age_group] || undefined;
+
+    // If MHR spread limit is set, sort teams by MHR for balanced pool seeding
+    if (mhrMaxSpread !== null) {
+      teams.sort((a: any, b: any) => (b.mhr_rating || 0) - (a.mhr_rating || 0));
+    }
 
     // Number each team within the division (1-indexed) for Bible-style display
     const numberedTeams = teams.map((t: any, i: number) => ({ ...t, seed: i + 1 }));
@@ -171,21 +432,40 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
     const bracketDay = eventDays[eventDays.length - 1];
 
     for (const matchup of poolGames) {
-      const slot = timeSlotTracker.getNextSlot(poolDays);
-      if (!slot) {
-        // Fallback: try any day including bracket day
-        const fallbackSlot = timeSlotTracker.getNextSlot(eventDays);
-        if (!fallbackSlot) continue;
-        Object.assign(slot || {}, fallbackSlot);
+      const gameTeamIds = [matchup.home.id, matchup.away.id];
+      // Try up to 20 slots to find one that satisfies team time restrictions
+      let actualSlot: any = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const candidate = timeSlotTracker.getNextSlot(poolDays, divGameDuration + minRestMinutes, preferredRinks);
+        if (!candidate) {
+          const fallback = timeSlotTracker.getNextSlot(eventDays, divGameDuration + minRestMinutes, preferredRinks);
+          if (!fallback) break;
+          if (teamTimeRestrictions.length === 0 || isSlotValidForTeams(gameTeamIds, fallback.date, fallback.startMinutes, fallback.startMinutes + divGameDuration)) {
+            actualSlot = fallback;
+            break;
+          }
+          continue;
+        }
+        if (teamTimeRestrictions.length === 0 || isSlotValidForTeams(gameTeamIds, candidate.date, candidate.startMinutes, candidate.startMinutes + divGameDuration)) {
+          actualSlot = candidate;
+          break;
+        }
+        // Slot violates team restrictions, try next
       }
-      const actualSlot = slot || timeSlotTracker.getNextSlot(eventDays);
-      if (!actualSlot) continue;
+      if (!actualSlot) {
+        // No valid slot found, use any available as fallback
+        actualSlot = timeSlotTracker.getNextSlot(eventDays, divGameDuration + minRestMinutes, preferredRinks);
+        if (!actualSlot) continue;
+      }
+
+      const gameId = crypto.randomUUID().replace(/-/g, '');
+      if (actualSlot.overflow) overflowGameIds.push(gameId);
 
       const startTime = formatDateTime(actualSlot.date, actualSlot.startMinutes);
-      const endTimeStr = formatDateTime(actualSlot.date, actualSlot.startMinutes + gameDurationMinutes);
+      const endTimeStr = formatDateTime(actualSlot.date, actualSlot.startMinutes + divGameDuration);
 
       games.push({
-        id: crypto.randomUUID().replace(/-/g, ''),
+        id: gameId,
         event_id: eventId,
         event_division_id: div.id,
         home_team_id: matchup.home.id,
@@ -205,10 +485,15 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
     // Initialize pool standings
     for (const pool of poolStructure) {
       for (const team of pool.teams) {
-        await db.prepare(`
-          INSERT OR REPLACE INTO pool_standings (id, event_id, event_division_id, pool_name, team_id)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(crypto.randomUUID().replace(/-/g, ''), eventId, div.id, pool.name, team.id).run();
+        try {
+          await db.prepare(`
+            INSERT OR REPLACE INTO pool_standings (id, event_id, event_division_id, pool_name, team_id)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(crypto.randomUUID().replace(/-/g, ''), eventId, div.id, pool.name, team.id).run();
+        } catch (err) {
+          console.error('Failed pool_standings insert:', JSON.stringify({ eventId, divId: div.id, pool: pool.name, teamId: team.id }), String(err));
+          throw err;
+        }
       }
     }
 
@@ -216,14 +501,17 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
     const bracketGames = generateBracketGames(poolStructure, teams.length);
 
     for (const bracket of bracketGames) {
-      const slot = timeSlotTracker.getNextSlot([bracketDay]);
+      const slot = timeSlotTracker.getNextSlot([bracketDay], divGameDuration + minRestMinutes, preferredRinks);
       if (!slot) continue;
 
+      const gameId = crypto.randomUUID().replace(/-/g, '');
+      if (slot.overflow) overflowGameIds.push(gameId);
+
       const startTime = formatDateTime(slot.date, slot.startMinutes);
-      const endTimeStr = formatDateTime(slot.date, slot.startMinutes + gameDurationMinutes);
+      const endTimeStr = formatDateTime(slot.date, slot.startMinutes + divGameDuration);
 
       games.push({
-        id: crypto.randomUUID().replace(/-/g, ''),
+        id: gameId,
         event_id: eventId,
         event_division_id: div.id,
         home_team_id: null, // TBD from pool standings
@@ -241,35 +529,23 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
     }
   }
 
-  // Clear existing schedule
-  await db.prepare('DELETE FROM games WHERE event_id = ?').bind(eventId).run();
-  await db.prepare('DELETE FROM pool_standings WHERE event_id = ?').bind(eventId).run();
+  console.log('Step 3: Games generated in memory:', games.length, '— inserting into DB...');
 
   // Insert all games
   for (const game of games) {
-    await db.prepare(`
-      INSERT INTO games (id, event_id, event_division_id, home_team_id, away_team_id, venue_id, rink_id,
-        game_number, start_time, end_time, game_type, pool_name, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      game.id, game.event_id, game.event_division_id, game.home_team_id, game.away_team_id,
-      game.venue_id, game.rink_id, game.game_number, game.start_time, game.end_time,
-      game.game_type, game.pool_name, game.status, game.notes || null
-    ).run();
-  }
-
-  // Re-insert pool standings
-  for (const div of divisions.results || []) {
-    const teams = divisionTeams[div.id] || [];
-    if (teams.length < 2) continue;
-    const poolStructure = createPools(teams.map((t: any, i: number) => ({ ...t, seed: i + 1 })));
-    for (const pool of poolStructure) {
-      for (const team of pool.teams) {
-        await db.prepare(`
-          INSERT OR REPLACE INTO pool_standings (id, event_id, event_division_id, pool_name, team_id)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(crypto.randomUUID().replace(/-/g, ''), eventId, div.id, pool.name, team.id).run();
-      }
+    try {
+      await db.prepare(`
+        INSERT INTO games (id, event_id, event_division_id, home_team_id, away_team_id, venue_id, rink_id,
+          game_number, start_time, end_time, game_type, pool_name, status, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        game.id, game.event_id, game.event_division_id, game.home_team_id, game.away_team_id,
+        game.venue_id || null, game.rink_id || null, game.game_number, game.start_time, game.end_time,
+        game.game_type, game.pool_name || null, game.status, game.notes || null
+      ).run();
+    } catch (err) {
+      console.error('Failed to insert game:', JSON.stringify({ id: game.id, venue_id: game.venue_id, rink_id: game.rink_id, div_id: game.event_division_id, home: game.home_team_id, away: game.away_team_id }), String(err));
+      throw err;
     }
   }
 
@@ -284,9 +560,18 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
         teams: (divisionTeams[d.id] || []).length,
         pools: createPools((divisionTeams[d.id] || []).map((t: any, i: number) => ({ ...t, seed: i + 1 }))).length,
       })),
-      message: 'Schedule generated — pool play + bracket games. Review and publish when ready.',
+      overflowGames: overflowGameIds.length,
+      overflowGameIds,
+      message: overflowGameIds.length > 0
+        ? `Schedule generated — ${overflowGameIds.length} game(s) placed on non-preferred rinks (overflow). Review and adjust.`
+        : 'Schedule generated — pool play + bracket games. Review and publish when ready.',
     },
   });
+
+  } catch (err) {
+    console.error('Generate schedule error at step:', String(err));
+    return c.json({ success: false, error: 'Schedule generation failed: ' + String(err) }, 500);
+  }
 });
 
 // ==========================================
@@ -296,20 +581,150 @@ schedulingRoutes.get('/events/:eventId/games', authMiddleware, async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
+  // Ensure staff columns exist
+  await ensureStaffColumns(db);
+
   const result = await db.prepare(`
     SELECT g.*,
       ht.name as home_team_name,
       at.name as away_team_name,
-      vr.name as rink_name
+      vr.name as rink_name,
+      v.name as venue_name,
+      (sk.first_name || ' ' || sk.last_name) as scorekeeper_name,
+      (dir.first_name || ' ' || dir.last_name) as director_name,
+      (r1.first_name || ' ' || r1.last_name) as ref1_name,
+      (r2.first_name || ' ' || r2.last_name) as ref2_name
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at ON at.id = g.away_team_id
     LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN users sk ON sk.id = g.scorekeeper_id
+    LEFT JOIN users dir ON dir.id = g.director_id
+    LEFT JOIN users r1 ON r1.id = g.ref1_id
+    LEFT JOIN users r2 ON r2.id = g.ref2_id
     WHERE g.event_id = ?
     ORDER BY g.start_time, g.game_number
   `).bind(eventId).all();
 
   return c.json({ success: true, data: result.results });
+});
+
+// ==========================================
+// GET STAFF (users with relevant roles for game assignments)
+// ==========================================
+schedulingRoutes.get('/staff', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+
+  const result = await db.prepare(`
+    SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, u.phone,
+      GROUP_CONCAT(ur.role) as roles
+    FROM users u
+    JOIN user_roles ur ON ur.user_id = u.id
+    WHERE ur.role IN ('director', 'scorekeeper', 'referee')
+    AND u.is_active = 1
+    GROUP BY u.id
+    ORDER BY u.last_name, u.first_name
+  `).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==========================================
+// RINK STAFF ASSIGNMENTS (scorekeeper by rink/day)
+// ==========================================
+
+// Auto-create rink_staff_assignments table
+async function ensureRinkStaffTable(db: any) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS rink_staff_assignments (
+        id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        rink_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('scorekeeper', 'director', 'ref')),
+        assignment_date TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(event_id, rink_id, user_id, role, assignment_date)
+      )
+    `).run();
+  } catch (_) {}
+}
+
+// GET rink staff assignments for an event
+schedulingRoutes.get('/events/:eventId/rink-staff', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  await ensureRinkStaffTable(db);
+
+  const result = await db.prepare(`
+    SELECT rsa.*,
+      (u.first_name || ' ' || u.last_name) as user_name,
+      u.email as user_email,
+      vr.name as rink_name
+    FROM rink_staff_assignments rsa
+    JOIN users u ON u.id = rsa.user_id
+    LEFT JOIN venue_rinks vr ON vr.id = rsa.rink_id
+    WHERE rsa.event_id = ?
+    ORDER BY rsa.assignment_date, rsa.rink_id, rsa.role
+  `).bind(eventId).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// PUT rink staff assignments (bulk save — replaces all for event)
+const rinkStaffSchema = z.object({
+  assignments: z.array(z.object({
+    rink_id: z.string(),
+    user_id: z.string(),
+    role: z.enum(['scorekeeper', 'director', 'ref']),
+    assignment_date: z.string(), // YYYY-MM-DD
+  })),
+  auto_populate: z.boolean().default(true), // auto-fill scorekeeper_id on matching games
+});
+
+schedulingRoutes.put('/events/:eventId/rink-staff', authMiddleware, requireRole('admin', 'director'), zValidator('json', rinkStaffSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { assignments, auto_populate } = c.req.valid('json');
+  const db = c.env.DB;
+  await ensureRinkStaffTable(db);
+  await ensureStaffColumns(db);
+
+  // Clear existing assignments for this event
+  await db.prepare('DELETE FROM rink_staff_assignments WHERE event_id = ?').bind(eventId).run();
+
+  // Insert new assignments
+  for (const a of assignments) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO rink_staff_assignments (id, event_id, rink_id, user_id, role, assignment_date)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, eventId, a.rink_id, a.user_id, a.role, a.assignment_date).run();
+  }
+
+  // Auto-populate: set scorekeeper_id on all games matching rink+date
+  if (auto_populate) {
+    let populated = 0;
+    for (const a of assignments) {
+      if (a.role === 'scorekeeper') {
+        const res = await db.prepare(`
+          UPDATE games SET scorekeeper_id = ?
+          WHERE event_id = ? AND rink_id = ? AND start_time LIKE ?
+        `).bind(a.user_id, eventId, a.rink_id, a.assignment_date + '%').run();
+        populated += res.meta.changes || 0;
+      } else if (a.role === 'director') {
+        const res = await db.prepare(`
+          UPDATE games SET director_id = ?
+          WHERE event_id = ? AND rink_id = ? AND start_time LIKE ?
+        `).bind(a.user_id, eventId, a.rink_id, a.assignment_date + '%').run();
+        populated += res.meta.changes || 0;
+      }
+    }
+    return c.json({ success: true, message: `${assignments.length} assignments saved, ${populated} games auto-populated` });
+  }
+
+  return c.json({ success: true, message: `${assignments.length} assignments saved` });
 });
 
 // ==========================================
@@ -337,8 +752,13 @@ schedulingRoutes.get('/events/:eventId/standings', authMiddleware, async (c) => 
 schedulingRoutes.delete('/events/:eventId/games', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
-  await db.prepare('DELETE FROM games WHERE event_id = ?').bind(eventId).run();
+  // Clean child tables without CASCADE before deleting games
+  const gf = `game_id IN (SELECT id FROM games WHERE event_id = '${eventId}')`;
+  for (const t of ['referee_game_assignments','game_lineups','game_three_stars','goalie_game_stats','shootout_rounds','game_period_scores','game_notes','game_coaches','game_officials']) {
+    try { await db.prepare(`DELETE FROM ${t} WHERE ${gf}`).run(); } catch (_) {}
+  }
   await db.prepare('DELETE FROM pool_standings WHERE event_id = ?').bind(eventId).run();
+  await db.prepare('DELETE FROM games WHERE event_id = ?').bind(eventId).run();
   return c.json({ success: true, message: 'Schedule cleared' });
 });
 
@@ -355,6 +775,10 @@ const updateGameSchema = z.object({
   pool_name: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   status: z.enum(['scheduled', 'warmup', 'in_progress', 'intermission', 'final', 'cancelled', 'forfeit']).optional(),
+  scorekeeper_id: z.string().nullable().optional(),
+  director_id: z.string().nullable().optional(),
+  ref1_id: z.string().nullable().optional(),
+  ref2_id: z.string().nullable().optional(),
 });
 
 schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateGameSchema), async (c) => {
@@ -379,6 +803,10 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
   if (data.pool_name !== undefined) { updates.push('pool_name = ?'); values.push(data.pool_name); }
   if (data.notes !== undefined) { updates.push('notes = ?'); values.push(data.notes); }
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
+  if (data.scorekeeper_id !== undefined) { updates.push('scorekeeper_id = ?'); values.push(data.scorekeeper_id); }
+  if (data.director_id !== undefined) { updates.push('director_id = ?'); values.push(data.director_id); }
+  if (data.ref1_id !== undefined) { updates.push('ref1_id = ?'); values.push(data.ref1_id); }
+  if (data.ref2_id !== undefined) { updates.push('ref2_id = ?'); values.push(data.ref2_id); }
 
   if (updates.length === 0) {
     return c.json({ success: false, error: 'No fields to update' }, 400);
@@ -389,13 +817,20 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
 
   await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
 
-  // Return updated game with team names
+  // Return updated game with team names and staff names
   const updated = await db.prepare(`
-    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name
+    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name, v.name as venue_name,
+      (sk.first_name || ' ' || sk.last_name) as scorekeeper_name, (dir.first_name || ' ' || dir.last_name) as director_name,
+      (r1.first_name || ' ' || r1.last_name) as ref1_name, (r2.first_name || ' ' || r2.last_name) as ref2_name
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at ON at.id = g.away_team_id
     LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN users sk ON sk.id = g.scorekeeper_id
+    LEFT JOIN users dir ON dir.id = g.director_id
+    LEFT JOIN users r1 ON r1.id = g.ref1_id
+    LEFT JOIN users r2 ON r2.id = g.ref2_id
     WHERE g.id = ?
   `).bind(gameId).first();
 
@@ -438,6 +873,10 @@ schedulingRoutes.delete('/games/:gameId', authMiddleware, requireRole('admin', '
   const game = await db.prepare('SELECT * FROM games WHERE id = ?').bind(gameId).first();
   if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
 
+  // Clean child tables without CASCADE before deleting game
+  for (const t of ['referee_game_assignments','game_lineups','game_three_stars','goalie_game_stats','shootout_rounds','game_period_scores','game_notes','game_coaches','game_officials']) {
+    try { await db.prepare(`DELETE FROM ${t} WHERE game_id = ?`).bind(gameId).run(); } catch (_) {}
+  }
   await db.prepare('DELETE FROM games WHERE id = ?').bind(gameId).run();
   return c.json({ success: true, message: 'Game deleted' });
 });
@@ -480,15 +919,358 @@ schedulingRoutes.post('/games', authMiddleware, requireRole('admin', 'director')
   ).run();
 
   const created = await db.prepare(`
-    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name
+    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name, v.name as venue_name
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at ON at.id = g.away_team_id
     LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
     WHERE g.id = ?
   `).bind(id).first();
 
   return c.json({ success: true, data: created });
+});
+
+// Replace one team with another across all games in an event
+const replaceTeamSchema = z.object({
+  old_team_id: z.string().min(1),
+  new_team_id: z.string().min(1),
+});
+
+schedulingRoutes.post('/events/:eventId/replace-team', authMiddleware, requireRole('admin', 'director'), zValidator('json', replaceTeamSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { old_team_id, new_team_id } = c.req.valid('json');
+  const db = c.env.DB;
+
+  if (old_team_id === new_team_id) {
+    return c.json({ success: false, error: 'Old and new team cannot be the same' }, 400);
+  }
+
+  // Verify both teams exist
+  const [oldTeam, newTeam] = await Promise.all([
+    db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(old_team_id).first<any>(),
+    db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(new_team_id).first<any>(),
+  ]);
+  if (!oldTeam) return c.json({ success: false, error: 'Original team not found' }, 404);
+  if (!newTeam) return c.json({ success: false, error: 'Replacement team not found' }, 404);
+
+  // Count affected games
+  const countResult = await db.prepare(
+    'SELECT COUNT(*) as cnt FROM games WHERE event_id = ? AND (home_team_id = ? OR away_team_id = ?)'
+  ).bind(eventId, old_team_id, old_team_id).first<any>();
+  const affected = countResult?.cnt || 0;
+
+  if (affected === 0) {
+    return c.json({ success: false, error: `${oldTeam.name} has no games in this event` }, 400);
+  }
+
+  // Update home_team_id
+  await db.prepare(
+    'UPDATE games SET home_team_id = ? WHERE event_id = ? AND home_team_id = ?'
+  ).bind(new_team_id, eventId, old_team_id).run();
+
+  // Update away_team_id
+  await db.prepare(
+    'UPDATE games SET away_team_id = ? WHERE event_id = ? AND away_team_id = ?'
+  ).bind(new_team_id, eventId, old_team_id).run();
+
+  // Also update the registration if one exists for the old team in this event
+  // (swap the team on the registration so standings etc. carry over)
+  const oldReg = await db.prepare(
+    'SELECT id, event_division_id FROM registrations WHERE event_id = ? AND team_id = ?'
+  ).bind(eventId, old_team_id).first<any>();
+
+  if (oldReg) {
+    // Check if new team already has a registration in this division
+    const existingNewReg = await db.prepare(
+      'SELECT id FROM registrations WHERE event_id = ? AND team_id = ? AND event_division_id = ?'
+    ).bind(eventId, new_team_id, oldReg.event_division_id).first<any>();
+
+    if (!existingNewReg) {
+      // Reassign the registration from old team to new team
+      await db.prepare(
+        'UPDATE registrations SET team_id = ? WHERE id = ?'
+      ).bind(new_team_id, oldReg.id).run();
+    }
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      games_updated: affected,
+      old_team: oldTeam.name,
+      new_team: newTeam.name,
+      message: `Replaced "${oldTeam.name}" with "${newTeam.name}" in ${affected} game${affected !== 1 ? 's' : ''}.`,
+    },
+  });
+});
+
+// ==========================================
+// DIVISION ASSIGNMENT
+// ==========================================
+
+// Get teams grouped by age group with division assignments
+schedulingRoutes.get('/events/:eventId/division-assignments', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Get all divisions for this event
+  const divResult = await db.prepare(`
+    SELECT id, age_group, division_level, max_teams, min_teams, price_cents, game_format, period_length_minutes, num_periods, status
+    FROM event_divisions WHERE event_id = ? ORDER BY age_group, division_level
+  `).bind(eventId).all();
+
+  // Get all approved registrations with team info
+  const regResult = await db.prepare(`
+    SELECT r.id as registration_id, r.event_division_id, r.team_id, r.status,
+           t.name as team_name, t.city, t.state, t.division_level as team_level
+    FROM registrations r
+    JOIN teams t ON t.id = r.team_id
+    WHERE r.event_id = ? AND r.status = 'approved'
+    ORDER BY t.name
+  `).bind(eventId).all();
+
+  // Group by age_group
+  const divisions = divResult.results as any[];
+  const registrations = regResult.results as any[];
+
+  const ageGroups: Record<string, { divisions: any[]; teams: any[] }> = {};
+
+  for (const div of divisions) {
+    if (!ageGroups[div.age_group]) {
+      ageGroups[div.age_group] = { divisions: [], teams: [] };
+    }
+    ageGroups[div.age_group].divisions.push(div);
+  }
+
+  for (const reg of registrations) {
+    const div = divisions.find((d: any) => d.id === reg.event_division_id);
+    if (div) {
+      if (!ageGroups[div.age_group]) {
+        ageGroups[div.age_group] = { divisions: [], teams: [] };
+      }
+      ageGroups[div.age_group].teams.push({
+        ...reg,
+        age_group: div.age_group,
+        division_level: div.division_level,
+      });
+    }
+  }
+
+  return c.json({ success: true, data: ageGroups });
+});
+
+// Auto-split an age group into divisions of max N teams (default 6)
+const autoSplitSchema = z.object({
+  age_group: z.string(),
+  max_per_division: z.number().min(3).max(8).default(6),
+});
+
+schedulingRoutes.post('/events/:eventId/auto-split', authMiddleware, requireRole('admin', 'director'), zValidator('json', autoSplitSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { age_group, max_per_division } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Get all approved registrations for this age group
+  const regResult = await db.prepare(`
+    SELECT r.id as registration_id, r.event_division_id, r.team_id,
+           t.name as team_name, t.division_level as team_level
+    FROM registrations r
+    JOIN teams t ON t.id = r.team_id
+    JOIN event_divisions ed ON ed.id = r.event_division_id
+    WHERE r.event_id = ? AND ed.age_group = ? AND r.status = 'approved'
+    ORDER BY t.name
+  `).bind(eventId, age_group).all();
+
+  const teams = regResult.results as any[];
+  if (teams.length === 0) {
+    return c.json({ success: false, error: 'No approved teams in this age group' }, 400);
+  }
+
+  // If already fits in one division, nothing to do
+  if (teams.length <= max_per_division) {
+    return c.json({ success: true, message: `Only ${teams.length} teams — no split needed`, data: { splits: 0 } });
+  }
+
+  // Calculate number of divisions needed
+  const numDivisions = Math.ceil(teams.length / max_per_division);
+
+  // Get a template division for this age group (use the first one for pricing/format)
+  const templateDiv = await db.prepare(`
+    SELECT * FROM event_divisions WHERE event_id = ? AND age_group = ? ORDER BY division_level LIMIT 1
+  `).bind(eventId, age_group).first<any>();
+
+  if (!templateDiv) {
+    return c.json({ success: false, error: 'No division found for this age group' }, 400);
+  }
+
+  // Division level naming: A, AA, B, BB, etc. for competitive tiers
+  // Or just numbered: Division 1, Division 2, etc.
+  const levelNames = ['A', 'AA', 'B', 'BB', 'C', 'CC', 'D', 'DD'];
+
+  // Create new divisions if needed
+  const divisionIds: string[] = [];
+  const existingDivs = await db.prepare(`
+    SELECT id, division_level FROM event_divisions WHERE event_id = ? AND age_group = ? ORDER BY division_level
+  `).bind(eventId, age_group).all();
+
+  const existingDivIds = (existingDivs.results as any[]).map((d: any) => d.id);
+
+  // If we have exactly the right number already, reuse them
+  if (existingDivIds.length >= numDivisions) {
+    // Reuse existing divisions
+    for (let i = 0; i < numDivisions; i++) {
+      divisionIds.push(existingDivIds[i]);
+    }
+  } else {
+    // Keep the first existing division, create new ones for the rest
+    divisionIds.push(existingDivIds[0]);
+    for (let i = 1; i < numDivisions; i++) {
+      if (i < existingDivIds.length) {
+        divisionIds.push(existingDivIds[i]);
+      } else {
+        const newId = crypto.randomUUID().replace(/-/g, '');
+        const level = i < levelNames.length ? levelNames[i] : `Division ${i + 1}`;
+        await db.prepare(`
+          INSERT INTO event_divisions (id, event_id, age_group, division_level, max_teams, min_teams, price_cents, game_format, period_length_minutes, num_periods, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+        `).bind(
+          newId, eventId, age_group, level,
+          max_per_division, templateDiv.min_teams || 3,
+          templateDiv.price_cents, templateDiv.game_format,
+          templateDiv.period_length_minutes, templateDiv.num_periods
+        ).run();
+        divisionIds.push(newId);
+      }
+    }
+    // Update the first division's level name if it doesn't have one matching the scheme
+    const firstLevel = levelNames[0];
+    await db.prepare(`UPDATE event_divisions SET division_level = ?, max_teams = ? WHERE id = ?`).bind(firstLevel, max_per_division, divisionIds[0]).run();
+  }
+
+  // Snake-draft teams into divisions by MHR ranking
+  // Round 0: 0→Div0, 1→Div1, 2→Div2 ...
+  // Round 1: (numDiv-1)→Div0, (numDiv-2)→Div1 ...
+  const assignments: { teamId: string; registrationId: string; divisionId: string; divIndex: number }[] = [];
+  teams.forEach((team: any, idx: number) => {
+    const round = Math.floor(idx / numDivisions);
+    const divIdx = round % 2 === 0 ? idx % numDivisions : numDivisions - 1 - (idx % numDivisions);
+    assignments.push({
+      teamId: team.team_id,
+      registrationId: team.registration_id,
+      divisionId: divisionIds[divIdx],
+      divIndex: divIdx,
+    });
+  });
+
+  // Update all registrations with their new division
+  for (const a of assignments) {
+    await db.prepare(`UPDATE registrations SET event_division_id = ? WHERE id = ?`).bind(a.divisionId, a.registrationId).run();
+  }
+
+  // Update current_team_count for all affected divisions
+  for (const divId of divisionIds) {
+    const count = assignments.filter(a => a.divisionId === divId).length;
+    await db.prepare(`UPDATE event_divisions SET current_team_count = ? WHERE id = ?`).bind(count, divId).run();
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      splits: numDivisions,
+      divisions: divisionIds,
+      assignments: assignments.length,
+      message: `Split ${teams.length} ${age_group} teams into ${numDivisions} divisions of ~${max_per_division}`,
+    },
+  });
+});
+
+// Move a team from one division to another
+const moveTeamSchema = z.object({
+  registration_id: z.string(),
+  target_division_id: z.string(),
+});
+
+schedulingRoutes.post('/events/:eventId/move-team', authMiddleware, requireRole('admin', 'director'), zValidator('json', moveTeamSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { registration_id, target_division_id } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Verify registration exists
+  const reg = await db.prepare(`SELECT * FROM registrations WHERE id = ? AND event_id = ?`).bind(registration_id, eventId).first<any>();
+  if (!reg) return c.json({ success: false, error: 'Registration not found' }, 404);
+
+  // Verify target division exists and belongs to the same event
+  const targetDiv = await db.prepare(`SELECT * FROM event_divisions WHERE id = ? AND event_id = ?`).bind(target_division_id, eventId).first<any>();
+  if (!targetDiv) return c.json({ success: false, error: 'Target division not found' }, 404);
+
+  const oldDivId = reg.event_division_id;
+  if (oldDivId === target_division_id) return c.json({ success: true, message: 'Already in that division' });
+
+  // Move registration
+  await db.prepare(`UPDATE registrations SET event_division_id = ? WHERE id = ?`).bind(target_division_id, registration_id).run();
+
+  // Update team counts on both divisions
+  await db.prepare(`UPDATE event_divisions SET current_team_count = (SELECT COUNT(*) FROM registrations WHERE event_division_id = ? AND status = 'approved') WHERE id = ?`).bind(oldDivId, oldDivId).run();
+  await db.prepare(`UPDATE event_divisions SET current_team_count = (SELECT COUNT(*) FROM registrations WHERE event_division_id = ? AND status = 'approved') WHERE id = ?`).bind(target_division_id, target_division_id).run();
+
+  return c.json({ success: true, message: 'Team moved successfully' });
+});
+
+// Create a new division under an age group
+const createDivisionSchema = z.object({
+  age_group: z.string(),
+  division_level: z.string(),
+});
+
+schedulingRoutes.post('/events/:eventId/create-division', authMiddleware, requireRole('admin', 'director'), zValidator('json', createDivisionSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { age_group, division_level } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Get template from existing division in this age group
+  const template = await db.prepare(`
+    SELECT * FROM event_divisions WHERE event_id = ? AND age_group = ? LIMIT 1
+  `).bind(eventId, age_group).first<any>();
+
+  const newId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO event_divisions (id, event_id, age_group, division_level, max_teams, min_teams, price_cents, game_format, period_length_minutes, num_periods, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+  `).bind(
+    newId, eventId, age_group, division_level,
+    template?.max_teams || 6, template?.min_teams || 3,
+    template?.price_cents || 0, template?.game_format || '5v5',
+    template?.period_length_minutes || 12, template?.num_periods || 3
+  ).run();
+
+  return c.json({ success: true, data: { id: newId, age_group, division_level } });
+});
+
+// Delete an empty division
+schedulingRoutes.delete('/events/:eventId/divisions/:divisionId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const divisionId = c.req.param('divisionId');
+  const db = c.env.DB;
+
+  // Check no teams are in this division (ANY status — FK constraint is on all registrations, not just approved)
+  const count = await db.prepare(`SELECT COUNT(*) as c FROM registrations WHERE event_division_id = ?`).bind(divisionId).first<any>();
+  if (count && count.c > 0) {
+    return c.json({ success: false, error: 'Cannot delete division with teams — move teams first' }, 400);
+  }
+
+  // Clean up any games + pool_standings referencing this division (FK without CASCADE)
+  const gf = `game_id IN (SELECT id FROM games WHERE event_division_id = '${divisionId}')`;
+  for (const t of ['referee_game_assignments','game_lineups','game_three_stars','goalie_game_stats','shootout_rounds','game_period_scores','game_notes','game_coaches','game_officials']) {
+    try { await db.prepare(`DELETE FROM ${t} WHERE ${gf}`).run(); } catch (_) {}
+  }
+  await db.prepare(`DELETE FROM pool_standings WHERE event_division_id = ?`).bind(divisionId).run();
+  await db.prepare(`DELETE FROM games WHERE event_division_id = ?`).bind(divisionId).run();
+  // Also clean up champions referencing this division
+  try { await db.prepare(`DELETE FROM champions WHERE event_division_id = ?`).bind(divisionId).run(); } catch (_) {}
+
+  await db.prepare(`DELETE FROM event_divisions WHERE id = ? AND event_id = ?`).bind(divisionId, eventId).run();
+  return c.json({ success: true, message: 'Division deleted' });
 });
 
 // ==========================================
@@ -811,11 +1593,11 @@ class TimeSlotTracker {
   private gameDuration: number;
   private restTime: number;
   private rinks: any[];
-  private rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number }[] }>;
+  private rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number; date: string | null }[] }>;
 
   constructor(
     days: Date[], firstMinute: number, lastMinute: number, gameDuration: number, restTime: number, rinks: any[],
-    rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number }[] }> = {}
+    rinkConfig: Record<string, { firstMinute: number; lastMinute: number; blocked: { start: number; end: number; date: string | null }[] }> = {}
   ) {
     this.days = days;
     this.firstMinute = firstMinute;
@@ -836,12 +1618,14 @@ class TimeSlotTracker {
   }
 
   // Check if a time slot overlaps with any blocked window for this rink
-  private isBlocked(rinkId: string | null, startMinutes: number): boolean {
+  private isBlocked(rinkId: string | null, startMinutes: number, date?: string): boolean {
     if (!rinkId) return false;
     const rc = this.rinkConfig[rinkId];
     if (!rc || !rc.blocked) return false;
     const endMinutes = startMinutes + this.gameDuration;
     for (const block of rc.blocked) {
+      // If block has a date, only apply on that date
+      if (block.date && date && block.date !== date) continue;
       // Overlap check: game starts before block ends AND game ends after block starts
       if (startMinutes < block.end && endMinutes > block.start) return true;
     }
@@ -854,48 +1638,74 @@ class TimeSlotTracker {
     return this.lastMinute;
   }
 
-  getNextSlot(allowedDays: Date[]): { date: Date; startMinutes: number; rinkId: string | null } | null {
-    // Find the earliest available slot across all allowed days and rinks
-    let best: { date: Date; startMinutes: number; rinkId: string | null; key: string } | null = null;
+  /**
+   * Get next available time slot.
+   * @param allowedDays - which event days to search
+   * @param slotDurationOverride - total time needed (game + rest)
+   * @param preferredRinkIds - if set, try these rinks first; if full, overflow to any rink
+   * @returns slot info with `overflow: true` if it landed on a non-preferred rink
+   */
+  getNextSlot(allowedDays: Date[], slotDurationOverride?: number, preferredRinkIds?: string[]): { date: Date; startMinutes: number; rinkId: string | null; overflow: boolean } | null {
+    const slotDuration = slotDurationOverride || (this.gameDuration + this.restTime);
 
-    for (const day of allowedDays) {
-      for (const rink of this.rinks) {
-        const key = `${day.toISOString().split('T')[0]}|${rink.id}`;
-        let nextMinute = this.slotIndex.get(key) || this.firstMinute;
-        const rinkLast = this.getRinkLastMinute(rink.id);
+    const findBestSlot = (rinkFilter?: string[]) => {
+      let best: { date: Date; startMinutes: number; rinkId: string | null; key: string } | null = null;
+      for (const day of allowedDays) {
+        for (const rink of this.rinks) {
+          // If filtering by rink, skip non-matching rinks
+          if (rinkFilter && rinkFilter.length > 0 && !rinkFilter.includes(rink.id)) continue;
 
-        // Skip past any blocked windows
-        let safety = 0;
-        while (this.isBlocked(rink.id, nextMinute) && safety < 100) {
-          // Jump to end of the blocking window
-          const rc = rink.id ? this.rinkConfig[rink.id] : null;
-          if (rc) {
-            for (const block of rc.blocked) {
-              if (nextMinute < block.end && nextMinute + this.gameDuration > block.start) {
-                nextMinute = block.end + this.restTime;
-                break;
+          const dayStr = day.toISOString().split('T')[0];
+          const key = `${dayStr}|${rink.id}`;
+          let nextMinute = this.slotIndex.get(key) || this.firstMinute;
+          const rinkLast = this.getRinkLastMinute(rink.id);
+
+          // Skip past any blocked windows
+          let safety = 0;
+          while (this.isBlocked(rink.id, nextMinute, dayStr) && safety < 100) {
+            const rc = rink.id ? this.rinkConfig[rink.id] : null;
+            if (rc) {
+              for (const block of rc.blocked) {
+                if (block.date && block.date !== dayStr) continue;
+                if (nextMinute < block.end && nextMinute + this.gameDuration > block.start) {
+                  nextMinute = block.end + this.restTime;
+                  break;
+                }
               }
             }
+            safety++;
           }
-          safety++;
-        }
 
-        if (nextMinute + this.gameDuration <= rinkLast + this.gameDuration) {
-          if (!best || nextMinute < best.startMinutes || (nextMinute === best.startMinutes && day < best.date)) {
-            best = { date: day, startMinutes: nextMinute, rinkId: rink.id, key };
+          if (nextMinute + this.gameDuration <= rinkLast + this.gameDuration) {
+            if (!best || nextMinute < best.startMinutes || (nextMinute === best.startMinutes && day < best.date)) {
+              best = { date: day, startMinutes: nextMinute, rinkId: rink.id, key };
+            }
           }
         }
       }
+      return best;
+    };
+
+    // Try preferred rinks first (if any are configured)
+    let best = (preferredRinkIds && preferredRinkIds.length > 0) ? findBestSlot(preferredRinkIds) : null;
+    let overflow = false;
+
+    // If no preferred rink slot available, fall back to any rink (overflow)
+    if (!best) {
+      best = findBestSlot();
+      if (best && preferredRinkIds && preferredRinkIds.length > 0) overflow = true;
     }
 
     if (best) {
-      // Advance the slot — and skip past any blocked windows for next time
-      let nextAvail = best.startMinutes + this.gameDuration + this.restTime;
+      // Advance the slot using the actual slot duration
+      let nextAvail = best.startMinutes + slotDuration;
       // Pre-skip blocked windows for the next call
+      const bestDayStr = best.date.toISOString().split('T')[0];
       if (best.rinkId && this.rinkConfig[best.rinkId]) {
         let safety = 0;
-        while (this.isBlocked(best.rinkId, nextAvail) && safety < 100) {
+        while (this.isBlocked(best.rinkId, nextAvail, bestDayStr) && safety < 100) {
           for (const block of this.rinkConfig[best.rinkId].blocked) {
+            if (block.date && block.date !== bestDayStr) continue;
             if (nextAvail < block.end && nextAvail + this.gameDuration > block.start) {
               nextAvail = block.end + this.restTime;
               break;
@@ -905,7 +1715,7 @@ class TimeSlotTracker {
         }
       }
       this.slotIndex.set(best.key, nextAvail);
-      return { date: best.date, startMinutes: best.startMinutes, rinkId: best.rinkId };
+      return { date: best.date, startMinutes: best.startMinutes, rinkId: best.rinkId, overflow };
     }
 
     return null;

@@ -12,6 +12,8 @@ export interface Env {
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
   TWILIO_PHONE_NUMBER: string;
+  TELNYX_API_KEY: string;
+  TELNYX_PHONE_NUMBER: string;
   CLAUDE_API_KEY: string;
   JWT_SECRET: string;
   USA_HOCKEY_API_KEY: string;

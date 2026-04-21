@@ -240,16 +240,22 @@ function GameCard({ game }: GameCardProps) {
       )}
 
       {/* Rink and time info */}
-      <div className="px-4 py-3 border-t border-[#e8e8ed] bg-gray-50">
-        <p className="text-xs text-[#86868b] mb-1">
-          <span className="uppercase tracking-widest font-semibold">{game.rink_name}</span>
-        </p>
-        <p className="text-xs text-[#3d3d3d]">
-          {formatTime(game.start_time)}
-          {game.adjusted_start_time && game.adjusted_start_time !== game.start_time && (
-            <span className="ml-2 text-amber-600 line-through">{formatTime(game.start_time)}</span>
-          )}
-        </p>
+      <div className="px-4 py-3 border-t border-[#e8e8ed] bg-gray-50 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-[#86868b] mb-1">
+            <span className="uppercase tracking-widest font-semibold">{game.rink_name}</span>
+          </p>
+          <p className="text-xs text-[#3d3d3d]">
+            {formatTime(game.start_time)}
+            {game.adjusted_start_time && game.adjusted_start_time !== game.start_time && (
+              <span className="ml-2 text-amber-600 line-through">{formatTime(game.start_time)}</span>
+            )}
+          </p>
+        </div>
+        <a href={`/scores/game?gameId=${game.id}`}
+          className="text-xs font-semibold text-[#003e79] hover:underline px-3 py-1.5 rounded-lg bg-[#f0f7ff] border border-[#003e79]/10">
+          Score Sheet →
+        </a>
       </div>
 
       {/* Expanded details */}

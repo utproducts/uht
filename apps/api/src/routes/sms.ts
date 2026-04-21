@@ -101,14 +101,14 @@ smsRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zValid
       `).bind(convoId, resolved.contactId, cleanPhone, resolved.displayName).run();
     }
 
-    // Send via Twilio
-    let twilioMessageId: string | null = null;
-    let twilioError: string | null = null;
+    // Send via Telnyx
+    let smsMessageId: string | null = null;
+    let smsError: string | null = null;
     try {
-      twilioMessageId = await sendTwilioSms(env, cleanPhone, data.message);
+      smsMessageId = await sendTelnyxSms(env, cleanPhone, data.message);
     } catch (err: any) {
-      twilioError = err?.message || 'Twilio send failed';
-      console.error('Twilio error:', twilioError);
+      smsError = err?.message || 'Telnyx send failed';
+      console.error('Telnyx error:', smsError);
     }
 
     // Save message
@@ -116,12 +116,12 @@ smsRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zValid
     await db.prepare(`
       INSERT INTO sms_messages (id, conversation_id, direction, body, textmagic_message_id, status, sent_by)
       VALUES (?, ?, 'outbound', ?, ?, ?, ?)
-    `).bind(msgId, convoId, data.message, twilioMessageId, twilioMessageId ? 'sent' : 'queued', user.id).run();
+    `).bind(msgId, convoId, data.message, smsMessageId, smsMessageId ? 'sent' : 'queued', user.id).run();
 
     await db.prepare("UPDATE sms_conversations SET last_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(convoId).run();
 
-    if (twilioError) {
-      return c.json({ success: false, error: `SMS delivery failed: ${twilioError}`, data: { messageId: msgId, conversationId: convoId } }, 502);
+    if (smsError) {
+      return c.json({ success: false, error: `SMS delivery failed: ${smsError}`, data: { messageId: msgId, conversationId: convoId } }, 502);
     }
 
     return c.json({ success: true, data: { messageId: msgId, conversationId: convoId } });
@@ -176,10 +176,10 @@ smsRoutes.post('/broadcast', authMiddleware, requireRole('admin', 'director'), z
       convo = { id: convoId };
     }
 
-    // Send via Twilio
-    let twilioId: string | null = null;
+    // Send via Telnyx
+    let telnyxId: string | null = null;
     try {
-      twilioId = await sendTwilioSms(env, cleanPhone, message);
+      telnyxId = await sendTelnyxSms(env, cleanPhone, message);
       sentCount++;
     } catch {
       failedCount++;
@@ -191,7 +191,7 @@ smsRoutes.post('/broadcast', authMiddleware, requireRole('admin', 'director'), z
       VALUES (?, ?, 'outbound', ?, ?, ?, ?)
     `).bind(
       crypto.randomUUID().replace(/-/g, ''), convo.id, message,
-      twilioId, twilioId ? 'sent' : 'failed', user.id
+      telnyxId, telnyxId ? 'sent' : 'failed', user.id
     ).run();
 
     await db.prepare("UPDATE sms_conversations SET last_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(convo.id).run();
@@ -245,34 +245,46 @@ smsRoutes.get('/filters', authMiddleware, requireRole('admin', 'director'), asyn
 });
 
 // ==================
-// Twilio inbound webhook (receives replies)
+// Telnyx inbound webhook (receives replies)
 // ==================
-smsRoutes.post('/webhooks/twilio', async (c) => {
+smsRoutes.post('/webhooks/telnyx', async (c) => {
   const db = c.env.DB;
 
-  // Twilio sends form-encoded data
-  const formData = await c.req.parseBody();
-  const phone = normalizePhone(String(formData['From'] || ''));
-  const message = String(formData['Body'] || '');
+  // Telnyx sends JSON
+  const payload = await c.req.json() as any;
+  const eventData = payload?.data?.payload || payload?.data?.event_type ? payload.data : null;
 
-  if (!phone || !message) {
-    return c.text('<Response></Response>', 200, { 'Content-Type': 'text/xml' });
+  if (!eventData) {
+    return c.json({ success: true });
+  }
+
+  // Only handle inbound messages
+  const eventType = payload?.data?.event_type || '';
+  if (eventType !== 'message.received') {
+    return c.json({ success: true });
+  }
+
+  const fromPhone = normalizePhone(String(eventData.from?.phone_number || ''));
+  const messageBody = String(eventData.text || '');
+  const telnyxMsgId = String(eventData.id || '');
+
+  if (!fromPhone || !messageBody) {
+    return c.json({ success: true });
   }
 
   // Find or create conversation
-  let convo = await db.prepare('SELECT id FROM sms_conversations WHERE phone_number = ?').bind(phone).first<{ id: string }>();
+  let convo = await db.prepare('SELECT id FROM sms_conversations WHERE phone_number = ?').bind(fromPhone).first<{ id: string }>();
 
   if (!convo) {
-    const resolved = await resolveContact(db, phone);
+    const resolved = await resolveContact(db, fromPhone);
     const convoId = crypto.randomUUID().replace(/-/g, '');
     await db.prepare(`
       INSERT INTO sms_conversations (id, contact_id, phone_number, contact_name, is_read, last_message_at)
       VALUES (?, ?, ?, ?, 0, datetime('now'))
-    `).bind(convoId, resolved.contactId, phone, resolved.displayName).run();
+    `).bind(convoId, resolved.contactId, fromPhone, resolved.displayName).run();
     convo = { id: convoId };
   } else {
-    // Re-resolve contact name in case they've since registered
-    const resolved = await resolveContact(db, phone);
+    const resolved = await resolveContact(db, fromPhone);
     if (resolved.displayName) {
       await db.prepare('UPDATE sms_conversations SET contact_name = ? WHERE id = ?').bind(resolved.displayName, convo.id).run();
     }
@@ -282,49 +294,51 @@ smsRoutes.post('/webhooks/twilio', async (c) => {
   await db.prepare(`
     INSERT INTO sms_messages (id, conversation_id, direction, body, textmagic_message_id, status)
     VALUES (?, ?, 'inbound', ?, ?, 'received')
-  `).bind(crypto.randomUUID().replace(/-/g, ''), convo.id, message, String(formData['MessageSid'] || '')).run();
+  `).bind(crypto.randomUUID().replace(/-/g, ''), convo.id, messageBody, telnyxMsgId).run();
 
   await db.prepare("UPDATE sms_conversations SET is_read = 0, last_message_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").bind(convo.id).run();
 
-  // TwiML empty response (no auto-reply)
+  return c.json({ success: true });
+});
+
+// Keep legacy Twilio webhook alive during transition
+smsRoutes.post('/webhooks/twilio', async (c) => {
   return c.text('<Response></Response>', 200, { 'Content-Type': 'text/xml' });
 });
 
 // ==================
-// HELPER: Send via Twilio
+// HELPER: Send via Telnyx
 // ==================
-async function sendTwilioSms(env: Env, to: string, body: string): Promise<string | null> {
-  const accountSid = env.TWILIO_ACCOUNT_SID;
-  const authToken = env.TWILIO_AUTH_TOKEN;
-  const fromNumber = env.TWILIO_PHONE_NUMBER;
+async function sendTelnyxSms(env: Env, to: string, body: string): Promise<string | null> {
+  const apiKey = env.TELNYX_API_KEY;
+  const fromNumber = env.TELNYX_PHONE_NUMBER;
 
-  if (!accountSid || !authToken || !fromNumber) {
-    console.warn('Twilio not configured — skipping SMS send');
+  if (!apiKey || !fromNumber) {
+    console.warn('Telnyx not configured — skipping SMS send');
     return null;
   }
 
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-  const auth = btoa(`${accountSid}:${authToken}`);
+  const normalizedTo = to.startsWith('+') ? to : `+1${to.replace(/\D/g, '').slice(-10)}`;
 
-  const params = new URLSearchParams();
-  params.append('To', to.startsWith('+') ? to : `+1${to}`);
-  params.append('From', fromNumber);
-  params.append('Body', body);
-
-  const response = await fetch(url, {
+  const response = await fetch('https://api.telnyx.com/v2/messages', {
     method: 'POST',
     headers: {
-      'Authorization': `Basic ${auth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
     },
-    body: params.toString(),
+    body: JSON.stringify({
+      from: fromNumber,
+      to: normalizedTo,
+      text: body,
+    }),
   });
 
   const result = await response.json() as any;
   if (!response.ok) {
-    throw new Error(result.message || 'Twilio send failed');
+    const errMsg = result?.errors?.[0]?.detail || result?.errors?.[0]?.title || 'Telnyx send failed';
+    throw new Error(errMsg);
   }
-  return result.sid || null;
+  return result?.data?.id || null;
 }
 
 // ==================

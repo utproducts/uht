@@ -144,7 +144,7 @@ eventRoutes.get('/meta/states', async (c) => {
 // ==================
 eventRoutes.get('/admin/list', async (c) => {
   const db = c.env.DB;
-  const { filter = 'upcoming' } = c.req.query();
+  const { filter = 'all', search, per_page, page = '1' } = c.req.query();
   const today = new Date().toISOString().split('T')[0];
 
   let dateCondition = '';
@@ -154,24 +154,41 @@ eventRoutes.get('/admin/list', async (c) => {
     dateCondition = `AND e.end_date < '${today}'`;
   }
 
+  let searchCondition = '';
+  const params: string[] = [];
+  if (search && search.trim().length >= 2) {
+    searchCondition = `AND (LOWER(e.name) LIKE ? OR LOWER(e.city) LIKE ? OR LOWER(e.state) LIKE ? OR e.season LIKE ?)`;
+    const term = `%${search.trim().toLowerCase()}%`;
+    params.push(term, term, term, term);
+  }
+
+  const countQuery = `SELECT COUNT(*) as total FROM events e WHERE 1=1 ${dateCondition} ${searchCondition}`;
+  const countResult = await db.prepare(countQuery).bind(...params).first<{ total: number }>();
+  const total = countResult?.total || 0;
+
+  const limit = per_page ? parseInt(per_page) : 200;
+  const offset = (parseInt(page) - 1) * limit;
+
   const result = await db.prepare(`
     SELECT e.*,
       t.name as tournament_name, t.location as tournament_location,
-      (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as registration_count,
-      (SELECT SUM(er2.payment_amount_cents) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.payment_amount_cents IS NOT NULL) as total_revenue_cents
+      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'approved') as registration_count,
+      (SELECT COALESCE(SUM(COALESCE(r2.amount_cents, ed2.price_cents)), 0) FROM registrations r2 LEFT JOIN event_divisions ed2 ON ed2.id = r2.event_division_id WHERE r2.event_id = e.id AND r2.payment_status = 'paid' AND r2.status = 'approved') as total_revenue_cents
     FROM events e
     LEFT JOIN tournaments t ON t.id = e.tournament_id
-    WHERE 1=1 ${dateCondition}
-    ORDER BY e.start_date ASC
-  `).all();
+    WHERE 1=1 ${dateCondition} ${searchCondition}
+    ORDER BY e.start_date DESC
+    LIMIT ? OFFSET ?
+  `).bind(...params, limit.toString(), offset.toString()).all();
 
-  return c.json({ success: true, data: result.results });
+  return c.json({ success: true, data: result.results, pagination: { total, page: parseInt(page), perPage: limit } });
 });
 
 // ==================
 // ADMIN: Get single event detail with registrations
 // ==================
 eventRoutes.get('/admin/detail/:id', async (c) => {
+  try {
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -186,31 +203,71 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
 
-  // Get registrations grouped by age_group
+  // Get registrations from normalized tables, mapped to field names the frontend expects
   const registrations = await db.prepare(`
+    SELECT r.id, r.event_id, r.status, r.payment_status,
+      r.amount_cents as payment_amount_cents,
+      t.name as team_name,
+      ed.age_group,
+      ed.division_level as division,
+      r.hotel_assigned,
+      r.notes,
+      r.event_division_id,
+      r.created_at, r.updated_at
+    FROM registrations r
+    LEFT JOIN teams t ON t.id = r.team_id
+    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+    WHERE r.event_id = ?
+    ORDER BY ed.age_group ASC, t.name ASC
+  `).bind(id).all();
+
+  // Also check legacy event_registrations table for any data there
+  const legacyRegs = await db.prepare(`
     SELECT * FROM event_registrations
     WHERE event_id = ?
     ORDER BY age_group ASC, team_name ASC
   `).bind(id).all();
 
-  // Get registration summary by age group
-  const summary = await db.prepare(`
-    SELECT age_group, COUNT(*) as team_count,
-      SUM(CASE WHEN payment_amount_cents IS NOT NULL THEN payment_amount_cents ELSE 0 END) as revenue_cents
-    FROM event_registrations
-    WHERE event_id = ?
-    GROUP BY age_group
-    ORDER BY age_group ASC
-  `).bind(id).all();
+  // Merge: use normalized registrations, fall back to legacy if normalized is empty
+  const allRegs = registrations.results.length > 0 ? registrations.results : legacyRegs.results;
+
+  // Get registration summary by age group (approved only — pending regs excluded from overview)
+  const approvedRegs = allRegs.filter((r: any) => r.status === 'approved');
+  const summary = approvedRegs.length > 0 ? (() => {
+    const groups: Record<string, { team_count: number; revenue_cents: number }> = {};
+    approvedRegs.forEach((r: any) => {
+      const ag = r.age_group || 'Unknown';
+      if (!groups[ag]) groups[ag] = { team_count: 0, revenue_cents: 0 };
+      groups[ag].team_count++;
+      groups[ag].revenue_cents += (r.payment_amount_cents || 0);
+    });
+    return Object.entries(groups).sort(([a],[b]) => a.localeCompare(b)).map(([age_group, data]) => ({
+      age_group, ...data
+    }));
+  })() : [];
+
+  // Get assigned venues
+  const assignedVenues = await db.prepare(`
+    SELECT ev.venue_id, ev.is_primary, ev.sort_order,
+      v.name as venue_name, v.city as venue_city, v.state as venue_state, v.address as venue_address
+    FROM event_venues ev
+    JOIN venues v ON v.id = ev.venue_id
+    WHERE ev.event_id = ?
+    ORDER BY ev.is_primary DESC, ev.sort_order ASC
+  `).bind(id).all().catch(() => ({ results: [] }));
 
   return c.json({
     success: true,
     data: {
       ...event,
-      registrations: registrations.results,
-      registration_summary: summary.results,
+      registrations: allRegs,
+      registration_summary: summary,
+      venues: assignedVenues.results,
     },
   });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message, stack: e.stack?.substring(0, 500) }, 500);
+  }
 });
 
 // ==================
@@ -258,6 +315,91 @@ const updateEventSchema = z.object({
   logo_url: z.string().nullable().optional(),
   banner_url: z.string().nullable().optional(),
   multi_event_discount_pct: z.number().nullable().optional(),
+});
+
+// ==================
+// ADMIN: Get event divisions with pricing
+// ==================
+eventRoutes.get('/admin/:id/divisions', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+
+  const divisions = await db.prepare(`
+    SELECT ed.*,
+    (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = ed.id AND r.status IN ('approved', 'pending')) as registered_count
+    FROM event_divisions ed
+    WHERE ed.event_id = ?
+    ORDER BY ed.age_group ASC, ed.division_level ASC
+  `).bind(id).all();
+
+  return c.json({ success: true, data: divisions.results });
+});
+
+// ==================
+// ADMIN: Save event divisions (upsert all)
+// ==================
+const saveDivisionsSchema = z.object({
+  divisions: z.array(z.object({
+    id: z.string().optional(),
+    age_group: z.string(),
+    division_level: z.string().optional().nullable(),
+    max_teams: z.number().optional().nullable(),
+    price_cents: z.number(),
+  })),
+});
+
+eventRoutes.put('/admin/:id/divisions', zValidator('json', saveDivisionsSchema), async (c) => {
+  const eventId = c.req.param('id');
+  const { divisions } = c.req.valid('json');
+  const db = c.env.DB;
+
+  const existing = await db.prepare('SELECT id FROM events WHERE id = ?').bind(eventId).first();
+  if (!existing) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // Get current divisions to preserve any with registrations
+  const current = await db.prepare('SELECT ed.id, (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = ed.id) as reg_count FROM event_divisions ed WHERE ed.event_id = ?').bind(eventId).all<any>();
+  const currentMap = new Map(current.results.map((d: any) => [d.id, d.reg_count]));
+
+  // Upsert each division
+  for (const div of divisions) {
+    if (div.id && currentMap.has(div.id)) {
+      // Update existing
+      await db.prepare(`
+        UPDATE event_divisions SET age_group = ?, division_level = ?, max_teams = ?, price_cents = ?
+        WHERE id = ? AND event_id = ?
+      `).bind(
+        div.age_group, div.division_level || null, div.max_teams || null,
+        div.price_cents,
+        div.id, eventId
+      ).run();
+      currentMap.delete(div.id);
+    } else {
+      // Insert new
+      const newId = div.id || crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO event_divisions (id, event_id, age_group, division_level, max_teams, price_cents)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        newId, eventId, div.age_group, div.division_level || null,
+        div.max_teams || null, div.price_cents
+      ).run();
+    }
+  }
+
+  // Delete removed divisions that have no registrations
+  for (const [divId, regCount] of currentMap) {
+    if (regCount === 0) {
+      await db.prepare('DELETE FROM event_divisions WHERE id = ? AND event_id = ?').bind(divId, eventId).run();
+    }
+  }
+
+  // Return updated divisions
+  const updated = await db.prepare(`
+    SELECT ed.*, (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = ed.id AND r.status IN ('approved', 'pending')) as registered_count
+    FROM event_divisions ed WHERE ed.event_id = ? ORDER BY ed.age_group ASC, ed.division_level ASC
+  `).bind(eventId).all();
+
+  return c.json({ success: true, data: updated.results });
 });
 
 eventRoutes.patch('/admin/update/:id', zValidator('json', updateEventSchema), async (c) => {
@@ -433,6 +575,283 @@ eventRoutes.get('/upcoming-for-upsell/:eventId', optionalAuth, async (c) => {
 });
 
 // ==================
+// PUBLIC: Get hotels available for an event (for registration hotel picker)
+// ==================
+eventRoutes.get('/event-hotels/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const result = await db.prepare(`
+    SELECT id, hotel_name, city, state, rate_description, booking_url
+    FROM event_hotels WHERE event_id = ? AND is_active = 1
+    ORDER BY sort_order ASC, hotel_name ASC
+  `).bind(eventId).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// PUBLIC: Get event divisions with pricing (for More Info page)
+// ==================
+eventRoutes.get('/event-divisions/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const result = await db.prepare(`
+    SELECT id, age_group, division_level, price_cents, game_format, period_length_minutes, num_periods, max_teams, status,
+      (SELECT COUNT(*) FROM registrations r WHERE r.event_division_id = event_divisions.id AND r.status != 'denied') as registered_count
+    FROM event_divisions WHERE event_id = ? AND status != 'cancelled'
+    ORDER BY
+      CASE age_group
+        WHEN 'Mite' THEN 1 WHEN 'Squirt' THEN 2 WHEN 'Pee Wee' THEN 3
+        WHEN 'Bantam' THEN 4 WHEN 'Midget' THEN 5 WHEN '16u' THEN 6
+        WHEN '16u/JV' THEN 7 WHEN '18u' THEN 8 WHEN '18u/Var.' THEN 9
+        ELSE 10 END,
+      division_level ASC
+  `).bind(eventId).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// PUBLIC: Get venues/rinks for an event's city (for More Info page)
+// ==================
+eventRoutes.get('/event-venues/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Get event city/state
+  const event = await db.prepare('SELECT city, state, venue_id FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // Check multi-venue junction table first
+  try {
+    const multiVenues = await db.prepare(`
+      SELECT v.* FROM event_venues ev
+      JOIN venues v ON v.id = ev.venue_id AND v.is_active = 1
+      WHERE ev.event_id = ?
+      ORDER BY ev.is_primary DESC, ev.sort_order ASC
+    `).bind(eventId).all();
+
+    if (multiVenues.results.length > 0) {
+      const venuesWithRinks = [];
+      for (const v of multiVenues.results as any[]) {
+        const rinks = await db.prepare('SELECT * FROM venue_rinks WHERE venue_id = ?').bind(v.id).all();
+        venuesWithRinks.push({ ...v, rinks: rinks.results });
+      }
+      return c.json({ success: true, data: venuesWithRinks });
+    }
+  } catch (_) {}
+
+  // Fallback: If event has a specific venue_id (legacy single venue)
+  if (event.venue_id) {
+    const venue = await db.prepare('SELECT * FROM venues WHERE id = ? AND is_active = 1').bind(event.venue_id).first<any>();
+    const rinks = venue ? await db.prepare('SELECT * FROM venue_rinks WHERE venue_id = ?').bind(venue.id).all() : { results: [] };
+    return c.json({ success: true, data: venue ? [{ ...venue, rinks: rinks.results }] : [] });
+  }
+
+  // Map full state names to abbreviations (events use full names, venues use abbreviations)
+  const stateAbbrevMap: Record<string, string> = {
+    'illinois': 'IL', 'indiana': 'IN', 'michigan': 'MI', 'missouri': 'MO',
+    'wisconsin': 'WI', 'colorado': 'CO', 'ohio': 'OH', 'minnesota': 'MN',
+  };
+  const stateAbbrev = stateAbbrevMap[event.state.toLowerCase()] || event.state;
+
+  // Return all venues in the event's metro area
+  const cityLower = event.city.toLowerCase();
+  let venues;
+  if (cityLower.includes('chicago')) {
+    // Chicago events use rinks across the metro area
+    venues = await db.prepare(`
+      SELECT * FROM venues WHERE is_active = 1 AND LOWER(state) = LOWER(?)
+      ORDER BY name ASC
+    `).bind(stateAbbrev).all();
+  } else if (cityLower.includes('wis dells') || cityLower.includes('wisconsin dells')) {
+    venues = await db.prepare(`
+      SELECT * FROM venues WHERE is_active = 1 AND
+        LOWER(city) IN ('wisconsin dells', 'baraboo')
+      ORDER BY name ASC
+    `).all();
+  } else if (cityLower.includes('st. louis') || cityLower.includes('st louis')) {
+    venues = await db.prepare(`
+      SELECT * FROM venues WHERE is_active = 1 AND LOWER(state) = LOWER(?)
+      ORDER BY name ASC
+    `).bind(stateAbbrev).all();
+  } else if (cityLower.includes('madison')) {
+    venues = await db.prepare(`
+      SELECT * FROM venues WHERE is_active = 1 AND LOWER(city) = 'madison'
+      ORDER BY name ASC
+    `).all();
+  } else {
+    venues = await db.prepare(`
+      SELECT * FROM venues WHERE is_active = 1 AND LOWER(city) = LOWER(?)
+      ORDER BY name ASC
+    `).bind(event.city).all();
+  }
+
+  // Fetch rinks for each venue
+  const venuesWithRinks = [];
+  for (const v of venues.results as any[]) {
+    const rinks = await db.prepare('SELECT * FROM venue_rinks WHERE venue_id = ?').bind(v.id).all();
+    venuesWithRinks.push({ ...v, rinks: rinks.results });
+  }
+
+  return c.json({ success: true, data: venuesWithRinks });
+});
+
+// ==================
+// ADMIN: Get assigned venues for an event (multi-venue)
+// ==================
+eventRoutes.get('/admin/event-venues/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Auto-create table
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS event_venues (
+        id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        venue_id TEXT NOT NULL,
+        is_primary INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(event_id, venue_id)
+      )
+    `).run();
+  } catch (_) {}
+
+  const venues = await db.prepare(`
+    SELECT ev.id, ev.venue_id, ev.is_primary, ev.sort_order,
+      v.name, v.city, v.state, v.address, v.num_rinks,
+      (SELECT COUNT(*) FROM venue_rinks vr WHERE vr.venue_id = v.id) as rink_count
+    FROM event_venues ev
+    JOIN venues v ON v.id = ev.venue_id
+    WHERE ev.event_id = ?
+    ORDER BY ev.is_primary DESC, ev.sort_order ASC
+  `).bind(eventId).all();
+
+  return c.json({ success: true, data: venues.results });
+});
+
+// ==================
+// ADMIN: Set venues for an event (replace all)
+// ==================
+eventRoutes.put('/admin/event-venues/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const body = await c.req.json() as { venue_ids: string[]; primary_venue_id?: string };
+
+  // Auto-create table
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS event_venues (
+        id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        venue_id TEXT NOT NULL,
+        is_primary INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(event_id, venue_id)
+      )
+    `).run();
+  } catch (_) {}
+
+  // Delete existing assignments
+  await db.prepare('DELETE FROM event_venues WHERE event_id = ?').bind(eventId).run();
+
+  // Insert new assignments
+  for (let i = 0; i < body.venue_ids.length; i++) {
+    const vid = body.venue_ids[i];
+    const isPrimary = body.primary_venue_id ? (vid === body.primary_venue_id ? 1 : 0) : (i === 0 ? 1 : 0);
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO event_venues (id, event_id, venue_id, is_primary, sort_order)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(id, eventId, vid, isPrimary, i).run();
+  }
+
+  // Also update the legacy venue_id field to the primary venue
+  const primaryId = body.primary_venue_id || body.venue_ids[0] || null;
+  await db.prepare("UPDATE events SET venue_id = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(primaryId, eventId).run();
+
+  // Return updated list
+  const venues = await db.prepare(`
+    SELECT ev.id, ev.venue_id, ev.is_primary, ev.sort_order,
+      v.name, v.city, v.state, v.address, v.num_rinks,
+      (SELECT COUNT(*) FROM venue_rinks vr WHERE vr.venue_id = v.id) as rink_count
+    FROM event_venues ev
+    JOIN venues v ON v.id = ev.venue_id
+    WHERE ev.event_id = ?
+    ORDER BY ev.is_primary DESC, ev.sort_order ASC
+  `).bind(eventId).all();
+
+  return c.json({ success: true, data: venues.results });
+});
+
+// ==================
+// ADMIN: Update event description/information (WYSIWYG)
+// ==================
+eventRoutes.patch('/event-info/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const body = await c.req.json() as any;
+
+  const setClauses: string[] = [];
+  const params: (string | null)[] = [];
+
+  if (body.description !== undefined) {
+    setClauses.push('description = ?');
+    params.push(body.description || null);
+  }
+  if (body.information !== undefined) {
+    setClauses.push('information = ?');
+    params.push(body.information || null);
+  }
+
+  if (setClauses.length === 0) return c.json({ success: false, error: 'No fields to update' }, 400);
+
+  setClauses.push("updated_at = datetime('now')");
+  params.push(eventId);
+
+  await db.prepare(`UPDATE events SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+  const updated = await db.prepare('SELECT id, description, information FROM events WHERE id = ?').bind(eventId).first();
+  return c.json({ success: true, data: updated });
+});
+
+// ==================
+// AI: Generate event description
+// ==================
+eventRoutes.post('/ai-generate-description/:eventId', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  const event = await db.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // Get divisions for context
+  const divisions = await db.prepare('SELECT age_group, division_level, price_cents, game_format, period_length_minutes FROM event_divisions WHERE event_id = ?').bind(eventId).all();
+
+  // Get venues for context
+  const venues = await db.prepare(`SELECT name, city, state, address FROM venues WHERE is_active = 1 AND LOWER(state) = LOWER(?)`)
+    .bind(event.state).all();
+
+  const ageGroups = divisions.results.map((d: any) => d.age_group);
+  const venueNames = venues.results.map((v: any) => v.name);
+  const priceRange = divisions.results
+    .filter((d: any) => d.price_cents > 0)
+    .map((d: any) => d.price_cents);
+  const minPrice = priceRange.length > 0 ? Math.min(...priceRange) : 0;
+  const maxPrice = priceRange.length > 0 ? Math.max(...priceRange) : 0;
+
+  const description = `Join us for the ${event.name}! This exciting youth hockey tournament takes place ${event.start_date} through ${event.end_date} in ${event.city}, ${event.state}. ` +
+    (ageGroups.length > 0 ? `We welcome teams from ${ageGroups.join(', ')} age groups. ` : '') +
+    `Every team is guaranteed a minimum of 4 games (3 pool play + bracket play). ` +
+    (minPrice > 0 ? `Registration ranges from $${(minPrice/100).toLocaleString()} to $${(maxPrice/100).toLocaleString()} per team depending on age group. ` : '') +
+    (venueNames.length > 0 ? `Games will be played at top-quality facilities including ${venueNames.slice(0, 3).join(', ')}${venueNames.length > 3 ? ' and more' : ''}. ` : '') +
+    `All games are USA Hockey sanctioned. Don't miss out — register your team today!`;
+
+  return c.json({ success: true, data: { description } });
+});
+
+// ==================
 // CONSUMER: Register team for an event (from events page)
 // ==================
 const consumerRegisterSchema = z.object({
@@ -448,6 +867,9 @@ const consumerRegisterSchema = z.object({
   headCoachName: z.string().optional(),
   paymentChoice: z.enum(['pay_now', 'pay_deposit', 'pay_later']),
   additionalEventIds: z.array(z.string()).optional(),
+  hotelChoice1: z.string().optional(),
+  hotelChoice2: z.string().optional(),
+  hotelChoice3: z.string().optional(),
 });
 
 eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async (c) => {
@@ -468,7 +890,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   if (!event) {
     return c.json({ success: false, error: 'Event not found' }, 404);
   }
-  if (event.status !== 'registration_open' && event.status !== 'active') {
+  if (event.status !== 'registration_open' && event.status !== 'active' && event.status !== 'published') {
     return c.json({ success: false, error: 'Registration is not open for this event' }, 400);
   }
 
@@ -492,7 +914,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
       if (!addEvent) {
         return c.json({ success: false, error: `Event ${addEventId} not found` }, 404);
       }
-      if (addEvent.status !== 'registration_open' && addEvent.status !== 'active') {
+      if (addEvent.status !== 'registration_open' && addEvent.status !== 'active' && addEvent.status !== 'published') {
         return c.json({ success: false, error: `Registration is not open for event ${addEvent.name}` }, 400);
       }
 
@@ -509,19 +931,31 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     }
   }
 
+  // Ensure hotel preference columns exist (auto-migrate)
+  try {
+    await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_choice_1 TEXT").run();
+  } catch {}
+  try {
+    await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_choice_2 TEXT").run();
+  } catch {}
+  try {
+    await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_choice_3 TEXT").run();
+  } catch {}
+
   // Create registration for primary event with 'pending' status
   const regIds: string[] = [];
   const regId = crypto.randomUUID().replace(/-/g, '');
   regIds.push(regId);
 
   await db.prepare(`
-    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
   `).bind(
     regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
-    data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid'
+    data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid',
+    data.hotelChoice1 || null, data.hotelChoice2 || null, data.hotelChoice3 || null
   ).run();
 
   // Create registrations for additional events
@@ -585,12 +1019,14 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
 // ADMIN: Update registration (payment, hotel assignment, notes)
 // ==================
 const updateRegistrationSchema = z.object({
-  status: z.enum(['pending', 'approved', 'denied', 'waitlisted']).optional(),
+  status: z.enum(['pending', 'approved', 'denied', 'waitlisted', 'withdrawn', 'rejected']).optional(),
   payment_status: z.enum(['unpaid', 'paid', 'partial', 'refunded', 'comp']).optional(),
   payment_amount_cents: z.number().nullable().optional(),
   payment_method: z.string().nullable().optional(),
   hotel_assigned: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  event_division_id: z.string().optional(),
+  team_name: z.string().optional(),
 });
 
 eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistrationSchema), async (c) => {
@@ -598,8 +1034,14 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Verify registration exists and get current status for email trigger
-  const existing = await db.prepare('SELECT id, status, event_id FROM event_registrations WHERE id = ?').bind(regId).first<{ id: string; status: string; event_id: string }>();
+  // Check both tables for the registration
+  let useNormalized = false;
+  let existing = await db.prepare('SELECT id, status, event_id FROM registrations WHERE id = ?').bind(regId).first<{ id: string; status: string; event_id: string }>();
+  if (existing) {
+    useNormalized = true;
+  } else {
+    existing = await db.prepare('SELECT id, status, event_id FROM event_registrations WHERE id = ?').bind(regId).first<{ id: string; status: string; event_id: string }>();
+  }
   if (!existing) {
     return c.json({ success: false, error: 'Registration not found' }, 404);
   }
@@ -618,12 +1060,15 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
     params.push(data.payment_status);
   }
   if (data.payment_amount_cents !== undefined) {
-    setClauses.push('payment_amount_cents = ?');
+    // Column name differs between tables
+    setClauses.push(useNormalized ? 'amount_cents = ?' : 'payment_amount_cents = ?');
     params.push(data.payment_amount_cents);
   }
   if (data.payment_method !== undefined) {
-    setClauses.push('payment_method = ?');
-    params.push(data.payment_method || null);
+    if (!useNormalized) {
+      setClauses.push('payment_method = ?');
+      params.push(data.payment_method || null);
+    }
   }
   if (data.hotel_assigned !== undefined) {
     setClauses.push('hotel_assigned = ?');
@@ -633,6 +1078,18 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
     setClauses.push('notes = ?');
     params.push(data.notes);
   }
+  if (useNormalized && data.event_division_id !== undefined) {
+    setClauses.push('event_division_id = ?');
+    params.push(data.event_division_id);
+  }
+  // Update team name if provided (normalized only)
+  if (useNormalized && data.team_name !== undefined) {
+    // Get team_id from registration, then update team name
+    const regForTeam = await db.prepare('SELECT team_id FROM registrations WHERE id = ?').bind(regId).first<any>();
+    if (regForTeam?.team_id) {
+      await db.prepare("UPDATE teams SET name = ?, updated_at = datetime('now') WHERE id = ?").bind(data.team_name, regForTeam.team_id).run();
+    }
+  }
 
   if (setClauses.length === 0) {
     return c.json({ success: false, error: 'No fields to update' }, 400);
@@ -641,10 +1098,30 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
   setClauses.push("updated_at = datetime('now')");
   params.push(regId);
 
-  await db.prepare(`UPDATE event_registrations SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+  const tableName = useNormalized ? 'registrations' : 'event_registrations';
+  await db.prepare(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
 
-  // Return updated registration
-  const updated = await db.prepare('SELECT * FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+  // Return updated registration with all fields the frontend needs
+  let updated: any;
+  if (useNormalized) {
+    updated = await db.prepare(`
+      SELECT r.id, r.event_id, r.status, r.payment_status,
+        r.amount_cents as payment_amount_cents,
+        t.name as team_name,
+        ed.age_group,
+        ed.division_level as division,
+        r.hotel_assigned,
+        r.notes,
+        r.event_division_id,
+        r.created_at, r.updated_at
+      FROM registrations r
+      LEFT JOIN teams t ON t.id = r.team_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      WHERE r.id = ?
+    `).bind(regId).first<any>();
+  } else {
+    updated = await db.prepare('SELECT * FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+  }
 
   // If status just changed to 'approved', send acceptance email
   if (data.status === 'approved' && previousStatus !== 'approved' && updated) {
@@ -700,18 +1177,40 @@ eventRoutes.get('/admin/hotels/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
-  // Get distinct hotel names from preferences for this event
-  const result = await db.prepare(`
-    SELECT DISTINCT hotel FROM (
-      SELECT hotel_pref_1 as hotel FROM event_registrations WHERE event_id = ? AND hotel_pref_1 IS NOT NULL
-      UNION SELECT hotel_pref_2 FROM event_registrations WHERE event_id = ? AND hotel_pref_2 IS NOT NULL
-      UNION SELECT hotel_pref_3 FROM event_registrations WHERE event_id = ? AND hotel_pref_3 IS NOT NULL
-      UNION SELECT hotel_assigned FROM event_registrations WHERE event_id = ? AND hotel_assigned IS NOT NULL
-      UNION SELECT hotel_choice FROM event_registrations WHERE event_id = ? AND hotel_choice IS NOT NULL
-    ) ORDER BY hotel ASC
-  `).bind(eventId, eventId, eventId, eventId, eventId).all();
+  // Collect hotel names from multiple sources (legacy prefs, event_hotels table, normalized registrations)
+  const hotels = new Set<string>();
 
-  return c.json({ success: true, data: result.results.map((r: any) => r.hotel).filter(Boolean) });
+  // 1. Legacy event_registrations preferences
+  try {
+    const legacy = await db.prepare(`
+      SELECT DISTINCT hotel FROM (
+        SELECT hotel_pref_1 as hotel FROM event_registrations WHERE event_id = ? AND hotel_pref_1 IS NOT NULL
+        UNION SELECT hotel_pref_2 FROM event_registrations WHERE event_id = ? AND hotel_pref_2 IS NOT NULL
+        UNION SELECT hotel_pref_3 FROM event_registrations WHERE event_id = ? AND hotel_pref_3 IS NOT NULL
+        UNION SELECT hotel_assigned FROM event_registrations WHERE event_id = ? AND hotel_assigned IS NOT NULL
+        UNION SELECT hotel_choice FROM event_registrations WHERE event_id = ? AND hotel_choice IS NOT NULL
+      )
+    `).bind(eventId, eventId, eventId, eventId, eventId).all();
+    legacy.results.forEach((r: any) => { if (r.hotel) hotels.add(r.hotel); });
+  } catch (e) { /* table may not exist */ }
+
+  // 2. event_hotels table
+  try {
+    const eh = await db.prepare(`
+      SELECT hotel_name FROM event_hotels WHERE event_id = ? AND is_active = 1
+    `).bind(eventId).all();
+    eh.results.forEach((r: any) => { if (r.hotel_name) hotels.add(r.hotel_name); });
+  } catch (e) { /* table may not exist */ }
+
+  // 3. Normalized registrations hotel_assigned
+  try {
+    const nr = await db.prepare(`
+      SELECT DISTINCT hotel_assigned FROM registrations WHERE event_id = ? AND hotel_assigned IS NOT NULL
+    `).bind(eventId).all();
+    nr.results.forEach((r: any) => { if (r.hotel_assigned) hotels.add(r.hotel_assigned); });
+  } catch (e) { /* column may not exist */ }
+
+  return c.json({ success: true, data: Array.from(hotels).sort() });
 });
 
 // ==================
@@ -720,6 +1219,8 @@ eventRoutes.get('/admin/hotels/:eventId', async (c) => {
 eventRoutes.get('/admin/event-hotels/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
+  // Auto-migrate: add price_per_night if missing
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN price_per_night INTEGER").run(); } catch (_) { /* already exists */ }
   const result = await db.prepare(`
     SELECT * FROM event_hotels WHERE event_id = ? AND is_active = 1 ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
@@ -740,6 +1241,7 @@ const addHotelSchema = z.object({
   booking_url: z.string().nullable().optional(),
   booking_code: z.string().nullable().optional(),
   room_block_count: z.number().nullable().optional(),
+  price_per_night: z.number().nullable().optional(),
   sort_order: z.number().optional(),
 });
 
@@ -748,11 +1250,11 @@ eventRoutes.post('/admin/event-hotels', zValidator('json', addHotelSchema), asyn
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
   await db.prepare(`
-    INSERT INTO event_hotels (id, event_id, hotel_name, address, city, state, phone, rate_description, booking_url, booking_code, room_block_count, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO event_hotels (id, event_id, hotel_name, address, city, state, phone, rate_description, booking_url, booking_code, room_block_count, price_per_night, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(id, data.event_id, data.hotel_name, data.address || null, data.city || null, data.state || null,
     data.phone || null, data.rate_description || null, data.booking_url || null, data.booking_code || null,
-    data.room_block_count || null, data.sort_order || 0
+    data.room_block_count || null, data.price_per_night || null, data.sort_order || 0
   ).run();
   const hotel = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(id).first();
   return c.json({ success: true, data: hotel }, 201);
@@ -771,6 +1273,7 @@ const updateHotelSchema = z.object({
   booking_url: z.string().nullable().optional(),
   booking_code: z.string().nullable().optional(),
   room_block_count: z.number().nullable().optional(),
+  price_per_night: z.number().nullable().optional(),
   sort_order: z.number().optional(),
   is_active: z.number().optional(),
 });
@@ -978,4 +1481,379 @@ eventRoutes.post('/:id/duplicate', authMiddleware, requireRole('admin'), async (
       message: `Duplicated from ${source.name}. Dates auto-adjusted to ${nextYearStart.toISOString().split('T')[0]}.`,
     },
   }, 201);
+});
+
+// ==================
+// ADMIN: Bulk import registrations from source site
+// ==================
+eventRoutes.post('/admin/bulk-import-registrations', async (c) => {
+  try {
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    events: Array<{
+      d1Id: string;
+      teams: Array<{
+        n: string; // team name
+        s: string; // status: approved, withdrawn, pending
+        p: string; // payment: paid, partial, unpaid
+        a: number; // amount_cents
+      }>;
+    }>;
+  }>();
+
+  const results: any[] = [];
+  const systemUserId = 'import';
+
+  for (const evt of body.events) {
+    // Get all divisions for this event
+    const divs = await db.prepare(
+      `SELECT id, age_group FROM event_divisions WHERE event_id = ? ORDER BY age_group`
+    ).bind(evt.d1Id).all<{ id: string; age_group: string }>();
+
+    if (!divs.results.length) {
+      results.push({ eventId: evt.d1Id, error: 'no divisions found', inserted: 0 });
+      continue;
+    }
+
+    // Default to first division
+    const defaultDiv = divs.results[0];
+
+    let inserted = 0;
+    for (const team of evt.teams) {
+      try {
+        // Find or create team by name
+        let existingTeam = await db.prepare(
+          `SELECT id FROM teams WHERE name = ? AND is_active = 1 LIMIT 1`
+        ).bind(team.n).first<{ id: string }>();
+
+        let teamId: string;
+        if (existingTeam) {
+          teamId = existingTeam.id;
+        } else {
+          // Create new team with default age_group from division
+          const newId = crypto.randomUUID().replace(/-/g, '');
+          await db.prepare(
+            `INSERT INTO teams (id, name, age_group, is_active, created_at, updated_at) VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))`
+          ).bind(newId, team.n, defaultDiv.age_group).run();
+          teamId = newId;
+        }
+
+        // Insert registration
+        const regId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(
+          `INSERT INTO registrations (id, event_id, event_division_id, team_id, registered_by, status, payment_status, amount_cents, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
+        ).bind(regId, evt.d1Id, defaultDiv.id, teamId, systemUserId, team.s, team.p, team.a || null).run();
+        inserted++;
+      } catch (e: any) {
+        // Skip individual failures
+        continue;
+      }
+    }
+
+    results.push({ eventId: evt.d1Id, inserted });
+  }
+
+  return c.json({ success: true, results });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message, stack: e.stack?.substring(0, 500) }, 500);
+  }
+});
+
+// ==================
+// ADMIN: Publish / unpublish schedule
+// ==================
+eventRoutes.post('/:eventId/publish-schedule', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Verify event exists
+  const event = await db.prepare('SELECT id, name, schedule_published FROM events WHERE id = ?').bind(eventId).first();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // Toggle: if already published, unpublish; otherwise publish
+  const body = await c.req.json().catch(() => ({}));
+  const publish = typeof body.publish === 'boolean' ? body.publish : (event.schedule_published !== 1);
+
+  await db.prepare('UPDATE events SET schedule_published = ? WHERE id = ?')
+    .bind(publish ? 1 : 0, eventId)
+    .run();
+
+  return c.json({
+    success: true,
+    data: {
+      schedule_published: publish ? 1 : 0,
+      message: publish ? 'Schedule published — now visible to the public.' : 'Schedule unpublished — hidden from public.',
+    },
+  });
+});
+
+// ==================
+// ADMIN: Seed registrations with hotel assignments (temporary migration helper)
+// ==================
+eventRoutes.post('/admin/seed-registrations', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json();
+  const { event_id, teams } = body;
+  // teams: [{ team_name, event_division_id, hotel_assigned, status, payment_status }]
+
+  if (!event_id || !teams || !Array.isArray(teams)) {
+    return c.json({ success: false, error: 'event_id and teams[] required' }, 400);
+  }
+
+  // Step 1: Ensure hotel_assigned column exists on registrations
+  try {
+    await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_assigned TEXT").run();
+  } catch (e: any) {
+    // Column already exists — that's fine
+    console.log('ALTER TABLE note:', e.message);
+  }
+
+  // Step 2: Ensure system-import user exists (for registered_by FK)
+  try {
+    await db.prepare("INSERT OR IGNORE INTO users (id, email, password_hash, first_name, last_name, created_at) VALUES ('system-import', 'system@import.local', 'no-login', 'System', 'Import', datetime('now'))").run();
+  } catch (e: any) {
+    console.log('System user note:', e.message);
+  }
+
+  // Step 3: Auto-create event_divisions if needed
+  const divisionSet = new Set(teams.map((t: any) => t.event_division_id));
+  for (const divId of divisionSet) {
+    const exists = await db.prepare("SELECT id FROM event_divisions WHERE id = ?").bind(divId).first();
+    if (!exists) {
+      // Parse age group from the div ID suffix
+      const parts = (divId as string).split('-');
+      const ageSlug = parts.slice(1).join('-'); // e.g. "pee-wee", "16ujv", "18uvar"
+      const ageMap: Record<string, string> = {
+        'bantam': 'Bantam', 'mite': 'Mite', 'pee-wee': 'Pee Wee', 'squirt': 'Squirt',
+        '16ujv': '16u/JV', '18uvar': '18u/Var.'
+      };
+      const ageGroup = ageMap[ageSlug] || ageSlug;
+      try {
+        await db.prepare(
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+        ).bind(divId, event_id, ageGroup).run();
+        console.log(`Created division: ${divId} => ${ageGroup}`);
+      } catch (e: any) {
+        console.log('Division create note:', e.message);
+      }
+    }
+  }
+
+  // Step 4: Disable foreign keys temporarily for hotel_assigned (new column, no FK)
+  const results: any[] = [];
+
+  for (const t of teams) {
+    try {
+      // Create or find team
+      let team = await db.prepare("SELECT id FROM teams WHERE name = ?").bind(t.team_name).first<any>();
+      if (!team) {
+        const teamId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare("INSERT INTO teams (id, name, created_at) VALUES (?, ?, datetime('now'))").bind(teamId, t.team_name).run();
+        team = { id: teamId };
+      }
+
+      // Check for existing registration
+      const existing = await db.prepare(
+        "SELECT id FROM registrations WHERE event_id = ? AND team_id = ? AND event_division_id = ?"
+      ).bind(event_id, team.id, t.event_division_id).first();
+
+      if (existing) {
+        results.push({ team: t.team_name, status: 'skipped', reason: 'already exists' });
+        continue;
+      }
+
+      // Verify all FKs exist before inserting
+      const divCheck = await db.prepare("SELECT id FROM event_divisions WHERE id = ?").bind(t.event_division_id).first();
+      const eventCheck = await db.prepare("SELECT id FROM events WHERE id = ?").bind(event_id).first();
+      const userCheck = await db.prepare("SELECT id FROM users WHERE id = ?").bind('system-import').first();
+
+      if (!divCheck || !eventCheck || !userCheck) {
+        results.push({ team: t.team_name, status: 'error', error: `FK check: div=${!!divCheck}, event=${!!eventCheck}, user=${!!userCheck}, divId=${t.event_division_id}` });
+        continue;
+      }
+
+      // Create registration - skip hotel_assigned if column doesn't exist yet
+      const regId = crypto.randomUUID().replace(/-/g, '');
+      try {
+        await db.prepare(`
+          INSERT INTO registrations (id, event_id, event_division_id, team_id, registered_by, status, payment_status, amount_cents, hotel_assigned, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 'system-import', ?, ?, 0, ?, datetime('now'), datetime('now'))
+        `).bind(
+          regId, event_id, t.event_division_id, team.id,
+          t.status || 'approved',
+          t.payment_status || 'paid',
+          t.hotel_assigned || null
+        ).run();
+      } catch (insertErr: any) {
+        // If hotel_assigned column doesn't exist, try without it
+        if (insertErr.message?.includes('hotel_assigned')) {
+          await db.prepare(`
+            INSERT INTO registrations (id, event_id, event_division_id, team_id, registered_by, status, payment_status, amount_cents, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'system-import', ?, ?, 0, datetime('now'), datetime('now'))
+          `).bind(
+            regId, event_id, t.event_division_id, team.id,
+            t.status || 'approved',
+            t.payment_status || 'paid'
+          ).run();
+        } else {
+          throw insertErr;
+        }
+      }
+
+      results.push({ team: t.team_name, status: 'inserted', regId });
+    } catch (e: any) {
+      results.push({ team: t.team_name, status: 'error', error: e.message });
+    }
+  }
+
+  return c.json({ success: true, inserted: results.filter(r => r.status === 'inserted').length, total: teams.length, results });
+});
+
+// ==================
+// ADMIN: Bulk create event_hotels from names (for importing hotel data)
+// ==================
+eventRoutes.post('/admin/seed-event-hotels', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json();
+  const { event_id, hotels } = body;
+  // hotels: [{ hotel_name, city, state }]
+
+  if (!event_id || !hotels || !Array.isArray(hotels)) {
+    return c.json({ success: false, error: 'event_id and hotels[] required' }, 400);
+  }
+
+  // Ensure event_hotels table exists
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS event_hotels (
+        id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL REFERENCES events(id),
+        master_hotel_id TEXT REFERENCES master_hotels(id),
+        hotel_name TEXT NOT NULL,
+        address TEXT, city TEXT, state TEXT, phone TEXT,
+        rate_description TEXT, booking_url TEXT, booking_code TEXT,
+        room_block_count INTEGER,
+        price_per_night INTEGER,
+        contact_name TEXT, contact_email TEXT, contact_phone TEXT, contact_title TEXT,
+        notes TEXT,
+        is_active INTEGER DEFAULT 1,
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      )
+    `).run();
+  } catch (e: any) {
+    console.log('event_hotels table note:', e.message);
+  }
+
+  const results: any[] = [];
+  let sortOrder = 0;
+
+  for (const h of hotels) {
+    try {
+      const existing = await db.prepare(
+        "SELECT id FROM event_hotels WHERE event_id = ? AND hotel_name = ?"
+      ).bind(event_id, h.hotel_name).first();
+
+      if (existing) {
+        results.push({ hotel: h.hotel_name, status: 'skipped' });
+        continue;
+      }
+
+      const id = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO event_hotels (id, event_id, hotel_name, city, state, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(id, event_id, h.hotel_name, h.city || 'South Bend', h.state || 'Indiana', sortOrder++).run();
+
+      results.push({ hotel: h.hotel_name, status: 'inserted' });
+    } catch (e: any) {
+      results.push({ hotel: h.hotel_name, status: 'error', error: e.message });
+    }
+  }
+
+  return c.json({ success: true, results });
+});
+
+// ==================
+// ADMIN: Fix registration age groups by matching team names
+// ==================
+eventRoutes.post('/admin/fix-age-groups', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json();
+  const { event_id, teams } = body;
+  // teams: [{ team_name, age_group }]
+
+  if (!event_id || !teams || !Array.isArray(teams)) {
+    return c.json({ success: false, error: 'event_id and teams[] required' }, 400);
+  }
+
+  // Get all unique age groups needed
+  const ageGroups = [...new Set(teams.map((t: any) => t.age_group))];
+
+  // Ensure event_divisions exist for each age group
+  const divMap: Record<string, string> = {};
+  for (const ag of ageGroups) {
+    const slug = ag.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+    const divId = event_id.substring(0, 16) + '-' + slug;
+
+    const existing = await db.prepare("SELECT id FROM event_divisions WHERE id = ?").bind(divId).first();
+    if (!existing) {
+      try {
+        await db.prepare(
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+        ).bind(divId, event_id, ag).run();
+      } catch (e: any) {
+        // Try without specific ID
+        const altId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+        ).bind(altId, event_id, ag).run();
+        divMap[ag] = altId;
+        continue;
+      }
+    }
+    divMap[ag] = divId;
+  }
+
+  // Get all registrations for this event with team names
+  const regs = await db.prepare(`
+    SELECT r.id, t.name as team_name, r.event_division_id
+    FROM registrations r
+    LEFT JOIN teams t ON t.id = r.team_id
+    WHERE r.event_id = ?
+  `).bind(event_id).all();
+
+  const results: any[] = [];
+  let updated = 0;
+
+  // For each registration, find matching team in the provided list and update division
+  for (const reg of regs.results as any[]) {
+    const teamName = reg.team_name;
+    const match = teams.find((t: any) => t.team_name === teamName);
+
+    if (match) {
+      const correctDivId = divMap[match.age_group];
+      if (correctDivId && correctDivId !== reg.event_division_id) {
+        await db.prepare("UPDATE registrations SET event_division_id = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(correctDivId, reg.id).run();
+        updated++;
+        results.push({ team: teamName, status: 'updated', from: reg.event_division_id, to: correctDivId, age: match.age_group });
+      } else {
+        results.push({ team: teamName, status: 'already_correct' });
+      }
+    } else {
+      results.push({ team: teamName, status: 'no_match' });
+    }
+  }
+
+  // Clean up old unused event_divisions for this event
+  await db.prepare(`
+    DELETE FROM event_divisions
+    WHERE event_id = ?
+    AND id NOT IN (SELECT DISTINCT event_division_id FROM registrations WHERE event_id = ?)
+  `).bind(event_id, event_id).run();
+
+  return c.json({ success: true, updated, total: regs.results.length, divMap, results });
 });

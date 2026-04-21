@@ -636,6 +636,436 @@ scoringRoutes.put('/contests/:contestId', authMiddleware, requireRole('admin', '
 });
 
 // ==========================================
+// PUBLIC: Full Game Sheet (all data for score sheet display)
+// ==========================================
+scoringRoutes.get('/games/:gameId/sheet', async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+
+  // Game info
+  const game = await db.prepare(`
+    SELECT g.*,
+      ht.name as home_team_name, ht.logo_url as home_team_logo,
+      at2.name as away_team_name, at2.logo_url as away_team_logo,
+      vr.name as rink_name, v.name as venue_name,
+      ed.age_group, ed.division_level, ed.game_format, ed.period_length_minutes as div_period_length,
+      e.name as event_name, e.season
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    LEFT JOIN events e ON e.id = g.event_id
+    WHERE g.id = ?
+  `).bind(gameId).first();
+
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  // Fetch all related data in parallel
+  const [events, shots, lineups, threeStars, goalieStats, shootout, periodScores, notes, coaches, officials] = await Promise.all([
+    db.prepare(`SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, game_time DESC, created_at ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_shots WHERE game_id = ? ORDER BY period ASC`).bind(gameId).all(),
+    db.prepare(`
+      SELECT gl.*, p.first_name, p.last_name, p.position as player_position
+      FROM game_lineups gl
+      LEFT JOIN players p ON p.id = gl.player_id
+      WHERE gl.game_id = ?
+      ORDER BY gl.team_id, gl.position ASC, CAST(gl.jersey_number AS INTEGER) ASC
+    `).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_three_stars WHERE game_id = ? ORDER BY star_number ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM goalie_game_stats WHERE game_id = ? ORDER BY team_id, is_starter DESC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM shootout_rounds WHERE game_id = ? ORDER BY sequence_order ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_period_scores WHERE game_id = ? ORDER BY team_id, period ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_notes WHERE game_id = ? ORDER BY period ASC, created_at ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_coaches WHERE game_id = ? ORDER BY team_id, role ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_officials WHERE game_id = ? ORDER BY role ASC`).bind(gameId).all(),
+  ]);
+
+  // Separate events by type
+  const goals = (events.results || []).filter((e: any) => e.event_type === 'goal');
+  const penalties = (events.results || []).filter((e: any) => e.event_type === 'penalty');
+
+  // Split lineups by team
+  const homeLineup = (lineups.results || []).filter((l: any) => l.team_id === (game as any).home_team_id);
+  const awayLineup = (lineups.results || []).filter((l: any) => l.team_id === (game as any).away_team_id);
+
+  return c.json({
+    success: true,
+    data: {
+      game,
+      goals,
+      penalties,
+      allEvents: events.results,
+      shots: shots.results,
+      homeLineup,
+      awayLineup,
+      threeStars: threeStars.results,
+      goalieStats: goalieStats.results,
+      shootout: shootout.results,
+      periodScores: periodScores.results,
+      notes: notes.results,
+      coaches: coaches.results,
+      officials: officials.results,
+    },
+  });
+});
+
+// ==========================================
+// SCOREKEEPER: Auto-load roster for a game's teams
+// ==========================================
+scoringRoutes.get('/games/:gameId/roster', async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+
+  const game = await db.prepare('SELECT home_team_id, away_team_id, event_id FROM games WHERE id = ?').bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  // Get active players for both teams
+  const homePlayers = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.jersey_number, p.position, p.shoots
+    FROM team_players tp
+    JOIN players p ON p.id = tp.player_id
+    WHERE tp.team_id = ? AND tp.status = 'active'
+    ORDER BY CAST(p.jersey_number AS INTEGER) ASC
+  `).bind(game.home_team_id).all();
+
+  const awayPlayers = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.jersey_number, p.position, p.shoots
+    FROM team_players tp
+    JOIN players p ON p.id = tp.player_id
+    WHERE tp.team_id = ? AND tp.status = 'active'
+    ORDER BY CAST(p.jersey_number AS INTEGER) ASC
+  `).bind(game.away_team_id).all();
+
+  // Get coaches for both teams
+  const homeCoaches = await db.prepare(`
+    SELECT tc.*, u.first_name, u.last_name, u.email
+    FROM team_coaches tc
+    LEFT JOIN users u ON u.id = tc.user_id
+    WHERE tc.team_id = ?
+  `).bind(game.home_team_id).all();
+
+  const awayCoaches = await db.prepare(`
+    SELECT tc.*, u.first_name, u.last_name, u.email
+    FROM team_coaches tc
+    LEFT JOIN users u ON u.id = tc.user_id
+    WHERE tc.team_id = ?
+  `).bind(game.away_team_id).all();
+
+  // Check if lineups already exist
+  const existingLineups = await db.prepare('SELECT COUNT(*) as cnt FROM game_lineups WHERE game_id = ?').bind(gameId).first<any>();
+
+  return c.json({
+    success: true,
+    data: {
+      homePlayers: homePlayers.results,
+      awayPlayers: awayPlayers.results,
+      homeCoaches: homeCoaches.results,
+      awayCoaches: awayCoaches.results,
+      lineupsLoaded: (existingLineups?.cnt || 0) > 0,
+    },
+  });
+});
+
+// ==========================================
+// SCOREKEEPER: Load roster into game lineups
+// ==========================================
+scoringRoutes.post('/games/:gameId/lineups/load', async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+
+  const pin = c.req.header('X-Scorekeeper-Pin');
+  const devBypass = c.req.header('X-Dev-Bypass') === 'true';
+  if (!devBypass && !pin) return c.json({ success: false, error: 'PIN required' }, 401);
+
+  const game = await db.prepare('SELECT home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  let loaded = 0;
+  for (const teamId of [game.home_team_id, game.away_team_id]) {
+    if (!teamId) continue;
+    const players = await db.prepare(`
+      SELECT p.id, p.jersey_number, p.position
+      FROM team_players tp
+      JOIN players p ON p.id = tp.player_id
+      WHERE tp.team_id = ? AND tp.status = 'active'
+    `).bind(teamId).all();
+
+    for (const player of (players.results || []) as any[]) {
+      const id = crypto.randomUUID().replace(/-/g, '');
+      try {
+        await db.prepare(`
+          INSERT OR IGNORE INTO game_lineups (id, game_id, team_id, player_id, jersey_number, position, is_starter)
+          VALUES (?, ?, ?, ?, ?, ?, 1)
+        `).bind(id, gameId, teamId, player.id, player.jersey_number || '0', player.position || 'F').run();
+        loaded++;
+      } catch { /* skip duplicates */ }
+    }
+  }
+
+  return c.json({ success: true, data: { loaded } });
+});
+
+// ==========================================
+// SCOREKEEPER: Manage individual lineup entries
+// ==========================================
+scoringRoutes.put('/games/:gameId/lineups/:lineupId', zValidator('json', z.object({
+  isScrached: z.boolean().optional(),
+  position: z.string().optional(),
+  jerseyNumber: z.string().optional(),
+})), async (c) => {
+  const { gameId, lineupId } = c.req.param();
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const updates: string[] = [];
+  const params: any[] = [];
+  if (data.isScrached !== undefined) { updates.push('is_scratched = ?'); params.push(data.isScrached ? 1 : 0); }
+  if (data.position) { updates.push('position = ?'); params.push(data.position); }
+  if (data.jerseyNumber) { updates.push('jersey_number = ?'); params.push(data.jerseyNumber); }
+
+  if (updates.length === 0) return c.json({ success: true });
+
+  params.push(lineupId, gameId);
+  await db.prepare(`UPDATE game_lineups SET ${updates.join(', ')} WHERE id = ? AND game_id = ?`).bind(...params).run();
+  return c.json({ success: true });
+});
+
+// ==========================================
+// SCOREKEEPER: Three Stars
+// ==========================================
+scoringRoutes.post('/games/:gameId/three-stars', zValidator('json', z.object({
+  stars: z.array(z.object({
+    starNumber: z.number().min(1).max(3),
+    teamId: z.string(),
+    jerseyNumber: z.string().optional(),
+    playerName: z.string().optional(),
+    playerId: z.string().optional(),
+  })),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { stars } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Delete existing and re-insert
+  await db.prepare('DELETE FROM game_three_stars WHERE game_id = ?').bind(gameId).run();
+
+  for (const star of stars) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO game_three_stars (id, game_id, star_number, team_id, player_id, jersey_number, player_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, gameId, star.starNumber, star.teamId, star.playerId || null, star.jerseyNumber || null, star.playerName || null).run();
+  }
+
+  return c.json({ success: true });
+});
+
+scoringRoutes.get('/games/:gameId/three-stars', async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+  const result = await db.prepare('SELECT * FROM game_three_stars WHERE game_id = ? ORDER BY star_number ASC').bind(gameId).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==========================================
+// SCOREKEEPER: Goalie Stats
+// ==========================================
+scoringRoutes.post('/games/:gameId/goalie-stats', zValidator('json', z.object({
+  teamId: z.string(),
+  jerseyNumber: z.string(),
+  playerName: z.string().optional(),
+  playerId: z.string().optional(),
+  toiMinutes: z.number().optional(),
+  shotsAgainst: z.number().optional(),
+  goalsAgainst: z.number().optional(),
+  isStarter: z.boolean().optional(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  try {
+    await db.prepare(`
+      INSERT INTO goalie_game_stats (id, game_id, team_id, player_id, jersey_number, player_name, toi_minutes, shots_against, goals_against, is_starter)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(game_id, team_id, player_id) DO UPDATE SET
+        toi_minutes = excluded.toi_minutes,
+        shots_against = excluded.shots_against,
+        goals_against = excluded.goals_against,
+        updated_at = datetime('now')
+    `).bind(
+      id, gameId, data.teamId, data.playerId || id, data.jerseyNumber,
+      data.playerName || null, data.toiMinutes || 0, data.shotsAgainst || 0,
+      data.goalsAgainst || 0, data.isStarter !== false ? 1 : 0
+    ).run();
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message }, 500);
+  }
+
+  return c.json({ success: true, data: { id } });
+});
+
+scoringRoutes.put('/games/:gameId/goalie-stats/:statId', zValidator('json', z.object({
+  toiMinutes: z.number().optional(),
+  shotsAgainst: z.number().optional(),
+  goalsAgainst: z.number().optional(),
+})), async (c) => {
+  const { statId } = c.req.param();
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const updates: string[] = ["updated_at = datetime('now')"];
+  const params: any[] = [];
+  if (data.toiMinutes !== undefined) { updates.push('toi_minutes = ?'); params.push(data.toiMinutes); }
+  if (data.shotsAgainst !== undefined) { updates.push('shots_against = ?'); params.push(data.shotsAgainst); }
+  if (data.goalsAgainst !== undefined) { updates.push('goals_against = ?'); params.push(data.goalsAgainst); }
+
+  params.push(statId);
+  await db.prepare(`UPDATE goalie_game_stats SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+  return c.json({ success: true });
+});
+
+// ==========================================
+// SCOREKEEPER: Shootout Rounds
+// ==========================================
+scoringRoutes.post('/games/:gameId/shootout', zValidator('json', z.object({
+  teamId: z.string(),
+  jerseyNumber: z.string(),
+  playerName: z.string().optional(),
+  playerId: z.string().optional(),
+  goalieJersey: z.string().optional(),
+  roundNumber: z.number(),
+  result: z.enum(['goal', 'save', 'miss']),
+  sequenceOrder: z.number(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO shootout_rounds (id, game_id, team_id, player_id, jersey_number, player_name, goalie_jersey, round_number, result, sequence_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, gameId, data.teamId, data.playerId || null, data.jerseyNumber, data.playerName || null, data.goalieJersey || null, data.roundNumber, data.result, data.sequenceOrder).run();
+
+  // Mark game as shootout
+  await db.prepare("UPDATE games SET is_shootout = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
+
+  return c.json({ success: true, data: { id } });
+});
+
+scoringRoutes.delete('/games/:gameId/shootout/:roundId', async (c) => {
+  const { roundId } = c.req.param();
+  const db = c.env.DB;
+  await db.prepare('DELETE FROM shootout_rounds WHERE id = ?').bind(roundId).run();
+  return c.json({ success: true });
+});
+
+// ==========================================
+// SCOREKEEPER: Game Notes
+// ==========================================
+scoringRoutes.post('/games/:gameId/notes', zValidator('json', z.object({
+  noteType: z.string().optional(),
+  content: z.string(),
+  period: z.number().optional(),
+  gameTime: z.string().optional(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO game_notes (id, game_id, note_type, content, period, game_time)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(id, gameId, data.noteType || 'general', data.content, data.period || null, data.gameTime || null).run();
+
+  return c.json({ success: true, data: { id } });
+});
+
+// ==========================================
+// SCOREKEEPER: Game Officials
+// ==========================================
+scoringRoutes.post('/games/:gameId/officials', zValidator('json', z.object({
+  officials: z.array(z.object({
+    officialName: z.string(),
+    role: z.string().optional(),
+    jerseyNumber: z.string().optional(),
+    refereeId: z.string().optional(),
+  })),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { officials } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Delete existing and re-insert
+  await db.prepare('DELETE FROM game_officials WHERE game_id = ?').bind(gameId).run();
+
+  for (const official of officials) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO game_officials (id, game_id, referee_id, official_name, role, jersey_number)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, gameId, official.refereeId || null, official.officialName, official.role || 'referee', official.jerseyNumber || null).run();
+  }
+
+  return c.json({ success: true });
+});
+
+// ==========================================
+// SCOREKEEPER: Game Coaches
+// ==========================================
+scoringRoutes.post('/games/:gameId/coaches', zValidator('json', z.object({
+  coaches: z.array(z.object({
+    teamId: z.string(),
+    coachName: z.string(),
+    role: z.string().optional(),
+    userId: z.string().optional(),
+  })),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { coaches } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Delete existing and re-insert
+  await db.prepare('DELETE FROM game_coaches WHERE game_id = ?').bind(gameId).run();
+
+  for (const coach of coaches) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO game_coaches (id, game_id, team_id, coach_name, role, user_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, gameId, coach.teamId, coach.coachName, coach.role || 'head', coach.userId || null).run();
+  }
+
+  return c.json({ success: true });
+});
+
+// ==========================================
+// SCOREKEEPER: Update scorekeeper info on game
+// ==========================================
+scoringRoutes.put('/games/:gameId/scorekeeper-info', zValidator('json', z.object({
+  scorekeeperName: z.string().optional(),
+  scorekeeperPhone: z.string().optional(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const updates: string[] = ["updated_at = datetime('now')"];
+  const params: any[] = [];
+  if (data.scorekeeperName !== undefined) { updates.push('scorekeeper_name = ?'); params.push(data.scorekeeperName); }
+  if (data.scorekeeperPhone !== undefined) { updates.push('scorekeeper_phone = ?'); params.push(data.scorekeeperPhone); }
+
+  params.push(gameId);
+  await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+  return c.json({ success: true });
+});
+
+// ==========================================
 // HELPER: Notify coaches when game goes final
 // ==========================================
 async function notifyCoachesOnFinal(db: D1Database, env: Env, gameId: string) {
@@ -685,7 +1115,7 @@ async function notifyCoachesOnFinal(db: D1Database, env: Env, gameId: string) {
       `If you need to contest this score, tap here: ${contestUrl}`;
 
     try {
-      await sendTwilioSms(env, coach.phone, message);
+      await sendTelnyxSms(env, coach.phone, message);
     } catch (err) {
       console.error(`Failed to notify coach at ${coach.phone}:`, err);
     }
@@ -693,34 +1123,34 @@ async function notifyCoachesOnFinal(db: D1Database, env: Env, gameId: string) {
 }
 
 // ==========================================
-// HELPER: Send SMS via Twilio
+// HELPER: Send SMS via Telnyx
 // ==========================================
-async function sendTwilioSms(env: Env, to: string, body: string): Promise<string | null> {
-  const accountSid = env.TWILIO_ACCOUNT_SID;
-  const authToken = env.TWILIO_AUTH_TOKEN;
-  const fromNumber = env.TWILIO_PHONE_NUMBER;
+async function sendTelnyxSms(env: Env, to: string, body: string): Promise<string | null> {
+  const apiKey = env.TELNYX_API_KEY;
+  const fromNumber = env.TELNYX_PHONE_NUMBER;
 
-  if (!accountSid || !authToken || !fromNumber) return null;
+  if (!apiKey || !fromNumber) return null;
 
-  // Normalize phone
   const digits = to.replace(/\D/g, '');
   const normalizedTo = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : to.startsWith('+') ? to : `+${digits}`;
 
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-  const auth = btoa(`${accountSid}:${authToken}`);
-
-  const params = new URLSearchParams();
-  params.append('To', normalizedTo);
-  params.append('From', fromNumber);
-  params.append('Body', body);
-
-  const response = await fetch(url, {
+  const response = await fetch('https://api.telnyx.com/v2/messages', {
     method: 'POST',
-    headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromNumber,
+      to: normalizedTo,
+      text: body,
+    }),
   });
 
   const result = await response.json() as any;
-  if (!response.ok) throw new Error(result.message || 'Twilio send failed');
-  return result.sid;
+  if (!response.ok) {
+    const errMsg = result?.errors?.[0]?.detail || result?.errors?.[0]?.title || 'Telnyx send failed';
+    throw new Error(errMsg);
+  }
+  return result?.data?.id || null;
 }

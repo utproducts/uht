@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import ActivityTracker from './components/ActivityTracker';
 
 export const metadata: Metadata = {
   title: 'Ultimate Hockey Tournaments',
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main>{children}</main>
         <Footer />
         <ChatWidget />
+        <ActivityTracker />
       </body>
     </html>
   );
@@ -47,6 +49,7 @@ function Navigation() {
             <a href="/cities" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Cities</a>
             <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Book Ice</a>
             <a href="/sponsors" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sponsors</a>
+            <a href="/referees" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Referees</a>
             <a href="/faq" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">FAQ</a>
             <a href="/contact" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Contact</a>
           </div>
@@ -88,6 +91,7 @@ function Footer() {
               <a href="/faq" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">FAQ</a>
               <a href="/contact" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Contact Us</a>
               <a href="/sponsors" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Become a Sponsor</a>
+              <a href="/referees" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Become a Referee</a>
             </div>
           </div>
           <div>

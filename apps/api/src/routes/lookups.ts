@@ -83,10 +83,99 @@ lookupRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
   return c.json({ success: true });
 });
 
-// DELETE /:id — soft delete (set is_active = 0)
+// DELETE /:id — hard delete (removes permanently)
 lookupRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  await c.env.DB.prepare('UPDATE lookup_values SET is_active = 0 WHERE id = ?').bind(id).run();
+  await c.env.DB.prepare('DELETE FROM lookup_values WHERE id = ?').bind(id).run();
+  return c.json({ success: true });
+});
+
+// ==========================================
+// STATE DIVISION LEVELS
+// ==========================================
+
+// Auto-create table on first use
+async function ensureStateDivLevels(db: any) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS state_division_levels (
+        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+        state TEXT NOT NULL,
+        level_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(state, level_name)
+      )
+    `).run();
+  } catch (_) {}
+}
+
+// GET /state-divisions — list all, optionally filtered by state
+lookupRoutes.get('/state-divisions', async (c) => {
+  const db = c.env.DB;
+  await ensureStateDivLevels(db);
+  const state = c.req.query('state');
+  if (state) {
+    const result = await db.prepare('SELECT * FROM state_division_levels WHERE state = ? ORDER BY sort_order, level_name').bind(state).all();
+    return c.json({ success: true, data: result.results });
+  }
+  const result = await db.prepare('SELECT * FROM state_division_levels ORDER BY state, sort_order, level_name').all();
+  return c.json({ success: true, data: result.results });
+});
+
+// GET /state-divisions/states — list all states that have levels
+lookupRoutes.get('/state-divisions/states', async (c) => {
+  const db = c.env.DB;
+  await ensureStateDivLevels(db);
+  const result = await db.prepare('SELECT DISTINCT state FROM state_division_levels ORDER BY state').all();
+  return c.json({ success: true, data: (result.results as any[]).map(r => r.state) });
+});
+
+// POST /state-divisions — add a level to a state
+lookupRoutes.post('/state-divisions', zValidator('json', z.object({
+  state: z.string().min(1).max(3),
+  levelName: z.string().min(1),
+  sortOrder: z.number().optional(),
+})), async (c) => {
+  const db = c.env.DB;
+  await ensureStateDivLevels(db);
+  const { state, levelName, sortOrder } = c.req.valid('json');
+  const id = `sdl-${Date.now().toString(36)}`;
+  const order = sortOrder ?? 0;
+  try {
+    await db.prepare('INSERT INTO state_division_levels (id, state, level_name, sort_order) VALUES (?, ?, ?, ?)').bind(id, state.toUpperCase(), levelName, order).run();
+    return c.json({ success: true, data: { id, state: state.toUpperCase(), level_name: levelName, sort_order: order } }, 201);
+  } catch (e: any) {
+    if (e?.message?.includes('UNIQUE')) return c.json({ success: false, error: 'That level already exists for this state' }, 409);
+    throw e;
+  }
+});
+
+// PUT /state-divisions/:id — update a level
+lookupRoutes.put('/state-divisions/:id', zValidator('json', z.object({
+  levelName: z.string().min(1).optional(),
+  sortOrder: z.number().optional(),
+  isActive: z.boolean().optional(),
+})), async (c) => {
+  const id = c.req.param('id');
+  const body = c.req.valid('json');
+  const db = c.env.DB;
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (body.levelName !== undefined) { sets.push('level_name = ?'); params.push(body.levelName); }
+  if (body.sortOrder !== undefined) { sets.push('sort_order = ?'); params.push(body.sortOrder); }
+  if (body.isActive !== undefined) { sets.push('is_active = ?'); params.push(body.isActive ? 1 : 0); }
+  if (sets.length === 0) return c.json({ error: 'No fields' }, 400);
+  params.push(id);
+  await db.prepare(`UPDATE state_division_levels SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+  return c.json({ success: true });
+});
+
+// DELETE /state-divisions/:id — hard delete
+lookupRoutes.delete('/state-divisions/:id', async (c) => {
+  const id = c.req.param('id');
+  await c.env.DB.prepare('DELETE FROM state_division_levels WHERE id = ?').bind(id).run();
   return c.json({ success: true });
 });
 

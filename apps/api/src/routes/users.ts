@@ -4,6 +4,14 @@ import { zValidator } from '@hono/zod-validator';
 import type { Env, UserRole } from '../types';
 import { authMiddleware, requireRole, hashPassword } from '../middleware/auth';
 
+// Custom validation hook that returns clean error messages
+const validationHook = (result: { success: boolean; error?: z.ZodError }, c: any) => {
+  if (!result.success) {
+    const messages = result.error!.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
+    return c.json({ success: false, error: messages }, 400);
+  }
+};
+
 export const userRoutes = new Hono<{ Bindings: Env }>();
 
 // ==================
@@ -48,7 +56,7 @@ const listQuerySchema = z.object({
 userRoutes.get('/',
   authMiddleware,
   requireRole('admin'),
-  zValidator('query', listQuerySchema),
+  zValidator('query', listQuerySchema, validationHook),
   async (c) => {
     const { q, role, status, page, per_page } = c.req.valid('query');
     const db = c.env.DB;
@@ -214,7 +222,7 @@ userRoutes.get('/:userId',
 userRoutes.post('/',
   authMiddleware,
   requireRole('admin'),
-  zValidator('json', createUserSchema),
+  zValidator('json', createUserSchema, validationHook),
   async (c) => {
     const data = c.req.valid('json');
     const db = c.env.DB;
@@ -280,7 +288,7 @@ userRoutes.post('/',
 userRoutes.put('/:userId',
   authMiddleware,
   requireRole('admin'),
-  zValidator('json', updateUserSchema),
+  zValidator('json', updateUserSchema, validationHook),
   async (c) => {
     const userId = c.req.param('userId');
     const data = c.req.valid('json');
@@ -386,7 +394,7 @@ userRoutes.put('/:userId',
 userRoutes.put('/:userId/roles',
   authMiddleware,
   requireRole('admin'),
-  zValidator('json', updateRolesSchema),
+  zValidator('json', updateRolesSchema, validationHook),
   async (c) => {
     const userId = c.req.param('userId');
     const { roles } = c.req.valid('json');
@@ -458,7 +466,7 @@ userRoutes.put('/:userId/roles',
 userRoutes.put('/:userId/status',
   authMiddleware,
   requireRole('admin'),
-  zValidator('json', updateStatusSchema),
+  zValidator('json', updateStatusSchema, validationHook),
   async (c) => {
     const userId = c.req.param('userId');
     const { is_active } = c.req.valid('json');

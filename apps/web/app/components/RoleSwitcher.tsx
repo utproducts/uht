@@ -21,7 +21,14 @@ export default function RoleSwitcher() {
 
   const switchRole = (roleId: string) => {
     if (typeof window !== 'undefined') localStorage.setItem('uht_role', roleId);
-    router.push('/dashboard/' + roleId);
+    // Roles with dedicated top-level dashboards
+    if (roleId === 'director') {
+      router.push('/director');
+    } else if (roleId === 'admin') {
+      router.push('/admin/events');
+    } else {
+      router.push('/dashboard/' + roleId);
+    }
     setOpen(false);
   };
 

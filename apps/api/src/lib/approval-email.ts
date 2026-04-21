@@ -1,5 +1,17 @@
 import type { Env } from '../types';
 
+interface HotelInfo {
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  phone?: string;
+  rateDescription?: string;
+  bookingUrl?: string;
+  bookingCode?: string;
+  pricePerNight?: number;
+}
+
 interface ApprovalEmailParams {
   recipientEmail: string;
   recipientName: string;
@@ -12,38 +24,53 @@ interface ApprovalEmailParams {
   eventCity: string;
   paymentStatus: string;
   priceCents?: number;
+  hotelInfo?: HotelInfo;
+  /** Admin-customized field overrides from DB */
+  _overrides?: Record<string, string>;
 }
 
 /**
  * Builds the acceptance email HTML matching the current UHT email style.
  * 3 variants based on payment status: pay_later, deposit_paid, fully_paid
  */
-function buildAcceptanceHtml(params: ApprovalEmailParams): string {
-  const { teamName, ageGroup, division, eventName, eventDate, eventCity, paymentStatus, priceCents } = params;
+export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { teamName: string; ageGroup: string; eventName: string; eventDate: string; eventCity: string; paymentStatus: string }): string {
+  const { teamName, ageGroup, division, eventName, eventDate, eventCity, paymentStatus, priceCents, hotelInfo } = params;
+  const o = (params as any)._overrides as Record<string, string> | undefined;
 
   const divisionText = division ? ` - ${division}` : '';
   const priceStr = priceCents ? `$${(priceCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '';
 
+  // Editable fields
+  const heading = o?.heading || 'Registration Accepted!';
+  const bodyIntro = o?.body_intro || 'Congratulations on your registration!';
+
   let paymentSection = '';
 
   if (paymentStatus === 'paid') {
+    const paymentText = o?.payment_text || 'Thank you, your registration has been paid in full.';
+    const rosterText = o?.roster_text || "Please send us your approved hockey roster as soon as it's ready — this can be uploaded online through the registration portal or emailed.";
     paymentSection = `
-      <p>Thank you, your registration has been paid in full.</p>
-      <p>Please send us your approved hockey roster as soon as it's ready — this can be uploaded online through the registration portal or emailed.</p>
+      <p>${paymentText}</p>
+      <p>${rosterText}</p>
     `;
   } else if (paymentStatus === 'partial') {
+    const paymentText = o?.payment_text || 'Thank you, your deposit has been received. The remaining balance is due 30 days before the tournament starts.';
+    const rosterText = o?.roster_text || "Please send us your approved hockey roster as soon as it's ready — this can be uploaded online through the registration portal or emailed.";
     paymentSection = `
-      <p>Thank you, your deposit has been received. The remaining balance is due 30 days before the tournament starts.</p>
-      <p>Please send us your approved hockey roster as soon as it's ready — this can be uploaded online through the registration portal or emailed.</p>
+      <p>${paymentText}</p>
+      <p>${rosterText}</p>
       <h3 style="color: #003e79; margin-top: 24px;">Payment Options:</h3>
       ${paymentOptionsHtml()}
     `;
   } else {
     // unpaid / pay later (default)
+    const paymentText = o?.payment_text || 'We will hold your spot for 14 days, during which a <strong>$350.00 deposit</strong> is required. The remaining balance is due 30 days before the tournament starts.';
+    const rosterText = o?.roster_text || "Please send us your approved hockey roster as soon as it's ready — this can be uploaded online through the registration portal or emailed.";
+    const depositNote = o?.deposit_note || 'If you need more time for the deposit, please reach out, and we can discuss waiving it.';
     paymentSection = `
-      <p>We will hold your spot for 14 days, during which a <strong>$350.00 deposit</strong> is required. The remaining balance is due 30 days before the tournament starts.</p>
-      <p>Please send us your approved hockey roster as soon as it's ready — this can be uploaded online through the registration portal or emailed.</p>
-      <p>If you need more time for the deposit, please reach out, and we can discuss waiving it.</p>
+      <p>${paymentText}</p>
+      <p>${rosterText}</p>
+      <p>${depositNote}</p>
       <h3 style="color: #003e79; margin-top: 24px;">Payment Options:</h3>
       ${paymentOptionsHtml()}
     `;
@@ -66,7 +93,7 @@ function buildAcceptanceHtml(params: ApprovalEmailParams): string {
           <tr>
             <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
               <img src="https://ultimatetournaments.com/storage/logo/uht-logo-white.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
-              <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700;">Registration Accepted!</h1>
+              <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 700;">${heading}</h1>
             </td>
           </tr>
 
@@ -99,8 +126,9 @@ function buildAcceptanceHtml(params: ApprovalEmailParams): string {
           <!-- Body -->
           <tr>
             <td style="padding: 24px 32px 32px 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
-              <p style="margin: 0 0 16px 0;"><strong>Congratulations on your registration!</strong></p>
+              <p style="margin: 0 0 16px 0;"><strong>${bodyIntro}</strong></p>
               ${paymentSection}
+              ${hotelInfo ? buildHotelSectionHtml(hotelInfo) : ''}
             </td>
           </tr>
 
@@ -141,6 +169,36 @@ function paymentOptionsHtml(): string {
   `;
 }
 
+function buildHotelSectionHtml(hotel: HotelInfo): string {
+  const priceStr = hotel.pricePerNight ? `$${hotel.pricePerNight}/night` : '';
+  const locationParts = [hotel.city, hotel.state].filter(Boolean).join(', ');
+
+  let details = '';
+  if (hotel.address) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">${hotel.address}${locationParts ? `, ${locationParts}` : ''}</p>`;
+  if (hotel.phone) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Phone: ${hotel.phone}</p>`;
+  if (priceStr) details += `<p style="margin: 4px 0; font-size: 13px; color: #003e79; font-weight: 600;">${priceStr}</p>`;
+  if (hotel.rateDescription) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">${hotel.rateDescription}</p>`;
+  if (hotel.bookingCode) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Booking Code: <strong>${hotel.bookingCode}</strong></p>`;
+
+  let bookingBtn = '';
+  if (hotel.bookingUrl) {
+    bookingBtn = `
+      <p style="margin: 12px 0 0 0;">
+        <a href="${hotel.bookingUrl}" style="display: inline-block; background-color: #00ccff; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 20px; border-radius: 20px;">Book Your Room</a>
+      </p>`;
+  }
+
+  return `
+    <div style="margin-top: 24px; padding: 20px; background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px;">
+      <h3 style="color: #003e79; margin: 0 0 8px 0; font-size: 16px;">Hotel Information</h3>
+      <p style="margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: #1d1d1f;">${hotel.name}</p>
+      ${details}
+      ${bookingBtn}
+      <p style="margin: 12px 0 0 0; font-size: 12px; color: #86868b;"><em>All out-of-state teams are required to stay at the designated tournament hotel.</em></p>
+    </div>
+  `;
+}
+
 /**
  * Send the acceptance/approval email via SendGrid
  */
@@ -151,12 +209,28 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
   }
 
   const { recipientEmail, recipientName, ccEmails, teamName, ageGroup, division, eventName, eventDate, eventCity } = params;
+  const o = params._overrides as Record<string, string> | undefined;
 
   const divisionText = division ? ` - ${division}` : '';
-  const subject = `Accepted! ${eventDate}, ${eventCity} - ${eventName} - ${teamName} - ${ageGroup}${divisionText}`;
+  const subjectTemplate = o?.subject || 'Accepted! {eventDate}, {eventCity} - {eventName} - {teamName} - {ageGroup}{divisionText}';
+  const subject = subjectTemplate
+    .replace(/\{eventDate\}/g, eventDate).replace(/\{eventCity\}/g, eventCity)
+    .replace(/\{eventName\}/g, eventName).replace(/\{teamName\}/g, teamName)
+    .replace(/\{ageGroup\}/g, ageGroup).replace(/\{divisionText\}/g, divisionText);
 
   const html = buildAcceptanceHtml(params);
-  const plainText = `Congratulations! Your registration for ${eventName} has been accepted.\n\nTeam: ${teamName}\nAge Group: ${ageGroup}${divisionText}\nEvent: ${eventName}\nDate: ${eventDate}\nCity: ${eventCity}\n\nPlease send us your approved hockey roster as soon as it's ready.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;
+  let hotelPlain = '';
+  if (params.hotelInfo) {
+    const h = params.hotelInfo;
+    hotelPlain = `\n\nHotel: ${h.name}`;
+    if (h.address) hotelPlain += `\nAddress: ${h.address}`;
+    if (h.phone) hotelPlain += `\nPhone: ${h.phone}`;
+    if (h.pricePerNight) hotelPlain += `\nRate: $${h.pricePerNight}/night`;
+    if (h.rateDescription) hotelPlain += `\n${h.rateDescription}`;
+    if (h.bookingCode) hotelPlain += `\nBooking Code: ${h.bookingCode}`;
+    if (h.bookingUrl) hotelPlain += `\nBook here: ${h.bookingUrl}`;
+  }
+  const plainText = `Congratulations! Your registration for ${eventName} has been accepted.\n\nTeam: ${teamName}\nAge Group: ${ageGroup}${divisionText}\nEvent: ${eventName}\nDate: ${eventDate}\nCity: ${eventCity}${hotelPlain}\n\nPlease send us your approved hockey roster as soon as it's ready.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;
 
   const personalizations: any = {
     to: [{ email: recipientEmail, name: recipientName }],
@@ -182,8 +256,8 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
         from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
         subject,
         content: [
-          { type: 'text/html', value: html },
           { type: 'text/plain', value: plainText },
+          { type: 'text/html', value: html },
         ],
       }),
     });

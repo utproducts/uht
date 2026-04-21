@@ -70,6 +70,28 @@ organizationRoutes.post('/', authMiddleware, requireRole('admin', 'organization'
   return c.json({ success: true, data: { id: orgId } }, 201);
 });
 
+// Rename organization
+organizationRoutes.patch('/:id', async (c) => {
+  const db = c.env.DB;
+  const orgId = c.req.param('id');
+  const body = await c.req.json<{ name?: string; city?: string; state?: string }>();
+
+  const fields: string[] = [];
+  const params: any[] = [];
+
+  if (body.name !== undefined) { fields.push('name = ?'); params.push(body.name); }
+  if (body.city !== undefined) { fields.push('city = ?'); params.push(body.city); }
+  if (body.state !== undefined) { fields.push('state = ?'); params.push(body.state); }
+
+  if (fields.length === 0) return c.json({ error: 'No fields to update' }, 400);
+
+  fields.push("updated_at = datetime('now')");
+  params.push(orgId);
+
+  await db.prepare(`UPDATE organizations SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run();
+  return c.json({ success: true });
+});
+
 // Create coach under organization and assign to team
 const assignCoachSchema = z.object({
   email: z.string().email(),
