@@ -24,10 +24,12 @@ function CoachTeams() {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
-        .then(json => { if (json.success) setTeams(json.data); })
-        .catch(() => {});
+        .then(json => { if (json.success && json.data?.length > 0) setTeams(json.data); })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
@@ -88,14 +90,20 @@ function RoleEvents({ role }: { role: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/api/events?per_page=50`)
+    const token = localStorage.getItem('uht_token');
+    if (!token) { setLoading(false); return; }
+
+    // Fetch events the user's teams are registered for
+    fetch(`${API}/api/events/my-registered`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then(r => r.json())
       .then(json => {
-        if (json.success) setEvents(json.data);
+        if (json.success) setEvents(json.data || []);
         else if (Array.isArray(json)) setEvents(json);
-        setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
@@ -104,25 +112,38 @@ function RoleEvents({ role }: { role: string }) {
   const upcoming = events.filter(e => e.end_date >= now);
   const past = events.filter(e => e.end_date < now);
 
+  const EventCard = ({ ev, isPast }: { ev: any; isPast?: boolean }) => (
+    <a key={ev.id} href={`/events/${ev.slug}`} className={`bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-5 hover:shadow-md transition block ${isPast ? 'opacity-70' : ''}`}>
+      <div className="flex items-center gap-4">
+        {ev.logo_url ? (
+          <img src={ev.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-[#003e79] flex items-center justify-center text-white font-bold text-sm shrink-0">
+            {(ev.name || '?')[0]}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-[#1d1d1f] truncate">{ev.name}</h3>
+          <p className="text-sm text-[#6e6e73] mt-0.5">
+            {ev.city}, {ev.state}
+            {ev.start_date && ` · ${new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(ev.end_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+          </p>
+          {ev.team_names && <p className="text-xs text-[#86868b] mt-0.5">{ev.team_names}</p>}
+        </div>
+        {!isPast && <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200 shrink-0">Upcoming</span>}
+      </div>
+    </a>
+  );
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-[#1d1d1f]">Events</h1>
+      <h1 className="text-2xl font-bold text-[#1d1d1f]">My Events</h1>
 
       {upcoming.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-3">Upcoming</h2>
           <div className="grid gap-3">
-            {upcoming.map((ev: any) => (
-              <a key={ev.id} href={`/events/${ev.slug}`} className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-5 hover:shadow-md transition block">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-[#1d1d1f]">{ev.name}</h3>
-                    <p className="text-sm text-[#6e6e73] mt-1">{ev.city}, {ev.state} · {new Date(ev.start_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(ev.end_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                  </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">Upcoming</span>
-                </div>
-              </a>
-            ))}
+            {upcoming.map((ev: any) => <EventCard key={ev.id} ev={ev} />)}
           </div>
         </div>
       )}
@@ -131,19 +152,21 @@ function RoleEvents({ role }: { role: string }) {
         <div>
           <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-3">Past Events</h2>
           <div className="grid gap-3">
-            {past.slice(0, 10).map((ev: any) => (
-              <a key={ev.id} href={`/events/${ev.slug}`} className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-5 hover:shadow-md transition block opacity-70">
-                <h3 className="font-semibold text-[#1d1d1f]">{ev.name}</h3>
-                <p className="text-sm text-[#6e6e73] mt-1">{ev.city}, {ev.state}</p>
-              </a>
-            ))}
+            {past.slice(0, 10).map((ev: any) => <EventCard key={ev.id} ev={ev} isPast />)}
           </div>
         </div>
       )}
 
       {events.length === 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-12 text-center">
-          <p className="text-[#6e6e73]">No events available right now.</p>
+          <div className="w-16 h-16 bg-[#f0f7ff] rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          </div>
+          <h3 className="text-lg font-semibold text-[#1d1d1f]">No registered events</h3>
+          <p className="mt-2 text-sm text-[#6e6e73]">Register a team for a tournament to see it here.</p>
+          <a href="/events" className="inline-block mt-4 px-6 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
+            Browse Events
+          </a>
         </div>
       )}
     </div>

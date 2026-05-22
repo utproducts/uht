@@ -226,7 +226,7 @@ export default function RegisterPage() {
 
   // Handle team continue → go to hotels step
   const handleTeamContinue = async () => {
-    if (!selectedTeam) return;
+    if (multiTeamMode ? selectedTeams.length === 0 : !selectedTeam) return;
     await loadEventHotels();
     setStep('hotels');
   };
@@ -422,8 +422,12 @@ export default function RegisterPage() {
               <h2 className="text-xl font-bold text-[#1d1d1f]">Select Your Team{multiTeamMode ? 's' : ''}</h2>
               {teams.length > 1 && (
                 <button onClick={() => { setMultiTeamMode(!multiTeamMode); setSelectedTeams([]); setSelectedTeam(null); }}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#e8e8ed] hover:bg-[#f5f5f7] transition text-[#6e6e73]">
-                  {multiTeamMode ? 'Single Team' : 'Register Multiple Teams'}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${
+                    multiTeamMode
+                      ? 'border-[#00ccff] bg-[#00ccff]/10 text-[#0077cc]'
+                      : 'border-[#e8e8ed] hover:bg-[#f5f5f7] text-[#6e6e73]'
+                  }`}>
+                  {multiTeamMode ? 'Multi-Team Mode ON — Switch to Single' : 'Register Multiple Teams'}
                 </button>
               )}
             </div>

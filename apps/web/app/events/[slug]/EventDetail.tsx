@@ -377,12 +377,19 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
     <div className="min-h-screen bg-[#fafafa]">
       {/* ═══════ HERO ═══════ */}
       <div className="relative bg-gradient-to-br from-[#003e79] via-[#005599] to-[#0077cc] overflow-hidden">
+        {/* Banner image if uploaded */}
+        {event.banner_url && (
+          <img src={event.banner_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        {event.banner_url && <div className="absolute inset-0 bg-[#003e79]/60" />}
         {/* Decorative elements */}
-        <div className="absolute inset-0 opacity-[0.04]">
-          <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full bg-white translate-x-1/3 -translate-y-1/3" />
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-white -translate-x-1/4 translate-y-1/4" />
-        </div>
-        {event.logo_url && (
+        {!event.banner_url && (
+          <div className="absolute inset-0 opacity-[0.04]">
+            <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full bg-white translate-x-1/3 -translate-y-1/3" />
+            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-white -translate-x-1/4 translate-y-1/4" />
+          </div>
+        )}
+        {event.logo_url && !event.banner_url && (
           <img src={event.logo_url} alt="" className="absolute right-0 top-0 h-full w-auto opacity-[0.06] scale-125 blur-[2px] pointer-events-none select-none" />
         )}
 

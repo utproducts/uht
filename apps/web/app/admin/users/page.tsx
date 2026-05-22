@@ -295,7 +295,10 @@ export default function AdminUsersPage() {
     params.append('page', pg.toString());
     params.append('per_page', '20');
 
-    fetch(`${API_BASE}?${params.toString()}`)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+    fetch(`${API_BASE}?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then(r => r.json())
       .then(json => {
         if (json.success) {

@@ -11,17 +11,16 @@ interface LookupValue {
   is_active: number;
 }
 
-type Category = 'age_group' | 'division' | 'league' | 'team_type' | 'state_divisions';
+type Category = 'age_group' | 'league' | 'team_type' | 'state_divisions';
 
 const CATEGORY_LABELS: Record<Category, { title: string; description: string; icon: string }> = {
   age_group: { title: 'Age Groups', description: 'Age divisions available for team registration', icon: '' },
-  division: { title: 'Division Levels', description: 'Global default division levels (AA, Gold, Silver, etc.)', icon: '' },
   state_divisions: { title: 'State Divisions', description: 'Each state has its own division level names', icon: '' },
   league: { title: 'Hometown Leagues', description: 'Local leagues teams can belong to', icon: '' },
   team_type: { title: 'Team Types', description: 'How the team was formed (Draft, Tryout, etc.)', icon: '' },
 };
 
-const CATEGORIES: Category[] = ['age_group', 'division', 'state_divisions', 'league', 'team_type'];
+const CATEGORIES: Category[] = ['age_group', 'state_divisions', 'league', 'team_type'];
 
 // US state codes
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
