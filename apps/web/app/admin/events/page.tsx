@@ -166,6 +166,12 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const [newHotel, setNewHotel] = useState({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
   const [addingHotel, setAddingHotel] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  // Hotel search state
+  const [hotelSearchQuery, setHotelSearchQuery] = useState('');
+  const [hotelSearchState, setHotelSearchState] = useState('');
+  const [hotelSearchResults, setHotelSearchResults] = useState<any[]>([]);
+  const [hotelSearchLoading, setHotelSearchLoading] = useState(false);
+  const [showHotelSearch, setShowHotelSearch] = useState(false);
 
   // Venue rinks state (for director-to-rink assignment)
   const [venueRinks, setVenueRinks] = useState<any[]>([]);
@@ -544,6 +550,27 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
         setHotels(prev => prev.map(h => h.id === hotelId ? { ...h, ...updates } : h));
       }
     } catch (e) { /* ignore */ }
+  };
+
+  const searchMasterHotels = async (query?: string, state?: string) => {
+    setHotelSearchLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (query) params.set('search', query);
+      if (state) params.set('state', state);
+      const res = await fetch(`${HOTEL_API}/master?${params.toString()}`);
+      const json = await res.json();
+      if (json.success) {
+        // Mark hotels already linked to this event
+        const linkedMasterIds = new Set(hotels.map((h: any) => h.master_hotel_id).filter(Boolean));
+        const results = (json.data || []).map((h: any) => ({
+          ...h,
+          already_linked: linkedMasterIds.has(h.id),
+        }));
+        setHotelSearchResults(results);
+      }
+    } catch (e) { /* ignore */ }
+    setHotelSearchLoading(false);
   };
 
   const handleAssignDirector = async (rinkIds?: string[]) => {
@@ -1883,36 +1910,112 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 )}
               </div>
 
-              {/* Suggested Hotels from Master Database */}
+              {/* Search Hotels from Master Database */}
               <div>
-                <p className="text-sm font-semibold text-[#1d1d1f] mb-2">
-                  Suggested Hotels
-                  <span className="text-xs font-normal text-[#86868b] ml-2">
-                    based on event location ({event?.city}, {event?.state})
-                  </span>
-                </p>
-                {loadingSuggestions ? (
-                  <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#003e79]" /></div>
-                ) : suggestedHotels.filter(h => !h.already_linked).length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {suggestedHotels.filter(h => !h.already_linked).map(h => (
-                      <div key={h.id} className="flex items-center gap-2 bg-[#f5f5f7] rounded-xl p-2.5 border border-[#e8e8ed] hover:border-[#99b5d6] transition">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-[#1d1d1f] truncate">{h.hotel_name}</p>
-                          <p className="text-[10px] text-[#86868b]">{h.city}, {h.state}</p>
-                          {h.default_rate_description && <p className="text-[10px] text-[#003e79]">{h.default_rate_description}</p>}
-                        </div>
-                        <button onClick={() => handleLinkHotel(h.id)} disabled={linkingId === h.id}
-                          className="px-2.5 py-1.5 bg-[#003e79] hover:bg-[#002d5a] text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 shrink-0">
-                          {linkingId === h.id ? '...' : '+ Add'}
-                        </button>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold text-[#1d1d1f]">Search Hotel Database</p>
+                  {!showHotelSearch && suggestedHotels.filter(h => !h.already_linked).length > 0 && (
+                    <span className="text-xs text-[#86868b]">{suggestedHotels.filter(h => !h.already_linked).length} suggested for {event?.state}</span>
+                  )}
+                </div>
+
+                {/* Quick suggestions (auto-loaded based on event location) */}
+                {!showHotelSearch && (
+                  <>
+                    {loadingSuggestions ? (
+                      <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#003e79]" /></div>
+                    ) : suggestedHotels.filter(h => !h.already_linked).length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                        {suggestedHotels.filter(h => !h.already_linked).map(h => (
+                          <div key={h.id} className="flex items-center gap-2 bg-[#f5f5f7] rounded-xl p-2.5 border border-[#e8e8ed] hover:border-[#99b5d6] transition">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-[#1d1d1f] truncate">{h.hotel_name}</p>
+                              <p className="text-[10px] text-[#86868b]">{h.city}, {h.state}</p>
+                              {h.default_rate_description && <p className="text-[10px] text-[#003e79]">{h.default_rate_description}</p>}
+                            </div>
+                            <button onClick={() => handleLinkHotel(h.id)} disabled={linkingId === h.id}
+                              className="px-2.5 py-1.5 bg-[#003e79] hover:bg-[#002d5a] text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 shrink-0">
+                              {linkingId === h.id ? '...' : '+ Add'}
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : null}
+                    <button onClick={() => { setShowHotelSearch(true); searchMasterHotels('', ''); }}
+                      className="text-sm text-[#003e79] hover:text-[#002d5a] font-medium transition flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                      Search all hotels by name or state
+                    </button>
+                  </>
+                )}
+
+                {/* Full search panel */}
+                {showHotelSearch && (
+                  <div className="bg-white border border-[#e8e8ed] rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-[#1d1d1f]">Find Hotels</p>
+                      <button onClick={() => setShowHotelSearch(false)} className="text-xs text-[#86868b] hover:text-[#6e6e73]">Close</button>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        <input
+                          type="text"
+                          value={hotelSearchQuery}
+                          onChange={e => setHotelSearchQuery(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') searchMasterHotels(hotelSearchQuery, hotelSearchState); }}
+                          placeholder="Search by hotel name or city..."
+                          className="w-full pl-9 pr-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none"
+                        />
+                      </div>
+                      <select
+                        value={hotelSearchState}
+                        onChange={e => { setHotelSearchState(e.target.value); searchMasterHotels(hotelSearchQuery, e.target.value); }}
+                        className="px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none bg-white min-w-[100px]"
+                      >
+                        <option value="">All States</option>
+                        {['IL', 'IN', 'MI', 'MN', 'MO', 'OH', 'WI'].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => searchMasterHotels(hotelSearchQuery, hotelSearchState)}
+                        className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white text-sm font-semibold rounded-xl transition">
+                        Search
+                      </button>
+                    </div>
+
+                    {hotelSearchLoading ? (
+                      <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#003e79]" /></div>
+                    ) : hotelSearchResults.length > 0 ? (
+                      <div className="max-h-64 overflow-y-auto space-y-1.5">
+                        {hotelSearchResults.map(h => (
+                          <div key={h.id} className={"flex items-center gap-3 rounded-xl p-2.5 border transition " +
+                            (h.already_linked ? "bg-emerald-50/50 border-emerald-200" : "bg-[#f5f5f7] border-[#e8e8ed] hover:border-[#99b5d6]")}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-[#1d1d1f] truncate">{h.hotel_name}</p>
+                              <p className="text-[10px] text-[#86868b]">{h.city}, {h.state}{h.address ? ` · ${h.address}` : ''}</p>
+                              {h.default_rate_description && <p className="text-[10px] text-[#003e79]">{h.default_rate_description}</p>}
+                            </div>
+                            {h.already_linked ? (
+                              <span className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 text-xs font-semibold rounded-lg shrink-0">Added</span>
+                            ) : (
+                              <button onClick={async () => {
+                                await handleLinkHotel(h.id);
+                                setHotelSearchResults(prev => prev.map(x => x.id === h.id ? { ...x, already_linked: true } : x));
+                              }} disabled={linkingId === h.id}
+                                className="px-2.5 py-1.5 bg-[#003e79] hover:bg-[#002d5a] text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 shrink-0">
+                                {linkingId === h.id ? '...' : '+ Add'}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#86868b] text-center py-3">
+                        {hotelSearchQuery || hotelSearchState ? 'No hotels found matching your search' : 'Enter a search term or select a state to find hotels'}
+                      </p>
+                    )}
                   </div>
-                ) : suggestedHotels.length > 0 ? (
-                  <p className="text-xs text-[#86868b] text-center py-2">All available hotels already added</p>
-                ) : (
-                  <p className="text-xs text-[#86868b] text-center py-2">No hotels in database for this area yet</p>
                 )}
               </div>
 

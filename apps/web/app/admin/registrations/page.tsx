@@ -755,7 +755,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
         body.event_division_id = divisionId;
       }
 
-      const res = await fetch(`https://uht.chad-157.workers.dev/api/admin/registration/${reg.id}`, {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify(body),

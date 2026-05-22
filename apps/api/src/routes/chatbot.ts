@@ -26,6 +26,52 @@ const chatSchema = z.object({
   })).optional(),
 });
 
+// Alias: /ask maps to same logic as /chat but returns { response } for backward compat
+chatbotRoutes.post('/ask', zValidator('json', chatSchema), async (c) => {
+  const data = c.req.valid('json');
+  const env = c.env;
+
+  // Simple AI generation — try Claude API, fallback to template
+  try {
+    if (env.CLAUDE_API_KEY) {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': env.CLAUDE_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 512,
+          messages: [{ role: 'user', content: data.message }],
+        }),
+      });
+      if (response.ok) {
+        const result = await response.json() as any;
+        const text = result.content?.[0]?.text || '';
+        if (text) return c.json({ success: true, data: { response: text } });
+      }
+    }
+  } catch (e) {
+    console.error('AI generation error:', e);
+  }
+
+  // Fallback: generate a template description from the prompt
+  const nameMatch = data.message.match(/called "([^"]+)"/);
+  const cityMatch = data.message.match(/in ([^.]+)\./);
+  const name = nameMatch?.[1] || 'this tournament';
+  const location = cityMatch?.[1] || 'a premier venue';
+
+  const templates = [
+    `Get ready for ${name}! Join us in ${location} for an exciting weekend of competitive youth hockey. Teams from across the region will battle it out on the ice in this action-packed tournament featuring top-tier competition at every level.`,
+    `${name} returns to ${location} for another thrilling weekend of youth hockey action. This premier tournament brings together talented teams for intense competition, great sportsmanship, and unforgettable memories on the ice.`,
+    `Experience the excitement of ${name} in ${location}! This premier youth hockey tournament features competitive divisions, professional officiating, and an electric atmosphere that players and families love.`,
+  ];
+  const text = templates[Math.floor(Math.random() * templates.length)];
+  return c.json({ success: true, data: { response: text } });
+});
+
 chatbotRoutes.post('/chat', zValidator('json', chatSchema), async (c) => {
   const data = c.req.valid('json');
   const env = c.env;

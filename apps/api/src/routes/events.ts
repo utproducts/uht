@@ -73,11 +73,16 @@ eventRoutes.get('/', optionalAuth, async (c) => {
 // ==================
 eventRoutes.get('/my-registered', authMiddleware, async (c) => {
   const db = c.env.DB;
-  const userId = (c as any).get('userId');
+  const authUser = c.get('user') as any;
+  const userId = authUser?.id;
+
+  if (!userId) {
+    return c.json({ success: true, data: [] });
+  }
 
   // Get user email for matching event_registrations
-  const user = await db.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first<{ email: string }>();
-  const userEmail = user?.email || '';
+  const userRecord = await db.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first<{ email: string }>();
+  const userEmail = userRecord?.email || authUser?.email || '';
 
   // Get team names owned by this user
   const userTeams = await db.prepare('SELECT name FROM teams WHERE owner_id = ?').bind(userId).all();

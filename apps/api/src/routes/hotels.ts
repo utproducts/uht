@@ -10,7 +10,7 @@ export const hotelRoutes = new Hono<{ Bindings: Env }>();
 // ==================
 hotelRoutes.get('/master', async (c) => {
   const db = c.env.DB;
-  const { city, state } = c.req.query();
+  const { city, state, search } = c.req.query();
 
   let query = 'SELECT * FROM master_hotels WHERE is_active = 1';
   const params: string[] = [];
@@ -22,6 +22,11 @@ hotelRoutes.get('/master', async (c) => {
   if (state) {
     query += ' AND LOWER(state) = LOWER(?)';
     params.push(state);
+  }
+  if (search) {
+    query += ' AND (LOWER(hotel_name) LIKE ? OR LOWER(city) LIKE ?)';
+    const searchTerm = `%${search.toLowerCase()}%`;
+    params.push(searchTerm, searchTerm);
   }
 
   query += ' ORDER BY state ASC, city ASC, hotel_name ASC';
