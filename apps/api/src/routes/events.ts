@@ -271,7 +271,7 @@ eventRoutes.get('/admin/list', async (c) => {
     FROM events e
     LEFT JOIN tournaments t ON t.id = e.tournament_id
     WHERE 1=1 ${dateCondition} ${searchCondition}
-    ORDER BY e.start_date DESC
+    ORDER BY e.start_date ASC
     LIMIT ? OFFSET ?
   `).bind(...params, limit.toString(), offset.toString()).all();
 

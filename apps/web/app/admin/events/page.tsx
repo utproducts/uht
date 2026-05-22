@@ -1028,11 +1028,10 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
                       <span>Age Group</span>
                       <span>Price ($)</span>
-                      <span>Max Teams</span>
                       <span>Registered</span>
                     </div>
                     {divisionConfigs.map((div, idx) => (
-                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_80px_80px_80px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
+                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_80px_80px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
                         <span className="text-sm font-semibold text-[#1d1d1f]">{div.age_group}</span>
                         <input type="number" step="1" min="0"
                           value={div.price_cents ? (div.price_cents / 100).toFixed(0) : ''}
@@ -1041,14 +1040,6 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                             setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, price_cents: val } : d));
                           }}
                           placeholder="0"
-                          className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
-                        <input type="number" min="0"
-                          value={div.max_teams || ''}
-                          onChange={e => {
-                            const val = e.target.value ? parseInt(e.target.value) : null;
-                            setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, max_teams: val } : d));
-                          }}
-                          placeholder="--"
                           className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
                         <span className="text-sm text-center text-[#86868b]">{div.registered_count || 0}</span>
                       </div>
@@ -2228,10 +2219,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     <div className="grid grid-cols-[1fr_100px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
                       <span>Age Group</span>
                       <span>Price ($)</span>
-                      <span>Max Teams</span>
                     </div>
                     {divisionConfigs.map((div, idx) => (
-                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_100px_80px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
+                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_100px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
                         <span className="text-sm font-semibold text-[#1d1d1f]">{div.age_group}</span>
                         <input type="number" step="1" min="0"
                           value={div.price_cents ? (div.price_cents / 100).toFixed(0) : ''}
@@ -2240,14 +2230,6 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                             setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, price_cents: val } : d));
                           }}
                           placeholder={form.price_cents || '0'}
-                          className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
-                        <input type="number" min="0"
-                          value={div.max_teams || ''}
-                          onChange={e => {
-                            const val = e.target.value ? parseInt(e.target.value) : null;
-                            setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, max_teams: val } : d));
-                          }}
-                          placeholder="--"
                           className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
                       </div>
                     ))}
@@ -3711,6 +3693,7 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
   const [tournaments, setTournaments] = useState<{ id: string; name: string }[]>([]);
@@ -3777,7 +3760,7 @@ export default function AdminEventsPage() {
       e.city.toLowerCase().includes(search.toLowerCase());
     const matchesMonth = activeMonth === 'all' || getMonthKey(e.start_date) === activeMonth;
     return matchesSearch && matchesMonth;
-  });
+  }).sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
 
   // Stats
   const totalTeams = events.reduce((sum, e) => sum + e.registration_count, 0);
@@ -3883,6 +3866,24 @@ export default function AdminEventsPage() {
               className="w-full px-4 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
             />
           </div>
+
+          {/* View Toggle */}
+          <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-lg transition ${viewMode === 'grid' ? 'bg-white shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}
+              title="Grid view"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-lg transition ${viewMode === 'list' ? 'bg-white shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}
+              title="List view"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 5.25h16.5m-16.5-10.5h16.5" /></svg>
+            </button>
+          </div>
         </div>
 
         {/* Month Filter */}
@@ -3926,11 +3927,58 @@ export default function AdminEventsPage() {
             <svg className="w-16 h-16 mx-auto text-[#86868b] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
             <p className="text-[#86868b] font-medium">No {filter} events found</p>
           </div>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
             {filtered.map((event) => (
               <EventCard key={event.id} event={event} onViewDetails={setSelectedEventId} onEdit={setEditingEvent} onDuplicate={handleDuplicate} onDelete={setDeleteConfirm} />
             ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#e8e8ed] bg-[#fafafa]">
+                  <th className="text-left px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Event</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Dates</th>
+                  <th className="text-left px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Location</th>
+                  <th className="text-center px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Teams</th>
+                  <th className="text-center px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Revenue</th>
+                  <th className="text-center px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Status</th>
+                  <th className="text-right px-4 py-3 font-semibold text-[#86868b] text-xs uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((event) => {
+                  const statusColors: Record<string, string> = {
+                    published: 'bg-blue-100 text-blue-700',
+                    registration_open: 'bg-green-100 text-green-700',
+                    draft: 'bg-gray-100 text-gray-600',
+                    completed: 'bg-[#e8e8ed] text-[#6e6e73]',
+                    sold_out: 'bg-red-100 text-red-700',
+                  };
+                  const statusLabel = event.status?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Draft';
+                  return (
+                    <tr key={event.id} className="border-b border-[#f5f5f7] hover:bg-[#fafafa] transition cursor-pointer" onClick={() => setSelectedEventId(event.id)}>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-[#1d1d1f]">{event.name}</div>
+                        {event.tournament_name && <div className="text-xs text-[#86868b]">{event.tournament_name}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-[#6e6e73] whitespace-nowrap">{fmtDate(event.start_date)} – {fmtDate(event.end_date)}</td>
+                      <td className="px-4 py-3 text-[#6e6e73]">{event.city}, {event.state}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-[#003e79]">{event.registration_count}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-green-600">${((event.total_revenue_cents || 0) / 100).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[event.status] || 'bg-gray-100 text-gray-600'}`}>{statusLabel}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); }} className="text-[#003e79] hover:text-[#002d5a] text-xs font-semibold mr-3">Edit</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(event.id); }} className="text-[#6e6e73] hover:text-[#1d1d1f] text-xs font-semibold">Duplicate</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

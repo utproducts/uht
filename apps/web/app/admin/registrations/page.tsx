@@ -1071,7 +1071,8 @@ export default function AdminRegistrationsPage() {
 
   // Filters
   let filtered = registrations;
-  if (divFilter) filtered = filtered.filter(r => r.event_division_id === divFilter);
+  if (divFilter === '__unassigned') filtered = filtered.filter(r => !r.event_division_id);
+  else if (divFilter) filtered = filtered.filter(r => r.event_division_id === divFilter);
   if (statusFilter) filtered = filtered.filter(r => r.status === statusFilter);
   if (search) {
     const q = search.toLowerCase();
@@ -1149,7 +1150,10 @@ export default function AdminRegistrationsPage() {
                 >
                   All
                 </button>
-                {divisions.map(d => (
+                {divisions.map(d => {
+                  const divApproved = registrations.filter(r => r.event_division_id === d.id && r.status === 'approved').length;
+                  const divTotal = registrations.filter(r => r.event_division_id === d.id).length;
+                  return (
                   <button
                     key={d.id}
                     onClick={() => setDivFilter(divFilter === d.id ? '' : d.id)}
@@ -1157,9 +1161,21 @@ export default function AdminRegistrationsPage() {
                       divFilter === d.id ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
                     }`}
                   >
-                    {d.age_group} {d.division_level} ({registrations.filter(r => r.event_division_id === d.id && r.status === 'approved').length}/{d.max_teams})
+                    {d.age_group} {d.division_level} ({divApproved} approved{divTotal > divApproved ? ` · ${divTotal} total` : ''})
                   </button>
-                ))}
+                  );
+                })}
+                {/* Unassigned division pill for consumer registrations without a division */}
+                {registrations.filter(r => !r.event_division_id).length > 0 && (
+                  <button
+                    onClick={() => setDivFilter(divFilter === '__unassigned' ? '' : '__unassigned')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                      divFilter === '__unassigned' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                    }`}
+                  >
+                    Unassigned ({registrations.filter(r => !r.event_division_id).length})
+                  </button>
+                )}
 
                 <div className="hidden sm:block w-px h-5 bg-[#e8e8ed]" />
 
