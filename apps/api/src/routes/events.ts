@@ -172,7 +172,8 @@ eventRoutes.get('/admin/list', async (c) => {
   const result = await db.prepare(`
     SELECT e.*,
       t.name as tournament_name, t.location as tournament_location,
-      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'approved') as registration_count,
+      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'approved') + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status = 'approved') as registration_count,
+      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as total_registration_count,
       (SELECT COALESCE(SUM(COALESCE(r2.amount_cents, ed2.price_cents)), 0) FROM registrations r2 LEFT JOIN event_divisions ed2 ON ed2.id = r2.event_division_id WHERE r2.event_id = e.id AND r2.payment_status = 'paid' AND r2.status = 'approved') as total_revenue_cents
     FROM events e
     LEFT JOIN tournaments t ON t.id = e.tournament_id
@@ -213,7 +214,8 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
       r.hotel_assigned,
       r.notes,
       r.event_division_id,
-      r.created_at, r.updated_at
+      r.created_at, r.updated_at,
+      'normalized' as source
     FROM registrations r
     LEFT JOIN teams t ON t.id = r.team_id
     LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
@@ -221,15 +223,24 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
     ORDER BY ed.age_group ASC, t.name ASC
   `).bind(id).all();
 
-  // Also check legacy event_registrations table for any data there
+  // Also check event_registrations table (consumer registration flow)
   const legacyRegs = await db.prepare(`
-    SELECT * FROM event_registrations
+    SELECT id, event_id, team_name, age_group, division,
+      manager_first_name, manager_last_name, email1 as email,
+      phone, status, payment_status,
+      NULL as payment_amount_cents,
+      NULL as hotel_assigned,
+      NULL as notes,
+      NULL as event_division_id,
+      created_at, updated_at,
+      'consumer' as source
+    FROM event_registrations
     WHERE event_id = ?
     ORDER BY age_group ASC, team_name ASC
   `).bind(id).all();
 
-  // Merge: use normalized registrations, fall back to legacy if normalized is empty
-  const allRegs = registrations.results.length > 0 ? registrations.results : legacyRegs.results;
+  // Merge BOTH tables — always include registrations from both sources
+  const allRegs = [...registrations.results, ...legacyRegs.results];
 
   // Get registration summary by age group (approved only — pending regs excluded from overview)
   const approvedRegs = allRegs.filter((r: any) => r.status === 'approved');

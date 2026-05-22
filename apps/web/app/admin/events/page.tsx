@@ -3118,15 +3118,17 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const ageGroups = event.age_groups ? JSON.parse(event.age_groups) : summary.length > 0 ? summary.map((s: any) => s.age_group) : [];
   const divisions = event.divisions ? JSON.parse(event.divisions) : [];
   const allRegistrations = event.registrations || [];
-  // Active registrations = approved only (matches event list counts and current site)
-  const registrations = allRegistrations.filter((r: any) => r.status === 'approved');
-  const totalRevenue = registrations.filter((r: any) => r.payment_status === 'paid').reduce((sum: number, r: any) => sum + (r.payment_amount_cents || 0), 0);
+  // Show ALL registrations (pending + approved + denied) so admins can manage them all
+  const registrations = allRegistrations.filter((r: any) => r.status !== 'denied' && r.status !== 'withdrawn');
+  const approvedRegistrations = allRegistrations.filter((r: any) => r.status === 'approved');
+  const totalRevenue = approvedRegistrations.filter((r: any) => r.payment_status === 'paid').reduce((sum: number, r: any) => sum + (r.payment_amount_cents || 0), 0);
 
   // Group registrations by age_group, stable sort by team_name within each group
   const grouped: Record<string, any[]> = {};
   registrations.forEach((r: any) => {
-    if (!grouped[r.age_group]) grouped[r.age_group] = [];
-    grouped[r.age_group].push(r);
+    const ag = r.age_group || 'Unknown';
+    if (!grouped[ag]) grouped[ag] = [];
+    grouped[ag].push(r);
   });
   // Sort each group by team name so rows don't jump on status change
   Object.values(grouped).forEach(arr => arr.sort((a: any, b: any) => (a.team_name || '').localeCompare(b.team_name || '')));

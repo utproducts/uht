@@ -234,7 +234,11 @@ function DirectionsIcon() {
 }
 
 /* ── Main Component ── */
-export default function EventDetail({ slug }: { slug: string }) {
+export default function EventDetail({ slug: initialSlug }: { slug: string }) {
+  // For dynamic routes served via _redirects fallback, read slug from URL
+  const slug = typeof window !== 'undefined' && initialSlug === '_'
+    ? window.location.pathname.replace(/^\/events\//, '').replace(/\/$/, '') || initialSlug
+    : initialSlug;
   const [event, setEvent] = useState<EventData | null>(null);
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [venue, setVenue] = useState<Venue | null>(null);

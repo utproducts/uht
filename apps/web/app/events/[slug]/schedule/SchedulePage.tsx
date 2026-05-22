@@ -88,7 +88,11 @@ function statusBadge(status: string): { label: string; classes: string } {
   }
 }
 
-export default function SchedulePage({ slug }: { slug: string }) {
+export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
+  // For dynamic routes served via _redirects fallback, read slug from URL
+  const slug = typeof window !== 'undefined' && initialSlug === '_'
+    ? window.location.pathname.replace(/^\/events\//, '').replace(/\/schedule\/?$/, '').replace(/\/$/, '') || initialSlug
+    : initialSlug;
   const [event, setEvent] = useState<EventData | null>(null);
   const [games, setGames] = useState<Game[]>([]);
   const [standings, setStandings] = useState<StandingsRow[]>([]);
