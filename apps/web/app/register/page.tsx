@@ -405,9 +405,9 @@ export default function RegisterPage() {
   // Compute pricing — per-team based on division pricing
   const teamsToPrice = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
   const getTeamPrice = (team: any) => {
-    if (!event) return event?.price_cents || 0;
+    if (!event) return 0;
     // Try to match division price by age group
-    const div = event.divisions?.find((d: any) => d.age_group === team.age_group);
+    const div = (event as any).divisions?.find((d: any) => d.age_group === team.age_group);
     if (div?.price_cents) return div.price_cents;
     return event.price_cents || 0;
   };

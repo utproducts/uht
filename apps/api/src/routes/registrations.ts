@@ -150,7 +150,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
   try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_choice_2 TEXT").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_choice_3 TEXT").run(); } catch (_) {}
 
-  let query = `
+  // --- Query 1: Normalized registrations (from auth flow) ---
+  let query1 = `
     SELECT r.*,
       t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
@@ -159,7 +160,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
       (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = r.id) as roster_count,
       h1.hotel_name as hotel_choice_1_name, h1.id as hotel_choice_1_id,
       h2.hotel_name as hotel_choice_2_name, h2.id as hotel_choice_2_id,
-      h3.hotel_name as hotel_choice_3_name, h3.id as hotel_choice_3_id
+      h3.hotel_name as hotel_choice_3_name, h3.id as hotel_choice_3_id,
+      'normalized' as _source
     FROM registrations r
     JOIN teams t ON t.id = r.team_id
     JOIN event_divisions ed ON ed.id = r.event_division_id
@@ -169,22 +171,83 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     LEFT JOIN event_hotels h3 ON h3.id = r.hotel_choice_3
     WHERE r.event_id = ?
   `;
-  const params: string[] = [eventId];
+  const params1: string[] = [eventId];
 
   if (status) {
-    query += ' AND r.status = ?';
-    params.push(status);
+    query1 += ' AND r.status = ?';
+    params1.push(status);
   }
   if (division_id) {
-    query += ' AND r.event_division_id = ?';
-    params.push(division_id);
+    query1 += ' AND r.event_division_id = ?';
+    params1.push(division_id);
   }
 
-  query += ' ORDER BY r.created_at DESC';
+  query1 += ' ORDER BY r.created_at DESC';
 
-  const result = await db.prepare(query).bind(...params).all();
+  const normalizedResult = await db.prepare(query1).bind(...params1).all();
 
-  return c.json({ success: true, data: result.results });
+  // --- Query 2: Consumer registrations (event_registrations table) ---
+  let query2 = `
+    SELECT er.*,
+      er.team_name as team_name,
+      er.age_group as team_age_group,
+      NULL as team_city,
+      NULL as team_state,
+      NULL as team_logo_url,
+      er.age_group as division_age_group,
+      er.division as division_level,
+      er.manager_first_name as registered_by_first,
+      er.manager_last_name as registered_by_last,
+      er.email1 as registered_by_email,
+      er.phone as registered_by_phone,
+      0 as roster_count,
+      ch1.hotel_name as hotel_choice_1_name, ch1.id as hotel_choice_1_id,
+      ch2.hotel_name as hotel_choice_2_name, ch2.id as hotel_choice_2_id,
+      ch3.hotel_name as hotel_choice_3_name, ch3.id as hotel_choice_3_id,
+      'consumer' as _source
+    FROM event_registrations er
+    LEFT JOIN event_hotels ch1 ON ch1.id = er.hotel_choice_1
+    LEFT JOIN event_hotels ch2 ON ch2.id = er.hotel_choice_2
+    LEFT JOIN event_hotels ch3 ON ch3.id = er.hotel_choice_3
+    WHERE er.event_id = ?
+  `;
+  const params2: string[] = [eventId];
+
+  if (status) {
+    query2 += ' AND er.status = ?';
+    params2.push(status);
+  }
+  // Consumer registrations don't have event_division_id, so skip division_id filter for them
+
+  query2 += ' ORDER BY er.created_at DESC';
+
+  const consumerResult = await db.prepare(query2).bind(...params2).all();
+
+  // --- Merge both result sets ---
+  const allRegistrations = [
+    ...(normalizedResult.results || []),
+    ...(consumerResult.results || []).map((er: any) => ({
+      ...er,
+      // Map consumer fields to match the Registration interface
+      team_id: er.id, // consumer regs don't have a team_id, use reg id as placeholder
+      event_division_id: null,
+      amount_cents: er.payment_amount_cents || null,
+      paid_cents: null,
+      approved_by: null,
+      approved_at: null,
+      stripe_payment_intent_id: null,
+      registered_by_name: [er.manager_first_name, er.manager_last_name].filter(Boolean).join(' ') || null,
+    })),
+  ];
+
+  // Sort merged results by created_at DESC
+  allRegistrations.sort((a: any, b: any) => {
+    const dateA = a.created_at || '';
+    const dateB = b.created_at || '';
+    return dateB.localeCompare(dateA);
+  });
+
+  return c.json({ success: true, data: allRegistrations });
 });
 
 // ==================
@@ -196,7 +259,13 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({})) as { hotelId?: string };
 
-  const reg = await db.prepare('SELECT * FROM registrations WHERE id = ?').bind(regId).first<any>();
+  // Check both tables for the registration
+  let isConsumer = false;
+  let reg = await db.prepare('SELECT * FROM registrations WHERE id = ?').bind(regId).first<any>();
+  if (!reg) {
+    reg = await db.prepare('SELECT * FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+    if (reg) isConsumer = true;
+  }
   if (!reg) {
     return c.json({ success: false, error: 'Registration not found' }, 404);
   }
@@ -205,49 +274,80 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     return c.json({ success: false, error: `Cannot approve a registration with status: ${reg.status}` }, 400);
   }
 
-  // Check if team is local or non-local
-  const team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email FROM teams WHERE id = ?')
-    .bind(reg.team_id).first<any>();
   const event = await db.prepare('SELECT name, city, state, start_date, end_date, price_cents FROM events WHERE id = ?')
     .bind(reg.event_id).first<any>();
 
-  // Non-local teams require hotel selection
-  const isLocal = team && event && team.state && event.state && team.state.toUpperCase() === event.state.toUpperCase();
-  if (!isLocal && !body.hotelId) {
-    return c.json({ success: false, error: 'Hotel selection required for non-local teams', requiresHotel: true }, 400);
+  // For consumer registrations, build a pseudo-team object from the registration data
+  let team: any = null;
+  if (isConsumer) {
+    team = {
+      name: reg.team_name,
+      age_group: reg.age_group,
+      city: null,
+      state: null,
+      head_coach_name: [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ') || null,
+      head_coach_email: reg.email1,
+    };
+  } else {
+    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email FROM teams WHERE id = ?')
+      .bind(reg.team_id).first<any>();
+  }
+
+  // Non-local teams require hotel selection (skip for consumer regs without location data)
+  if (!isConsumer) {
+    const isLocal = team && event && team.state && event.state && team.state.toUpperCase() === event.state.toUpperCase();
+    if (!isLocal && !body.hotelId) {
+      return c.json({ success: false, error: 'Hotel selection required for non-local teams', requiresHotel: true }, 400);
+    }
   }
 
   // If hotel provided, look it up for the email
   let hotelInfo: any = null;
   if (body.hotelId) {
     hotelInfo = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(body.hotelId).first<any>();
-    // Save hotel assignment on the registration
-    try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_assigned TEXT").run(); } catch (_) {}
-    await db.prepare('UPDATE registrations SET hotel_assigned = ? WHERE id = ?').bind(body.hotelId, regId).run();
+    if (isConsumer) {
+      try { await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_assigned TEXT").run(); } catch (_) {}
+      await db.prepare('UPDATE event_registrations SET hotel_assigned = ? WHERE id = ?').bind(body.hotelId, regId).run();
+    } else {
+      try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_assigned TEXT").run(); } catch (_) {}
+      await db.prepare('UPDATE registrations SET hotel_assigned = ? WHERE id = ?').bind(body.hotelId, regId).run();
+    }
   }
 
-  // Update registration
-  await db.prepare(`
-    UPDATE registrations SET status = 'approved', approved_by = ?, approved_at = datetime('now'), updated_at = datetime('now')
-    WHERE id = ?
-  `).bind(user.id, regId).run();
+  // Update registration status
+  if (isConsumer) {
+    await db.prepare(`
+      UPDATE event_registrations SET status = 'approved', updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(regId).run();
+  } else {
+    await db.prepare(`
+      UPDATE registrations SET status = 'approved', approved_by = ?, approved_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(user.id, regId).run();
 
-  // Increment division team count
-  await db.prepare(`
-    UPDATE event_divisions SET current_team_count = current_team_count + 1 WHERE id = ?
-  `).bind(reg.event_division_id).run();
+    // Increment division team count (only for normalized registrations with divisions)
+    if (reg.event_division_id) {
+      await db.prepare(`
+        UPDATE event_divisions SET current_team_count = current_team_count + 1 WHERE id = ?
+      `).bind(reg.event_division_id).run();
+    }
+  }
 
   // Audit log
   await db.prepare(`
     INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
     VALUES (?, ?, 'registration.approved', 'registration', ?, ?)
-  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ team_id: reg.team_id, hotel_id: body.hotelId || null })).run();
+  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ team_name: team?.name, hotel_id: body.hotelId || null, source: isConsumer ? 'consumer' : 'normalized' })).run();
 
   // Send approval email
   let emailSent = false;
   try {
-    const division = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?')
-      .bind(reg.event_division_id).first<any>();
+    let divisionInfo: any = null;
+    if (!isConsumer && reg.event_division_id) {
+      divisionInfo = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?')
+        .bind(reg.event_division_id).first<any>();
+    }
 
     if (team && event) {
       const startDate = new Date(event.start_date + 'T12:00:00');
@@ -258,10 +358,12 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
 
       // Determine payment status from the registration
       let paymentStatus = 'unpaid';
-      if (reg.paid_cents && reg.amount_cents && reg.paid_cents >= reg.amount_cents) {
-        paymentStatus = 'paid';
-      } else if (reg.paid_cents && reg.paid_cents > 0) {
-        paymentStatus = 'partial';
+      if (!isConsumer) {
+        if (reg.paid_cents && reg.amount_cents && reg.paid_cents >= reg.amount_cents) {
+          paymentStatus = 'paid';
+        } else if (reg.paid_cents && reg.paid_cents > 0) {
+          paymentStatus = 'partial';
+        }
       }
 
       // Fetch admin-customized template overrides from DB
@@ -272,8 +374,8 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         recipientEmail,
         recipientName,
         teamName: team.name,
-        ageGroup: division?.age_group || team.age_group,
-        division: division?.division_level || undefined,
+        ageGroup: divisionInfo?.age_group || reg.age_group || team.age_group,
+        division: divisionInfo?.division_level || reg.division || undefined,
         eventName: event.name,
         eventDate: eventDateStr,
         eventCity: `${event.city}, ${event.state}`,
@@ -310,15 +412,25 @@ registrationRoutes.post('/:id/reject', authMiddleware, requireRole('admin', 'dir
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
 
+  // Check both tables
+  let isConsumer = false;
+  const normReg = await db.prepare('SELECT id FROM registrations WHERE id = ?').bind(regId).first();
+  if (!normReg) {
+    const consumerReg = await db.prepare('SELECT id FROM event_registrations WHERE id = ?').bind(regId).first();
+    if (consumerReg) isConsumer = true;
+    else return c.json({ success: false, error: 'Registration not found' }, 404);
+  }
+
+  const tableName = isConsumer ? 'event_registrations' : 'registrations';
   await db.prepare(`
-    UPDATE registrations SET status = 'rejected', notes = COALESCE(?, notes), updated_at = datetime('now')
+    UPDATE ${tableName} SET status = 'rejected', notes = COALESCE(?, notes), updated_at = datetime('now')
     WHERE id = ?
   `).bind(body.reason || null, regId).run();
 
   await db.prepare(`
     INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
     VALUES (?, ?, 'registration.rejected', 'registration', ?, ?)
-  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ reason: body.reason })).run();
+  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ reason: body.reason, source: isConsumer ? 'consumer' : 'normalized' })).run();
 
   return c.json({ success: true, message: 'Registration rejected' });
 });

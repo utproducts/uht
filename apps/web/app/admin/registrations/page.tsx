@@ -1028,7 +1028,7 @@ export default function AdminRegistrationsPage() {
     const isLocal = reg && selectedEvent && reg.team_state && selectedEvent.state &&
       reg.team_state.toUpperCase() === selectedEvent.state.toUpperCase();
 
-    // Non-local team without hotel → show hotel modal
+    // Non-local team without hotel → show hotel modal (unless 'skip' was passed)
     if (!isLocal && !hotelId && eventHotels.length > 0) {
       setHotelModalReg(reg || null);
       setSelectedHotelId('');
@@ -1037,10 +1037,12 @@ export default function AdminRegistrationsPage() {
 
     setApproving(true);
     try {
+      // If 'skip' was passed, send no hotelId to approve without hotel
+      const actualHotelId = hotelId === 'skip' ? undefined : hotelId;
       const res = await authFetch(`${API_BASE}/registrations/${regId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hotelId: hotelId || undefined }),
+        body: JSON.stringify({ hotelId: actualHotelId || undefined }),
       });
       const json = await res.json() as any;
       if (!json.success && json.requiresHotel) {
@@ -1368,6 +1370,13 @@ export default function AdminRegistrationsPage() {
                   className="px-5 py-2.5 rounded-full text-sm font-semibold text-[#6e6e73] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition"
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={() => hotelModalReg && handleApprove(hotelModalReg.id, 'skip')}
+                  disabled={approving}
+                  className="px-5 py-2.5 rounded-full text-sm font-semibold text-[#6e6e73] border border-[#e8e8ed] hover:bg-[#f5f5f7] transition"
+                >
+                  Approve Without Hotel
                 </button>
                 <button
                   onClick={() => hotelModalReg && handleApprove(hotelModalReg.id, selectedHotelId)}
