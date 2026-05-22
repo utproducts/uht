@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
+const UPLOAD_API = 'https://uht.chad-157.workers.dev/api/upload/image';
 
 interface EventItem {
   id: string;
@@ -233,6 +234,25 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Image upload state
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+
+  const handleImageUpload = async (file: File, field: 'logo_url' | 'banner_url') => {
+    const setUploading = field === 'logo_url' ? setUploadingLogo : setUploadingBanner;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(UPLOAD_API, { method: 'POST', body: fd });
+      const json = await res.json();
+      if (json.success && json.url) {
+        setForm(prev => ({ ...prev, [field]: json.url }));
+      }
+    } catch (e) { console.error('Upload failed', e); }
+    setUploading(false);
+  };
 
   // Load hotels + venue rinks when in edit mode
   useEffect(() => {
@@ -570,18 +590,32 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const json = await res.json();
       if (json.success) {
-        // For create mode, also save venue assignments
-        if (!isEdit && selectedVenueIds.size > 0 && json.data?.id) {
-          try {
-            await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${json.data.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
-              body: JSON.stringify({
-                venue_ids: Array.from(selectedVenueIds),
-                primary_venue_id: primaryVenueId,
-              }),
-            });
-          } catch (_) {}
+        // For create mode, also save venue assignments + division pricing
+        if (!isEdit && json.data?.id) {
+          const newEventId = json.data.id;
+          // Save venues
+          if (selectedVenueIds.size > 0) {
+            try {
+              await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${newEventId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                body: JSON.stringify({
+                  venue_ids: Array.from(selectedVenueIds),
+                  primary_venue_id: primaryVenueId,
+                }),
+              });
+            } catch (_) {}
+          }
+          // Save per-division pricing
+          if (divisionConfigs.length > 0 && divisionConfigs.some(d => d.price_cents > 0)) {
+            try {
+              await fetch(`${API_BASE}/admin/${newEventId}/divisions`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                body: JSON.stringify({ divisions: divisionConfigs }),
+              });
+            } catch (_) {}
+          }
         }
         setResult('success');
         onSaved();
@@ -832,18 +866,44 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 </div>
               </div>
 
-              {/* Logo + Banner URLs */}
+              {/* Logo + Banner Upload */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Logo URL</label>
-                  <input type="url" value={form.logo_url} onChange={e => setForm({ ...form, logo_url: e.target.value })}
-                    placeholder="https://..." className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Banner Image URL</label>
-                  <input type="url" value={form.banner_url} onChange={e => setForm({ ...form, banner_url: e.target.value })}
-                    placeholder="https://..." className={inputCls} />
-                </div>
+                {(['logo_url', 'banner_url'] as const).map(field => {
+                  const label = field === 'logo_url' ? 'Event Logo' : 'Banner Image';
+                  const isUploading = field === 'logo_url' ? uploadingLogo : uploadingBanner;
+                  const currentUrl = form[field];
+                  return (
+                    <div key={field}>
+                      <label className={labelCls}>{label}</label>
+                      {currentUrl ? (
+                        <div className="relative group">
+                          <img src={currentUrl} alt={label} className="w-full h-24 object-contain bg-[#f5f5f7] rounded-xl border border-[#e8e8ed]" />
+                          <button type="button" onClick={() => setForm({ ...form, [field]: '' })}
+                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs font-bold">
+                            X
+                          </button>
+                        </div>
+                      ) : (
+                        <label className={`flex flex-col items-center justify-center h-24 rounded-xl border-2 border-dashed cursor-pointer transition ${isUploading ? 'border-[#003e79] bg-[#f0f7ff]' : 'border-[#d2d2d7] hover:border-[#003e79] hover:bg-[#f0f7ff]/50'}`}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImageUpload(f, field); }}>
+                          <input type="file" accept="image/*" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(f, field); }} />
+                          {isUploading ? (
+                            <span className="text-xs text-[#003e79] font-medium flex items-center gap-2">
+                              <span className="animate-spin h-4 w-4 border-2 border-[#003e79] border-t-transparent rounded-full" /> Uploading...
+                            </span>
+                          ) : (
+                            <>
+                              <svg className="w-6 h-6 text-[#86868b] mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              <span className="text-xs text-[#86868b]">Drop image or click to upload</span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Age Groups */}
@@ -1986,6 +2046,83 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   ))}
                 </div>
               </div>
+
+              {/* Per-division pricing in create mode */}
+              {divisionConfigs.length > 0 && (
+                <div className="bg-[#f8f9fa] rounded-xl p-4 border border-[#e8e8ed]">
+                  <label className="block text-sm font-medium text-[#3d3d3d] mb-3">Pricing by Age Group</label>
+                  <p className="text-xs text-[#86868b] mb-3">Set different prices for younger vs older divisions. Leave blank to use the base price (${form.price_cents || '0'}).</p>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-[1fr_100px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
+                      <span>Age Group</span>
+                      <span>Price ($)</span>
+                      <span>Max Teams</span>
+                    </div>
+                    {divisionConfigs.map((div, idx) => (
+                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_100px_80px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
+                        <span className="text-sm font-semibold text-[#1d1d1f]">{div.age_group}</span>
+                        <input type="number" step="1" min="0"
+                          value={div.price_cents ? (div.price_cents / 100).toFixed(0) : ''}
+                          onChange={e => {
+                            const val = e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0;
+                            setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, price_cents: val } : d));
+                          }}
+                          placeholder={form.price_cents || '0'}
+                          className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
+                        <input type="number" min="0"
+                          value={div.max_teams || ''}
+                          onChange={e => {
+                            const val = e.target.value ? parseInt(e.target.value) : null;
+                            setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, max_teams: val } : d));
+                          }}
+                          placeholder="--"
+                          className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Logo upload in create mode */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['logo_url', 'banner_url'] as const).map(field => {
+                  const label = field === 'logo_url' ? 'Event Logo' : 'Banner Image';
+                  const isUploading = field === 'logo_url' ? uploadingLogo : uploadingBanner;
+                  const currentUrl = form[field];
+                  return (
+                    <div key={field}>
+                      <label className={labelCls}>{label}</label>
+                      {currentUrl ? (
+                        <div className="relative group">
+                          <img src={currentUrl} alt={label} className="w-full h-24 object-contain bg-[#f5f5f7] rounded-xl border border-[#e8e8ed]" />
+                          <button type="button" onClick={() => setForm({ ...form, [field]: '' })}
+                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs font-bold">
+                            X
+                          </button>
+                        </div>
+                      ) : (
+                        <label className={`flex flex-col items-center justify-center h-24 rounded-xl border-2 border-dashed cursor-pointer transition ${isUploading ? 'border-[#003e79] bg-[#f0f7ff]' : 'border-[#d2d2d7] hover:border-[#003e79] hover:bg-[#f0f7ff]/50'}`}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImageUpload(f, field); }}>
+                          <input type="file" accept="image/*" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(f, field); }} />
+                          {isUploading ? (
+                            <span className="text-xs text-[#003e79] font-medium flex items-center gap-2">
+                              <span className="animate-spin h-4 w-4 border-2 border-[#003e79] border-t-transparent rounded-full" /> Uploading...
+                            </span>
+                          ) : (
+                            <>
+                              <svg className="w-6 h-6 text-[#86868b] mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              <span className="text-xs text-[#86868b]">Drop image or click to upload</span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <div>
                 <label className={labelCls}>Event Information (shown to registrants)</label>
                 <textarea value={form.information} onChange={e => setForm({ ...form, information: e.target.value })}
@@ -2006,34 +2143,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 </div>
               </div>
 
-              {/* Selected venue chips */}
-              {selectedVenueIds.size > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(selectedVenueIds).map(vid => {
-                    const v = venues.find(x => x.id === vid);
-                    if (!v) return null;
-                    const isPrimary = primaryVenueId === vid;
-                    return (
-                      <div key={vid} className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 ${isPrimary ? 'border-[#003e79] bg-[#f0f7ff]' : 'border-[#e8e8ed] bg-[#fafafa]'}`}>
-                        <span className="text-sm font-semibold text-[#1d1d1f]">{v.name}</span>
-                        <span className="text-xs text-[#86868b]">{v.city}, {v.state}</span>
-                        {isPrimary ? (
-                          <span className="text-[10px] px-2 py-0.5 bg-[#003e79] text-white rounded-full font-bold">PRIMARY</span>
-                        ) : (
-                          <button onClick={() => setPrimaryVenueId(vid)} className="text-[10px] px-2 py-0.5 bg-[#f5f5f7] text-[#86868b] hover:bg-[#e0efff] hover:text-[#003e79] rounded-full font-semibold transition">
-                            Make Primary
-                          </button>
-                        )}
-                        <button onClick={() => toggleCreateVenue(vid)} className="text-[#86868b] hover:text-red-500 transition">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Search + List */}
+              {/* Search + Filter */}
               <div className="flex items-center gap-3">
                 <div className="relative flex-1">
                   <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2054,31 +2164,44 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 )}
               </div>
 
-              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+              {/* Unified venue list — selected venues stay in place with expanded controls */}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {createDisplayVenues.length === 0 ? (
                   <p className="text-sm text-[#86868b] text-center py-6">
                     {venueSearch ? `No venues matching "${venueSearch}"` : `No venues in ${formStateDisplay}`}
                   </p>
                 ) : createDisplayVenues.map(v => {
                   const isChecked = selectedVenueIds.has(v.id);
+                  const isPrimary = primaryVenueId === v.id;
                   return (
-                    <div key={v.id} onClick={() => toggleCreateVenue(v.id)}
-                      className={`flex items-center gap-4 p-3 rounded-xl border-2 cursor-pointer transition ${isChecked ? 'border-[#003e79] bg-[#f0f7ff]/30' : 'border-[#e8e8ed] hover:border-[#c8c8cd]'}`}>
-                      <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition ${isChecked ? 'bg-[#003e79] border-[#003e79]' : 'border-[#c8c8cd] bg-white'}`}>
-                        {isChecked && (
-                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <div key={v.id}
+                      className={`rounded-xl border-2 transition ${isChecked ? 'border-[#003e79] bg-[#f0f7ff]/30' : 'border-[#e8e8ed] hover:border-[#c8c8cd]'}`}>
+                      <div className="flex items-center gap-4 p-3 cursor-pointer" onClick={() => toggleCreateVenue(v.id)}>
+                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition ${isChecked ? 'bg-[#003e79] border-[#003e79]' : 'border-[#c8c8cd] bg-white'}`}>
+                          {isChecked && (
+                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          )}
+                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-[#003e79] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                          {v.num_rinks || '?'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-[#1d1d1f] truncate">{v.name}</p>
+                          <p className="text-xs text-[#86868b]">{v.city}, {v.state}</p>
+                        </div>
+                        {isChecked && isPrimary && (
+                          <span className="text-[10px] px-2 py-0.5 bg-[#003e79] text-white rounded-full font-bold shrink-0">PRIMARY</span>
+                        )}
+                        {isChecked && !isPrimary && (
+                          <button onClick={e => { e.stopPropagation(); setPrimaryVenueId(v.id); }}
+                            className="text-[10px] px-2 py-0.5 bg-white text-[#003e79] border border-[#003e79] hover:bg-[#003e79] hover:text-white rounded-full font-semibold transition shrink-0">
+                            Set Primary
+                          </button>
+                        )}
+                        {normalizeState(v.state) !== formStateNorm && !isChecked && (
+                          <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full font-semibold border border-amber-200 shrink-0">{v.state}</span>
                         )}
                       </div>
-                      <div className="w-8 h-8 rounded-lg bg-[#003e79] text-white flex items-center justify-center text-xs font-bold shrink-0">
-                        {v.num_rinks || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm text-[#1d1d1f] truncate">{v.name}</p>
-                        <p className="text-xs text-[#86868b]">{v.city}, {v.state}</p>
-                      </div>
-                      {normalizeState(v.state) !== formStateNorm && (
-                        <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full font-semibold border border-amber-200">{v.state}</span>
-                      )}
                     </div>
                   );
                 })}

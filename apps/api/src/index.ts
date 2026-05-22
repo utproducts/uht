@@ -85,6 +85,40 @@ app.route('/api/analytics', analyticsRoutes);
 app.route('/api/financials', financialRoutes);
 app.route('/api/referees', refereeRoutes);
 
+// Image upload to R2
+app.post('/api/upload/image', async (c) => {
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File | null;
+  if (!file) return c.json({ error: 'No file provided' }, 400);
+
+  const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif'];
+  if (!allowed.includes(file.type)) return c.json({ error: 'Invalid file type' }, 400);
+  if (file.size > 5 * 1024 * 1024) return c.json({ error: 'File too large (max 5MB)' }, 400);
+
+  const ext = file.name.split('.').pop() || 'png';
+  const key = `images/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+
+  await c.env.STORAGE.put(key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type },
+  });
+
+  // Return the public URL via R2 custom domain or worker proxy
+  const url = `https://uht.chad-157.workers.dev/api/upload/${key}`;
+  return c.json({ success: true, url, key });
+});
+
+// Serve uploaded images from R2
+app.get('/api/upload/images/:filename', async (c) => {
+  const filename = c.req.param('filename');
+  const object = await c.env.STORAGE.get(`images/${filename}`);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/png');
+  headers.set('Cache-Control', 'public, max-age=31536000');
+  return new Response(object.body, { headers });
+});
+
 // Bulk import endpoint (admin only, for data migration)
 app.post('/api/import/bulk', async (c) => {
   const db = c.env.DB;
