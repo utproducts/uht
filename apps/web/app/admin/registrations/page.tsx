@@ -1093,7 +1093,7 @@ export default function AdminRegistrationsPage() {
       await authFetch(`${API_BASE}/events/admin/registration/${regId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_division_id: newDivisionId }),
+        body: JSON.stringify({ event_division_id: newDivisionId || null }),
       });
       loadEventData();
     } catch (err) {

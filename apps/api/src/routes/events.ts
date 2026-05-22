@@ -267,7 +267,7 @@ eventRoutes.get('/admin/list', async (c) => {
       t.name as tournament_name, t.location as tournament_location,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status NOT IN ('denied','withdrawn')) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('denied','withdrawn')) as registration_count,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as total_registration_count,
-      (SELECT COALESCE(SUM(COALESCE(r2.amount_cents, ed2.price_cents)), 0) FROM registrations r2 LEFT JOIN event_divisions ed2 ON ed2.id = r2.event_division_id WHERE r2.event_id = e.id AND r2.payment_status = 'paid' AND r2.status = 'approved') as total_revenue_cents
+      (SELECT COALESCE(SUM(COALESCE(r2.amount_cents, ed2.price_cents)), 0) FROM registrations r2 LEFT JOIN event_divisions ed2 ON ed2.id = r2.event_division_id WHERE r2.event_id = e.id AND r2.payment_status = 'paid' AND r2.status = 'approved') + (SELECT COALESCE(SUM(COALESCE(er2.payment_amount_cents, 0)), 0) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.payment_status = 'paid' AND er2.status = 'approved') as total_revenue_cents
     FROM events e
     LEFT JOIN tournaments t ON t.id = e.tournament_id
     WHERE 1=1 ${dateCondition} ${searchCondition}
@@ -321,10 +321,10 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
     SELECT id, event_id, team_name, age_group, division,
       manager_first_name, manager_last_name, email1 as email,
       phone, status, payment_status,
-      NULL as payment_amount_cents,
-      NULL as hotel_assigned,
-      NULL as notes,
-      NULL as event_division_id,
+      payment_amount_cents,
+      hotel_assigned,
+      notes,
+      event_division_id,
       created_at, updated_at,
       'consumer' as source
     FROM event_registrations
@@ -1046,20 +1046,44 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_choice_3 TEXT").run();
   } catch {}
 
+  // Helper: match a team's age group (e.g. "Squirt AA", "Squirt Red 1") to an event division
+  // by checking if the division's age_group is a prefix of the team's age_group (case-insensitive)
+  const findMatchingDivision = async (eventId: string, teamAgeGroup: string): Promise<string | null> => {
+    if (!teamAgeGroup) return null;
+    const divs = await db.prepare(
+      `SELECT id, age_group FROM event_divisions WHERE event_id = ? AND status = 'open' ORDER BY age_group ASC`
+    ).bind(eventId).all<{ id: string; age_group: string }>();
+    const teamAg = teamAgeGroup.toLowerCase().trim();
+    // Try exact match first, then prefix match (longest prefix wins)
+    let bestMatch: { id: string; len: number } | null = null;
+    for (const d of (divs.results || [])) {
+      const divAg = d.age_group.toLowerCase().trim();
+      if (teamAg === divAg) return d.id; // exact match
+      if (teamAg.startsWith(divAg) && (!bestMatch || divAg.length > bestMatch.len)) {
+        bestMatch = { id: d.id, len: divAg.length };
+      }
+    }
+    return bestMatch?.id || null;
+  };
+
   // Create registration for primary event with 'pending' status
   const regIds: string[] = [];
   const regId = crypto.randomUUID().replace(/-/g, '');
   regIds.push(regId);
 
+  // Auto-match division
+  const matchedDivisionId = await findMatchingDivision(data.eventId, data.ageGroup);
+
   await db.prepare(`
-    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
   `).bind(
     regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
     data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid',
-    data.hotelChoice1 || null, data.hotelChoice2 || null, data.hotelChoice3 || null
+    data.hotelChoice1 || null, data.hotelChoice2 || null, data.hotelChoice3 || null,
+    matchedDivisionId
   ).run();
 
   // Create registrations for additional events
@@ -1067,14 +1091,17 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     const addRegId = crypto.randomUUID().replace(/-/g, '');
     regIds.push(addRegId);
 
+    const addMatchedDivId = await findMatchingDivision(addEvent.id, data.ageGroup);
+
     await db.prepare(`
-      INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+      INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
     `).bind(
       addRegId, addEvent.id, data.teamName, data.ageGroup, data.division || null,
       data.managerFirstName || null, data.managerLastName || null,
       data.email, data.phone || null,
-      data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid'
+      data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid',
+      addMatchedDivId
     ).run();
   }
 
@@ -1129,7 +1156,7 @@ const updateRegistrationSchema = z.object({
   payment_method: z.string().nullable().optional(),
   hotel_assigned: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
-  event_division_id: z.string().optional(),
+  event_division_id: z.string().nullable().optional(),
   team_name: z.string().optional(),
 });
 
@@ -1137,6 +1164,9 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
   const regId = c.req.param('regId');
   const data = c.req.valid('json');
   const db = c.env.DB;
+
+  // Auto-migrate: ensure event_division_id column exists on event_registrations
+  try { await db.prepare("ALTER TABLE event_registrations ADD COLUMN event_division_id TEXT").run(); } catch (_) {}
 
   // Check both tables for the registration
   let useNormalized = false;

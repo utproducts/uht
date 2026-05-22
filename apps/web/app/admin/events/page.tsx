@@ -1012,7 +1012,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
               {divisionConfigs.length > 0 && (
                 <div className="bg-[#f8f9fa] rounded-xl p-4 border border-[#e8e8ed]">
                   <div className="flex items-center justify-between mb-3">
-                    <label className="block text-sm font-medium text-[#3d3d3d]">Division Pricing & Capacity</label>
+                    <label className="block text-sm font-medium text-[#3d3d3d]">Division Pricing</label>
                     {isEdit && (
                       <button onClick={saveDivisions} disabled={savingDivisions}
                         className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -1025,7 +1025,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
+                    <div className="grid grid-cols-[1fr_80px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
                       <span>Age Group</span>
                       <span>Price ($)</span>
                       <span>Registered</span>
