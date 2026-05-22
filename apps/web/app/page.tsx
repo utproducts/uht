@@ -28,7 +28,7 @@ export default function HomePage() {
             />
           </div>
           <p className="text-white/60 font-semibold text-sm tracking-widest uppercase mb-4">
-            TEST - 2025–26 Season
+            2025–26 Season
           </p>
           <h1
             className={oswald.className + " text-5xl sm:text-6xl lg:text-8xl font-bold uppercase tracking-tight text-white max-w-4xl mx-auto leading-[0.95]"}
