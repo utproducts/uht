@@ -33,13 +33,15 @@ interface Division {
 interface Registration {
   id: string;
   event_id: string;
-  event_division_id: string;
+  event_division_id: string | null;
   team_id: string;
   team_name: string;
   team_city: string | null;
   team_state: string | null;
   team_logo_url: string | null;
+  team_age_group: string | null;
   age_group: string;
+  division_age_group: string | null;
   division_level: string;
   status: string;
   payment_status: string;
@@ -58,6 +60,7 @@ interface Registration {
   created_at: string;
   updated_at: string | null;
   notes: string | null;
+  _source?: string;
   hotel_choice_1: string | null;
   hotel_choice_2: string | null;
   hotel_choice_3: string | null;
@@ -735,7 +738,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [status, setStatus] = useState(reg.status);
   const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
   const [amountCents, setAmountCents] = useState(reg.amount_cents ? (reg.amount_cents / 100).toString() : '');
-  const [divisionId, setDivisionId] = useState(reg.event_division_id);
+  const [divisionId, setDivisionId] = useState(reg.event_division_id || '');
   const [hotelAssigned, setHotelAssigned] = useState(reg.hotel_assigned || '');
   const [notes, setNotes] = useState(reg.notes || '');
   const [saving, setSaving] = useState(false);
@@ -751,8 +754,8 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
         hotel_assigned: hotelAssigned || null,
         notes: notes || null,
       };
-      if (divisionId !== reg.event_division_id) {
-        body.event_division_id = divisionId;
+      if (divisionId !== (reg.event_division_id || '')) {
+        body.event_division_id = divisionId || null;
       }
 
       const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
@@ -795,7 +798,10 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             <div>
               <h3 className="text-lg font-bold text-[#1d1d1f]">{reg.team_name}</h3>
               <p className="text-sm text-[#86868b]">
-                {reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''} · {reg.age_group} {reg.division_level}
+                {reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''}
+                {reg.team_age_group && <> · Team: {reg.team_age_group}</>}
+                {reg.event_division_id && <> · Div: {reg.division_age_group} {reg.division_level}</>}
+                {!reg.event_division_id && <> · <span className="text-amber-600 font-medium">Unassigned</span></>}
               </p>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-[#f5f5f7] rounded-xl transition">
@@ -829,13 +835,26 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
 
           {/* ── Division ── */}
           <div>
-            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Division</label>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Event Division</label>
             <select value={divisionId} onChange={e => setDivisionId(e.target.value)}
               className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
+              <option value="">Unassigned</option>
               {divisions.map(d => (
-                <option key={d.id} value={d.id}>{d.age_group} {d.division_level} ({d.current_team_count}/{d.max_teams})</option>
+                <option key={d.id} value={d.id}>{d.age_group} {d.division_level} ({d.current_team_count} teams)</option>
               ))}
             </select>
+            {reg.team_age_group && (
+              <p className="text-xs text-[#86868b] mt-1.5">
+                Team profile: <span className="font-semibold text-[#1d1d1f]">{reg.team_age_group}</span>
+                {divisionId && (() => {
+                  const selectedDiv = divisions.find(d => d.id === divisionId);
+                  if (selectedDiv && selectedDiv.age_group !== reg.team_age_group) {
+                    return <span className="ml-1.5 text-amber-600 font-medium">(playing up/down)</span>;
+                  }
+                  return null;
+                })()}
+              </p>
+            )}
           </div>
 
           {/* ── Contact Info (read-only) ── */}
@@ -1069,6 +1088,19 @@ export default function AdminRegistrationsPage() {
     loadEventData();
   };
 
+  const handleDivisionChange = async (regId: string, newDivisionId: string) => {
+    try {
+      await authFetch(`${API_BASE}/events/admin/registration/${regId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_division_id: newDivisionId }),
+      });
+      loadEventData();
+    } catch (err) {
+      alert('Failed to update division.');
+    }
+  };
+
   // Filters
   let filtered = registrations;
   if (divFilter === '__unassigned') filtered = filtered.filter(r => !r.event_division_id);
@@ -1242,15 +1274,28 @@ export default function AdminRegistrationsPage() {
                           <td className="px-4 py-3">
                             <p className="font-semibold text-[#1d1d1f]">{reg.team_name}</p>
                             <p className="text-xs text-[#86868b] mt-0.5">
-                              {reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''}
+                              {reg.team_age_group && <span className="font-medium text-[#6e6e73]">{reg.team_age_group}</span>}
+                              {reg.team_city && <>{reg.team_age_group ? ' · ' : ''}{reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''}</>}
                               {reg.team_state && selectedEvent && reg.team_state.toUpperCase() !== selectedEvent.state.toUpperCase() && (
                                 <span className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">TRAVEL</span>
                               )}
                               {reg.roster_count > 0 && ` · ${reg.roster_count} players`}
                             </p>
                           </td>
-                          <td className="px-4 py-3 hidden sm:table-cell">
-                            <span className="text-xs font-medium text-[#6e6e73]">{reg.age_group} {reg.division_level}</span>
+                          <td className="px-4 py-3 hidden sm:table-cell" onClick={e => e.stopPropagation()}>
+                            <select
+                              value={reg.event_division_id || ''}
+                              onChange={e => handleDivisionChange(reg.id, e.target.value)}
+                              className="text-xs font-medium text-[#1d1d1f] bg-[#f5f5f7] border border-[#e8e8ed] rounded-lg px-2 py-1 focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none cursor-pointer max-w-[160px]"
+                            >
+                              <option value="">Unassigned</option>
+                              {divisions.map(d => (
+                                <option key={d.id} value={d.id}>{d.age_group} {d.division_level}</option>
+                              ))}
+                            </select>
+                            {reg.team_age_group && reg.event_division_id && reg.team_age_group !== reg.division_age_group && (
+                              <div className="text-[10px] text-amber-600 mt-0.5 font-medium">Team: {reg.team_age_group}</div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge status={reg.status} />

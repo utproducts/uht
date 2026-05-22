@@ -149,6 +149,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
   try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_choice_1 TEXT").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_choice_2 TEXT").run(); } catch (_) {}
   try { await db.prepare("ALTER TABLE registrations ADD COLUMN hotel_choice_3 TEXT").run(); } catch (_) {}
+  // Auto-migrate: add event_division_id to consumer registrations for division assignment
+  try { await db.prepare("ALTER TABLE event_registrations ADD COLUMN event_division_id TEXT").run(); } catch (_) {}
 
   // --- Query 1: Normalized registrations (from auth flow) ---
   let query1 = `
@@ -194,8 +196,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
       NULL as team_city,
       NULL as team_state,
       NULL as team_logo_url,
-      er.age_group as division_age_group,
-      er.division as division_level,
+      COALESCE(ced.age_group, er.age_group) as division_age_group,
+      COALESCE(ced.division_level, er.division) as division_level,
       er.manager_first_name as registered_by_first,
       er.manager_last_name as registered_by_last,
       er.email1 as registered_by_email,
@@ -206,6 +208,7 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
       ch3.hotel_name as hotel_choice_3_name, ch3.id as hotel_choice_3_id,
       'consumer' as _source
     FROM event_registrations er
+    LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
     LEFT JOIN event_hotels ch1 ON ch1.id = er.hotel_choice_1
     LEFT JOIN event_hotels ch2 ON ch2.id = er.hotel_choice_2
     LEFT JOIN event_hotels ch3 ON ch3.id = er.hotel_choice_3
@@ -217,7 +220,10 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     query2 += ' AND er.status = ?';
     params2.push(status);
   }
-  // Consumer registrations don't have event_division_id, so skip division_id filter for them
+  if (division_id) {
+    query2 += ' AND er.event_division_id = ?';
+    params2.push(division_id);
+  }
 
   query2 += ' ORDER BY er.created_at DESC';
 
@@ -230,7 +236,7 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
       ...er,
       // Map consumer fields to match the Registration interface
       team_id: er.id, // consumer regs don't have a team_id, use reg id as placeholder
-      event_division_id: null,
+      event_division_id: er.event_division_id || null,
       amount_cents: er.payment_amount_cents || null,
       paid_cents: null,
       approved_by: null,

@@ -1182,7 +1182,7 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
     setClauses.push('notes = ?');
     params.push(data.notes);
   }
-  if (useNormalized && data.event_division_id !== undefined) {
+  if (data.event_division_id !== undefined) {
     setClauses.push('event_division_id = ?');
     params.push(data.event_division_id);
   }
