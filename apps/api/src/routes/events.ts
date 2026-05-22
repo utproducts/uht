@@ -69,6 +69,76 @@ eventRoutes.get('/', optionalAuth, async (c) => {
 });
 
 // ==================
+// AUTH: Get events the current user's teams are registered for
+// ==================
+eventRoutes.get('/my-registered', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const userId = (c as any).get('userId');
+
+  // Get user email for matching event_registrations
+  const user = await db.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first<{ email: string }>();
+  const userEmail = user?.email || '';
+
+  // Get team names owned by this user
+  const userTeams = await db.prepare('SELECT name FROM teams WHERE owner_id = ?').bind(userId).all();
+  const teamNames = userTeams.results?.map((t: any) => t.name) || [];
+
+  // Get events from registrations table (team-based auth flow)
+  const regEvents = await db.prepare(`
+    SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+      GROUP_CONCAT(DISTINCT t.name) as team_names
+    FROM events e
+    INNER JOIN registrations r ON r.event_id = e.id AND r.status NOT IN ('denied', 'withdrawn')
+    INNER JOIN teams t ON t.id = r.team_id AND t.owner_id = ?
+    GROUP BY e.id
+  `).bind(userId).all();
+
+  // Get events from event_registrations table (consumer flow — match by email or team name)
+  let legacyEvents: any[] = [];
+  if (userEmail || teamNames.length > 0) {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (userEmail) {
+      conditions.push('er.email1 = ?');
+      params.push(userEmail);
+    }
+    for (const tn of teamNames) {
+      conditions.push('er.team_name = ?');
+      params.push(tn);
+    }
+    const whereClause = conditions.join(' OR ');
+    const legacyResult = await db.prepare(`
+      SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+        GROUP_CONCAT(DISTINCT er.team_name) as team_names
+      FROM events e
+      INNER JOIN event_registrations er ON er.event_id = e.id AND er.status NOT IN ('denied', 'withdrawn')
+      WHERE (${whereClause})
+      GROUP BY e.id
+    `).bind(...params).all();
+    legacyEvents = legacyResult.results || [];
+  }
+
+  // Merge and deduplicate by event ID
+  const eventMap = new Map<string, any>();
+  for (const ev of [...(regEvents.results || []), ...legacyEvents]) {
+    if (!eventMap.has(ev.id)) {
+      eventMap.set(ev.id, ev);
+    } else {
+      const existing = eventMap.get(ev.id);
+      const existingNames = (existing.team_names || '').split(',').filter(Boolean);
+      const newNames = (ev.team_names || '').split(',').filter(Boolean);
+      existing.team_names = [...new Set([...existingNames, ...newNames])].join(', ');
+    }
+  }
+
+  const data = Array.from(eventMap.values()).sort((a, b) =>
+    (b.start_date || '').localeCompare(a.start_date || '')
+  );
+
+  return c.json({ success: true, data });
+});
+
+// ==================
 // PUBLIC: Get single event by slug
 // ==================
 eventRoutes.get('/:slug', optionalAuth, async (c) => {
@@ -102,6 +172,24 @@ eventRoutes.get('/:slug', optionalAuth, async (c) => {
       ...event,
       divisions: divisions.results,
     },
+  });
+});
+
+// ==================
+// DEBUG: Check registration data (temporary)
+// ==================
+eventRoutes.get('/debug/registrations/:eventId', async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+
+  const regs = await db.prepare('SELECT id, team_name, status, email1, age_group, created_at FROM event_registrations WHERE event_id = ?').bind(eventId).all();
+  const normalizedRegs = await db.prepare('SELECT r.id, t.name as team_name, r.status, r.created_at FROM registrations r LEFT JOIN teams t ON t.id = r.team_id WHERE r.event_id = ?').bind(eventId).all();
+
+  return c.json({
+    event_registrations: regs.results,
+    registrations: normalizedRegs.results,
+    event_registrations_count: regs.results?.length || 0,
+    registrations_count: normalizedRegs.results?.length || 0,
   });
 });
 
@@ -140,79 +228,6 @@ eventRoutes.get('/meta/states', async (c) => {
 });
 
 // ==================
-// AUTH: Get events the current user's teams are registered for
-// ==================
-eventRoutes.get('/my-registered', authMiddleware, async (c) => {
-  const db = c.env.DB;
-  const userId = (c as any).get('userId');
-
-  // Get user email for matching event_registrations
-  const user = await db.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first<{ email: string }>();
-  const userEmail = user?.email || '';
-
-  // Get team names owned by this user
-  const userTeams = await db.prepare('SELECT name FROM teams WHERE owner_id = ?').bind(userId).all();
-  const teamNames = userTeams.results?.map((t: any) => t.name) || [];
-
-  // Get events from registrations table (team-based auth flow)
-  const regEvents = await db.prepare(`
-    SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
-      GROUP_CONCAT(DISTINCT t.name) as team_names
-    FROM events e
-    INNER JOIN registrations r ON r.event_id = e.id AND r.status NOT IN ('denied', 'withdrawn')
-    INNER JOIN teams t ON t.id = r.team_id AND t.owner_id = ?
-    GROUP BY e.id
-  `).bind(userId).all();
-
-  // Get events from event_registrations table (consumer flow — match by email or team name)
-  let legacyEvents: any[] = [];
-  if (userEmail || teamNames.length > 0) {
-    // Build conditions
-    const conditions: string[] = [];
-    const params: string[] = [];
-    if (userEmail) {
-      conditions.push('er.email1 = ?');
-      params.push(userEmail);
-    }
-    for (const tn of teamNames) {
-      conditions.push('er.team_name = ?');
-      params.push(tn);
-    }
-    const whereClause = conditions.join(' OR ');
-    const legacyResult = await db.prepare(`
-      SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
-        GROUP_CONCAT(DISTINCT er.team_name) as team_names
-      FROM events e
-      INNER JOIN event_registrations er ON er.event_id = e.id AND er.status NOT IN ('denied', 'withdrawn')
-      WHERE (${whereClause})
-      GROUP BY e.id
-    `).bind(...params).all();
-    legacyEvents = legacyResult.results || [];
-  }
-
-  // Merge and deduplicate by event ID
-  const eventMap = new Map<string, any>();
-  for (const ev of [...(regEvents.results || []), ...legacyEvents]) {
-    if (!eventMap.has(ev.id)) {
-      eventMap.set(ev.id, ev);
-    } else {
-      // Merge team names
-      const existing = eventMap.get(ev.id);
-      const existingNames = (existing.team_names || '').split(',').filter(Boolean);
-      const newNames = (ev.team_names || '').split(',').filter(Boolean);
-      const allNames = [...new Set([...existingNames, ...newNames])];
-      existing.team_names = allNames.join(', ');
-    }
-  }
-
-  const data = Array.from(eventMap.values()).sort((a, b) =>
-    (b.start_date || '').localeCompare(a.start_date || '')
-  );
-
-  return c.json({ success: true, data });
-});
-
-// ==================
 // ADMIN: List events (with registration counts, upcoming/past)
 // ==================
 eventRoutes.get('/admin/list', async (c) => {
@@ -245,7 +260,7 @@ eventRoutes.get('/admin/list', async (c) => {
   const result = await db.prepare(`
     SELECT e.*,
       t.name as tournament_name, t.location as tournament_location,
-      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status = 'approved') + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status = 'approved') as registration_count,
+      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status NOT IN ('denied','withdrawn')) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('denied','withdrawn')) as registration_count,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as total_registration_count,
       (SELECT COALESCE(SUM(COALESCE(r2.amount_cents, ed2.price_cents)), 0) FROM registrations r2 LEFT JOIN event_divisions ed2 ON ed2.id = r2.event_division_id WHERE r2.event_id = e.id AND r2.payment_status = 'paid' AND r2.status = 'approved') as total_revenue_cents
     FROM events e

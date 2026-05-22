@@ -103,6 +103,10 @@ export default function RegisterPage() {
   // Hotels
   const [eventHotels, setEventHotels] = useState<EventHotel[]>([]);
   const [hotelPicks, setHotelPicks] = useState<[string, string, string]>(['', '', '']);
+  // Per-team hotel picks for multi-team mode: { teamId: [pick1, pick2, pick3] }
+  const [teamHotelPicks, setTeamHotelPicks] = useState<Record<string, [string, string, string]>>({});
+  const [teamLocalFlags, setTeamLocalFlags] = useState<Record<string, boolean>>({});
+  const [activeHotelTeamIdx, setActiveHotelTeamIdx] = useState(0);
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [isLocalTeam, setIsLocalTeam] = useState(false);
 
@@ -231,14 +235,52 @@ export default function RegisterPage() {
     setStep('hotels');
   };
 
-  // Handle hotel selection
+  // Handle hotel selection — works for both single and multi-team modes
+  const getActiveHotelPicks = (): [string, string, string] => {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      return teamHotelPicks[teamId] || ['', '', ''];
+    }
+    return hotelPicks;
+  };
+  const getActiveLocalFlag = (): boolean => {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      return teamLocalFlags[teamId] || false;
+    }
+    return isLocalTeam;
+  };
+  const setActiveLocalFlag = (val: boolean) => {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      setTeamLocalFlags(prev => ({ ...prev, [teamId]: val }));
+      if (val) setTeamHotelPicks(prev => ({ ...prev, [teamId]: ['', '', ''] }));
+    } else {
+      setIsLocalTeam(val);
+      if (val) setHotelPicks(['', '', '']);
+    }
+  };
+
   const selectHotel = (slot: 0 | 1 | 2, hotelName: string) => {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      setTeamHotelPicks(prev => {
+        const current = prev[teamId] || ['', '', ''];
+        const next = [...current] as [string, string, string];
+        const existingIdx = next.indexOf(hotelName);
+        if (existingIdx !== -1 && existingIdx !== slot) {
+          next[existingIdx] = next[slot];
+        }
+        next[slot] = hotelName;
+        return { ...prev, [teamId]: next };
+      });
+      return;
+    }
     setHotelPicks(prev => {
       const next = [...prev] as [string, string, string];
-      // If this hotel is already in another slot, swap
       const existingIdx = next.indexOf(hotelName);
       if (existingIdx !== -1 && existingIdx !== slot) {
-        next[existingIdx] = next[slot]; // put whatever was in target slot into old slot
+        next[existingIdx] = next[slot];
       }
       next[slot] = hotelName;
       return next;
@@ -246,6 +288,16 @@ export default function RegisterPage() {
   };
 
   const removeHotel = (slot: 0 | 1 | 2) => {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      setTeamHotelPicks(prev => {
+        const current = prev[teamId] || ['', '', ''];
+        const next = [...current] as [string, string, string];
+        next[slot] = '';
+        return { ...prev, [teamId]: next };
+      });
+      return;
+    }
     setHotelPicks(prev => {
       const next = [...prev] as [string, string, string];
       next[slot] = '';
@@ -287,9 +339,28 @@ export default function RegisterPage() {
           managerLastName: auth.user?.name?.split(' ').slice(1).join(' ') || undefined,
           headCoachName: team.head_coach_name || undefined,
           paymentChoice,
-          hotelChoice1: isLocalTeam ? 'Local Team' : hotelPicks[0] || undefined,
-          hotelChoice2: isLocalTeam ? undefined : hotelPicks[1] || undefined,
-          hotelChoice3: isLocalTeam ? undefined : hotelPicks[2] || undefined,
+          hotelChoice1: (() => {
+            if (multiTeamMode) {
+              const tLocal = teamLocalFlags[team.id];
+              if (tLocal) return 'Local Team';
+              return (teamHotelPicks[team.id] || ['', '', ''])[0] || undefined;
+            }
+            return isLocalTeam ? 'Local Team' : hotelPicks[0] || undefined;
+          })(),
+          hotelChoice2: (() => {
+            if (multiTeamMode) {
+              if (teamLocalFlags[team.id]) return undefined;
+              return (teamHotelPicks[team.id] || ['', '', ''])[1] || undefined;
+            }
+            return isLocalTeam ? undefined : hotelPicks[1] || undefined;
+          })(),
+          hotelChoice3: (() => {
+            if (multiTeamMode) {
+              if (teamLocalFlags[team.id]) return undefined;
+              return (teamHotelPicks[team.id] || ['', '', ''])[2] || undefined;
+            }
+            return isLocalTeam ? undefined : hotelPicks[2] || undefined;
+          })(),
         };
         if (selectedUpsellIds.size > 0) {
           body.additionalEventIds = Array.from(selectedUpsellIds);
@@ -331,9 +402,19 @@ export default function RegisterPage() {
     });
   };
 
-  // Compute pricing
-  const basePriceCents = event?.price_cents || 0;
-  const depositCents = event?.deposit_cents || 0;
+  // Compute pricing — per-team based on division pricing
+  const teamsToPrice = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
+  const getTeamPrice = (team: any) => {
+    if (!event) return event?.price_cents || 0;
+    // Try to match division price by age group
+    const div = event.divisions?.find((d: any) => d.age_group === team.age_group);
+    if (div?.price_cents) return div.price_cents;
+    return event.price_cents || 0;
+  };
+  const totalPriceCents = teamsToPrice.reduce((sum, t) => sum + getTeamPrice(t), 0);
+  const basePriceCents = teamsToPrice.length <= 1 ? (event?.price_cents || 0) : totalPriceCents;
+  const perTeamDeposit = event?.deposit_cents || 0;
+  const depositCents = perTeamDeposit * Math.max(teamsToPrice.length, 1);
   const discountPct = event?.multi_event_discount_pct || 0;
   const totalUpsellEvents = selectedUpsellIds.size;
   const upsellSavingsCents = totalUpsellEvents > 0
@@ -526,12 +607,46 @@ export default function RegisterPage() {
         )}
 
         {/* ═══════════════════════════════════ STEP 2: HOTEL PREFERENCES ═══════════════════════════════════ */}
-        {step === 'hotels' && (
+        {step === 'hotels' && (() => {
+          const currentPicks = getActiveHotelPicks();
+          const currentLocal = getActiveLocalFlag();
+          const allTeamsHaveHotels = multiTeamMode && selectedTeams.length > 0
+            ? selectedTeams.every(t => teamLocalFlags[t.id] || (teamHotelPicks[t.id] && teamHotelPicks[t.id][0]))
+            : isLocalTeam || hotelPicks[0] || eventHotels.length === 0;
+
+          return (
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Hotel Preferences</h2>
-            <p className="text-sm text-[#6e6e73] mb-6">
-              Select your top 3 hotel choices in priority order. We'll do our best to accommodate your first choice.
+            <p className="text-sm text-[#6e6e73] mb-4">
+              {multiTeamMode && selectedTeams.length > 1
+                ? 'Select hotel preferences for each team. Use the tabs below to switch between teams.'
+                : 'Select your top 3 hotel choices in priority order.'}
             </p>
+
+            {/* Multi-team tabs */}
+            {multiTeamMode && selectedTeams.length > 1 && (
+              <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+                {selectedTeams.map((team, idx) => {
+                  const hasSelection = teamLocalFlags[team.id] || (teamHotelPicks[team.id] && teamHotelPicks[team.id][0]);
+                  return (
+                    <button
+                      key={team.id}
+                      onClick={() => setActiveHotelTeamIdx(idx)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
+                        activeHotelTeamIdx === idx
+                          ? 'bg-[#003e79] text-white'
+                          : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+                      }`}
+                    >
+                      {team.name}
+                      {hasSelection && (
+                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {loadingHotels ? (
               <div className="text-center py-8">
@@ -546,12 +661,9 @@ export default function RegisterPage() {
               <>
                 {/* Local team toggle */}
                 <button
-                  onClick={() => {
-                    setIsLocalTeam(!isLocalTeam);
-                    if (!isLocalTeam) setHotelPicks(['', '', '']);
-                  }}
+                  onClick={() => setActiveLocalFlag(!currentLocal)}
                   className={`w-full text-left p-4 rounded-xl border-2 mb-5 transition-all ${
-                    isLocalTeam ? 'border-[#003e79] bg-[#003e79]/5' : 'border-[#e8e8ed] hover:border-[#003e79]/40'
+                    currentLocal ? 'border-[#003e79] bg-[#003e79]/5' : 'border-[#e8e8ed] hover:border-[#003e79]/40'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -560,21 +672,21 @@ export default function RegisterPage() {
                       <p className="text-sm text-[#6e6e73] mt-0.5">We don't need a hotel — we live nearby.</p>
                     </div>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                      isLocalTeam ? 'border-[#003e79] bg-[#003e79]' : 'border-[#d1d1d6]'
+                      currentLocal ? 'border-[#003e79] bg-[#003e79]' : 'border-[#d1d1d6]'
                     }`}>
-                      {isLocalTeam && (
+                      {currentLocal && (
                         <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                       )}
                     </div>
                   </div>
                 </button>
 
-                {!isLocalTeam && (
+                {!currentLocal && (
                   <>
                     {/* Selected picks display */}
                     <div className="space-y-3 mb-6">
                       {[0, 1, 2].map(slot => {
-                        const pick = hotelPicks[slot];
+                        const pick = currentPicks[slot];
                         const hotel = eventHotels.find(h => h.hotel_name === pick);
                         const label = slot === 0 ? '1st Choice' : slot === 1 ? '2nd Choice' : '3rd Choice';
                         const colors = slot === 0 ? 'border-[#00ccff] bg-[#00ccff]/5' : slot === 1 ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-gray-50';
@@ -617,10 +729,9 @@ export default function RegisterPage() {
                     <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider mb-3">Available Hotels</p>
                     <div className="space-y-2 max-h-[300px] overflow-y-auto">
                       {eventHotels.map(hotel => {
-                        const pickedSlot = hotelPicks.indexOf(hotel.hotel_name);
+                        const pickedSlot = currentPicks.indexOf(hotel.hotel_name);
                         const isPicked = pickedSlot !== -1;
-                        // Find next empty slot
-                        const nextEmpty = hotelPicks.findIndex(p => !p);
+                        const nextEmpty = currentPicks.findIndex(p => !p);
 
                         return (
                           <button
@@ -672,22 +783,43 @@ export default function RegisterPage() {
               </button>
               <button
                 onClick={() => setStep('payment')}
-                disabled={!isLocalTeam && !hotelPicks[0] && eventHotels.length > 0}
+                disabled={!allTeamsHaveHotels}
                 className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
               >
                 Continue
               </button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ═══════════════════════════════════ STEP 3: PAYMENT CHOICE ═══════════════════════════════════ */}
         {step === 'payment' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Choose Payment Option</h2>
-            <p className="text-sm text-[#6e6e73] mb-6">
-              Registering <span className="font-medium text-[#1d1d1f]">{selectedTeam?.name}</span> for this tournament.
+            <p className="text-sm text-[#6e6e73] mb-2">
+              {multiTeamMode && selectedTeams.length > 1
+                ? <>Registering <span className="font-medium text-[#1d1d1f]">{selectedTeams.length} teams</span> for this tournament.</>
+                : <>Registering <span className="font-medium text-[#1d1d1f]">{selectedTeam?.name || selectedTeams[0]?.name}</span> for this tournament.</>
+              }
             </p>
+
+            {/* Multi-team price breakdown */}
+            {multiTeamMode && selectedTeams.length > 1 && (
+              <div className="bg-[#f5f5f7] rounded-xl p-4 mb-6 space-y-2">
+                <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider">Price Breakdown</p>
+                {selectedTeams.map(team => (
+                  <div key={team.id} className="flex justify-between text-sm">
+                    <span className="text-[#1d1d1f]">{team.name} <span className="text-[#86868b]">({team.age_group})</span></span>
+                    <span className="font-medium text-[#1d1d1f]">{formatPrice(getTeamPrice(team))}</span>
+                  </div>
+                ))}
+                <div className="border-t border-[#e8e8ed] pt-2 flex justify-between text-sm font-semibold">
+                  <span className="text-[#1d1d1f]">Total</span>
+                  <span className="text-[#1d1d1f]">{formatPrice(totalPriceCents)}</span>
+                </div>
+              </div>
+            )}
 
             {regError && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-3">
