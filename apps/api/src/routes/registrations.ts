@@ -138,6 +138,87 @@ registrationRoutes.post('/', authMiddleware, requireRole('admin', 'director', 'o
 });
 
 // ==================
+// ADMIN/DIRECTOR: List ALL registrations across all events
+// ==================
+registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const { status: statusFilter, search, event_id } = c.req.query();
+
+  // Auto-migrate
+  try { await db.prepare("ALTER TABLE event_registrations ADD COLUMN event_division_id TEXT").run(); } catch (_) {}
+
+  // Normalized registrations
+  let q1 = `
+    SELECT r.*,
+      t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
+      t.logo_url as team_logo_url,
+      ed.age_group as division_age_group, ed.division_level,
+      u.first_name as registered_by_first, u.last_name as registered_by_last, u.email as registered_by_email, u.phone as registered_by_phone,
+      e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
+      'normalized' as _source
+    FROM registrations r
+    JOIN teams t ON t.id = r.team_id
+    JOIN event_divisions ed ON ed.id = r.event_division_id
+    JOIN users u ON u.id = r.registered_by
+    JOIN events e ON e.id = r.event_id
+    WHERE 1=1
+  `;
+  const p1: string[] = [];
+  if (statusFilter) { q1 += ' AND r.status = ?'; p1.push(statusFilter); }
+  if (event_id) { q1 += ' AND r.event_id = ?'; p1.push(event_id); }
+  if (search) {
+    q1 += ' AND (LOWER(t.name) LIKE ? OR LOWER(e.name) LIKE ?)';
+    const s = `%${search.toLowerCase()}%`;
+    p1.push(s, s);
+  }
+  q1 += ' ORDER BY r.created_at DESC';
+  const norm = await db.prepare(q1).bind(...p1).all();
+
+  // Consumer registrations
+  let q2 = `
+    SELECT er.*,
+      er.team_name, er.age_group as team_age_group,
+      NULL as team_city, NULL as team_state, NULL as team_logo_url,
+      COALESCE(ced.age_group, er.age_group) as division_age_group,
+      COALESCE(ced.division_level, er.division) as division_level,
+      er.manager_first_name as registered_by_first, er.manager_last_name as registered_by_last,
+      er.email1 as registered_by_email, er.phone as registered_by_phone,
+      e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
+      'consumer' as _source
+    FROM event_registrations er
+    LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
+    JOIN events e ON e.id = er.event_id
+    WHERE 1=1
+  `;
+  const p2: string[] = [];
+  if (statusFilter) { q2 += ' AND er.status = ?'; p2.push(statusFilter); }
+  if (event_id) { q2 += ' AND er.event_id = ?'; p2.push(event_id); }
+  if (search) {
+    q2 += ' AND (LOWER(er.team_name) LIKE ? OR LOWER(e.name) LIKE ?)';
+    const s = `%${search.toLowerCase()}%`;
+    p2.push(s, s);
+  }
+  q2 += ' ORDER BY er.created_at DESC';
+  const cons = await db.prepare(q2).bind(...p2).all();
+
+  const all = [
+    ...(norm.results || []),
+    ...(cons.results || []).map((er: any) => ({
+      ...er,
+      team_id: er.id,
+      event_division_id: er.event_division_id || null,
+      amount_cents: er.payment_amount_cents || null,
+      paid_cents: null,
+      registered_by_name: [er.manager_first_name, er.manager_last_name].filter(Boolean).join(' ') || null,
+    })),
+  ];
+
+  all.sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+  return c.json({ success: true, data: all, total: all.length });
+});
+
+// ==================
 // ADMIN/DIRECTOR: List registrations for an event
 // ==================
 registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {

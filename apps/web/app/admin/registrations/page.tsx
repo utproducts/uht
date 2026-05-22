@@ -986,77 +986,65 @@ interface EventHotel {
 }
 
 export default function AdminRegistrationsPage() {
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [divisions, setDivisions] = useState<Division[]>([]);
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [regLoading, setRegLoading] = useState(false);
-  const [divFilter, setDivFilter] = useState('');
+  const [registrations, setRegistrations] = useState<(Registration & { event_name?: string; event_city?: string; event_state?: string; event_start_date?: string })[]>([]);
+  const [regLoading, setRegLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [showAddTeam, setShowAddTeam] = useState(false);
+  const [eventFilter, setEventFilter] = useState('');
 
   // Detail/Edit panel
   const [selectedReg, setSelectedReg] = useState<Registration | null>(null);
+  const [detailDivisions, setDetailDivisions] = useState<Division[]>([]);
+  const [detailHotels, setDetailHotels] = useState<EventHotel[]>([]);
 
   // Hotel selection for non-local approval
-  const [eventHotels, setEventHotels] = useState<EventHotel[]>([]);
   const [hotelModalReg, setHotelModalReg] = useState<Registration | null>(null);
   const [selectedHotelId, setSelectedHotelId] = useState('');
   const [approving, setApproving] = useState(false);
+  const [eventHotels, setEventHotels] = useState<EventHotel[]>([]);
 
-  // Load registrations + divisions + hotels when event changes
-  const loadEventData = useCallback(async () => {
-    if (!selectedEvent) {
-      setRegistrations([]);
-      setDivisions([]);
-      setEventHotels([]);
-      return;
-    }
+  const loadAllRegistrations = useCallback(async () => {
     setRegLoading(true);
     try {
-      const [regRes, eventRes, hotelsRes] = await Promise.all([
-        authFetch(`${API_BASE}/registrations/event/${selectedEvent.id}`),
-        authFetch(`${API_BASE}/events/${selectedEvent.slug}`),
-        authFetch(`${API_BASE}/events/admin/event-hotels/${selectedEvent.id}`),
-      ]);
-      const regJson = await regRes.json();
-      if (regJson.success) setRegistrations(regJson.data || []);
-      const hotelsJson = await hotelsRes.json() as any;
-      if (hotelsJson.success) setEventHotels(hotelsJson.data || []);
-
-      const eventJson = await eventRes.json();
-      if (eventJson.success && eventJson.data?.divisions) {
-        setDivisions(eventJson.data.divisions);
-      }
+      const res = await authFetch(`${API_BASE}/registrations/all`);
+      const json = await res.json() as any;
+      if (json.success) setRegistrations(json.data || []);
     } catch {}
     setRegLoading(false);
-  }, [selectedEvent]);
+  }, []);
 
-  useEffect(() => { loadEventData(); }, [loadEventData]);
+  useEffect(() => { loadAllRegistrations(); }, [loadAllRegistrations]);
 
-  const handleSelectEvent = (ev: Event | null) => {
-    setSelectedEvent(ev);
-    setDivFilter('');
-    setStatusFilter('');
-    setSearch('');
+  // Load divisions + hotels for a specific event (for detail panel)
+  const loadEventContext = async (eventId: string, slug?: string) => {
+    try {
+      const [hotelsRes] = await Promise.all([
+        authFetch(`${API_BASE}/events/admin/event-hotels/${eventId}`),
+      ]);
+      const hotelsJson = await hotelsRes.json() as any;
+      if (hotelsJson.success) {
+        setDetailHotels(hotelsJson.data || []);
+        setEventHotels(hotelsJson.data || []);
+      }
+    } catch {}
+    // Load divisions from event detail
+    try {
+      const evRes = await authFetch(`${API_BASE}/events/admin/${eventId}`);
+      const evJson = await evRes.json() as any;
+      if (evJson.success && evJson.data?.divisions) setDetailDivisions(evJson.data.divisions);
+    } catch {}
+  };
+
+  const handleOpenDetail = async (reg: Registration & { event_name?: string }) => {
+    setSelectedReg(reg);
+    setDetailDivisions([]);
+    setDetailHotels([]);
+    await loadEventContext(reg.event_id);
   };
 
   const handleApprove = async (regId: string, hotelId?: string) => {
-    // Find the registration
-    const reg = registrations.find(r => r.id === regId);
-    const isLocal = reg && selectedEvent && reg.team_state && selectedEvent.state &&
-      reg.team_state.toUpperCase() === selectedEvent.state.toUpperCase();
-
-    // Non-local team without hotel → show hotel modal (unless 'skip' was passed)
-    if (!isLocal && !hotelId && eventHotels.length > 0) {
-      setHotelModalReg(reg || null);
-      setSelectedHotelId('');
-      return;
-    }
-
     setApproving(true);
     try {
-      // If 'skip' was passed, send no hotelId to approve without hotel
       const actualHotelId = hotelId === 'skip' ? undefined : hotelId;
       const res = await authFetch(`${API_BASE}/registrations/${regId}/approve`, {
         method: 'POST',
@@ -1065,13 +1053,12 @@ export default function AdminRegistrationsPage() {
       });
       const json = await res.json() as any;
       if (!json.success && json.requiresHotel) {
-        // API says hotel is required but we have no hotels — warn admin
         alert('This team is non-local and requires a hotel assignment. Please add hotels to this event first (Events → Hotels tab).');
         setApproving(false);
         return;
       }
       setHotelModalReg(null);
-      loadEventData();
+      loadAllRegistrations();
     } catch (err) {
       alert('Failed to approve registration.');
     }
@@ -1085,31 +1072,18 @@ export default function AdminRegistrationsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: 'Rejected by admin' }),
     });
-    loadEventData();
-  };
-
-  const handleDivisionChange = async (regId: string, newDivisionId: string) => {
-    try {
-      await authFetch(`${API_BASE}/events/admin/registration/${regId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_division_id: newDivisionId || null }),
-      });
-      loadEventData();
-    } catch (err) {
-      alert('Failed to update division.');
-    }
+    loadAllRegistrations();
   };
 
   // Filters
   let filtered = registrations;
-  if (divFilter === '__unassigned') filtered = filtered.filter(r => !r.event_division_id);
-  else if (divFilter) filtered = filtered.filter(r => r.event_division_id === divFilter);
   if (statusFilter) filtered = filtered.filter(r => r.status === statusFilter);
+  if (eventFilter) filtered = filtered.filter(r => r.event_id === eventFilter);
   if (search) {
     const q = search.toLowerCase();
     filtered = filtered.filter(r =>
       r.team_name.toLowerCase().includes(q) ||
+      ((r as any).event_name || '').toLowerCase().includes(q) ||
       (r.team_city || '').toLowerCase().includes(q)
     );
   }
@@ -1117,263 +1091,206 @@ export default function AdminRegistrationsPage() {
   // Stats
   const approved = registrations.filter(r => r.status === 'approved').length;
   const pending = registrations.filter(r => r.status === 'pending').length;
+  const denied = registrations.filter(r => r.status === 'rejected' || r.status === 'denied').length;
   const waitlisted = registrations.filter(r => r.status === 'waitlisted').length;
   const total = registrations.length;
 
+  // Unique events for event filter dropdown
+  const uniqueEvents = Array.from(new Map(registrations.map(r => [r.event_id, { id: r.event_id, name: (r as any).event_name || 'Unknown' }])).values())
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <div className="bg-[#fafafa] min-h-full">
+      {/* Header */}
       <div className="max-w-7xl mx-auto px-6 pt-6 pb-2">
         <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Registrations</h1>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {!selectedEvent ? (
-          <EventCardsGrid onSelect={handleSelectEvent} />
-        ) : (
-          <>
-            {/* Back + Event Name */}
-            <button
-              onClick={() => handleSelectEvent(null)}
-              className="flex items-center gap-1.5 text-[#003e79] hover:text-[#002d5a] font-medium text-sm transition"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-              All Events
-            </button>
-            <div className="flex items-center gap-3 -mt-2">
-              <h2 className="text-xl font-extrabold text-[#1d1d1f]">{selectedEvent.name}</h2>
-              <span className="text-sm text-[#86868b]">{selectedEvent.city}, {selectedEvent.state} · {formatDateShort(selectedEvent.start_date)}–{formatDateShort(selectedEvent.end_date)}</span>
+      {/* Stats */}
+      <div className="max-w-7xl mx-auto px-6 mt-2">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[
+            { label: 'Total', value: total, color: 'text-[#003e79]' },
+            { label: 'Approved', value: approved, color: 'text-emerald-600' },
+            { label: 'Pending', value: pending, color: 'text-amber-600' },
+            { label: 'Waitlisted', value: waitlisted, color: 'text-blue-600' },
+            { label: 'Denied', value: denied, color: 'text-red-600' },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-2xl border border-[#e8e8ed] p-4 text-center">
+              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+              <div className="text-xs text-[#86868b] mt-1 uppercase tracking-widest font-semibold">{s.label}</div>
             </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Total', value: total, color: 'text-[#003e79]' },
-                { label: 'Approved', value: approved, color: 'text-emerald-600' },
-                { label: 'Pending', value: pending, color: 'text-amber-600' },
-                { label: 'Waitlisted', value: waitlisted, color: 'text-blue-600' },
-              ].map(s => (
-                <div key={s.label} className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                  <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-                  <div className="text-xs text-[#86868b] mt-1 uppercase tracking-widest font-semibold">{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Toolbar */}
-            <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <h2 className="text-lg font-bold text-[#1d1d1f]">Teams</h2>
-                <button
-                  onClick={() => setShowAddTeam(true)}
-                  className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-[#003e79] hover:bg-[#002d5a] transition-colors"
-                >
-                  + Add Team
-                </button>
-              </div>
-
-              {/* Filters row */}
-              <div className="flex flex-wrap gap-2 items-center">
-                {/* Division pills */}
-                <button
-                  onClick={() => setDivFilter('')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                    !divFilter ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                  }`}
-                >
-                  All
-                </button>
-                {divisions.map(d => {
-                  const divApproved = registrations.filter(r => r.event_division_id === d.id && r.status === 'approved').length;
-                  const divTotal = registrations.filter(r => r.event_division_id === d.id).length;
-                  return (
-                  <button
-                    key={d.id}
-                    onClick={() => setDivFilter(divFilter === d.id ? '' : d.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                      divFilter === d.id ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                    }`}
-                  >
-                    {d.age_group} {d.division_level} ({divApproved} approved{divTotal > divApproved ? ` · ${divTotal} total` : ''})
-                  </button>
-                  );
-                })}
-                {/* Unassigned division pill for consumer registrations without a division */}
-                {registrations.filter(r => !r.event_division_id).length > 0 && (
-                  <button
-                    onClick={() => setDivFilter(divFilter === '__unassigned' ? '' : '__unassigned')}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                      divFilter === '__unassigned' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                    }`}
-                  >
-                    Unassigned ({registrations.filter(r => !r.event_division_id).length})
-                  </button>
-                )}
-
-                <div className="hidden sm:block w-px h-5 bg-[#e8e8ed]" />
-
-                {/* Status filter */}
-                <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#f5f5f7] text-[#6e6e73] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="approved">Approved</option>
-                  <option value="pending">Pending</option>
-                  <option value="waitlisted">Waitlisted</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-
-                {/* Search */}
-                <div className="flex-1 min-w-[140px]">
-                  <div className="relative">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="search"
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      placeholder="Search teams..."
-                      className="w-full pl-9 pr-3 py-1.5 rounded-full text-xs bg-[#f5f5f7] text-[#1d1d1f] placeholder:text-[#86868b] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
-                    />
-                  </div>
-                </div>
-
-                <span className="text-xs text-[#86868b] tabular-nums">{filtered.length} team{filtered.length !== 1 ? 's' : ''}</span>
-              </div>
-
-              {/* Registration table */}
-              {regLoading ? (
-                <div className="py-12 text-center">
-                  <div className="inline-block w-6 h-6 border-2 border-[#003e79] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="py-12 text-center">
-                  <p className="text-[#86868b] text-sm">
-                    {registrations.length === 0
-                      ? 'No teams registered yet. Click "+ Add Team" to get started.'
-                      : 'No teams match your filters.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-[#e8e8ed] overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
-                        <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase tracking-wider">Team</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden sm:table-cell">Division</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase tracking-wider">Status</th>
-                        <th className="text-center px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden md:table-cell">Registered</th>
-                        <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((reg, idx) => (
-                        <tr key={reg.id} onClick={() => setSelectedReg(reg)} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} hover:bg-[#f0f7ff] transition-colors cursor-pointer`}>
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-[#1d1d1f]">{reg.team_name}</p>
-                            <p className="text-xs text-[#86868b] mt-0.5">
-                              {reg.team_age_group && <span className="font-medium text-[#6e6e73]">{reg.team_age_group}</span>}
-                              {reg.team_city && <>{reg.team_age_group ? ' · ' : ''}{reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''}</>}
-                              {reg.team_state && selectedEvent && reg.team_state.toUpperCase() !== selectedEvent.state.toUpperCase() && (
-                                <span className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">TRAVEL</span>
-                              )}
-                              {reg.roster_count > 0 && ` · ${reg.roster_count} players`}
-                            </p>
-                          </td>
-                          <td className="px-4 py-3 hidden sm:table-cell" onClick={e => e.stopPropagation()}>
-                            <select
-                              value={reg.event_division_id || ''}
-                              onChange={e => handleDivisionChange(reg.id, e.target.value)}
-                              className="text-xs font-medium text-[#1d1d1f] bg-[#f5f5f7] border border-[#e8e8ed] rounded-lg px-2 py-1 focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none cursor-pointer max-w-[160px]"
-                            >
-                              <option value="">Unassigned</option>
-                              {divisions.map(d => (
-                                <option key={d.id} value={d.id}>{d.age_group} {d.division_level}</option>
-                              ))}
-                            </select>
-                            {reg.team_age_group && reg.event_division_id && reg.team_age_group !== reg.division_age_group && (
-                              <div className="text-[10px] text-amber-600 mt-0.5 font-medium">Team: {reg.team_age_group}</div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <StatusBadge status={reg.status} />
-                          </td>
-                          <td className="px-4 py-3 text-center hidden md:table-cell">
-                            <span className="text-xs text-[#86868b]">{formatDate(reg.created_at)}</span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {reg.status === 'pending' && (
-                                <>
-                                  <button
-                                    onClick={() => handleApprove(reg.id)}
-                                    className="px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition"
-                                  >
-                                    Approve
-                                  </button>
-                                  <button
-                                    onClick={() => handleReject(reg.id)}
-                                    className="px-3 py-1 rounded-full text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition"
-                                  >
-                                    Reject
-                                  </button>
-                                </>
-                              )}
-                              {reg.status === 'waitlisted' && (
-                                <button
-                                  onClick={() => handleApprove(reg.id)}
-                                  className="px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition"
-                                >
-                                  Approve
-                                </button>
-                              )}
-                              {reg.status === 'approved' && (
-                                <span className="text-xs text-emerald-600 font-medium">✓ Active</span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+          ))}
+        </div>
       </div>
 
-      {/* Add Team Modal */}
-      {showAddTeam && selectedEvent && (
-        <AddTeamModal
-          event={selectedEvent}
-          divisions={divisions}
-          onComplete={() => { setShowAddTeam(false); loadEventData(); }}
-          onClose={() => setShowAddTeam(false)}
-        />
-      )}
+      {/* Controls */}
+      <div className="max-w-7xl mx-auto px-6 mt-6">
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Status pills */}
+          {[
+            { key: '', label: 'All', count: total },
+            { key: 'approved', label: 'Approved', count: approved },
+            { key: 'pending', label: 'Pending', count: pending },
+            { key: 'waitlisted', label: 'Waitlisted', count: waitlisted },
+            { key: 'rejected', label: 'Denied', count: denied },
+          ].map(s => (
+            <button
+              key={s.key}
+              onClick={() => setStatusFilter(s.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                statusFilter === s.key ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+              }`}
+            >
+              {s.label} ({s.count})
+            </button>
+          ))}
+
+          <div className="hidden sm:block w-px h-5 bg-[#e8e8ed]" />
+
+          {/* Event filter */}
+          <select
+            value={eventFilter}
+            onChange={e => setEventFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#f5f5f7] text-[#6e6e73] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 max-w-[200px]"
+          >
+            <option value="">All Events</option>
+            {uniqueEvents.map(ev => (
+              <option key={ev.id} value={ev.id}>{ev.name}</option>
+            ))}
+          </select>
+
+          {/* Search */}
+          <div className="flex-1 min-w-[160px] max-w-xs">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="search"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search teams or events..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-full text-xs bg-[#f5f5f7] text-[#1d1d1f] placeholder:text-[#86868b] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20"
+              />
+            </div>
+          </div>
+
+          <span className="text-xs text-[#86868b] tabular-nums">{filtered.length} registration{filtered.length !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+
+      {/* Registration table */}
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {regLoading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <p className="text-[#86868b] font-medium">
+              {registrations.length === 0 ? 'No registrations yet.' : 'No registrations match your filters.'}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#e8e8ed] bg-[#fafafa]">
+                  <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Team</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Event</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden md:table-cell">Division</th>
+                  <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Status</th>
+                  <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden lg:table-cell">Date</th>
+                  <th className="text-right px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((reg, idx) => (
+                  <tr key={reg.id} onClick={() => handleOpenDetail(reg)} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} hover:bg-[#f0f7ff] transition-colors cursor-pointer`}>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-[#1d1d1f]">{reg.team_name}</p>
+                      <p className="text-xs text-[#86868b] mt-0.5">
+                        {reg.team_age_group && <span className="font-medium text-[#6e6e73]">{reg.team_age_group}</span>}
+                        {reg.team_city && <>{reg.team_age_group ? ' · ' : ''}{reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''}</>}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-[#1d1d1f]">{(reg as any).event_name}</p>
+                      <p className="text-xs text-[#86868b]">{(reg as any).event_city}, {(reg as any).event_state}</p>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {reg.division_age_group ? (
+                        <span className="text-xs font-medium text-[#6e6e73]">{reg.division_age_group} {reg.division_level}</span>
+                      ) : (
+                        <span className="text-xs text-amber-600 font-medium">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <StatusBadge status={reg.status} />
+                    </td>
+                    <td className="px-4 py-3 text-center hidden lg:table-cell">
+                      <span className="text-xs text-[#86868b]">{formatDate(reg.created_at)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {reg.status === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => handleApprove(reg.id)}
+                              className="px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleReject(reg.id)}
+                              className="px-3 py-1 rounded-full text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {reg.status === 'waitlisted' && (
+                          <button
+                            onClick={() => handleApprove(reg.id)}
+                            className="px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition"
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {reg.status === 'approved' && (
+                          <span className="text-xs text-emerald-600 font-medium">Active</span>
+                        )}
+                        {(reg.status === 'rejected' || reg.status === 'denied') && (
+                          <span className="text-xs text-red-500 font-medium">Denied</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Registration Detail/Edit Panel */}
       {selectedReg && (
         <RegistrationDetailPanel
           reg={selectedReg}
-          divisions={divisions}
-          eventHotels={eventHotels}
+          divisions={detailDivisions}
+          eventHotels={detailHotels}
           onClose={() => setSelectedReg(null)}
-          onSaved={() => loadEventData()}
+          onSaved={() => loadAllRegistrations()}
         />
       )}
 
       {/* Hotel Selection Modal for Non-Local Teams */}
       {hotelModalReg && (() => {
-        // Build the team's priority hotel list (their 3 choices)
         const teamChoices: { id: string; name: string; rank: number }[] = [];
         if (hotelModalReg.hotel_choice_1_id) teamChoices.push({ id: hotelModalReg.hotel_choice_1_id, name: hotelModalReg.hotel_choice_1_name || '', rank: 1 });
         if (hotelModalReg.hotel_choice_2_id) teamChoices.push({ id: hotelModalReg.hotel_choice_2_id, name: hotelModalReg.hotel_choice_2_name || '', rank: 2 });
         if (hotelModalReg.hotel_choice_3_id) teamChoices.push({ id: hotelModalReg.hotel_choice_3_id, name: hotelModalReg.hotel_choice_3_name || '', rank: 3 });
-        // Hotels to display: team's choices if they have any, otherwise fall back to all event hotels
         const displayHotels = teamChoices.length > 0
           ? teamChoices.map(c => ({ ...eventHotels.find(h => h.id === c.id)!, rank: c.rank })).filter(h => h && h.id)
           : eventHotels.map(h => ({ ...h, rank: 0 }));
