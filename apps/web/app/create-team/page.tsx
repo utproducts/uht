@@ -66,6 +66,7 @@ export default function CreateTeamPage() {
   // Dynamic lookups from API
   const [ageGroups, setAgeGroups] = useState<string[]>(FALLBACK_AGE_GROUPS);
   const [divisions, setDivisions] = useState<string[]>(FALLBACK_DIVISIONS);
+  const [stateDivisions, setStateDivisions] = useState<Record<string, string[]>>({});
   const [leagues, setLeagues] = useState<string[]>(FALLBACK_LEAGUES);
   const [teamTypes, setTeamTypes] = useState<string[]>(FALLBACK_TEAM_TYPES);
 
@@ -96,6 +97,19 @@ export default function CreateTeamPage() {
         if (dv.length) setDivisions(dv);
         if (lg.length) setLeagues(lg);
         if (tt.length) setTeamTypes(tt);
+      } catch {}
+      // Load state-based divisions
+      try {
+        const sdRes = await fetch(`${API}/lookups/state-divisions`);
+        const sdJson = await sdRes.json() as any;
+        if (sdJson.success && sdJson.data) {
+          const byState: Record<string, string[]> = {};
+          for (const item of sdJson.data) {
+            if (!byState[item.state]) byState[item.state] = [];
+            byState[item.state].push(item.level_name);
+          }
+          setStateDivisions(byState);
+        }
       } catch {}
     })();
   }, [router]);
@@ -257,8 +271,11 @@ export default function CreateTeamPage() {
                     <select value={form.divisionLevel} onChange={e => set('divisionLevel', e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
                       <option value="">Select...</option>
-                      {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                      {(form.state && stateDivisions[form.state]?.length ? stateDivisions[form.state] : divisions).map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
+                    {form.state && stateDivisions[form.state]?.length > 0 && (
+                      <p className="text-xs text-[#86868b] mt-1">Showing divisions for {form.state}</p>
+                    )}
                   </div>
                 </div>
 
@@ -282,11 +299,9 @@ export default function CreateTeamPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Hometown League</label>
-                    <select value={form.hometownLeague} onChange={e => set('hometownLeague', e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
-                      <option value="">Select...</option>
-                      {leagues.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
+                    <input type="text" value={form.hometownLeague} onChange={e => set('hometownLeague', e.target.value)}
+                      placeholder="e.g. COHL, NIHL, AHAI"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Team Website</label>

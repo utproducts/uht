@@ -93,10 +93,12 @@ export default function RegisterPage() {
   // Auth
   const [auth, setAuth] = useState<{ token: string; user: any } | null>(null);
 
-  // Teams
+  // Teams (multi-team support)
   const [teams, setTeams] = useState<Team[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [selectedTeams, setSelectedTeams] = useState<Team[]>([]);
+  const [multiTeamMode, setMultiTeamMode] = useState(false);
 
   // Hotels
   const [eventHotels, setEventHotels] = useState<EventHotel[]>([]);
@@ -265,42 +267,49 @@ export default function RegisterPage() {
 
   // Submit registration
   const submitRegistration = async () => {
-    if (!event || !selectedTeam || !paymentChoice || !auth) return;
+    if (!event || !paymentChoice || !auth) return;
+    const teamsToRegister = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
+    if (teamsToRegister.length === 0) return;
     setStep('submitting');
     setRegError(null);
 
     try {
-      const body: any = {
-        eventId: event.id,
-        teamId: selectedTeam.id,
-        teamName: selectedTeam.name,
-        ageGroup: selectedTeam.age_group || 'Unknown',
-        division: selectedTeam.division_level || undefined,
-        email: auth.user?.email || 'unknown@email.com',
-        managerFirstName: auth.user?.name?.split(' ')[0] || undefined,
-        managerLastName: auth.user?.name?.split(' ').slice(1).join(' ') || undefined,
-        headCoachName: selectedTeam.head_coach_name || undefined,
-        paymentChoice,
-        hotelChoice1: isLocalTeam ? 'Local Team' : hotelPicks[0] || undefined,
-        hotelChoice2: isLocalTeam ? undefined : hotelPicks[1] || undefined,
-        hotelChoice3: isLocalTeam ? undefined : hotelPicks[2] || undefined,
-      };
-      if (selectedUpsellIds.size > 0) {
-        body.additionalEventIds = Array.from(selectedUpsellIds);
+      const results: any[] = [];
+      for (const team of teamsToRegister) {
+        const body: any = {
+          eventId: event.id,
+          teamId: team.id,
+          teamName: team.name,
+          ageGroup: team.age_group || 'Unknown',
+          division: team.division_level || undefined,
+          email: auth.user?.email || 'unknown@email.com',
+          managerFirstName: auth.user?.name?.split(' ')[0] || undefined,
+          managerLastName: auth.user?.name?.split(' ').slice(1).join(' ') || undefined,
+          headCoachName: team.head_coach_name || undefined,
+          paymentChoice,
+          hotelChoice1: isLocalTeam ? 'Local Team' : hotelPicks[0] || undefined,
+          hotelChoice2: isLocalTeam ? undefined : hotelPicks[1] || undefined,
+          hotelChoice3: isLocalTeam ? undefined : hotelPicks[2] || undefined,
+        };
+        if (selectedUpsellIds.size > 0) {
+          body.additionalEventIds = Array.from(selectedUpsellIds);
+        }
+        const res = await fetch(`${API}/events/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json() as any;
+        if (json.success) {
+          results.push(json.data);
+        } else {
+          setRegError(`Registration failed for ${team.name}: ${json.error || 'Unknown error'}`);
+          setStep('payment');
+          return;
+        }
       }
-      const res = await fetch(`${API}/events/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json() as any;
-      if (json.success) {
-        setRegResult(json.data);
-        setStep('confirmed');
-      } else {
-        setRegError(json.error || 'Registration failed.');
-        setStep('payment');
-      }
+      setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
+      setStep('confirmed');
     } catch {
       setRegError('Network error. Please try again.');
       setStep('payment');
@@ -390,6 +399,18 @@ export default function RegisterPage() {
 
       {/* Registration flow */}
       <div className="max-w-3xl mx-auto px-6 py-8">
+        {/* Registrant info */}
+        {auth && step !== 'confirmed' && step !== 'submitting' && (
+          <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm rounded-xl px-4 py-2.5 mb-4 border border-[#e8e8ed]">
+            <div className="flex items-center gap-2 text-sm text-[#6e6e73]">
+              <svg className="w-4 h-4 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              <span>Registering as <span className="font-semibold text-[#1d1d1f]">{auth.user?.name || auth.user?.email}</span></span>
+              {(() => { const role = typeof window !== 'undefined' ? localStorage.getItem('uht_role') : null; return role ? <span className="px-2 py-0.5 rounded-full bg-[#f0f7ff] text-[#003e79] text-xs font-semibold capitalize">{role}</span> : null; })()}
+            </div>
+            <a href="/login" className="text-xs text-[#00ccff] hover:text-[#0099bf] font-medium">Switch Account</a>
+          </div>
+        )}
+
         {step !== 'confirmed' && step !== 'submitting' && (
           <StepIndicator steps={stepNames} current={stepIndex} />
         )}
@@ -397,8 +418,18 @@ export default function RegisterPage() {
         {/* ═══════════════════════════════════ STEP 1: SELECT TEAM ═══════════════════════════════════ */}
         {step === 'team' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
-            <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Select Your Team</h2>
-            <p className="text-sm text-[#6e6e73] mb-6">Choose which team to register for this tournament.</p>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xl font-bold text-[#1d1d1f]">Select Your Team{multiTeamMode ? 's' : ''}</h2>
+              {teams.length > 1 && (
+                <button onClick={() => { setMultiTeamMode(!multiTeamMode); setSelectedTeams([]); setSelectedTeam(null); }}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#e8e8ed] hover:bg-[#f5f5f7] transition text-[#6e6e73]">
+                  {multiTeamMode ? 'Single Team' : 'Register Multiple Teams'}
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-[#6e6e73] mb-6">
+              {multiTeamMode ? 'Select all teams to register for this tournament in one checkout.' : 'Choose which team to register for this tournament.'}
+            </p>
 
             {loadingTeams ? (
               <div className="text-center py-8">
@@ -422,35 +453,56 @@ export default function RegisterPage() {
             ) : (
               <>
                 <div className="space-y-3 mb-6">
-                  {teams.map(team => (
-                    <button
-                      key={team.id}
-                      onClick={() => setSelectedTeam(team)}
-                      className={`w-full text-left p-4 rounded-xl border-2 transition-all group ${
-                        selectedTeam?.id === team.id
-                          ? 'border-[#00ccff] bg-[#00ccff]/5 shadow-sm'
-                          : 'border-[#e8e8ed] hover:border-[#00ccff]/40 hover:bg-[#f5f5f7]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold text-[#1d1d1f]">{team.name}</p>
-                          <p className="text-sm text-[#6e6e73] mt-0.5">
-                            {[team.age_group, team.division_level].filter(Boolean).join(' · ')}
-                            {team.head_coach_name && ` · Coach ${team.head_coach_name}`}
-                          </p>
+                  {teams.map(team => {
+                    const isSelected = multiTeamMode
+                      ? selectedTeams.some(t => t.id === team.id)
+                      : selectedTeam?.id === team.id;
+                    return (
+                      <button
+                        key={team.id}
+                        onClick={() => {
+                          if (multiTeamMode) {
+                            setSelectedTeams(prev =>
+                              prev.some(t => t.id === team.id)
+                                ? prev.filter(t => t.id !== team.id)
+                                : [...prev, team]
+                            );
+                          } else {
+                            setSelectedTeam(team);
+                          }
+                        }}
+                        className={`w-full text-left p-4 rounded-xl border-2 transition-all group ${
+                          isSelected
+                            ? 'border-[#00ccff] bg-[#00ccff]/5 shadow-sm'
+                            : 'border-[#e8e8ed] hover:border-[#00ccff]/40 hover:bg-[#f5f5f7]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-[#1d1d1f]">{team.name}</p>
+                            <p className="text-sm text-[#6e6e73] mt-0.5">
+                              {[team.age_group, team.division_level].filter(Boolean).join(' · ')}
+                              {team.head_coach_name && ` · Coach ${team.head_coach_name}`}
+                            </p>
+                          </div>
+                          <div className={`w-5 h-5 ${multiTeamMode ? 'rounded-md' : 'rounded-full'} border-2 flex items-center justify-center transition-all ${
+                            isSelected ? 'border-[#00ccff] bg-[#00ccff]' : 'border-[#d1d1d6]'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                            )}
+                          </div>
                         </div>
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                          selectedTeam?.id === team.id ? 'border-[#00ccff] bg-[#00ccff]' : 'border-[#d1d1d6]'
-                        }`}>
-                          {selectedTeam?.id === team.id && (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {multiTeamMode && selectedTeams.length > 0 && (
+                  <div className="bg-[#f0f7ff] border border-[#003e79]/20 rounded-xl p-3 mb-4 text-sm text-[#003e79]">
+                    Registering {selectedTeams.length} team{selectedTeams.length > 1 ? 's' : ''} — {selectedTeams.map(t => t.name).join(', ')}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between">
                   <a href={`/create-team?redirect=/register?event=${event.slug}`} className="text-sm font-medium text-[#00ccff] hover:text-[#0099bf]">
@@ -458,10 +510,10 @@ export default function RegisterPage() {
                   </a>
                   <button
                     onClick={handleTeamContinue}
-                    disabled={!selectedTeam}
+                    disabled={multiTeamMode ? selectedTeams.length === 0 : !selectedTeam}
                     className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
                   >
-                    Continue
+                    Continue{multiTeamMode && selectedTeams.length > 1 ? ` (${selectedTeams.length} teams)` : ''}
                   </button>
                 </div>
               </>

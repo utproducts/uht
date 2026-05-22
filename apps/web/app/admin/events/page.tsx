@@ -239,6 +239,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
 
+  // AI description generation state
+  const [generatingDesc, setGeneratingDesc] = useState(false);
+
   const handleImageUpload = async (file: File, field: 'logo_url' | 'banner_url') => {
     const setUploading = field === 'logo_url' ? setUploadingLogo : setUploadingBanner;
     setUploading(true);
@@ -252,6 +255,51 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       }
     } catch (e) { console.error('Upload failed', e); }
     setUploading(false);
+  };
+
+  // Persist create-mode form state to sessionStorage (#111)
+  useEffect(() => {
+    if (!isEdit) {
+      const saved = sessionStorage.getItem('uht_create_event_form');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setForm(prev => ({ ...prev, ...parsed }));
+          if (parsed._step) setStep(parsed._step);
+          if (parsed._selectedVenueIds) setSelectedVenueIds(new Set(parsed._selectedVenueIds));
+          if (parsed._primaryVenueId) setPrimaryVenueId(parsed._primaryVenueId);
+          if (parsed._divisionConfigs) setDivisionConfigs(parsed._divisionConfigs);
+        } catch {}
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isEdit) {
+      const toSave = { ...form, _step: step, _selectedVenueIds: Array.from(selectedVenueIds), _primaryVenueId: primaryVenueId, _divisionConfigs: divisionConfigs };
+      sessionStorage.setItem('uht_create_event_form', JSON.stringify(toSave));
+    }
+  }, [form, step, selectedVenueIds, primaryVenueId, divisionConfigs, isEdit]);
+
+  // Clear persisted state on close or successful save
+  const clearPersistedForm = () => sessionStorage.removeItem('uht_create_event_form');
+
+  const generateAIDescription = async () => {
+    setGeneratingDesc(true);
+    try {
+      const ageList = form.age_groups.length > 0 ? form.age_groups.join(', ') : 'various age groups';
+      const prompt = `Write a short, exciting marketing description (2-3 sentences max) for a youth hockey tournament called "${form.name}" in ${form.city}, ${form.state}. ${form.start_date && form.end_date ? `It runs from ${form.start_date} to ${form.end_date}.` : ''} Age groups: ${ageList}. Keep it professional, enthusiastic, and focused on the competitive experience. Do not use emojis.`;
+      const res = await fetch('https://uht.chad-157.workers.dev/api/chatbot/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: prompt }),
+      });
+      const json = await res.json();
+      if (json.success && json.data?.response) {
+        setForm(prev => ({ ...prev, description: json.data.response }));
+      }
+    } catch (e) { console.error('AI generation failed', e); }
+    setGeneratingDesc(false);
   };
 
   // Load hotels + venue rinks when in edit mode
@@ -621,6 +669,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
         onSaved();
         if (!isEdit) {
           // Close modal after creating a new event
+          clearPersistedForm();
           setTimeout(() => { onClose(); }, 600);
         } else {
           // Stay open in edit mode — just flash success and reset
@@ -1005,7 +1054,17 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
               {/* Description */}
               <div>
-                <label className={labelCls}>Description (marketing copy)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-[#3d3d3d]">Description (marketing copy)</label>
+                  <button type="button" onClick={generateAIDescription} disabled={generatingDesc || !form.name}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {generatingDesc ? (
+                      <><span className="animate-spin h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" /> Generating...</>
+                    ) : (
+                      <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> AI Generate</>
+                    )}
+                  </button>
+                </div>
                 <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
                   rows={2} placeholder="Longer description for event page..."
                   className={inputCls + ' resize-none'} />
@@ -1957,7 +2016,17 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 </div>
               </div>
               <div>
-                <label className={labelCls}>Description</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-[#3d3d3d]">Description</label>
+                  <button type="button" onClick={generateAIDescription} disabled={generatingDesc || !form.name}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {generatingDesc ? (
+                      <><span className="animate-spin h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" /> Generating...</>
+                    ) : (
+                      <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> AI Generate</>
+                    )}
+                  </button>
+                </div>
                 <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
                   rows={2} placeholder="Brief event description" className={inputCls + ' resize-none'} />
               </div>
