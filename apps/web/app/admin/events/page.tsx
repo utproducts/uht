@@ -763,14 +763,21 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div>
+      <div className="bg-white rounded-2xl shadow-lg w-full overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-[#e8e8ed] px-6 py-4 rounded-t-2xl z-10">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-[#1d1d1f]">{isEdit ? 'Edit Event' : 'Create Event'}</h3>
-            <button onClick={onClose} className="p-1.5 hover:bg-[#fafafa] rounded-lg transition">
-              <svg className="w-5 h-5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => { clearPersistedForm(); onClose(); }} className="flex items-center gap-1.5 text-sm text-[#6e6e73] hover:text-[#1d1d1f] font-medium transition">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                Back to Events
+              </button>
+              <span className="text-[#d1d1d6]">|</span>
+              <h3 className="text-lg font-bold text-[#1d1d1f]">{isEdit ? 'Edit Event' : 'Create Event'}</h3>
+            </div>
+            {isEdit && event && (
+              <span className="text-xs text-[#86868b]">{event.name}</span>
+            )}
           </div>
 
           {isEdit ? (
@@ -3766,6 +3773,23 @@ export default function AdminEventsPage() {
   const totalTeams = events.reduce((sum, e) => sum + e.registration_count, 0);
   const totalRevenue = events.reduce((sum, e) => sum + (e.total_revenue_cents || 0), 0);
 
+  // Full-page edit/create mode
+  if (editingEvent) {
+    return (
+      <div className="bg-[#fafafa] min-h-full">
+        <div className="max-w-5xl mx-auto px-6 py-6">
+          <EventFormModal
+            event={editingEvent === 'create' ? null : editingEvent}
+            tournaments={tournaments}
+            venues={venues}
+            onClose={() => setEditingEvent(null)}
+            onSaved={reloadEvents}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (selectedEventId) {
     return (
       <div className="bg-[#fafafa] min-h-full">
@@ -3778,17 +3802,6 @@ export default function AdminEventsPage() {
 
   return (
     <div className="bg-[#fafafa] min-h-full">
-      {/* Create/Edit Form Modal */}
-      {editingEvent && (
-        <EventFormModal
-          event={editingEvent === 'create' ? null : editingEvent}
-          tournaments={tournaments}
-          venues={venues}
-          onClose={() => setEditingEvent(null)}
-          onSaved={reloadEvents}
-        />
-      )}
-
       {/* Delete Confirmation */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
