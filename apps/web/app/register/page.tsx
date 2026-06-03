@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const API = 'https://uht.chad-157.workers.dev/api';
 
@@ -110,9 +110,19 @@ export default function RegisterPage() {
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [isLocalTeam, setIsLocalTeam] = useState(false);
 
-  // Steps: team → hotels → payment → upsell → submitting → confirmed
-  const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'upsell' | 'submitting' | 'confirmed'>('team');
+  // Steps: team → hotels → payment → upsell → card_form → submitting → confirmed
+  const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'upsell' | 'card_form' | 'submitting' | 'confirmed'>('team');
   const [paymentChoice, setPaymentChoice] = useState<'pay_now' | 'pay_deposit' | 'pay_later' | null>(null);
+
+  // Stripe embedded payment
+  const [stripeInstance, setStripeInstance] = useState<any>(null);
+  const [stripeElements, setStripeElements] = useState<any>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentAmountCents, setPaymentAmountCents] = useState(0);
+  const paymentElementRef = useRef<HTMLDivElement>(null);
 
   // Upsell
   const [upsellEvents, setUpsellEvents] = useState<UpsellEvent[]>([]);
@@ -215,6 +225,104 @@ export default function RegisterPage() {
       setLoadingTeams(false);
     })();
   }, []);
+
+  // Load Stripe.js
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if ((window as any).Stripe) {
+      setStripeInstance((window as any).Stripe('pk_live_51JT7FXGJu05jTbyJAmm6UfNev2syS1j9F81arSoiT6Fx8JcQhmcjBUUNVxGX0Zf0amJj1H5Ylvdh7FScdopNkxfn00kBBHQuTz'));
+      return;
+    }
+    const existing = document.querySelector('script[src="https://js.stripe.com/v3/"]');
+    if (existing) return;
+    const script = document.createElement('script');
+    script.src = 'https://js.stripe.com/v3/';
+    script.async = true;
+    script.onload = () => {
+      if ((window as any).Stripe) {
+        setStripeInstance((window as any).Stripe('pk_live_51JT7FXGJu05jTbyJAmm6UfNev2syS1j9F81arSoiT6Fx8JcQhmcjBUUNVxGX0Zf0amJj1H5Ylvdh7FScdopNkxfn00kBBHQuTz'));
+      }
+    };
+    document.head.appendChild(script);
+  }, []);
+
+  // Mount Stripe Payment Element when card_form step is active
+  useEffect(() => {
+    if (step !== 'card_form' || !stripeInstance || !clientSecret) return;
+    const timer = setTimeout(() => {
+      if (!paymentElementRef.current) return;
+      // Clear previous mount
+      paymentElementRef.current.innerHTML = '';
+      const elements = stripeInstance.elements({
+        clientSecret,
+        appearance: {
+          theme: 'stripe',
+          variables: {
+            colorPrimary: '#003e79',
+            colorBackground: '#ffffff',
+            colorText: '#1d1d1f',
+            colorDanger: '#dc2626',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            borderRadius: '12px',
+            spacingUnit: '4px',
+          },
+        },
+      });
+      const paymentElement = elements.create('payment', {
+        layout: 'tabs',
+      });
+      paymentElement.mount(paymentElementRef.current);
+      setStripeElements(elements);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [step, stripeInstance, clientSecret]);
+
+  // Handle Stripe payment submission
+  const handlePaymentSubmit = async () => {
+    if (!stripeInstance || !stripeElements) return;
+    setProcessingPayment(true);
+    setCardError(null);
+
+    try {
+      const { error, paymentIntent } = await stripeInstance.confirmPayment({
+        elements: stripeElements,
+        redirect: 'if_required',
+      });
+
+      if (error) {
+        setCardError(error.message || 'Payment failed. Please try again.');
+        setProcessingPayment(false);
+        return;
+      }
+
+      if (paymentIntent && paymentIntent.status === 'succeeded') {
+        // Call our confirm-payment endpoint to update DB
+        try {
+          await fetch(`${API}/stripe/confirm-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentIntentId: paymentIntent.id }),
+          });
+        } catch {
+          // Webhook will handle it if this call fails
+        }
+
+        setRegResult((prev: any) => ({
+          ...prev,
+          paymentConfirmed: true,
+          amountPaid: paymentIntent.amount,
+        }));
+        setStep('confirmed');
+      } else if (paymentIntent && paymentIntent.status === 'requires_action') {
+        setCardError('Additional authentication required. Please complete verification.');
+      } else {
+        setCardError('Payment was not completed. Please try again.');
+      }
+    } catch (err: any) {
+      setCardError(err.message || 'An unexpected error occurred.');
+    }
+    setProcessingPayment(false);
+  };
 
   // Load hotels for the event
   const loadEventHotels = async () => {
@@ -379,8 +487,54 @@ export default function RegisterPage() {
           return;
         }
       }
-      setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
-      setStep('confirmed');
+
+      // If paying now or deposit, create PaymentIntent and show card form
+      if (paymentChoice === 'pay_now' || paymentChoice === 'pay_deposit') {
+        const allRegIds = results.flatMap((r: any) => r.allRegistrationIds || [r.primaryRegistrationId]);
+        const teamNames = teamsToRegister.map(t => t.name);
+
+        try {
+          const stripeRes = await fetch(`${API}/stripe/create-payment-intent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              registrationIds: allRegIds,
+              paymentChoice,
+              email: auth.user?.email || 'unknown@email.com',
+              eventName: event.name,
+              teamNames,
+            }),
+          });
+          const stripeJson = await stripeRes.json() as any;
+
+          if (stripeJson.success && stripeJson.data?.clientSecret) {
+            setClientSecret(stripeJson.data.clientSecret);
+            setPaymentIntentId(stripeJson.data.paymentIntentId);
+            setPaymentAmountCents(stripeJson.data.totalCents || 0);
+            setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
+            setStep('card_form');
+            return;
+          } else {
+            console.error('PaymentIntent error:', stripeJson.error);
+            setRegResult({
+              ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
+              paymentNote: 'Registration submitted! We\'ll send a payment link via email.',
+            });
+            setStep('confirmed');
+          }
+        } catch (stripeErr) {
+          console.error('Payment setup error:', stripeErr);
+          setRegResult({
+            ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
+            paymentNote: 'Registration submitted! We\'ll send a payment link via email.',
+          });
+          setStep('confirmed');
+        }
+      } else {
+        // pay_later — no payment needed now
+        setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
+        setStep('confirmed');
+      }
     } catch {
       setRegError('Network error. Please try again.');
       setStep('payment');
@@ -422,8 +576,8 @@ export default function RegisterPage() {
     : 0;
 
   // Step names
-  const stepNames = ['Team', 'Hotels', 'Payment', 'More Events', 'Confirm'];
-  const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'upsell' ? 3 : step === 'confirmed' || step === 'submitting' ? 4 : 0;
+  const stepNames = ['Team', 'Hotels', 'Payment', 'More Events', 'Checkout'];
+  const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'upsell' ? 3 : step === 'card_form' || step === 'confirmed' || step === 'submitting' ? 4 : 0;
 
   if (loading) {
     return (
@@ -1185,6 +1339,89 @@ export default function RegisterPage() {
           );
         })()}
 
+        {/* ═══════════════════════════════════ STEP 5: CARD FORM (Stripe Elements) ═══════════════════════════════════ */}
+        {step === 'card_form' && (
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-full bg-[#003e79]/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[#1d1d1f]">Complete Payment</h2>
+                <p className="text-sm text-[#6e6e73]">Enter your card details to finalize your registration.</p>
+              </div>
+            </div>
+
+            {/* Order summary */}
+            <div className="bg-[#f5f5f7] rounded-xl p-4 my-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-[#6e6e73]">
+                    {paymentChoice === 'pay_deposit' ? 'Deposit' : 'Total'} for{' '}
+                    <span className="font-medium text-[#1d1d1f]">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
+                  </p>
+                  <p className="text-xs text-[#86868b] mt-0.5">
+                    {multiTeamMode && selectedTeams.length > 1
+                      ? `${selectedTeams.length} teams: ${selectedTeams.map(t => t.name).join(', ')}`
+                      : selectedTeam?.name || selectedTeams[0]?.name}
+                  </p>
+                </div>
+                <span className="text-2xl font-bold text-[#1d1d1f]">
+                  {paymentAmountCents > 0 ? `$${(paymentAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : formatPrice(paymentChoice === 'pay_deposit' ? depositCents : basePriceCents)}
+                </span>
+              </div>
+            </div>
+
+            {/* Card error */}
+            {cardError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-3">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>{cardError}</span>
+              </div>
+            )}
+
+            {/* Stripe Payment Element mounts here */}
+            <div
+              ref={paymentElementRef}
+              className="min-h-[200px] mb-6 rounded-xl"
+              style={{ minHeight: '200px' }}
+            />
+
+            {/* Secure payment note */}
+            <div className="flex items-center gap-2 text-xs text-[#86868b] mb-6">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <span>Your payment is securely processed by Stripe. We never store your card details.</span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => { setStep('upsell'); setCardError(null); }}
+                disabled={processingPayment}
+                className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors disabled:opacity-40"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handlePaymentSubmit}
+                disabled={processingPayment || !stripeElements}
+                className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm flex items-center gap-2"
+              >
+                {processingPayment ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    Pay {paymentAmountCents > 0 ? `$${(paymentAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'Now'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ═══════════════════════════════════ SUBMITTING ═══════════════════════════════════ */}
         {step === 'submitting' && (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
@@ -1205,11 +1442,15 @@ export default function RegisterPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2">Registration Confirmed!</h2>
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {regResult.paymentConfirmed ? 'Payment Confirmed!' : 'Registration Confirmed!'}
+                </h2>
                 <p className="text-white/80">
-                  {regResult.eventsRegistered > 1
-                    ? `You've registered for ${regResult.eventsRegistered} events!`
-                    : 'Your team has been registered.'}
+                  {regResult.paymentConfirmed
+                    ? `Your ${paymentChoice === 'pay_deposit' ? 'deposit' : 'payment'} of $${((regResult.amountPaid || paymentAmountCents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })} has been received.`
+                    : regResult.eventsRegistered > 1
+                      ? `You've registered for ${regResult.eventsRegistered} events!`
+                      : 'Your team has been registered.'}
                 </p>
               </div>
 
@@ -1244,9 +1485,17 @@ export default function RegisterPage() {
                     <div className="flex justify-between text-sm">
                       <span className="text-[#6e6e73]">Payment</span>
                       <span className="font-medium text-[#1d1d1f]">
-                        {paymentChoice === 'pay_now' ? 'Pay in Full' : paymentChoice === 'pay_deposit' ? 'Deposit' : 'Pay Later'}
+                        {regResult?.paymentConfirmed
+                          ? `${paymentChoice === 'pay_deposit' ? 'Deposit' : 'Paid'} — $${((regResult.amountPaid || paymentAmountCents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                          : paymentChoice === 'pay_now' ? 'Pay in Full' : paymentChoice === 'pay_deposit' ? 'Deposit' : 'Pay Later'}
                       </span>
                     </div>
+                    {regResult?.paymentNote && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[#6e6e73]">Note</span>
+                        <span className="font-medium text-amber-600">{regResult.paymentNote}</span>
+                      </div>
+                    )}
                     {(isLocalTeam || hotelPicks[0]) && (
                       <div className="flex justify-between text-sm">
                         <span className="text-[#6e6e73]">Hotel</span>

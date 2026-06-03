@@ -26,6 +26,7 @@ import { directorRoutes } from './routes/director';
 import { analyticsRoutes } from './routes/analytics';
 import { financialRoutes } from './routes/financials';
 import { refereeRoutes } from './routes/referees';
+import { stripeRoutes } from './routes/stripe';
 import type { Env } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -84,6 +85,7 @@ app.route('/api/director', directorRoutes);
 app.route('/api/analytics', analyticsRoutes);
 app.route('/api/financials', financialRoutes);
 app.route('/api/referees', refereeRoutes);
+app.route('/api/stripe', stripeRoutes);
 
 // Image upload to R2
 app.post('/api/upload/image', async (c) => {
