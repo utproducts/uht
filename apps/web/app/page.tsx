@@ -104,12 +104,12 @@ const TESTIMONIALS = [
 
 /* ---------- Action photos for gallery ---------- */
 const GALLERY_PHOTOS = [
-  { src: 'https://images.unsplash.com/photo-1580748142247-07e17a6bbb5e?w=500&q=80', alt: 'Hockey action shot' },
-  { src: 'https://images.unsplash.com/photo-1515703407324-5f753afd8be8?w=500&q=80', alt: 'Youth hockey team' },
-  { src: 'https://images.unsplash.com/photo-1570498839593-e565b39455fc?w=500&q=80', alt: 'Ice rink action' },
-  { src: 'https://images.unsplash.com/photo-1552667466-07770ae110d0?w=500&q=80', alt: 'Hockey celebration' },
-  { src: 'https://images.unsplash.com/photo-1580692475446-c2fabbbbf835?w=500&q=80', alt: 'Hockey goalie' },
-  { src: 'https://images.unsplash.com/photo-1576301537781-79c42b6b01c0?w=500&q=80', alt: 'Hockey puck drop' },
+  { src: 'https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?w=500&q=80', alt: 'Hockey arena action' },
+  { src: 'https://images.unsplash.com/photo-1515703407324-5f753afd8be8?w=500&q=80', alt: 'Hockey goal net' },
+  { src: 'https://images.unsplash.com/photo-1486128105845-91daff43f404?w=500&q=80', alt: 'Ice hockey game with referee' },
+  { src: 'https://images.unsplash.com/photo-1549598145-86b354509082?w=500&q=80', alt: 'Hockey player in full gear' },
+  { src: 'https://images.unsplash.com/photo-1517339763538-9bb6c388613a?w=500&q=80', alt: 'Hockey arena game' },
+  { src: 'https://images.unsplash.com/photo-1545471977-94cac22e71ed?w=500&q=80', alt: 'Ice hockey players' },
 ];
 
 export default function HomePage() {
@@ -158,23 +158,23 @@ export default function HomePage() {
   return (
     <>
       {/* ═══════════════════════ HERO ═══════════════════════ */}
-      <section className="relative overflow-hidden bg-[#001d3d] min-h-[85vh] flex items-center">
+      <section className="relative overflow-hidden bg-[#001d3d] min-h-[70vh] flex items-center">
         {/* Background image with overlay */}
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1580748142247-07e17a6bbb5e?w=1600&q=80"
+            src="https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?w=1920&q=80"
             alt=""
-            className="w-full h-full object-cover opacity-30"
+            className="w-full h-full object-cover opacity-40"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#001d3d]/80 via-[#001d3d]/60 to-[#001d3d]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#001d3d]/90 via-[#001d3d]/70 to-[#001d3d]/40" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#001d3d] via-transparent to-[#001d3d]/30" />
         </div>
 
-        {/* Animated accent elements */}
-        <div className="absolute top-20 right-[10%] w-72 h-72 bg-[#00ccff]/15 rounded-full blur-[100px] animate-pulse" />
-        <div className="absolute bottom-20 left-[5%] w-96 h-96 bg-[#003e79]/30 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#00ccff]/5 rounded-full blur-[150px]" />
+        {/* Subtle accent glow */}
+        <div className="absolute top-20 right-[15%] w-64 h-64 bg-[#00ccff]/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-10 left-[5%] w-80 h-80 bg-[#003e79]/20 rounded-full blur-[120px]" />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-20 sm:py-28 w-full">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-14 sm:py-20 w-full">
           <div className="max-w-4xl">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 mb-8">
