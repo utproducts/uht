@@ -221,6 +221,8 @@ export default function EventsPage() {
     const params = new URLSearchParams(window.location.search);
     const cityParam = params.get('city');
     if (cityParam) setCityFilter(cityParam);
+    const tabParam = params.get('tab');
+    if (tabParam === 'past') setTab('past');
     const slug = params.get('register');
     if (slug) window.history.replaceState({}, '', window.location.pathname);
   }, []);

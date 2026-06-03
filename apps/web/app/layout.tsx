@@ -46,6 +46,7 @@ function Navigation() {
           </a>
           <div className="hidden md:flex items-center gap-8">
             <a href="/events" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Events</a>
+            <a href="/events?tab=past" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Past Events</a>
             <a href="/cities" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Cities</a>
             <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Book Ice</a>
             <a href="/sponsors" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sponsors</a>
@@ -81,6 +82,7 @@ function Footer() {
             <h4 className="text-sm font-semibold text-[#1d1d1f] mb-3">Events</h4>
             <div className="space-y-2">
               <a href="/events" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Upcoming Events</a>
+              <a href="/events?tab=past" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Past Events</a>
               <a href="/cities" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Cities</a>
               <a href="/book-ice" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Book Ice</a>
             </div>
