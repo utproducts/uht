@@ -149,6 +149,12 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Hero logo carousel scroll animation */
+@keyframes scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-33.333%); }
+}
+
 /* Custom scrollbar (webkit) */
 ::-webkit-scrollbar {
   width: 8px;
