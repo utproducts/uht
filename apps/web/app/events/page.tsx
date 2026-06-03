@@ -108,9 +108,9 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
   const accent = cityAccent(event.city);
 
   return (
-    <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] ${past ? 'opacity-75 hover:opacity-100' : ''}`}>
+    <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] flex flex-col h-full ${past ? 'opacity-75 hover:opacity-100' : ''}`}>
       <div className="h-1.5 w-full" style={{ background: `linear-gradient(to right, ${accent}, ${accent}88)` }} />
-      <div className="p-5">
+      <div className="p-5 flex flex-col flex-1">
         <div className="flex gap-4">
           <div className="shrink-0">
             {event.logo_url ? (
@@ -181,21 +181,21 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
           <p className="text-[13px] text-[#6e6e73] mt-3 line-clamp-2 leading-relaxed">{event.information}</p>
         )}
 
-        <div className="border-t border-[#f0f0f3] mt-4 pt-4" />
+        <div className="border-t border-[#f0f0f3] mt-auto pt-4" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {!past && scheduleLive ? (
             <>
-              <a href={`/events/${event.slug}/schedule`} className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all">View Schedule</a>
-              <a href={`/events/${event.slug}`} className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">Details</a>
+              <a href={`/events/${event.slug}/schedule`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all whitespace-nowrap">View Schedule</a>
+              <a href={`/events/${event.slug}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors whitespace-nowrap">More Info</a>
             </>
           ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
             <>
-              <a href={`/register?event=${event.slug}&eventId=${event.id}`} className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all">Register</a>
-              <a href={`/events/${event.slug}`} className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">Details</a>
+              <a href={`/register?event=${event.slug}&eventId=${event.id}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all whitespace-nowrap">Register</a>
+              <a href={`/events/${event.slug}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors whitespace-nowrap">More Info</a>
             </>
           ) : (
-            <a href={`/events/${event.slug}`} className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">Details</a>
+            <a href={`/events/${event.slug}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors whitespace-nowrap">More Info</a>
           )}
         </div>
       </div>
@@ -694,7 +694,7 @@ export default function EventsPage() {
                       ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
                         <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-white bg-[#003e79] group-hover:bg-[#002d5a] transition-colors">Register</span>
                       ) : (
-                        <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] group-hover:bg-[#e0efff] transition-colors">Details</span>
+                        <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] group-hover:bg-[#e0efff] transition-colors">More Info</span>
                       )}
                     </div>
                   </div>
