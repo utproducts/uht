@@ -115,24 +115,13 @@ const GALLERY_PHOTOS = [
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
-  const [totalTeams, setTotalTeams] = useState(0);
 
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch(`${API}/events?per_page=200`);
         const json = await res.json();
-        const data: Event[] = json.data || [];
-        setEvents(data);
-
-        // Count total unique registrations for social proof
-        try {
-          const regRes = await fetch(`${API}/registrations/all?per_page=1`);
-          const regJson = await regRes.json();
-          setTotalTeams(regJson.pagination?.total || 250);
-        } catch {
-          setTotalTeams(250);
-        }
+        setEvents(json.data || []);
       } catch {
         // fallback
       }
@@ -148,14 +137,12 @@ export default function HomePage() {
   const carouselEvents = allUpcoming.slice(0, 12);
 
   const totalEvents = events.length;
-  const uniqueCities = new Set(events.map(e => e.city)).size;
-  const uniqueStates = new Set(events.map(e => e.state)).size;
 
-  /* Counter refs */
-  const eventsCounter = useCountUp(totalEvents, 2000);
-  const teamsCounter = useCountUp(totalTeams, 2000);
-  const citiesCounter = useCountUp(uniqueCities, 1500);
-  const statesCounter = useCountUp(uniqueStates, 1200);
+  /* Counter refs — hardcoded stats for social proof */
+  const eventsCounter = useCountUp(totalEvents || 36, 2000);
+  const teamsCounter = useCountUp(1500, 2000);
+  const citiesCounter = useCountUp(7, 1500);
+  const statesCounter = useCountUp(4, 1200);
 
   return (
     <>
@@ -164,7 +151,7 @@ export default function HomePage() {
         {/* Background image with overlay */}
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1580748141549-71748dbe0bdc?w=1920&q=80"
+            src="/hero-bg.webp"
             alt=""
             className="w-full h-full object-cover opacity-40"
           />
@@ -268,7 +255,7 @@ export default function HomePage() {
       </section>
 
       {/* ═══════════════════════ STATS BAR ═══════════════════════ */}
-      <section className="relative bg-[#fafafa] -mt-16 z-10">
+      <section className="relative bg-[#fafafa] pt-6 z-10">
         <div className="max-w-5xl mx-auto px-6 sm:px-8">
           <div className="bg-white rounded-2xl shadow-[0_4px_40px_-10px_rgba(0,0,0,0.12)] border border-[#e8e8ed] grid grid-cols-2 md:grid-cols-4 divide-x divide-[#e8e8ed]">
             {[
