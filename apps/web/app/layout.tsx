@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import ActivityTracker from './components/ActivityTracker';
 import Navigation from './components/Navigation';
+import ChatWidget from './components/ChatWidget';
 
 export const metadata: Metadata = {
   title: 'Ultimate Hockey Tournaments',
@@ -81,17 +82,3 @@ function Footer() {
   );
 }
 
-function ChatWidget() {
-  return (
-    <div id="chat-widget" className="fixed bottom-6 right-6 z-50">
-      <button
-        className="w-14 h-14 bg-navy-700 rounded-full shadow-elevated flex items-center justify-center text-white hover:bg-navy-800 transition-all duration-200 hover:scale-105 active:scale-95"
-        aria-label="Chat with us"
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </button>
-    </div>
-  );
-}
