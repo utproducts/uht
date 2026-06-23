@@ -19,7 +19,9 @@ eventRoutes.get('/', optionalAuth, async (c) => {
   let query = `
     SELECT e.*, v.name as venue_name, v.city as venue_city,
     (SELECT COUNT(*) FROM event_divisions ed WHERE ed.event_id = e.id) as division_count,
-    (SELECT GROUP_CONCAT(DISTINCT ed2.age_group) FROM event_divisions ed2 WHERE ed2.event_id = e.id) as age_groups
+    (SELECT GROUP_CONCAT(DISTINCT ed2.age_group) FROM event_divisions ed2 WHERE ed2.event_id = e.id) as age_groups,
+    (SELECT MIN(ed3.price_cents) FROM event_divisions ed3 WHERE ed3.event_id = e.id AND ed3.price_cents > 0) as price_min_cents,
+    (SELECT MAX(ed4.price_cents) FROM event_divisions ed4 WHERE ed4.event_id = e.id AND ed4.price_cents > 0) as price_max_cents
     FROM events e
     LEFT JOIN venues v ON v.id = e.venue_id
     WHERE e.status NOT IN ('draft')

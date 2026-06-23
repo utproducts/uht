@@ -18,6 +18,8 @@ interface Event {
   age_groups: string | null;
   divisions: string | null;
   price_cents: number | null;
+  price_min_cents: number | null;
+  price_max_cents: number | null;
   deposit_cents: number | null;
   slots_count: number | null;
   is_sold_out: number;
@@ -39,6 +41,19 @@ function formatDateRange(start: string, end: string) {
 function formatPrice(cents: number | null) {
   if (!cents) return '';
   return `$${(cents / 100).toLocaleString()}`;
+}
+
+function formatPriceRange(event: Event): string {
+  const min = event.price_min_cents;
+  const max = event.price_max_cents;
+  // If we have division-level pricing, show a range
+  if (min && max && min > 0 && max > 0) {
+    if (min === max) return `$${(min / 100).toLocaleString()}`;
+    return `$${(min / 100).toLocaleString()} – $${(max / 100).toLocaleString()}`;
+  }
+  // Fall back to base event price
+  if (event.price_cents) return `$${(event.price_cents / 100).toLocaleString()}`;
+  return '';
 }
 
 function parseJsonArray(s: string | null): string[] {
@@ -159,9 +174,9 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
               {days} day{days !== 1 ? 's' : ''} away
             </span>
           )}
-          {event.price_cents && isUpcoming && (
+          {(event.price_min_cents || event.price_cents) && isUpcoming && (
             <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-bold text-[#003e79] bg-[#f0f7ff] border border-[#003e79]/10 ml-auto">
-              {formatPrice(event.price_cents)}
+              {formatPriceRange(event)}
             </span>
           )}
         </div>
@@ -564,14 +579,14 @@ export default function EventsPage() {
         ) : viewMode === 'list' ? (
           /* ── LIST VIEW ── */
           <div className="bg-white rounded-2xl shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] border border-[#e8e8ed] overflow-hidden">
-            <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_80px_200px] items-center px-5 py-3 border-b border-[#e8e8ed] bg-[#fafafa]">
+            <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_120px_200px] items-center px-5 py-3 border-b border-[#e8e8ed] bg-[#fafafa]">
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest"></span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Event</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Location</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Dates</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center">Status</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right">Price</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right"></span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Location</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Dates</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center pl-4 border-l border-[#e8e8ed]">Status</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right pl-4 border-l border-[#e8e8ed]">Price</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right pl-4 border-l border-[#e8e8ed]"></span>
             </div>
 
             {filtered.map((event, idx) => {
@@ -621,8 +636,8 @@ export default function EventsPage() {
                               <span className="w-1 h-1 bg-[#00ccff] rounded-full animate-pulse" />Next Up
                             </span>
                           )}
-                          {event.price_cents && isUp && (
-                            <span className="text-xs font-bold text-[#003e79]">{formatPrice(event.price_cents)}</span>
+                          {(event.price_min_cents || event.price_cents) && isUp && (
+                            <span className="text-xs font-bold text-[#003e79]">{formatPriceRange(event)}</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-2.5">
@@ -645,7 +660,7 @@ export default function EventsPage() {
                   </div>
 
                   {/* Desktop layout */}
-                  <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_80px_200px] items-center px-5 py-3.5">
+                  <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_120px_200px] items-center px-5 py-3.5">
                     <div>
                       {event.logo_url ? (
                         <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] border border-[#e8e8ed] flex items-center justify-center overflow-hidden group-hover:border-[#003e79]/20 transition-colors">
@@ -679,16 +694,16 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-sm text-[#3d3d3d]">{event.city}, {event.state}</div>
+                    <div className="text-sm text-[#3d3d3d] pl-4 border-l border-[#e8e8ed]">{event.city}, {event.state}</div>
 
-                    <div>
+                    <div className="pl-4 border-l border-[#e8e8ed]">
                       <p className="text-sm text-[#3d3d3d]">{formatDateRange(event.start_date, event.end_date)}</p>
                       {isUp && days > 0 && days <= 90 && (
                         <p className="text-[11px] text-[#86868b] mt-0.5">{days} day{days !== 1 ? 's' : ''} away</p>
                       )}
                     </div>
 
-                    <div className="text-center">
+                    <div className="text-center pl-4 border-l border-[#e8e8ed]">
                       {scheduleLive ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-700">
                           <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />Live
@@ -700,15 +715,15 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-right">
-                      {event.price_cents && isUp ? (
-                        <span className="text-sm font-bold text-[#003e79]">{formatPrice(event.price_cents)}</span>
+                    <div className="text-right pl-4 border-l border-[#e8e8ed]">
+                      {(event.price_min_cents || event.price_cents) && isUp ? (
+                        <span className="text-sm font-bold text-[#003e79]">{formatPriceRange(event)}</span>
                       ) : (
                         <span className="text-sm text-[#c7c7cc]">—</span>
                       )}
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-2 whitespace-nowrap pl-4 border-l border-[#e8e8ed]">
                       {!past && scheduleLive ? (
                         <>
                           <a href={`/events/${event.slug}`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
