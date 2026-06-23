@@ -4,7 +4,7 @@ export function generateStaticParams() {
   const roles = ['coach', 'manager', 'organization', 'parent', 'scorekeeper', 'referee'];
   const slugsByRole: Record<string, string[][]> = {
     coach: [['teams'], ['events'], ['roster'], ['schedule']],
-    manager: [['team'], ['events'], ['players'], ['payments']],
+    manager: [['teams'], ['events'], ['roster'], ['schedule']],
     organization: [['teams'], ['coaches'], ['rosters'], ['events']],
     parent: [['teams'], ['schedule'], ['results'], ['stats']],
     scorekeeper: [['assignments'], ['completed']],

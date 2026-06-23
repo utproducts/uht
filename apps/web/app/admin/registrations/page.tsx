@@ -85,9 +85,19 @@ interface TeamSearchResult {
 const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
   approved: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   pending: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+  awaiting_payment: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-400' },
   waitlisted: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
   rejected: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
   withdrawn: { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' },
+};
+
+const statusLabels: Record<string, string> = {
+  approved: 'Approved',
+  pending: 'Pending',
+  awaiting_payment: 'Awaiting Payment',
+  waitlisted: 'Waitlisted',
+  rejected: 'Rejected',
+  withdrawn: 'Withdrawn',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -95,7 +105,37 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${s.bg} ${s.text}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+const paymentColors: Record<string, { bg: string; text: string }> = {
+  paid: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  partial: { bg: 'bg-cyan-50', text: 'text-cyan-700' },
+  pay_later: { bg: 'bg-amber-50', text: 'text-amber-700' },
+  unpaid: { bg: 'bg-gray-100', text: 'text-gray-500' },
+  pending_payment: { bg: 'bg-orange-50', text: 'text-orange-600' },
+  refunded: { bg: 'bg-purple-50', text: 'text-purple-700' },
+  comp: { bg: 'bg-blue-50', text: 'text-blue-700' },
+};
+
+const paymentLabels: Record<string, string> = {
+  paid: 'Paid',
+  partial: 'Deposit Paid',
+  pay_later: 'Pay Later',
+  unpaid: 'Unpaid',
+  pending_payment: 'Processing',
+  refunded: 'Refunded',
+  comp: 'Comped',
+};
+
+function PaymentBadge({ status }: { status: string }) {
+  const s = paymentColors[status] || paymentColors.unpaid;
+  const label = paymentLabels[status] || status;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${s.bg} ${s.text}`}>
+      {label}
     </span>
   );
 }
@@ -816,18 +856,19 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
           <div>
             <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Registration Status</label>
             <div className="flex gap-2 flex-wrap">
-              {['pending', 'approved', 'waitlisted', 'rejected', 'withdrawn'].map(s => (
+              {['pending', 'approved', 'awaiting_payment', 'waitlisted', 'rejected', 'withdrawn'].map(s => (
                 <button key={s} onClick={() => setStatus(s)}
                   className={"px-4 py-2 rounded-xl text-sm font-semibold transition border-2 " +
                     (status === s
                       ? s === 'approved' ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                         : s === 'pending' ? 'border-amber-400 bg-amber-50 text-amber-700'
+                        : s === 'awaiting_payment' ? 'border-orange-400 bg-orange-50 text-orange-700'
                         : s === 'waitlisted' ? 'border-blue-400 bg-blue-50 text-blue-700'
                         : s === 'rejected' ? 'border-red-400 bg-red-50 text-red-700'
                         : 'border-gray-400 bg-gray-50 text-gray-700'
                       : 'border-[#e8e8ed] bg-white text-[#86868b] hover:border-[#c8c8cd]')}
                 >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                  {statusLabels[s] || s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
               ))}
             </div>
@@ -881,8 +922,11 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
                   className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
                   <option value="unpaid">Unpaid</option>
                   <option value="paid">Paid</option>
-                  <option value="partial">Partial</option>
+                  <option value="partial">Deposit Paid</option>
+                  <option value="pay_later">Pay Later</option>
+                  <option value="pending_payment">Processing</option>
                   <option value="refunded">Refunded</option>
+                  <option value="comp">Comped</option>
                   <option value="comp">Comp</option>
                 </select>
               </div>
@@ -1077,7 +1121,12 @@ export default function AdminRegistrationsPage() {
 
   // Filters
   let filtered = registrations;
-  if (statusFilter) filtered = filtered.filter(r => r.status === statusFilter);
+  if (statusFilter) {
+    filtered = filtered.filter(r => r.status === statusFilter);
+  } else {
+    // "All" filter excludes awaiting_payment by default
+    filtered = filtered.filter(r => r.status !== 'awaiting_payment');
+  }
   if (eventFilter) filtered = filtered.filter(r => r.event_id === eventFilter);
   if (search) {
     const q = search.toLowerCase();
@@ -1093,7 +1142,8 @@ export default function AdminRegistrationsPage() {
   const pending = registrations.filter(r => r.status === 'pending').length;
   const denied = registrations.filter(r => r.status === 'rejected' || r.status === 'denied').length;
   const waitlisted = registrations.filter(r => r.status === 'waitlisted').length;
-  const total = registrations.length;
+  const awaitingPayment = registrations.filter(r => r.status === 'awaiting_payment').length;
+  const total = registrations.filter(r => r.status !== 'awaiting_payment').length;
 
   // Unique events for event filter dropdown
   const uniqueEvents = Array.from(new Map(registrations.map(r => [r.event_id, { id: r.event_id, name: (r as any).event_name || 'Unknown' }])).values())
@@ -1110,9 +1160,10 @@ export default function AdminRegistrationsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
-            { label: 'Total', value: total, color: 'text-[#003e79]' },
+            { label: 'Registered', value: total, color: 'text-[#003e79]' },
             { label: 'Approved', value: approved, color: 'text-emerald-600' },
             { label: 'Pending', value: pending, color: 'text-amber-600' },
+            { label: 'Awaiting Pay', value: awaitingPayment, color: 'text-orange-500' },
             { label: 'Waitlisted', value: waitlisted, color: 'text-blue-600' },
             { label: 'Denied', value: denied, color: 'text-red-600' },
           ].map(s => (
@@ -1132,6 +1183,7 @@ export default function AdminRegistrationsPage() {
             { key: '', label: 'All', count: total },
             { key: 'approved', label: 'Approved', count: approved },
             { key: 'pending', label: 'Pending', count: pending },
+            { key: 'awaiting_payment', label: 'Awaiting Pay', count: awaitingPayment },
             { key: 'waitlisted', label: 'Waitlisted', count: waitlisted },
             { key: 'rejected', label: 'Denied', count: denied },
           ].map(s => (
@@ -1201,6 +1253,7 @@ export default function AdminRegistrationsPage() {
                   <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Event</th>
                   <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden md:table-cell">Division</th>
                   <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Status</th>
+                  <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden md:table-cell">Payment</th>
                   <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden lg:table-cell">Date</th>
                   <th className="text-right px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Actions</th>
                 </tr>
@@ -1228,6 +1281,9 @@ export default function AdminRegistrationsPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={reg.status} />
+                    </td>
+                    <td className="px-4 py-3 text-center hidden md:table-cell">
+                      <PaymentBadge status={reg.payment_status || 'unpaid'} />
                     </td>
                     <td className="px-4 py-3 text-center hidden lg:table-cell">
                       <span className="text-xs text-[#86868b]">{formatDate(reg.created_at)}</span>

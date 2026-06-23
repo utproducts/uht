@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import RosterImport from '../components/RosterImport';
 
 // Fallbacks in case API is unreachable
 const FALLBACK_AGE_GROUPS = ['Mite (8U)', 'Squirt (10U)', 'Pee Wee (12U)', 'Bantam (14U)', '16U / JV', '18U / Varsity'];
@@ -54,14 +55,40 @@ const initialForm: FormData = {
   wins: '', losses: '', ties: '', goalsFor: '', goalsAgainst: '',
 };
 
+function getBackLabel(path: string): string {
+  if (path.includes('/dashboard/coach')) return 'Back to My Teams';
+  if (path.includes('/dashboard/manager')) return 'Back to Dashboard';
+  if (path.includes('/dashboard')) return 'Back to Dashboard';
+  if (path.includes('/register')) return 'Back to Registration';
+  return 'Back to Events';
+}
+
 export default function CreateTeamPage() {
   const router = useRouter();
   const [form, setForm] = useState<FormData>(initialForm);
-  const [step, setStep] = useState(1); // 1 = Team Info, 2 = Coaching Staff, 3 = USA Hockey & Record
+  const [step, setStep] = useState(1); // 1 = Team Info, 2 = Coaching Staff, 3 = USA Hockey & Record, 4 = Roster
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [redirectAfter, setRedirectAfter] = useState<string | null>(null);
+  const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
+  const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  // Roster state
+  const [rosterPlayers, setRosterPlayers] = useState<Array<{
+    id?: string; firstName: string; lastName: string; jerseyNumber: string;
+    position: string; shoots: string; usaHockeyNumber: string;
+  }>>([]);
+  const [importingRoster, setImportingRoster] = useState(false);
+  const [rosterError, setRosterError] = useState('');
+  const [pasteMode, setPasteMode] = useState(false);
+  const [pastedText, setPastedText] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newPlayer, setNewPlayer] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
+
+  // Back navigation
+  const [backLink, setBackLink] = useState<{ href: string; label: string }>({ href: '/events', label: 'Back to Events' });
 
   // Dynamic lookups from API
   const [ageGroups, setAgeGroups] = useState<string[]>(FALLBACK_AGE_GROUPS);
@@ -81,6 +108,10 @@ export default function CreateTeamPage() {
     const params = new URLSearchParams(window.location.search);
     const redir = params.get('redirect');
     if (redir) setRedirectAfter(redir);
+
+    // Track where the user came from for the back button
+    const fromParam = params.get('from');
+    if (fromParam) setBackLink({ href: fromParam, label: getBackLabel(fromParam) });
 
     // Load dynamic lookups
     (async () => {
@@ -150,9 +181,13 @@ export default function CreateTeamPage() {
     };
 
     try {
+      const authToken = localStorage.getItem('uht_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
       const res = await fetch(`${API}/teams`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
       const data = await res.json() as any;
@@ -167,22 +202,135 @@ export default function CreateTeamPage() {
       existingTeams.push({ id: data.data.id, name: form.name.trim(), ageGroup: form.ageGroup });
       localStorage.setItem('uht_teams', JSON.stringify(existingTeams));
 
-      setSuccess(true);
-      setTimeout(() => {
-        if (redirectAfter) {
-          router.push(redirectAfter);
-        } else {
-          const role = localStorage.getItem('uht_role') || 'coach';
-          router.push('/dashboard/' + role);
-        }
-      }, 1500);
+      setCreatedTeamId(data.data.id);
+      setCreatedInviteCode(data.data.inviteCode || null);
+      setSaving(false);
+
+      // Auto-import from USA Hockey URL if provided
+      if (form.usaHockeyRosterUrl.trim()) {
+        setStep(4);
+        handleImportFromUrl(data.data.id);
+      } else {
+        setStep(4);
+      }
     } catch (err) {
       setError('Network error. Please try again.');
       setSaving(false);
     }
   };
 
+  const handleImportFromUrl = async (teamId: string) => {
+    setImportingRoster(true);
+    setRosterError('');
+    try {
+      const authToken = localStorage.getItem('uht_token');
+      const res = await fetch(`${API}/teams/${teamId}/import-roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ url: form.usaHockeyRosterUrl.trim() }),
+      });
+      const data = await res.json() as any;
+      if (data.success && data.data?.players?.length > 0) {
+        setRosterPlayers(data.data.players.map((p: any) => ({
+          id: p.id, firstName: p.firstName, lastName: p.lastName,
+          jerseyNumber: p.jerseyNumber || '', position: p.position || '',
+          shoots: p.shoots || '', usaHockeyNumber: p.usaHockeyNumber || '',
+        })));
+      } else {
+        setRosterError(data.error || 'No players found. Try pasting your roster or adding players manually.');
+      }
+    } catch {
+      setRosterError('Failed to import. Try pasting your roster or adding players manually.');
+    }
+    setImportingRoster(false);
+  };
+
+  const handlePasteImport = async () => {
+    if (!pastedText.trim() || !createdTeamId) return;
+    setImportingRoster(true);
+    setRosterError('');
+    try {
+      const authToken = localStorage.getItem('uht_token');
+      const res = await fetch(`${API}/teams/${createdTeamId}/import-roster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ pastedData: pastedText }),
+      });
+      const data = await res.json() as any;
+      if (data.success && data.data?.players?.length > 0) {
+        setRosterPlayers(prev => [...prev, ...data.data.players.map((p: any) => ({
+          id: p.id, firstName: p.firstName, lastName: p.lastName,
+          jerseyNumber: p.jerseyNumber || '', position: p.position || '',
+          shoots: p.shoots || '', usaHockeyNumber: p.usaHockeyNumber || '',
+        }))]);
+        setPastedText('');
+        setPasteMode(false);
+      } else {
+        setRosterError(data.error || 'Could not parse roster data.');
+      }
+    } catch {
+      setRosterError('Failed to import pasted data.');
+    }
+    setImportingRoster(false);
+  };
+
+  const handleAddPlayer = async () => {
+    if (!newPlayer.firstName.trim() || !newPlayer.lastName.trim() || !createdTeamId) return;
+    try {
+      const authToken = localStorage.getItem('uht_token');
+      const res = await fetch(`${API}/teams/${createdTeamId}/players`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify(newPlayer),
+      });
+      const data = await res.json() as any;
+      if (data.success) {
+        setRosterPlayers(prev => [...prev, { id: data.data.id, ...newPlayer }]);
+        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
+        setShowAddForm(false);
+      }
+    } catch {}
+  };
+
+  const handleRemovePlayer = async (playerId: string) => {
+    if (!createdTeamId) return;
+    try {
+      const authToken = localStorage.getItem('uht_token');
+      await fetch(`${API}/teams/${createdTeamId}/players/${playerId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setRosterPlayers(prev => prev.filter(p => p.id !== playerId));
+    } catch {}
+  };
+
+  const handleFinish = () => {
+    setSuccess(true);
+  };
+
+  const goToDashboard = () => {
+    if (redirectAfter) {
+      router.push(redirectAfter);
+    } else {
+      const role = localStorage.getItem('uht_role') || 'coach';
+      router.push('/dashboard/' + role + '/teams');
+    }
+  };
+
+  const copyInviteCode = () => {
+    if (createdInviteCode) {
+      navigator.clipboard.writeText(createdInviteCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2500);
+    }
+  };
+
   if (success) {
+    const managerEmail = form.managerEmail?.trim();
+    const coachEmail = form.headCoachEmail?.trim();
+    const creatorEmail = (() => { try { const u = JSON.parse(localStorage.getItem('uht_user') || '{}'); return u.email || ''; } catch { return ''; } })();
+    const invitedSomeone = (managerEmail && managerEmail !== creatorEmail) || (coachEmail && coachEmail !== creatorEmail);
+
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
         <nav className="bg-navy-700 px-6 py-4">
@@ -192,14 +340,70 @@ export default function CreateTeamPage() {
           </a>
         </nav>
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+          <div className="w-full max-w-md">
+            {/* Success header */}
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-[#1d1d1f]">{form.name || 'Team'} Created!</h2>
             </div>
-            <h2 className="text-2xl font-semibold text-[#1d1d1f]">Team Created!</h2>
-            <p className="text-[#6e6e73] mt-2">Redirecting you back...</p>
+
+            {/* Invite code card */}
+            {createdInviteCode && (
+              <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden mb-5">
+                <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-5 py-3">
+                  <p className="text-white font-semibold text-sm flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                    Your Team Invite Code
+                  </p>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <div className="bg-[#f5f5f7] rounded-xl px-6 py-3 border-2 border-dashed border-[#d2d2d7]">
+                      <span className="text-3xl font-mono font-bold tracking-[0.3em] text-[#003e79] select-all">{createdInviteCode}</span>
+                    </div>
+                    <button onClick={copyInviteCode}
+                      className={"flex items-center gap-1.5 px-4 py-3 rounded-xl text-sm font-semibold transition " +
+                        (codeCopied ? "bg-green-100 text-green-700" : "bg-[#003e79] text-white hover:bg-[#002d5a]")}>
+                      {codeCopied ? (
+                        <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Copied!</>
+                      ) : (
+                        <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy</>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-sm text-[#6e6e73] text-center leading-relaxed">
+                    Share this code with your {form.managerEmail ? 'coach' : 'manager'} or other team staff so they can link to this team when they create their account.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Sent invite notice */}
+            {invitedSomeone && (
+              <div className="bg-[#f0f7ff] border border-[#003e79]/15 rounded-xl p-4 mb-5 flex items-start gap-3">
+                <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center text-white shrink-0 mt-0.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#003e79]">Invite email sent!</p>
+                  <p className="text-xs text-[#6e6e73] mt-0.5">
+                    {managerEmail && managerEmail !== creatorEmail && <>We sent an invite to <span className="font-medium">{managerEmail}</span>. </>}
+                    {coachEmail && coachEmail !== creatorEmail && <>We sent an invite to <span className="font-medium">{coachEmail}</span>. </>}
+                    They&apos;ll be automatically linked to {form.name || 'this team'} when they sign up.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Continue button */}
+            <button onClick={goToDashboard}
+              className="w-full py-3.5 rounded-xl bg-[#003e79] text-white text-base font-semibold hover:bg-[#002d5a] transition">
+              Go to My Teams
+            </button>
           </div>
         </div>
       </div>
@@ -213,7 +417,10 @@ export default function CreateTeamPage() {
           <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
           <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
         </a>
-        <a href="/events" className="text-white/70 text-sm hover:text-white transition-colors">Back to Events</a>
+        <a href={backLink.href} className="text-white/70 text-sm hover:text-white transition-colors flex items-center gap-1">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          {backLink.label}
+        </a>
       </nav>
 
       <div className="flex-1 flex items-start justify-center p-6 pt-8">
@@ -226,7 +433,7 @@ export default function CreateTeamPage() {
 
           {/* Step Indicator */}
           <div className="flex items-center justify-center gap-2 mb-8">
-            {[1, 2, 3].map(s => (
+            {[1, 2, 3, 4].map(s => (
               <div key={s} className="flex items-center gap-2">
                 <div className={"w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors " +
                   (step === s ? "bg-brand-500 text-white" : step > s ? "bg-green-500 text-white" : "bg-gray-200 text-[#6e6e73]")}>
@@ -234,7 +441,7 @@ export default function CreateTeamPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                   ) : s}
                 </div>
-                {s < 3 && <div className={"w-12 h-0.5 " + (step > s ? "bg-green-500" : "bg-gray-200")} />}
+                {s < 4 && <div className={"w-8 h-0.5 " + (step > s ? "bg-green-500" : "bg-gray-200")} />}
               </div>
             ))}
           </div>
@@ -510,7 +717,71 @@ export default function CreateTeamPage() {
                   <button onClick={handleSubmit} disabled={saving}
                     className={"px-10 py-3 rounded-xl font-medium text-sm transition-all " +
                       (saving ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-brand-500 text-white hover:bg-brand-600")}>
-                    {saving ? 'Creating Team...' : 'Create Team'}
+                    {saving ? 'Creating Team...' : 'Next: Add Roster'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 4: Roster */}
+            {step === 4 && createdTeamId && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">Team Roster</h2>
+                    <p className="text-sm text-[#6e6e73]">Add your players — upload a file, paste from a spreadsheet, import from USA Hockey, or add manually</p>
+                  </div>
+                  <span className="text-xs text-[#86868b] bg-gray-100 px-3 py-1 rounded-full">{rosterPlayers.length} players</span>
+                </div>
+
+                <RosterImport
+                  teamId={createdTeamId}
+                  compact
+                  onPlayersAdded={(newPlayers) => {
+                    setRosterPlayers(prev => [...prev, ...newPlayers]);
+                  }}
+                />
+
+                {/* Roster Table */}
+                {rosterPlayers.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-left">
+                          <th className="px-4 py-2.5 font-medium text-[#6e6e73] w-12">#</th>
+                          <th className="px-4 py-2.5 font-medium text-[#6e6e73]">Name</th>
+                          <th className="px-4 py-2.5 font-medium text-[#6e6e73]">Position</th>
+                          <th className="px-4 py-2.5 font-medium text-[#6e6e73]">Shoots</th>
+                          <th className="px-4 py-2.5 font-medium text-[#6e6e73] w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rosterPlayers.map((p, i) => (
+                          <tr key={p.id || i} className="border-t border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-2.5 text-[#1d1d1f] font-medium">{p.jerseyNumber || '—'}</td>
+                            <td className="px-4 py-2.5 text-[#1d1d1f]">{p.firstName} {p.lastName}</td>
+                            <td className="px-4 py-2.5 text-[#6e6e73] capitalize">{p.position || '—'}</td>
+                            <td className="px-4 py-2.5 text-[#6e6e73] capitalize">{p.shoots || '—'}</td>
+                            <td className="px-4 py-2.5">
+                              {p.id && (
+                                <button onClick={() => handleRemovePlayer(p.id!)}
+                                  className="text-red-400 hover:text-red-600 transition">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="pt-4 flex justify-between items-center">
+                  <p className="text-xs text-[#86868b]">You can always add more players later from your dashboard.</p>
+                  <button onClick={handleFinish}
+                    className="px-10 py-3 rounded-xl font-medium text-sm bg-brand-500 text-white hover:bg-brand-600 transition-all">
+                    {rosterPlayers.length > 0 ? 'Finish' : 'Skip & Finish'}
                   </button>
                 </div>
               </div>

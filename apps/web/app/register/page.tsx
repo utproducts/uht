@@ -560,9 +560,15 @@ export default function RegisterPage() {
   const teamsToPrice = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
   const getTeamPrice = (team: any) => {
     if (!event) return 0;
-    // Try to match division price by age group
-    const div = (event as any).divisions?.find((d: any) => d.age_group === team.age_group);
-    if (div?.price_cents) return div.price_cents;
+    // divisions might be a JSON string, an array, or null
+    let divs = (event as any).divisions;
+    if (typeof divs === 'string') {
+      try { divs = JSON.parse(divs); } catch { divs = null; }
+    }
+    if (Array.isArray(divs)) {
+      const div = divs.find((d: any) => d && typeof d === 'object' && d.age_group === team.age_group);
+      if (div?.price_cents) return div.price_cents;
+    }
     return event.price_cents || 0;
   };
   const totalPriceCents = teamsToPrice.reduce((sum, t) => sum + getTeamPrice(t), 0);

@@ -240,12 +240,17 @@ export default function EventsPage() {
   }, []);
 
   // Split into upcoming / past by end_date
+  // Only show past events from Oct 2026 onward (current season)
+  const PAST_CUTOFF = '2026-10-01';
   const { upcoming, past } = useMemo(() => {
     const u: Event[] = [];
     const p: Event[] = [];
     for (const ev of allEvents) {
-      if (isEventPast(ev)) p.push(ev);
-      else u.push(ev);
+      if (isEventPast(ev)) {
+        if (ev.start_date >= PAST_CUTOFF) p.push(ev);
+      } else {
+        u.push(ev);
+      }
     }
     u.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
     p.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
@@ -559,7 +564,7 @@ export default function EventsPage() {
         ) : viewMode === 'list' ? (
           /* ── LIST VIEW ── */
           <div className="bg-white rounded-2xl shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] border border-[#e8e8ed] overflow-hidden">
-            <div className="hidden lg:grid lg:grid-cols-[80px_1fr_140px_160px_120px_100px_130px] items-center px-5 py-3 border-b border-[#e8e8ed] bg-[#fafafa]">
+            <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_80px_200px] items-center px-5 py-3 border-b border-[#e8e8ed] bg-[#fafafa]">
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest"></span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Event</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Location</span>
@@ -578,9 +583,8 @@ export default function EventsPage() {
               const isFirst = isNextUpFirst && idx === 0;
 
               return (
-                <a
+                <div
                   key={event.id}
-                  href={`/events/${event.slug}`}
                   className={`block group border-b border-[#f0f0f3] last:border-b-0 hover:bg-[#f8fbff] transition-colors ${past ? 'opacity-70 hover:opacity-100' : ''}`}
                 >
                   {/* Mobile layout */}
@@ -598,7 +602,9 @@ export default function EventsPage() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-bold text-[#1d1d1f] group-hover:text-[#003e79] transition-colors truncate">{event.name}</h3>
+                        <a href={`/events/${event.slug}`} className="block">
+                          <h3 className="text-sm font-bold text-[#1d1d1f] hover:text-[#003e79] transition-colors truncate">{event.name}</h3>
+                        </a>
                         <p className="text-xs text-[#6e6e73] mt-0.5">{event.city}, {event.state} · {formatDateRange(event.start_date, event.end_date)}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           {scheduleLive ? (
@@ -619,13 +625,27 @@ export default function EventsPage() {
                             <span className="text-xs font-bold text-[#003e79]">{formatPrice(event.price_cents)}</span>
                           )}
                         </div>
+                        <div className="flex items-center gap-2 mt-2.5">
+                          {!past && scheduleLive ? (
+                            <>
+                              <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
+                              <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                            </>
+                          ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
+                            <>
+                              <a href={`/register?event=${event.slug}&eventId=${event.id}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] transition-colors">Register</a>
+                              <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                            </>
+                          ) : (
+                            <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                          )}
+                        </div>
                       </div>
-                      <svg className="w-4 h-4 text-[#c7c7cc] group-hover:text-[#003e79] shrink-0 mt-1 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                     </div>
                   </div>
 
                   {/* Desktop layout */}
-                  <div className="hidden lg:grid lg:grid-cols-[80px_1fr_140px_160px_120px_100px_130px] items-center px-5 py-3.5">
+                  <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_80px_200px] items-center px-5 py-3.5">
                     <div>
                       {event.logo_url ? (
                         <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] border border-[#e8e8ed] flex items-center justify-center overflow-hidden group-hover:border-[#003e79]/20 transition-colors">
@@ -640,7 +660,7 @@ export default function EventsPage() {
 
                     <div className="min-w-0 pr-4">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-[#1d1d1f] group-hover:text-[#003e79] transition-colors truncate">{event.name}</h3>
+                        <a href={`/events/${event.slug}`} className="text-sm font-bold text-[#1d1d1f] hover:text-[#003e79] transition-colors truncate">{event.name}</a>
                         {isFirst && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f7ff] text-[#003e79] border border-[#003e79]/10 shrink-0">
                             <span className="w-1 h-1 bg-[#00ccff] rounded-full animate-pulse" />Next Up
@@ -688,17 +708,23 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-right">
+                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       {!past && scheduleLive ? (
-                        <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-600 group-hover:bg-emerald-700 transition-colors">Schedule</span>
+                        <>
+                          <a href={`/events/${event.slug}`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
+                          <a href={`/events/${event.slug}`} className="inline-block px-3 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                        </>
                       ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
-                        <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-white bg-[#003e79] group-hover:bg-[#002d5a] transition-colors">Register</span>
+                        <>
+                          <a href={`/register?event=${event.slug}&eventId=${event.id}`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] transition-colors">Register</a>
+                          <a href={`/events/${event.slug}`} className="inline-block px-3 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                        </>
                       ) : (
-                        <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] group-hover:bg-[#e0efff] transition-colors">More Info</span>
+                        <a href={`/events/${event.slug}`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
                       )}
                     </div>
                   </div>
-                </a>
+                </div>
               );
             })}
           </div>

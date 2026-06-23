@@ -34,7 +34,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </a>
         <div className="flex items-center gap-4">
           <span className="text-white/60 text-sm font-medium">Admin Dashboard</span>
-          <a href="/login" className="text-white/40 text-sm hover:text-white transition-colors">Sign out</a>
+          <button onClick={() => { localStorage.removeItem('uht_token'); localStorage.removeItem('uht_user'); localStorage.removeItem('uht_role'); window.location.href = '/login'; }} className="text-white/40 text-sm hover:text-white transition-colors">Sign out</button>
         </div>
       </header>
 

@@ -175,12 +175,13 @@ stripeRoutes.post('/confirm-payment', async (c) => {
       for (const regId of regIds) {
         const paymentStatus = paymentChoice === 'pay_deposit' ? 'partial' : 'paid';
 
+        // Update payment info AND promote status from 'awaiting_payment' to 'pending' (registered, awaiting admin review)
         await db.prepare(
-          `UPDATE event_registrations SET payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+          `UPDATE event_registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
         ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
 
         await db.prepare(
-          `UPDATE registrations SET payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+          `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
         ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
       }
 
@@ -219,12 +220,13 @@ stripeRoutes.post('/webhook', async (c) => {
     for (const regId of regIds) {
       const paymentStatus = paymentChoice === 'pay_deposit' ? 'partial' : 'paid';
 
+      // Promote status from 'awaiting_payment' to 'pending' on successful payment
       await db.prepare(
-        `UPDATE event_registrations SET payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+        `UPDATE event_registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
       ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
 
       await db.prepare(
-        `UPDATE registrations SET payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+        `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
       ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
     }
   }

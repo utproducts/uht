@@ -6,7 +6,85 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 
 export const organizationRoutes = new Hono<{ Bindings: Env }>();
 
+// ==================
+// Dashboard — comprehensive stats for org owner
+// ==================
+organizationRoutes.get('/dashboard', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Get org(s) owned by user
+  const orgs = await db.prepare(`
+    SELECT o.* FROM organizations o WHERE o.owner_id = ? AND o.is_active = 1
+  `).bind(user.id).all();
+
+  if (!orgs.results.length) {
+    return c.json({ success: true, data: { org: null, stats: null } });
+  }
+
+  const org = orgs.results[0] as any;
+  const orgId = org.id;
+
+  // Aggregate stats in parallel
+  const [teamCount, playerCount, coachCount, managerCount, eventCount, balanceDue] = await Promise.all([
+    db.prepare('SELECT COUNT(*) as c FROM teams WHERE organization_id = ? AND is_active = 1').bind(orgId).first<{ c: number }>(),
+    db.prepare(`
+      SELECT COUNT(DISTINCT tp.player_id) as c FROM team_players tp
+      JOIN teams t ON t.id = tp.team_id WHERE t.organization_id = ? AND t.is_active = 1 AND tp.status = 'active'
+    `).bind(orgId).first<{ c: number }>(),
+    db.prepare(`
+      SELECT COUNT(DISTINCT tc.user_id) as c FROM team_coaches tc
+      JOIN teams t ON t.id = tc.team_id WHERE t.organization_id = ? AND t.is_active = 1
+    `).bind(orgId).first<{ c: number }>(),
+    db.prepare(`
+      SELECT COUNT(DISTINCT tm.user_id) as c FROM team_managers tm
+      JOIN teams t ON t.id = tm.team_id WHERE t.organization_id = ? AND t.is_active = 1
+    `).bind(orgId).first<{ c: number }>(),
+    db.prepare(`
+      SELECT COUNT(DISTINCT r.event_id) as c FROM registrations r
+      JOIN teams t ON t.id = r.team_id WHERE t.organization_id = ? AND t.is_active = 1 AND r.status != 'cancelled'
+    `).bind(orgId).first<{ c: number }>(),
+    db.prepare(`
+      SELECT COALESCE(SUM(CASE WHEN r.payment_status != 'paid' THEN COALESCE(ed.price, 0) ELSE 0 END), 0) as c
+      FROM registrations r
+      JOIN teams t ON t.id = r.team_id
+      LEFT JOIN event_divisions ed ON ed.event_id = r.event_id AND ed.id = r.division_id
+      WHERE t.organization_id = ? AND t.is_active = 1 AND r.status != 'cancelled'
+    `).bind(orgId).first<{ c: number }>(),
+  ]);
+
+  // Recent registrations (last 5)
+  const recentRegs = await db.prepare(`
+    SELECT r.id, r.status, r.payment_status, r.created_at,
+      t.name as team_name, t.age_group,
+      e.name as event_name, e.start_date, e.end_date
+    FROM registrations r
+    JOIN teams t ON t.id = r.team_id
+    JOIN events e ON e.id = r.event_id
+    WHERE t.organization_id = ? AND t.is_active = 1
+    ORDER BY r.created_at DESC LIMIT 5
+  `).bind(orgId).all();
+
+  return c.json({
+    success: true,
+    data: {
+      org,
+      stats: {
+        teams: teamCount?.c || 0,
+        players: playerCount?.c || 0,
+        coaches: coachCount?.c || 0,
+        managers: managerCount?.c || 0,
+        events: eventCount?.c || 0,
+        balanceDueCents: balanceDue?.c || 0,
+      },
+      recentRegistrations: recentRegs.results,
+    },
+  });
+});
+
+// ==================
 // Get current user's organization(s)
+// ==================
 organizationRoutes.get('/mine', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -21,7 +99,390 @@ organizationRoutes.get('/mine', authMiddleware, async (c) => {
   return c.json({ success: true, data: result.results });
 });
 
-// Get org with teams
+// ==================
+// Get org teams with full detail (coaches, managers, player count, registrations)
+// ==================
+organizationRoutes.get('/:id/teams-full', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const db = c.env.DB;
+
+  const teams = await db.prepare(`
+    SELECT t.*,
+      t.invite_code,
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
+      (SELECT COUNT(*) FROM registrations r WHERE r.team_id = t.id AND r.status != 'cancelled') as registration_count
+    FROM teams t WHERE t.organization_id = ? AND t.is_active = 1
+    ORDER BY t.age_group ASC, t.name ASC
+  `).bind(orgId).all();
+
+  // Get coaches and managers for each team
+  const teamIds = (teams.results as any[]).map(t => t.id);
+  const teamsWithStaff = [];
+
+  for (const team of teams.results as any[]) {
+    const coaches = await db.prepare(`
+      SELECT tc.role as coach_role, u.id as user_id, u.first_name, u.last_name, u.email, u.phone
+      FROM team_coaches tc JOIN users u ON u.id = tc.user_id
+      WHERE tc.team_id = ?
+    `).bind(team.id).all();
+
+    const managers = await db.prepare(`
+      SELECT u.id as user_id, u.first_name, u.last_name, u.email, u.phone
+      FROM team_managers tm JOIN users u ON u.id = tm.user_id
+      WHERE tm.team_id = ?
+    `).bind(team.id).all();
+
+    // Get upcoming events for this team
+    const upcomingEvents = await db.prepare(`
+      SELECT e.name, e.start_date, e.end_date, r.status as reg_status, r.payment_status
+      FROM registrations r JOIN events e ON e.id = r.event_id
+      WHERE r.team_id = ? AND r.status != 'cancelled' AND e.end_date >= date('now')
+      ORDER BY e.start_date ASC LIMIT 3
+    `).bind(team.id).all();
+
+    teamsWithStaff.push({
+      ...team,
+      coaches: coaches.results,
+      managers: managers.results,
+      upcomingEvents: upcomingEvents.results,
+    });
+  }
+
+  return c.json({ success: true, data: teamsWithStaff });
+});
+
+// ==================
+// Get org events — all events any org team is registered for
+// ==================
+organizationRoutes.get('/:id/events', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const db = c.env.DB;
+
+  const events = await db.prepare(`
+    SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+      GROUP_CONCAT(DISTINCT t.name) as team_names,
+      COUNT(DISTINCT r.team_id) as teams_registered,
+      SUM(CASE WHEN r.payment_status = 'paid' THEN 1 ELSE 0 END) as teams_paid,
+      SUM(CASE WHEN r.status = 'approved' THEN 1 ELSE 0 END) as teams_approved
+    FROM events e
+    JOIN registrations r ON r.event_id = e.id AND r.status != 'cancelled'
+    JOIN teams t ON t.id = r.team_id AND t.organization_id = ? AND t.is_active = 1
+    GROUP BY e.id
+    ORDER BY e.start_date DESC
+  `).bind(orgId).all();
+
+  // For each event, get individual team registrations
+  const eventsWithTeams = [];
+  for (const evt of events.results as any[]) {
+    const teamRegs = await db.prepare(`
+      SELECT t.id as team_id, t.name as team_name, t.age_group,
+        r.status as reg_status, r.payment_status, r.created_at as reg_date,
+        ed.age_group as division_age, ed.level as division_level
+      FROM registrations r
+      JOIN teams t ON t.id = r.team_id AND t.organization_id = ? AND t.is_active = 1
+      LEFT JOIN event_divisions ed ON ed.id = r.division_id
+      WHERE r.event_id = ? AND r.status != 'cancelled'
+      ORDER BY t.age_group ASC, t.name ASC
+    `).bind(orgId, evt.id).all();
+
+    eventsWithTeams.push({ ...evt, teamRegistrations: teamRegs.results });
+  }
+
+  return c.json({ success: true, data: eventsWithTeams });
+});
+
+// ==================
+// Get all staff (coaches + managers) across org teams
+// ==================
+organizationRoutes.get('/:id/staff', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const db = c.env.DB;
+
+  const coaches = await db.prepare(`
+    SELECT u.id, u.first_name, u.last_name, u.email, u.phone,
+      tc.role as coach_role, t.id as team_id, t.name as team_name, t.age_group,
+      'coach' as staff_type
+    FROM team_coaches tc
+    JOIN users u ON u.id = tc.user_id
+    JOIN teams t ON t.id = tc.team_id AND t.organization_id = ? AND t.is_active = 1
+    ORDER BY u.last_name ASC
+  `).bind(orgId).all();
+
+  const managers = await db.prepare(`
+    SELECT u.id, u.first_name, u.last_name, u.email, u.phone,
+      t.id as team_id, t.name as team_name, t.age_group,
+      'manager' as staff_type
+    FROM team_managers tm
+    JOIN users u ON u.id = tm.user_id
+    JOIN teams t ON t.id = tm.team_id AND t.organization_id = ? AND t.is_active = 1
+    ORDER BY u.last_name ASC
+  `).bind(orgId).all();
+
+  // Group by person
+  const staffMap = new Map<string, any>();
+  for (const c of coaches.results as any[]) {
+    if (!staffMap.has(c.id)) {
+      staffMap.set(c.id, { id: c.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone, teams: [] });
+    }
+    staffMap.get(c.id).teams.push({ teamId: c.team_id, teamName: c.team_name, ageGroup: c.age_group, role: `${c.coach_role} coach` });
+  }
+  for (const m of managers.results as any[]) {
+    if (!staffMap.has(m.id)) {
+      staffMap.set(m.id, { id: m.id, firstName: m.first_name, lastName: m.last_name, email: m.email, phone: m.phone, teams: [] });
+    }
+    staffMap.get(m.id).teams.push({ teamId: m.team_id, teamName: m.team_name, ageGroup: m.age_group, role: 'manager' });
+  }
+
+  return c.json({ success: true, data: Array.from(staffMap.values()) });
+});
+
+// ==================
+// Get all players across org teams
+// ==================
+organizationRoutes.get('/:id/rosters', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const db = c.env.DB;
+
+  const players = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.date_of_birth, p.usa_hockey_number,
+      p.jersey_number, p.position, p.shoots,
+      t.id as team_id, t.name as team_name, t.age_group
+    FROM team_players tp
+    JOIN players p ON p.id = tp.player_id
+    JOIN teams t ON t.id = tp.team_id AND t.organization_id = ? AND t.is_active = 1
+    WHERE tp.status = 'active'
+    ORDER BY t.age_group ASC, t.name ASC, p.last_name ASC
+  `).bind(orgId).all();
+
+  return c.json({ success: true, data: players.results });
+});
+
+// ==================
+// Create team under org (uses same fields as main team creation)
+// ==================
+const createOrgTeamSchema = z.object({
+  name: z.string().min(1),
+  ageGroup: z.string(),
+  divisionLevel: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  headCoachEmail: z.string().email().optional(),
+  headCoachName: z.string().optional(),
+  managerEmail: z.string().email().optional(),
+  managerName: z.string().optional(),
+});
+
+organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createOrgTeamSchema), async (c) => {
+  const orgId = c.req.param('id');
+  const data = c.req.valid('json');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Verify org ownership
+  const org = await db.prepare('SELECT id FROM organizations WHERE id = ? AND owner_id = ?').bind(orgId, user.id).first();
+  if (!org) return c.json({ success: false, error: 'Organization not found or access denied' }, 403);
+
+  const teamId = crypto.randomUUID().replace(/-/g, '');
+
+  // Generate invite code
+  const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let inviteCode = '';
+  const randBytes = crypto.getRandomValues(new Uint8Array(6));
+  for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
+
+  await db.prepare(`
+    INSERT INTO teams (id, organization_id, name, age_group, division_level, city, state,
+      head_coach_name, head_coach_email, manager_name, manager_email, created_by, invite_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    teamId, orgId, data.name, data.ageGroup, data.divisionLevel || null,
+    data.city || null, data.state || null,
+    data.headCoachName || null, data.headCoachEmail || null,
+    data.managerName || null, data.managerEmail || null,
+    user.id, inviteCode
+  ).run();
+
+  // Auto-link org owner as team member
+  const memberId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
+    VALUES (?, ?, ?, 'organization', 'active', 'creator')
+  `).bind(memberId, teamId, user.id).run();
+
+  // If coach email provided, create invite
+  if (data.headCoachEmail) {
+    const existingCoach = await db.prepare('SELECT id FROM users WHERE email = ?').bind(data.headCoachEmail.toLowerCase()).first<{ id: string }>();
+    if (existingCoach) {
+      await db.prepare('INSERT OR IGNORE INTO team_coaches (id, team_id, user_id, role, assigned_by) VALUES (?, ?, ?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingCoach.id, 'head', user.id).run();
+      await db.prepare('INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingCoach.id, 'coach', 'active', 'org_assigned').run();
+    } else {
+      // Create team invite
+      const invId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO team_invites (id, team_id, invited_email, invited_role, invited_by, status)
+        VALUES (?, ?, ?, 'coach', ?, 'pending')
+      `).bind(invId, teamId, data.headCoachEmail.toLowerCase(), user.id).run();
+
+      // Send invite email via SendGrid
+      try {
+        const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.headCoachEmail)}&role=coach`;
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email: data.headCoachEmail }] }],
+            from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+            subject: `You've been invited to coach ${data.name}`,
+            content: [{
+              type: 'text/html',
+              value: `<p>You've been invited to coach <strong>${data.name}</strong> on Ultimate Tournaments.</p>
+                <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
+                <p>Or use invite code: <strong>${inviteCode}</strong></p>`,
+            }],
+          }),
+        });
+      } catch {}
+    }
+  }
+
+  // If manager email provided, create invite
+  if (data.managerEmail) {
+    const existingMgr = await db.prepare('SELECT id FROM users WHERE email = ?').bind(data.managerEmail.toLowerCase()).first<{ id: string }>();
+    if (existingMgr) {
+      await db.prepare('INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingMgr.id).run();
+      await db.prepare('INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingMgr.id, 'manager', 'active', 'org_assigned').run();
+    } else {
+      const invId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO team_invites (id, team_id, invited_email, invited_role, invited_by, status)
+        VALUES (?, ?, ?, 'manager', ?, 'pending')
+      `).bind(invId, teamId, data.managerEmail.toLowerCase(), user.id).run();
+
+      try {
+        const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.managerEmail)}&role=manager`;
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email: data.managerEmail }] }],
+            from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+            subject: `You've been invited to manage ${data.name}`,
+            content: [{
+              type: 'text/html',
+              value: `<p>You've been invited to manage <strong>${data.name}</strong> on Ultimate Tournaments.</p>
+                <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
+                <p>Or use invite code: <strong>${inviteCode}</strong></p>`,
+            }],
+          }),
+        });
+      } catch {}
+    }
+  }
+
+  return c.json({ success: true, data: { id: teamId, inviteCode } }, 201);
+});
+
+// ==================
+// Invite staff (coach or manager) to existing team
+// ==================
+const inviteStaffSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+  role: z.enum(['coach', 'manager']),
+});
+
+organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zValidator('json', inviteStaffSchema), async (c) => {
+  const orgId = c.req.param('id');
+  const teamId = c.req.param('teamId');
+  const data = c.req.valid('json');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Verify org ownership and team belongs to org
+  const team = await db.prepare(`
+    SELECT t.id, t.name, t.invite_code FROM teams t
+    JOIN organizations o ON o.id = t.organization_id AND o.owner_id = ?
+    WHERE t.id = ? AND t.organization_id = ?
+  `).bind(user.id, teamId, orgId).first<{ id: string; name: string; invite_code: string }>();
+
+  if (!team) return c.json({ success: false, error: 'Team not found or access denied' }, 403);
+
+  const email = data.email.toLowerCase();
+  const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>();
+
+  if (existingUser) {
+    // Direct link
+    if (data.role === 'coach') {
+      await db.prepare('INSERT OR IGNORE INTO team_coaches (id, team_id, user_id, role, assigned_by) VALUES (?, ?, ?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingUser.id, 'head', user.id).run();
+    } else {
+      await db.prepare('INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingUser.id).run();
+    }
+    await db.prepare('INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID().replace(/-/g, ''), teamId, existingUser.id, data.role, 'active', 'org_assigned').run();
+
+    return c.json({ success: true, message: 'User linked to team', linked: true });
+  }
+
+  // Create invite
+  const invId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO team_invites (id, team_id, invited_email, invited_role, invited_by, status)
+    VALUES (?, ?, ?, ?, ?, 'pending')
+  `).bind(invId, teamId, email, data.role, user.id).run();
+
+  // Send invite email
+  try {
+    const signupUrl = `https://uht-web.pages.dev/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
+    await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email }] }],
+        from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+        subject: `You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} ${team.name}`,
+        content: [{
+          type: 'text/html',
+          value: `<p>You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} <strong>${team.name}</strong> on Ultimate Tournaments.</p>
+            <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
+            <p>Or use invite code: <strong>${team.invite_code}</strong></p>`,
+        }],
+      }),
+    });
+  } catch {}
+
+  return c.json({ success: true, message: 'Invite sent', linked: false });
+});
+
+// ==================
+// Remove staff from team
+// ==================
+organizationRoutes.delete('/:id/teams/:teamId/staff/:userId', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const teamId = c.req.param('teamId');
+  const staffUserId = c.req.param('userId');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Verify org ownership
+  const org = await db.prepare('SELECT id FROM organizations WHERE id = ? AND owner_id = ?').bind(orgId, user.id).first();
+  if (!org) return c.json({ success: false, error: 'Access denied' }, 403);
+
+  await db.prepare('DELETE FROM team_coaches WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
+  await db.prepare('DELETE FROM team_managers WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
+  await db.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
+
+  return c.json({ success: true });
+});
+
+// ==================
+// Get org with teams (basic)
+// ==================
 organizationRoutes.get('/:id', authMiddleware, async (c) => {
   const orgId = c.req.param('id');
   const db = c.env.DB;
@@ -39,7 +500,9 @@ organizationRoutes.get('/:id', authMiddleware, async (c) => {
   return c.json({ success: true, data: { ...org, teams: teams.results } });
 });
 
+// ==================
 // Create organization
+// ==================
 const createOrgSchema = z.object({
   name: z.string().min(1),
   usaHockeyOrgId: z.string().optional(),
@@ -70,18 +533,20 @@ organizationRoutes.post('/', authMiddleware, requireRole('admin', 'organization'
   return c.json({ success: true, data: { id: orgId } }, 201);
 });
 
-// Rename organization
-organizationRoutes.patch('/:id', async (c) => {
+// ==================
+// Update organization
+// ==================
+organizationRoutes.patch('/:id', authMiddleware, async (c) => {
   const db = c.env.DB;
   const orgId = c.req.param('id');
-  const body = await c.req.json<{ name?: string; city?: string; state?: string }>();
+  const body = await c.req.json<{ name?: string; city?: string; state?: string; phone?: string; email?: string; website?: string; address?: string; zip?: string }>();
 
   const fields: string[] = [];
   const params: any[] = [];
 
-  if (body.name !== undefined) { fields.push('name = ?'); params.push(body.name); }
-  if (body.city !== undefined) { fields.push('city = ?'); params.push(body.city); }
-  if (body.state !== undefined) { fields.push('state = ?'); params.push(body.state); }
+  for (const [key, col] of Object.entries({ name: 'name', city: 'city', state: 'state', phone: 'phone', email: 'email', website: 'website', address: 'address', zip: 'zip' })) {
+    if ((body as any)[key] !== undefined) { fields.push(`${col} = ?`); params.push((body as any)[key]); }
+  }
 
   if (fields.length === 0) return c.json({ error: 'No fields to update' }, 400);
 
@@ -90,50 +555,4 @@ organizationRoutes.patch('/:id', async (c) => {
 
   await db.prepare(`UPDATE organizations SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run();
   return c.json({ success: true });
-});
-
-// Create coach under organization and assign to team
-const assignCoachSchema = z.object({
-  email: z.string().email(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  phone: z.string().optional(),
-  teamId: z.string(),
-  coachRole: z.enum(['head', 'assistant']).default('assistant'),
-});
-
-organizationRoutes.post('/:id/coaches', authMiddleware, requireRole('admin', 'organization'), zValidator('json', assignCoachSchema), async (c) => {
-  const orgId = c.req.param('id');
-  const data = c.req.valid('json');
-  const db = c.env.DB;
-
-  // Check if user exists, if not create invite
-  let coachUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(data.email.toLowerCase()).first<{ id: string }>();
-
-  if (!coachUser) {
-    // Create a placeholder user that can be claimed via email invite
-    const userId = crypto.randomUUID().replace(/-/g, '');
-    const tempPassword = crypto.randomUUID(); // They'll reset this
-    const { hashPassword } = await import('../middleware/auth');
-    const hash = await hashPassword(tempPassword);
-
-    await db.prepare(`
-      INSERT INTO users (id, email, password_hash, first_name, last_name, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(userId, data.email.toLowerCase(), hash, data.firstName, data.lastName, data.phone || null).run();
-
-    await db.prepare(`INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, 'coach')`)
-      .bind(crypto.randomUUID().replace(/-/g, ''), userId).run();
-
-    coachUser = { id: userId };
-    // TODO: Send invite email via SendGrid
-  }
-
-  // Assign to team
-  await db.prepare(`
-    INSERT OR IGNORE INTO team_coaches (id, team_id, user_id, role, assigned_by)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(crypto.randomUUID().replace(/-/g, ''), data.teamId, coachUser.id, data.coachRole, c.get('user').id).run();
-
-  return c.json({ success: true, data: { userId: coachUser.id } }, 201);
 });

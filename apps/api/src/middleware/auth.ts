@@ -111,7 +111,7 @@ export async function generateToken(user: { id: string; email: string; roles: Us
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime('90d')
     .sign(secret);
 
   return token;

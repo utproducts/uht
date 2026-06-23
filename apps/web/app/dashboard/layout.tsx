@@ -20,7 +20,7 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Settings', href: '/admin/settings' },
   ]},
   director: { label: 'Director', items: [
-    { name: 'My Events', href: '/director' },
+    { name: 'My Events', href: '/dashboard/director' },
   ]},
   organization: { label: 'Organization', items: [
     { name: 'Overview', href: '/dashboard/organization' },
@@ -30,18 +30,16 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Events', href: '/dashboard/organization/events' },
   ]},
   coach: { label: 'Coach', items: [
-    { name: 'Overview', href: '/dashboard/coach' },
     { name: 'My Teams', href: '/dashboard/coach/teams' },
     { name: 'Roster', href: '/dashboard/coach/roster' },
     { name: 'Events', href: '/dashboard/coach/events' },
     { name: 'Schedule', href: '/dashboard/coach/schedule' },
   ]},
   manager: { label: 'Manager', items: [
-    { name: 'Overview', href: '/dashboard/manager' },
-    { name: 'My Team', href: '/dashboard/manager/team' },
-    { name: 'Players', href: '/dashboard/manager/players' },
+    { name: 'My Teams', href: '/dashboard/manager/teams' },
+    { name: 'Roster', href: '/dashboard/manager/roster' },
     { name: 'Events', href: '/dashboard/manager/events' },
-    { name: 'Payments', href: '/dashboard/manager/payments' },
+    { name: 'Schedule', href: '/dashboard/manager/schedule' },
   ]},
   parent: { label: 'Parent / Player', items: [
     { name: 'Overview', href: '/dashboard/parent' },
@@ -77,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </a>
         <div className="flex items-center gap-4">
           <span className="text-white/60 text-sm font-medium">{nav.label} Dashboard</span>
-          <a href="/login" className="text-white/40 text-sm hover:text-white transition-colors">Sign out</a>
+          <button onClick={() => { localStorage.removeItem('uht_token'); localStorage.removeItem('uht_user'); localStorage.removeItem('uht_role'); window.location.href = '/login'; }} className="text-white/40 text-sm hover:text-white transition-colors">Sign out</button>
         </div>
       </header>
 

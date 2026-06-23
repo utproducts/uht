@@ -8,6 +8,7 @@ function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
+  const redirectUrl = searchParams.get('redirect');
 
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [error, setError] = useState('');
@@ -35,11 +36,15 @@ function VerifyContent() {
 
           setStatus('success');
 
-          const role = data.data.user.roles?.[0] || 'parent';
           setTimeout(() => {
-            if (role === 'admin') router.push('/admin/events');
-            else if (role === 'director') router.push('/director');
-            else router.push('/dashboard/' + role);
+            if (redirectUrl) {
+              router.push(redirectUrl);
+            } else {
+              const role = data.data.user.roles?.[0] || 'parent';
+              if (role === 'admin') router.push('/admin/events');
+              else if (role === 'director') router.push('/director');
+              else router.push('/dashboard/' + role);
+            }
           }, 1500);
         } else {
           setStatus('error');

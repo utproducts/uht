@@ -4,27 +4,12 @@ import { useRouter } from 'next/navigation';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
-const ROLES = [
-  { id: 'admin', label: 'Admin', desc: 'Full system access' },
-  { id: 'director', label: 'Director', desc: 'Event management' },
-  { id: 'organization', label: 'Organization', desc: 'Teams & rosters' },
-  { id: 'coach', label: 'Coach', desc: 'Team management' },
-  { id: 'manager', label: 'Manager', desc: 'Team creation' },
-  { id: 'parent', label: 'Parent / Player', desc: 'Stats & results' },
-  { id: 'scorekeeper', label: 'Scorekeeper', desc: 'Live scoring' },
-  { id: 'referee', label: 'Referee', desc: 'Game assignments' },
-];
-
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
-
-  // Dev mode state
-  const [devMode, setDevMode] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -47,7 +32,7 @@ export default function LoginPage() {
       const resp = await fetch(`${API}/api/auth/magic-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), redirect: redirectUrl || undefined }),
       });
       const data = await resp.json();
 
@@ -66,30 +51,6 @@ export default function LoginPage() {
     } catch {
       setStatus('error');
       setErrorMsg('Unable to connect. Please try again.');
-    }
-  };
-
-  // Dev mode login (same as before)
-  const handleDevLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const role = selected || 'admin';
-    localStorage.setItem('uht_role', role);
-    localStorage.setItem('uht_token', 'mock-token-' + role);
-    localStorage.setItem('uht_user', JSON.stringify({
-      id: 'user-1',
-      email: email || 'admin@uht.com',
-      name: email ? email.split('@')[0] : 'Admin',
-      roles: [role],
-    }));
-
-    if (redirectUrl) {
-      router.push(redirectUrl);
-    } else if (role === 'director') {
-      router.push('/director');
-    } else if (role === 'admin') {
-      router.push('/admin/events');
-    } else {
-      router.push('/dashboard/' + role);
     }
   };
 
@@ -146,11 +107,10 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-semibold text-[#1d1d1f]">Sign in</h1>
             <p className="mt-2 text-[#6e6e73]">
-              {devMode ? 'Dev mode — pick a role' : 'Enter your email to receive a login link'}
+              Enter your email to receive a login link
             </p>
           </div>
 
-          {!devMode ? (
             <form onSubmit={handleMagicLink} className="bg-white rounded-2xl shadow-soft p-8">
               <div>
                 <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Email address</label>
@@ -204,55 +164,6 @@ export default function LoginPage() {
                 </p>
               </div>
             </form>
-          ) : (
-            <form onSubmit={handleDevLogin} className="bg-white rounded-2xl shadow-soft p-8">
-              <div>
-                <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm"
-                />
-              </div>
-
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Sign in as</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ROLES.map((role) => (
-                    <button
-                      type="button"
-                      key={role.id}
-                      onClick={() => setSelected(role.id)}
-                      className={
-                        "flex flex-col px-3 py-2.5 rounded-xl border text-left text-sm transition-all " +
-                        (selected === role.id
-                          ? "border-brand-400 bg-brand-50 text-brand-600"
-                          : "border-gray-200 hover:border-gray-300 text-[#1d1d1f]")
-                      }
-                    >
-                      <span className="font-medium">{role.label}</span>
-                      <span className="text-xs text-[#6e6e73]">{role.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <button type="submit" className="mt-6 w-full btn-primary py-3 text-base font-medium">
-                Sign In (Dev)
-              </button>
-            </form>
-          )}
-
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => setDevMode(!devMode)}
-              className="text-xs text-[#aeaeb2] hover:text-[#6e6e73] transition-colors"
-            >
-              {devMode ? '← Back to magic link login' : 'Dev mode →'}
-            </button>
-          </div>
         </div>
       </div>
     </div>

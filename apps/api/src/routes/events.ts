@@ -84,56 +84,47 @@ eventRoutes.get('/my-registered', authMiddleware, async (c) => {
   const userRecord = await db.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first<{ email: string }>();
   const userEmail = userRecord?.email || authUser?.email || '';
 
-  // Get team names owned by this user
-  const userTeams = await db.prepare('SELECT name FROM teams WHERE owner_id = ?').bind(userId).all();
-  const teamNames = userTeams.results?.map((t: any) => t.name) || [];
-
-  // Get events from registrations table (team-based auth flow)
-  const regEvents = await db.prepare(`
-    SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
-      GROUP_CONCAT(DISTINCT t.name) as team_names
-    FROM events e
-    INNER JOIN registrations r ON r.event_id = e.id AND r.status NOT IN ('denied', 'withdrawn')
-    INNER JOIN teams t ON t.id = r.team_id AND t.owner_id = ?
-    GROUP BY e.id
-  `).bind(userId).all();
-
-  // Get events from event_registrations table (consumer flow — match by email or team name)
-  let legacyEvents: any[] = [];
-  if (userEmail || teamNames.length > 0) {
-    const conditions: string[] = [];
-    const params: string[] = [];
-    if (userEmail) {
-      conditions.push('er.email1 = ?');
-      params.push(userEmail);
-    }
-    for (const tn of teamNames) {
-      conditions.push('er.team_name = ?');
-      params.push(tn);
-    }
-    const whereClause = conditions.join(' OR ');
-    const legacyResult = await db.prepare(`
-      SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
-        GROUP_CONCAT(DISTINCT er.team_name) as team_names
-      FROM events e
-      INNER JOIN event_registrations er ON er.event_id = e.id AND er.status NOT IN ('denied', 'withdrawn')
-      WHERE (${whereClause})
-      GROUP BY e.id
-    `).bind(...params).all();
-    legacyEvents = legacyResult.results || [];
-  }
-
-  // Merge and deduplicate by event ID
   const eventMap = new Map<string, any>();
-  for (const ev of [...(regEvents.results || []), ...legacyEvents]) {
-    if (!eventMap.has(ev.id)) {
+
+  // 1) Registrations table — teams linked via created_by or team_managers
+  try {
+    const regEvents = await db.prepare(`
+      SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+        GROUP_CONCAT(DISTINCT t.name) as team_names
+      FROM events e
+      INNER JOIN registrations r ON r.event_id = e.id AND r.status NOT IN ('denied', 'withdrawn')
+      INNER JOIN teams t ON t.id = r.team_id
+      LEFT JOIN team_managers tm ON tm.team_id = t.id
+      WHERE t.created_by = ? OR tm.user_id = ?
+      GROUP BY e.id
+    `).bind(userId, userId).all();
+    for (const ev of (regEvents.results || [])) {
       eventMap.set(ev.id, ev);
-    } else {
-      const existing = eventMap.get(ev.id);
-      const existingNames = (existing.team_names || '').split(',').filter(Boolean);
-      const newNames = (ev.team_names || '').split(',').filter(Boolean);
-      existing.team_names = [...new Set([...existingNames, ...newNames])].join(', ');
     }
+  } catch {}
+
+  // 2) Event_registrations table — match by user email
+  if (userEmail) {
+    try {
+      const consumerEvents = await db.prepare(`
+        SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+          GROUP_CONCAT(DISTINCT er.team_name) as team_names
+        FROM events e
+        INNER JOIN event_registrations er ON er.event_id = e.id AND er.status NOT IN ('denied', 'withdrawn')
+        WHERE er.email1 = ?
+        GROUP BY e.id
+      `).bind(userEmail).all();
+      for (const ev of (consumerEvents.results || [])) {
+        if (!eventMap.has(ev.id)) {
+          eventMap.set(ev.id, ev);
+        } else {
+          const existing = eventMap.get(ev.id);
+          const existingNames = (existing.team_names || '').split(',').filter(Boolean);
+          const newNames = (ev.team_names || '').split(',').filter(Boolean);
+          existing.team_names = [...new Set([...existingNames, ...newNames])].join(', ');
+        }
+      }
+    } catch {}
   }
 
   const data = Array.from(eventMap.values()).sort((a, b) =>
@@ -601,6 +592,73 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
 });
 
 // ==================
+// ADMIN: Bulk import events (from Excel template JSON)
+// ==================
+eventRoutes.post('/admin/bulk-import', async (c) => {
+  const body = await c.req.json() as { events: any[] };
+  const db = c.env.DB;
+
+  if (!body.events?.length) {
+    return c.json({ success: false, error: 'No events provided' }, 400);
+  }
+
+  const results: { name: string; id?: string; slug?: string; error?: string }[] = [];
+
+  for (const evt of body.events) {
+    try {
+      if (!evt.name || !evt.city || !evt.state || !evt.start_date || !evt.end_date) {
+        results.push({ name: evt.name || '(unnamed)', error: 'Missing required fields (name, city, state, start_date, end_date)' });
+        continue;
+      }
+
+      const id = crypto.randomUUID().replace(/-/g, '');
+      const slug = evt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const pin = String(Math.floor(1000 + Math.random() * 9000));
+      const priceCents = evt.price_cents || (evt.price_dollars ? Math.round(evt.price_dollars * 100) : null);
+      const depositCents = evt.deposit_cents || (evt.deposit_dollars ? Math.round(evt.deposit_dollars * 100) : null);
+
+      await db.prepare(`
+        INSERT INTO events (id, name, slug, city, state, start_date, end_date, status,
+          description, price_cents, deposit_cents, slots_count, age_groups,
+          season, registration_open_date, registration_deadline, scorekeeper_pin)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id, evt.name, slug, evt.city, evt.state, evt.start_date, evt.end_date,
+        evt.status || 'draft', evt.description || null,
+        priceCents, depositCents, evt.slots_count || 100,
+        evt.age_groups || null, evt.season || null,
+        evt.registration_open_date || null, evt.registration_deadline || null, pin
+      ).run();
+
+      // Create scorekeeper pin record
+      await db.prepare(`INSERT INTO scorekeeper_pins (id, event_id, pin_code) VALUES (?, ?, ?)`)
+        .bind(crypto.randomUUID().replace(/-/g, ''), id, pin).run();
+
+      // Auto-create divisions from age_groups
+      if (evt.age_groups) {
+        const ageGroups = evt.age_groups.split(',').map((ag: string) => ag.trim()).filter(Boolean);
+        for (const ag of ageGroups) {
+          const divId = crypto.randomUUID().replace(/-/g, '');
+          await db.prepare(`
+            INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at)
+            VALUES (?, ?, ?, 'Open', ?, 'open', datetime('now'))
+          `).bind(divId, id, ag, priceCents || 0).run();
+        }
+      }
+
+      results.push({ name: evt.name, id, slug });
+    } catch (e: any) {
+      results.push({ name: evt.name || '(unnamed)', error: e.message });
+    }
+  }
+
+  const created = results.filter(r => r.id).length;
+  const failed = results.filter(r => r.error).length;
+
+  return c.json({ success: true, data: { created, failed, total: body.events.length, results } });
+});
+
+// ==================
 // ADMIN: Delete event
 // ==================
 eventRoutes.delete('/admin/delete/:id', async (c) => {
@@ -610,9 +668,19 @@ eventRoutes.delete('/admin/delete/:id', async (c) => {
   const existing = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(id).first<any>();
   if (!existing) return c.json({ success: false, error: 'Event not found' }, 404);
 
-  // Delete registrations first
-  await db.prepare('DELETE FROM event_registrations WHERE event_id = ?').bind(id).run();
-  // Delete the event
+  // Cascade delete all related records
+  const tables = [
+    'event_registrations', 'registrations', 'event_divisions', 'event_hotels',
+    'event_venues', 'scorekeeper_pins', 'games', 'promoted_events',
+    'special_requests', 'game_slots', 'schedule_rules', 'audit_log',
+  ];
+  for (const table of tables) {
+    try {
+      await db.prepare(`DELETE FROM ${table} WHERE event_id = ?`).bind(id).run();
+    } catch (_) { /* table may not exist or no event_id column */ }
+  }
+
+  // Delete the event itself
   await db.prepare('DELETE FROM events WHERE id = ?').bind(id).run();
 
   return c.json({ success: true, data: { deleted: existing.name } });
@@ -999,8 +1067,9 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   }
 
   // Check if team is already registered for primary event
+  // Ignore 'denied', 'rejected', 'withdrawn', and 'awaiting_payment' (abandoned checkouts)
   const existing = await db.prepare(
-    "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status != 'denied'"
+    "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')"
   ).bind(data.eventId, data.teamName).first();
 
   if (existing) {
@@ -1024,7 +1093,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
 
       // Check if team is already registered for this additional event
       const addExisting = await db.prepare(
-        "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status != 'denied'"
+        "SELECT id FROM event_registrations WHERE event_id = ? AND team_name = ? AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')"
       ).bind(addEventId, data.teamName).first();
 
       if (addExisting) {
@@ -1066,22 +1135,27 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     return bestMatch?.id || null;
   };
 
-  // Create registration for primary event with 'pending' status
+  // Create registration — status depends on payment choice:
+  // pay_now/pay_deposit → 'awaiting_payment' (not yet registered until they pay)
+  // pay_later → 'pending' (registered, awaiting admin review)
   const regIds: string[] = [];
   const regId = crypto.randomUUID().replace(/-/g, '');
   regIds.push(regId);
+
+  const initialStatus = data.paymentChoice === 'pay_later' ? 'pending' : 'awaiting_payment';
+  const initialPaymentStatus = data.paymentChoice === 'pay_later' ? 'pay_later' : 'unpaid';
 
   // Auto-match division
   const matchedDivisionId = await findMatchingDivision(data.eventId, data.ageGroup);
 
   await db.prepare(`
     INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
-    data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid',
+    initialStatus, initialPaymentStatus,
     data.hotelChoice1 || null, data.hotelChoice2 || null, data.hotelChoice3 || null,
     matchedDivisionId
   ).run();
@@ -1095,12 +1169,12 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
 
     await db.prepare(`
       INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       addRegId, addEvent.id, data.teamName, data.ageGroup, data.division || null,
       data.managerFirstName || null, data.managerLastName || null,
       data.email, data.phone || null,
-      data.paymentChoice === 'pay_now' ? 'unpaid' : 'unpaid',
+      initialStatus, initialPaymentStatus,
       addMatchedDivId
     ).run();
   }
@@ -1150,8 +1224,8 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
 // ADMIN: Update registration (payment, hotel assignment, notes)
 // ==================
 const updateRegistrationSchema = z.object({
-  status: z.enum(['pending', 'approved', 'denied', 'waitlisted', 'withdrawn', 'rejected']).optional(),
-  payment_status: z.enum(['unpaid', 'paid', 'partial', 'refunded', 'comp']).optional(),
+  status: z.enum(['pending', 'approved', 'denied', 'waitlisted', 'withdrawn', 'rejected', 'awaiting_payment']).optional(),
+  payment_status: z.enum(['unpaid', 'paid', 'partial', 'refunded', 'comp', 'pay_later', 'pending_payment']).optional(),
   payment_amount_cents: z.number().nullable().optional(),
   payment_method: z.string().nullable().optional(),
   hotel_assigned: z.string().nullable().optional(),
@@ -1222,6 +1296,54 @@ eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistr
     const regForTeam = await db.prepare('SELECT team_id FROM registrations WHERE id = ?').bind(regId).first<any>();
     if (regForTeam?.team_id) {
       await db.prepare("UPDATE teams SET name = ?, updated_at = datetime('now') WHERE id = ?").bind(data.team_name, regForTeam.team_id).run();
+    }
+  }
+
+  // Auto-assign division if not set and we have an age_group to match
+  if (!data.event_division_id) {
+    const fullReg = useNormalized
+      ? await db.prepare('SELECT event_id, event_division_id FROM registrations WHERE id = ?').bind(regId).first<any>()
+      : await db.prepare('SELECT event_id, age_group, event_division_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+
+    if (fullReg && !fullReg.event_division_id) {
+      // Get the age_group to match — for normalized regs, get it from the team
+      let ageGroup: string | null = null;
+      if (useNormalized) {
+        const regTeam = await db.prepare('SELECT t.age_group FROM registrations r JOIN teams t ON t.id = r.team_id WHERE r.id = ?').bind(regId).first<any>();
+        ageGroup = regTeam?.age_group || null;
+      } else {
+        ageGroup = fullReg.age_group || null;
+      }
+
+      if (ageGroup && fullReg.event_id) {
+        // Try exact match first, then prefix match (e.g. "Mite (8U)" matches "Mite" or "8U")
+        let div = await db.prepare('SELECT id FROM event_divisions WHERE event_id = ? AND age_group = ?')
+          .bind(fullReg.event_id, ageGroup).first<any>();
+
+        if (!div) {
+          // Try matching by extracting the code from parentheses, e.g. "Mite (8U)" -> "8U"
+          const codeMatch = ageGroup.match(/\(([^)]+)\)/);
+          const nameMatch = ageGroup.match(/^([^(]+)/);
+          if (codeMatch) {
+            div = await db.prepare('SELECT id FROM event_divisions WHERE event_id = ? AND age_group = ?')
+              .bind(fullReg.event_id, codeMatch[1].trim()).first<any>();
+          }
+          if (!div && nameMatch) {
+            div = await db.prepare('SELECT id FROM event_divisions WHERE event_id = ? AND age_group = ?')
+              .bind(fullReg.event_id, nameMatch[1].trim()).first<any>();
+          }
+          // Try prefix match as last resort
+          if (!div) {
+            div = await db.prepare("SELECT id FROM event_divisions WHERE event_id = ? AND (? LIKE age_group || '%' OR age_group LIKE ? || '%')")
+              .bind(fullReg.event_id, ageGroup, ageGroup.split(' ')[0]).first<any>();
+          }
+        }
+
+        if (div) {
+          setClauses.push('event_division_id = ?');
+          params.push(div.id);
+        }
+      }
     }
   }
 

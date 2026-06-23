@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import ActivityTracker from './components/ActivityTracker';
+import Navigation from './components/Navigation';
 
 export const metadata: Metadata = {
   title: 'Ultimate Hockey Tournaments',
@@ -29,40 +30,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
-function Navigation() {
-  return (
-    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e8e8ed]">
-      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-        <div className="flex items-center justify-between h-16">
-          <a href="/" className="flex items-center gap-3">
-            <img
-              src="/uht-logo.png"
-              alt="Ultimate Hockey Tournaments"
-              className="h-10 w-auto"
-            />
-            <span className="font-semibold text-[#1d1d1f] text-lg tracking-tight">
-              Ultimate Tournaments
-            </span>
-          </a>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="/events" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Events</a>
-            <a href="/events?tab=past" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Past Events</a>
-            <a href="/cities" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Cities</a>
-            <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Book Ice</a>
-            <a href="/sponsors" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sponsors</a>
-            <a href="/referees" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Referees</a>
-            <a href="/faq" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">FAQ</a>
-            <a href="/contact" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Contact</a>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href="/login" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sign In</a>
-            <a href="/events" className="btn-primary text-sm py-2 px-5">Find Events</a>
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
-}
 
 function Footer() {
   return (

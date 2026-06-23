@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import DirectorDash from './DirectorDash';
+import OrgDashboard from './OrgDashboard';
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -375,47 +377,9 @@ function AdminDash() {
   );
 }
 
-function DirectorDash() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Upcoming Events" value={4} sub="Next 60 days" />
-        <StatCard label="Teams Registered" value={186} sub="Across all events" />
-        <StatCard label="Venues Booked" value={8} sub="2 pending" />
-        <StatCard label="Staff Assigned" value={42} sub="Refs + scorekeepers" />
-      </div>
-      <SectionTitle>Event Pipeline</SectionTitle>
-      <Table headers={['Event', 'Date', 'Teams', 'Status']} rows={[
-        ['Presidents Day Classic', 'Feb 14-16', '48/48', 'Full'],
-        ['Spring Showdown', 'Mar 21-23', '32/64', 'Open'],
-        ['Summer Slapshot', 'Jun 13-15', '0/48', 'Coming Soon'],
-      ]} />
-      <SectionTitle>Venue Capacity</SectionTitle>
-      <CapBar label="Bridgeport Ice Arena" cur={6} max={8} />
-      <CapBar label="Twin Rinks Stamford" cur={4} max={6} />
-      <CapBar label="Shelton Rink" cur={2} max={4} />
-    </div>
-  );
-}
+/* DirectorDash is imported from ./DirectorDash.tsx */
 
-function OrgDash() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="My Teams" value={6} sub="3 divisions" />
-        <StatCard label="Registered Events" value={4} sub="2 upcoming" />
-        <StatCard label="Total Players" value={94} sub="Across all teams" />
-        <StatCard label="Balance Due" value="$4,200" sub="Next payment Apr 1" />
-      </div>
-      <SectionTitle>Team Roster</SectionTitle>
-      <Table headers={['Team', 'Division', 'Players', 'Next Event']} rows={[
-        ['CT Wolves U12 A', 'Squirt A', '15', 'Presidents Day Classic'],
-        ['CT Wolves U14 AA', 'Bantam AA', '17', 'Presidents Day Classic'],
-        ['CT Wolves U10 B', 'Mite B', '14', 'Spring Showdown'],
-      ]} />
-    </div>
-  );
-}
+/* OrgDash is imported from ./OrgDashboard.tsx */
 
 function CoachDash() {
   const [teams, setTeams] = useState<any[]>([]);
@@ -644,7 +608,7 @@ function RefereeDash() {
 const DASHBOARDS: Record<string, () => JSX.Element> = {
   admin: AdminDash,
   director: DirectorDash,
-  organization: OrgDash,
+  organization: OrgDashboard,
   coach: CoachDash,
   manager: ManagerDash,
   parent: ParentDash,
@@ -652,7 +616,29 @@ const DASHBOARDS: Record<string, () => JSX.Element> = {
   referee: RefereeDash,
 };
 
+// Roles that skip overview and redirect to a sub-page
+const ROLE_REDIRECTS: Record<string, string> = {
+  coach: '/dashboard/coach/teams',
+  manager: '/dashboard/manager/teams',
+};
+
 export default function DashboardContent({ role }: { role: string }) {
+  useEffect(() => {
+    const redirect = ROLE_REDIRECTS[role];
+    if (redirect) {
+      window.location.href = redirect;
+    }
+  }, [role]);
+
+  // If this role redirects, show a brief loading state
+  if (ROLE_REDIRECTS[role]) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" />
+      </div>
+    );
+  }
+
   const Dashboard = DASHBOARDS[role];
 
   if (!Dashboard) {

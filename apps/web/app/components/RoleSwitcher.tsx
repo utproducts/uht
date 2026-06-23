@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 const ROLES = [
   { id: 'admin', label: 'Admin' },
@@ -15,19 +15,17 @@ const ROLES = [
 
 export default function RoleSwitcher() {
   const [open, setOpen] = useState(false);
-  const router = useRouter();
   const pathname = usePathname();
   const currentRole = ROLES.find((r) => pathname.includes(r.id)) || ROLES[0];
 
   const switchRole = (roleId: string) => {
     if (typeof window !== 'undefined') localStorage.setItem('uht_role', roleId);
-    // Roles with dedicated top-level dashboards
-    if (roleId === 'director') {
-      router.push('/director');
-    } else if (roleId === 'admin') {
-      router.push('/admin/events');
+    // Use window.location.href for full page reload — router.push can fail
+    // to re-mount the layout correctly in a static export
+    if (roleId === 'admin') {
+      window.location.href = '/admin/events';
     } else {
-      router.push('/dashboard/' + roleId);
+      window.location.href = '/dashboard/' + roleId;
     }
     setOpen(false);
   };

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
+import * as jose from 'jose';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 
@@ -518,7 +519,7 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
 
-  // Get teams where user is coach, manager, or org owner
+  // Get teams where user is creator, coach, manager, team_member, or org owner
   const result = await db.prepare(`
     SELECT DISTINCT t.*, o.name as organization_name,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
@@ -527,10 +528,11 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     LEFT JOIN organizations o ON o.id = t.organization_id
     LEFT JOIN team_coaches tc ON tc.team_id = t.id
     LEFT JOIN team_managers tm ON tm.team_id = t.id
+    LEFT JOIN team_members tmem ON tmem.team_id = t.id AND tmem.status = 'active'
     LEFT JOIN organizations org ON org.id = t.organization_id AND org.owner_id = ?
-    WHERE tc.user_id = ? OR tm.user_id = ? OR org.owner_id = ?
+    WHERE t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR org.owner_id = ?
     ORDER BY t.age_group ASC, t.name ASC
-  `).bind(user.id, user.id, user.id, user.id).all();
+  `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
 
   return c.json({ success: true, data: result.results });
 });
@@ -630,13 +632,37 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
+  // Generate a short invite code for the team (6 chars, uppercase alphanumeric)
+  const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 to avoid confusion
+  let inviteCode = '';
+  const randBytes = crypto.getRandomValues(new Uint8Array(6));
+  for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
+
+  // Resolve user ID from auth token if available
+  let createdByUserId: string | null = null;
+  let creatorEmail: string | null = null;
+  let creatorRole: string | null = null;
+  try {
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && c.env.JWT_SECRET) {
+      const token = authHeader.replace('Bearer ', '');
+      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
+      const { payload } = await jose.jwtVerify(token, secret);
+      createdByUserId = (payload.sub || (payload as any).id) as string || null;
+      creatorEmail = (payload as any).email || null;
+      // Determine creator role from their token roles
+      const roles = (payload as any).roles || [];
+      creatorRole = roles.includes('coach') ? 'coach' : roles.includes('manager') ? 'manager' : 'coach';
+    }
+  } catch {}
+
   await db.prepare(`
     INSERT INTO teams (id, organization_id, name, age_group, division_level,
       usa_hockey_team_id, usa_hockey_roster_url, city, state,
       website, hometown_league, team_type, season_record,
       head_coach_name, head_coach_email, head_coach_phone,
-      manager_name, manager_email, manager_phone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      manager_name, manager_email, manager_phone, created_by, invite_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, data.organizationId || null, data.name, data.ageGroup,
     data.divisionLevel || null, data.usaHockeyTeamId || null,
@@ -644,10 +670,509 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
     data.website || null, data.hometownLeague || null,
     data.teamType || null, data.seasonRecord || null,
     data.headCoachName || null, data.headCoachEmail || null, data.headCoachPhone || null,
-    data.managerName || null, data.managerEmail || null, data.managerPhone || null
+    data.managerName || null, data.managerEmail || null, data.managerPhone || null,
+    createdByUserId, inviteCode
   ).run();
 
-  return c.json({ success: true, data: { id: teamId } }, 201);
+  // Link creator as a team_member
+  if (createdByUserId) {
+    try {
+      // Legacy junction table
+      const linkId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO team_managers (id, team_id, user_id)
+        VALUES (?, ?, ?)
+      `).bind(linkId, teamId, createdByUserId).run();
+
+      // New team_members table
+      const memberId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
+        VALUES (?, ?, ?, ?, 'active', 'creator')
+      `).bind(memberId, teamId, createdByUserId, creatorRole || 'coach').run();
+    } catch {}
+  }
+
+  // Auto-invite: if coach email is provided and differs from creator, invite them
+  const coachEmail = data.headCoachEmail?.toLowerCase()?.trim();
+  if (coachEmail && coachEmail !== creatorEmail?.toLowerCase()) {
+    try {
+      // Check if they already have an account
+      const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(coachEmail).first<{ id: string }>();
+
+      if (existingUser) {
+        // Auto-link them as a team member
+        const mId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
+          VALUES (?, ?, ?, 'coach', 'active', 'auto_linked')
+        `).bind(mId, teamId, existingUser.id).run();
+        // Also legacy table
+        const lcId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`INSERT OR IGNORE INTO team_coaches (id, team_id, user_id) VALUES (?, ?, ?)`).bind(lcId, teamId, existingUser.id).run();
+      } else {
+        // Create invite record
+        const invId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT OR IGNORE INTO team_invites (id, team_id, email, phone, invited_role, invite_code, status, invited_by)
+          VALUES (?, ?, ?, ?, 'coach', ?, 'pending', ?)
+        `).bind(invId, teamId, coachEmail, data.headCoachPhone || null, inviteCode, createdByUserId).run();
+
+        // Send invite email
+        if (c.env.SENDGRID_API_KEY) {
+          const signupUrl = `https://ultimatetournaments.com/signup?invite=${inviteCode}&email=${encodeURIComponent(coachEmail)}&role=coach`;
+          try {
+            await fetch('https://api.sendgrid.com/v3/mail/send', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                personalizations: [{ to: [{ email: coachEmail, name: data.headCoachName || '' }] }],
+                from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+                subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
+                content: [{ type: 'text/html', value: `
+                  <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+                    <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
+                    <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
+                      You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
+                    </p>
+                    <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
+                      Create your account to manage your team, view schedules, and register for events.
+                    </p>
+                    <a href="${signupUrl}" style="display: inline-block; background: #003e79; color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin: 24px 0;">
+                      Join ${data.name}
+                    </a>
+                    <p style="color: #aeaeb2; font-size: 13px; margin-top: 24px;">
+                      Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
+                    </p>
+                  </div>
+                ` }],
+              }),
+            });
+          } catch (err: any) {
+            console.error('SendGrid invite (coach) error:', err?.message || String(err));
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Auto-invite coach error:', err?.message || String(err));
+    }
+  }
+
+  // Auto-invite: if manager email is provided and differs from creator, invite them
+  const mgrEmail = data.managerEmail?.toLowerCase()?.trim();
+  if (mgrEmail && mgrEmail !== creatorEmail?.toLowerCase() && mgrEmail !== coachEmail) {
+    try {
+      const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(mgrEmail).first<{ id: string }>();
+
+      if (existingUser) {
+        const mId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
+          VALUES (?, ?, ?, 'manager', 'active', 'auto_linked')
+        `).bind(mId, teamId, existingUser.id).run();
+        const lmId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)`).bind(lmId, teamId, existingUser.id).run();
+      } else {
+        const invId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT OR IGNORE INTO team_invites (id, team_id, email, phone, invited_role, invite_code, status, invited_by)
+          VALUES (?, ?, ?, ?, 'manager', ?, 'pending', ?)
+        `).bind(invId, teamId, mgrEmail, data.managerPhone || null, inviteCode, createdByUserId).run();
+
+        if (c.env.SENDGRID_API_KEY) {
+          const signupUrl = `https://ultimatetournaments.com/signup?invite=${inviteCode}&email=${encodeURIComponent(mgrEmail)}&role=manager`;
+          try {
+            await fetch('https://api.sendgrid.com/v3/mail/send', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                personalizations: [{ to: [{ email: mgrEmail, name: data.managerName || '' }] }],
+                from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+                subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
+                content: [{ type: 'text/html', value: `
+                  <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+                    <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
+                    <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
+                      You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
+                    </p>
+                    <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
+                      Create your account to manage your team, view schedules, and register for events.
+                    </p>
+                    <a href="${signupUrl}" style="display: inline-block; background: #003e79; color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin: 24px 0;">
+                      Join ${data.name}
+                    </a>
+                    <p style="color: #aeaeb2; font-size: 13px; margin-top: 24px;">
+                      Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
+                    </p>
+                  </div>
+                ` }],
+              }),
+            });
+          } catch (err: any) {
+            console.error('SendGrid invite (manager) error:', err?.message || String(err));
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Auto-invite manager error:', err?.message || String(err));
+    }
+  }
+
+  return c.json({ success: true, data: { id: teamId, inviteCode } }, 201);
+});
+
+// ==================
+// Scrape roster from USA Hockey URL
+// ==================
+teamRoutes.post('/:id/import-roster', authMiddleware, async (c) => {
+  const teamId = c.req.param('id');
+  const db = c.env.DB;
+  const body = await c.req.json<{ url?: string; pastedData?: string }>();
+
+  // Verify team exists and user has access
+  const user = c.get('user');
+  const team = await db.prepare('SELECT id, created_by FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) return c.json({ success: false, error: 'Team not found' }, 404);
+
+  let players: Array<{
+    firstName: string; lastName: string; jerseyNumber?: string;
+    position?: string; shoots?: string; dateOfBirth?: string;
+    usaHockeyNumber?: string;
+  }> = [];
+
+  // Strategy 1: Scrape from URL
+  if (body.url) {
+    try {
+      const resp = await fetch(body.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+      });
+      if (!resp.ok) {
+        return c.json({ success: false, error: `Could not fetch URL (HTTP ${resp.status}). The page may require login. Try pasting your roster data instead.` }, 400);
+      }
+      const html = await resp.text();
+
+      // Try to parse roster from HTML tables
+      // Look for table rows with player-like data (jersey #, name, position)
+      const tableRowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      const stripTags = (s: string) => s.replace(/<[^>]+>/g, '').trim();
+
+      const rows: string[][] = [];
+      let rowMatch;
+      while ((rowMatch = tableRowRegex.exec(html)) !== null) {
+        const cells: string[] = [];
+        let cellMatch;
+        const rowHtml = rowMatch[1];
+        const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+        while ((cellMatch = cellRe.exec(rowHtml)) !== null) {
+          cells.push(stripTags(cellMatch[1]));
+        }
+        if (cells.length >= 2) rows.push(cells);
+      }
+
+      // Detect which columns contain what based on header row or data patterns
+      if (rows.length > 1) {
+        // Try to find header row
+        const headerRow = rows[0].map(h => h.toLowerCase());
+        let nameCol = -1, jerseyCol = -1, posCol = -1, dobCol = -1, numCol = -1;
+
+        for (let i = 0; i < headerRow.length; i++) {
+          const h = headerRow[i];
+          if (h.includes('name') || h.includes('player')) nameCol = i;
+          else if (h.includes('jersey') || h === '#' || h === 'no' || h === 'number') jerseyCol = i;
+          else if (h.includes('pos')) posCol = i;
+          else if (h.includes('birth') || h.includes('dob') || h.includes('date')) dobCol = i;
+          else if (h.includes('usa') || h.includes('reg') || h.includes('member')) numCol = i;
+        }
+
+        // If no header detected, guess by patterns
+        if (nameCol === -1 && rows.length > 2) {
+          for (let i = 0; i < rows[1].length; i++) {
+            const val = rows[1][i];
+            if (/^[A-Za-z]+(,?\s+[A-Za-z]+)+$/.test(val) && nameCol === -1) nameCol = i;
+            else if (/^\d{1,2}$/.test(val) && jerseyCol === -1) jerseyCol = i;
+            else if (/^(F|D|G|C|LW|RW|LD|RD|forward|defense|goalie)/i.test(val) && posCol === -1) posCol = i;
+          }
+        }
+
+        // Parse data rows (skip header)
+        const startRow = (nameCol !== -1 || jerseyCol !== -1) ? 1 : 0;
+        for (let i = startRow; i < rows.length; i++) {
+          const row = rows[i];
+          let firstName = '', lastName = '';
+
+          if (nameCol !== -1 && row[nameCol]) {
+            const name = row[nameCol].trim();
+            // Handle "Last, First" or "First Last"
+            if (name.includes(',')) {
+              const parts = name.split(',').map(s => s.trim());
+              lastName = parts[0];
+              firstName = parts[1] || '';
+            } else {
+              const parts = name.split(/\s+/);
+              firstName = parts[0] || '';
+              lastName = parts.slice(1).join(' ') || '';
+            }
+          }
+
+          if (!firstName && !lastName) continue;
+
+          const normalizePos = (p: string): string | undefined => {
+            if (!p) return undefined;
+            const lp = p.toLowerCase().trim();
+            if (lp.startsWith('f') || lp === 'c' || lp === 'lw' || lp === 'rw') return 'forward';
+            if (lp.startsWith('d') || lp === 'ld' || lp === 'rd') return 'defense';
+            if (lp.startsWith('g')) return 'goalie';
+            return undefined;
+          };
+
+          players.push({
+            firstName,
+            lastName,
+            jerseyNumber: jerseyCol !== -1 ? row[jerseyCol]?.trim() || undefined : undefined,
+            position: posCol !== -1 ? normalizePos(row[posCol]) : undefined,
+            dateOfBirth: dobCol !== -1 ? row[dobCol]?.trim() || undefined : undefined,
+            usaHockeyNumber: numCol !== -1 ? row[numCol]?.trim() || undefined : undefined,
+          });
+        }
+      }
+
+      if (players.length === 0) {
+        return c.json({
+          success: false,
+          error: 'Could not find roster data on that page. The page may be JavaScript-rendered or require login. Try pasting your roster data instead.',
+        }, 400);
+      }
+    } catch (e: any) {
+      return c.json({
+        success: false,
+        error: `Failed to fetch URL: ${e.message}. Try pasting your roster data instead.`,
+      }, 400);
+    }
+  }
+
+  // Strategy 2: Parse pasted text data
+  if (body.pastedData && players.length === 0) {
+    const lines = body.pastedData.split('\n').map(l => l.trim()).filter(Boolean);
+
+    for (const line of lines) {
+      // Try tab-separated or comma-separated
+      let parts = line.includes('\t') ? line.split('\t') : line.split(',');
+      parts = parts.map(p => p.trim()).filter(Boolean);
+
+      if (parts.length === 0) continue;
+
+      // Try to parse each line
+      let firstName = '', lastName = '', jerseyNumber: string | undefined;
+      let position: string | undefined;
+
+      // Check if first part is a number (jersey)
+      if (/^\d{1,2}$/.test(parts[0])) {
+        jerseyNumber = parts[0];
+        parts = parts.slice(1);
+      }
+
+      // Name handling
+      if (parts.length >= 1) {
+        const name = parts[0];
+        if (name.includes(',')) {
+          const np = name.split(',').map(s => s.trim());
+          lastName = np[0];
+          firstName = np[1] || '';
+        } else {
+          const np = name.split(/\s+/);
+          if (parts.length === 1 && np.length >= 2) {
+            firstName = np[0];
+            lastName = np.slice(1).join(' ');
+          } else if (parts.length >= 2) {
+            firstName = parts[0];
+            lastName = parts[1];
+          } else {
+            firstName = np[0];
+          }
+        }
+      }
+
+      // Position from remaining parts
+      if (parts.length >= 3) {
+        const posStr = parts[2]?.toLowerCase();
+        if (posStr && (posStr.startsWith('f') || posStr === 'c' || posStr === 'lw' || posStr === 'rw')) position = 'forward';
+        else if (posStr && (posStr.startsWith('d') || posStr === 'ld' || posStr === 'rd')) position = 'defense';
+        else if (posStr && posStr.startsWith('g')) position = 'goalie';
+      }
+
+      // Jersey from later parts if not found
+      if (!jerseyNumber && parts.length >= 3) {
+        for (let i = 2; i < parts.length; i++) {
+          if (/^\d{1,2}$/.test(parts[i])) { jerseyNumber = parts[i]; break; }
+        }
+      }
+
+      if (firstName || lastName) {
+        players.push({ firstName, lastName, jerseyNumber, position });
+      }
+    }
+  }
+
+  if (players.length === 0) {
+    return c.json({ success: false, error: 'No player data found. Please provide a URL or paste roster data.' }, 400);
+  }
+
+  // Insert players into DB and link to team
+  let added = 0;
+  const addedPlayers: any[] = [];
+
+  for (const p of players) {
+    if (!p.firstName && !p.lastName) continue;
+
+    // Check if player already on this team (by name match)
+    const existing = await db.prepare(`
+      SELECT p.id FROM players p
+      JOIN team_players tp ON tp.player_id = p.id
+      WHERE tp.team_id = ? AND tp.status = 'active'
+        AND LOWER(p.first_name) = LOWER(?) AND LOWER(p.last_name) = LOWER(?)
+    `).bind(teamId, p.firstName, p.lastName).first();
+
+    if (existing) continue; // Skip duplicates
+
+    const playerId = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO players (id, first_name, last_name, date_of_birth, usa_hockey_number, jersey_number, position, shoots)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      playerId, p.firstName, p.lastName, p.dateOfBirth || null,
+      p.usaHockeyNumber || null, p.jerseyNumber || null,
+      p.position || null, p.shoots || null
+    ).run();
+
+    await db.prepare(`
+      INSERT INTO team_players (id, team_id, player_id, status)
+      VALUES (?, ?, ?, 'active')
+    `).bind(crypto.randomUUID().replace(/-/g, ''), teamId, playerId).run();
+
+    addedPlayers.push({ id: playerId, ...p });
+    added++;
+  }
+
+  return c.json({ success: true, data: { added, players: addedPlayers, total_parsed: players.length } });
+});
+
+// ==================
+// Bulk add players to team (from manual entry form)
+// ==================
+teamRoutes.post('/:id/players/bulk', authMiddleware, async (c) => {
+  const teamId = c.req.param('id');
+  const db = c.env.DB;
+  const body = await c.req.json<{ players: Array<{
+    firstName: string; lastName: string; jerseyNumber?: string;
+    position?: string; shoots?: string; dateOfBirth?: string;
+    usaHockeyNumber?: string;
+  }> }>();
+
+  if (!body.players?.length) {
+    return c.json({ success: false, error: 'No players provided' }, 400);
+  }
+
+  let added = 0;
+  const addedPlayers: any[] = [];
+
+  for (const p of body.players) {
+    if (!p.firstName?.trim() && !p.lastName?.trim()) continue;
+
+    // Check duplicate
+    const existing = await db.prepare(`
+      SELECT p.id FROM players p
+      JOIN team_players tp ON tp.player_id = p.id
+      WHERE tp.team_id = ? AND tp.status = 'active'
+        AND LOWER(p.first_name) = LOWER(?) AND LOWER(p.last_name) = LOWER(?)
+    `).bind(teamId, p.firstName.trim(), p.lastName.trim()).first();
+
+    if (existing) continue;
+
+    const playerId = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO players (id, first_name, last_name, date_of_birth, usa_hockey_number, jersey_number, position, shoots)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      playerId, p.firstName.trim(), p.lastName.trim(), p.dateOfBirth || null,
+      p.usaHockeyNumber || null, p.jerseyNumber || null,
+      p.position || null, p.shoots || null
+    ).run();
+
+    await db.prepare(`
+      INSERT INTO team_players (id, team_id, player_id, status)
+      VALUES (?, ?, ?, 'active')
+    `).bind(crypto.randomUUID().replace(/-/g, ''), teamId, playerId).run();
+
+    addedPlayers.push({ id: playerId, ...p });
+    added++;
+  }
+
+  return c.json({ success: true, data: { added, players: addedPlayers } });
+});
+
+// ==================
+// Update a player's details
+// ==================
+teamRoutes.patch('/:teamId/players/:playerId', authMiddleware, async (c) => {
+  const { teamId, playerId } = c.req.param();
+  const db = c.env.DB;
+  const body = await c.req.json();
+
+  const fields: string[] = [];
+  const vals: any[] = [];
+  const allowed = ['first_name', 'last_name', 'jersey_number', 'position', 'shoots', 'date_of_birth', 'usa_hockey_number'];
+
+  for (const f of allowed) {
+    if (body[f] !== undefined) {
+      fields.push(`${f} = ?`);
+      vals.push(body[f]);
+    }
+  }
+  // Also accept camelCase keys
+  const camelMap: Record<string, string> = {
+    firstName: 'first_name', lastName: 'last_name', jerseyNumber: 'jersey_number',
+    dateOfBirth: 'date_of_birth', usaHockeyNumber: 'usa_hockey_number',
+  };
+  for (const [camel, snake] of Object.entries(camelMap)) {
+    if (body[camel] !== undefined && !vals.includes(body[camel])) {
+      fields.push(`${snake} = ?`);
+      vals.push(body[camel]);
+    }
+  }
+
+  if (fields.length === 0) {
+    return c.json({ success: false, error: 'No fields to update' }, 400);
+  }
+
+  vals.push(playerId);
+  await db.prepare(`UPDATE players SET ${fields.join(', ')} WHERE id = ?`).bind(...vals).run();
+  return c.json({ success: true });
+});
+
+// ==================
+// Get team roster (for coach/manager dashboard)
+// ==================
+teamRoutes.get('/:id/roster', authMiddleware, async (c) => {
+  const teamId = c.req.param('id');
+  const db = c.env.DB;
+
+  const players = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.date_of_birth, p.usa_hockey_number,
+           p.jersey_number, p.position, p.shoots,
+           tp.status as roster_status, tp.added_at
+    FROM players p
+    JOIN team_players tp ON tp.player_id = p.id
+    WHERE tp.team_id = ? AND tp.status IN ('active', 'rostered')
+    ORDER BY CAST(COALESCE(p.jersey_number, '999') AS INTEGER), p.last_name ASC
+  `).bind(teamId).all();
+
+  return c.json({ success: true, data: players.results, count: players.results.length });
 });
 
 // ==================
@@ -663,10 +1188,22 @@ const addPlayerSchema = z.object({
   shoots: z.enum(['left', 'right']).optional(),
 });
 
-teamRoutes.post('/:id/players', authMiddleware, requireRole('admin', 'organization', 'coach', 'manager'), zValidator('json', addPlayerSchema), async (c) => {
+teamRoutes.post('/:id/players', authMiddleware, zValidator('json', addPlayerSchema), async (c) => {
   const teamId = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;
+
+  // Check duplicate
+  const existing = await db.prepare(`
+    SELECT p.id FROM players p
+    JOIN team_players tp ON tp.player_id = p.id
+    WHERE tp.team_id = ? AND tp.status = 'active'
+      AND LOWER(p.first_name) = LOWER(?) AND LOWER(p.last_name) = LOWER(?)
+  `).bind(teamId, data.firstName, data.lastName).first();
+
+  if (existing) {
+    return c.json({ success: false, error: 'Player already on this team' }, 409);
+  }
 
   const playerId = crypto.randomUUID().replace(/-/g, '');
 
@@ -759,4 +1296,205 @@ teamRoutes.post('/admin/consolidate-orgs', async (c) => {
     teams_linked: teamsLinked,
     errors: errors.length > 0 ? errors : undefined
   });
+});
+
+// ==================
+// JOIN TEAM via invite code
+// ==================
+const joinTeamSchema = z.object({
+  inviteCode: z.string().min(4).max(10),
+});
+
+teamRoutes.post('/join', authMiddleware, zValidator('json', joinTeamSchema), async (c) => {
+  const { inviteCode } = c.req.valid('json');
+  const user = c.get('user');
+  const db = c.env.DB;
+  const code = inviteCode.toUpperCase().trim();
+
+  // Find the team with this invite code
+  const team = await db.prepare(`
+    SELECT id, name, age_group, invite_code FROM teams WHERE invite_code = ? AND is_active = 1
+  `).bind(code).first<{ id: string; name: string; age_group: string; invite_code: string }>();
+
+  if (!team) {
+    return c.json({ success: false, error: 'Invalid invite code. Please check the code and try again.' }, 404);
+  }
+
+  // Check if already a member
+  const existing = await db.prepare(`
+    SELECT id FROM team_members WHERE team_id = ? AND user_id = ?
+  `).bind(team.id, user.id).first();
+
+  if (existing) {
+    return c.json({ success: false, error: 'You are already a member of this team.' }, 409);
+  }
+
+  // Determine role: check if there's a pending invite for this user's email
+  let role = 'coach'; // default
+  const invite = await db.prepare(`
+    SELECT id, invited_role FROM team_invites WHERE team_id = ? AND email = ? AND status = 'pending'
+  `).bind(team.id, user.email).first<{ id: string; invited_role: string }>();
+
+  if (invite) {
+    role = invite.invited_role || 'coach';
+    // Mark invite as accepted
+    await db.prepare(`
+      UPDATE team_invites SET status = 'accepted', accepted_by = ?, accepted_at = datetime('now')
+      WHERE id = ?
+    `).bind(user.id, invite.id).run();
+  }
+
+  // Add to team_members
+  const memberId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO team_members (id, team_id, user_id, role, status, joined_via)
+    VALUES (?, ?, ?, ?, 'active', 'invite_code')
+  `).bind(memberId, team.id, user.id, role).run();
+
+  // Also link via legacy junction tables
+  try {
+    const jId = crypto.randomUUID().replace(/-/g, '');
+    if (role === 'manager') {
+      await db.prepare(`INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, team.id, user.id).run();
+    } else {
+      await db.prepare(`INSERT OR IGNORE INTO team_coaches (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, team.id, user.id).run();
+    }
+  } catch {}
+
+  // Ensure user has the right role in user_roles
+  try {
+    const hasRole = await db.prepare(`SELECT id FROM user_roles WHERE user_id = ? AND role = ?`).bind(user.id, role).first();
+    if (!hasRole) {
+      const roleId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)`).bind(roleId, user.id, role).run();
+    }
+  } catch {}
+
+  return c.json({
+    success: true,
+    data: { teamId: team.id, teamName: team.name, ageGroup: team.age_group, role },
+    message: `You've joined ${team.name} as ${role}!`,
+  });
+});
+
+// ==================
+// CHECK PENDING INVITES for a user's email (called on signup/login)
+// ==================
+teamRoutes.get('/invites/check', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  const invites = await db.prepare(`
+    SELECT ti.id, ti.team_id, ti.invited_role, ti.invite_code, ti.created_at,
+           t.name as team_name, t.age_group
+    FROM team_invites ti
+    JOIN teams t ON t.id = ti.team_id AND t.is_active = 1
+    WHERE ti.email = ? AND ti.status = 'pending'
+    ORDER BY ti.created_at DESC
+  `).bind(user.email).all();
+
+  return c.json({ success: true, data: invites.results });
+});
+
+// ==================
+// AUTO-ACCEPT all pending invites for a user (called after signup)
+// ==================
+teamRoutes.post('/invites/accept-all', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  let linked = 0;
+
+  const invites = await db.prepare(`
+    SELECT ti.id, ti.team_id, ti.invited_role, ti.invite_code
+    FROM team_invites ti
+    JOIN teams t ON t.id = ti.team_id AND t.is_active = 1
+    WHERE ti.email = ? AND ti.status = 'pending'
+  `).bind(user.email).all<{ id: string; team_id: string; invited_role: string; invite_code: string }>();
+
+  for (const inv of invites.results || []) {
+    try {
+      // Check not already a member
+      const exists = await db.prepare(`SELECT id FROM team_members WHERE team_id = ? AND user_id = ?`).bind(inv.team_id, user.id).first();
+      if (exists) continue;
+
+      // Add to team_members
+      const memberId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO team_members (id, team_id, user_id, role, status, joined_via)
+        VALUES (?, ?, ?, ?, 'active', 'invite_auto')
+      `).bind(memberId, inv.team_id, user.id, inv.invited_role).run();
+
+      // Legacy junction table
+      const jId = crypto.randomUUID().replace(/-/g, '');
+      if (inv.invited_role === 'manager') {
+        await db.prepare(`INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, inv.team_id, user.id).run();
+      } else {
+        await db.prepare(`INSERT OR IGNORE INTO team_coaches (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, inv.team_id, user.id).run();
+      }
+
+      // Mark invite accepted
+      await db.prepare(`
+        UPDATE team_invites SET status = 'accepted', accepted_by = ?, accepted_at = datetime('now')
+        WHERE id = ?
+      `).bind(user.id, inv.id).run();
+
+      // Ensure user has the role
+      const hasRole = await db.prepare(`SELECT id FROM user_roles WHERE user_id = ? AND role = ?`).bind(user.id, inv.invited_role).first();
+      if (!hasRole) {
+        const roleId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)`).bind(roleId, user.id, inv.invited_role).run();
+      }
+
+      linked++;
+    } catch (err: any) {
+      console.error(`Auto-accept invite ${inv.id} error:`, err?.message || String(err));
+    }
+  }
+
+  return c.json({ success: true, linked, message: linked > 0 ? `Linked to ${linked} team(s)!` : 'No pending invites.' });
+});
+
+// ==================
+// GET team invite code (for displaying on team cards)
+// ==================
+teamRoutes.get('/:id/invite-code', authMiddleware, async (c) => {
+  const teamId = c.req.param('id');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Verify user has access to this team
+  const access = await db.prepare(`
+    SELECT t.invite_code FROM teams t
+    LEFT JOIN team_members tmem ON tmem.team_id = t.id AND tmem.user_id = ?
+    LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
+    LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
+    WHERE t.id = ? AND (t.created_by = ? OR tmem.user_id IS NOT NULL OR tc.user_id IS NOT NULL OR tm.user_id IS NOT NULL)
+  `).bind(user.id, user.id, user.id, teamId, user.id).first<{ invite_code: string }>();
+
+  if (!access) {
+    return c.json({ success: false, error: 'Team not found or access denied' }, 404);
+  }
+
+  return c.json({ success: true, data: { inviteCode: access.invite_code } });
+});
+
+// ==================
+// ADMIN: Backfill invite codes for existing teams
+// ==================
+teamRoutes.post('/admin/backfill-invite-codes', async (c) => {
+  const db = c.env.DB;
+  const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  const teams = await db.prepare(`SELECT id FROM teams WHERE (invite_code IS NULL OR invite_code = '') AND is_active = 1 LIMIT 100`).all<{ id: string }>();
+  let updated = 0;
+
+  for (const team of teams.results || []) {
+    let code = '';
+    const randBytes = crypto.getRandomValues(new Uint8Array(6));
+    for (let i = 0; i < 6; i++) code += codeChars[randBytes[i] % codeChars.length];
+    await db.prepare(`UPDATE teams SET invite_code = ? WHERE id = ?`).bind(code, team.id).run();
+    updated++;
+  }
+
+  return c.json({ success: true, updated });
 });

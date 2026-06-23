@@ -46,9 +46,42 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
       VALUES (?, ?, ?)
     `).bind(crypto.randomUUID().replace(/-/g, ''), userId, data.role).run();
 
+    // Auto-link any pending team invites for this email
+    const allRoles: string[] = [data.role];
+    try {
+      const pendingInvites = await db.prepare(`
+        SELECT ti.id, ti.team_id, ti.invited_role
+        FROM team_invites ti
+        JOIN teams t ON t.id = ti.team_id AND t.is_active = 1
+        WHERE ti.email = ? AND ti.status = 'pending'
+      `).bind(data.email.toLowerCase()).all<{ id: string; team_id: string; invited_role: string }>();
+
+      for (const inv of pendingInvites.results || []) {
+        const memberId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
+          VALUES (?, ?, ?, ?, 'active', 'invite_auto')
+        `).bind(memberId, inv.team_id, userId, inv.invited_role).run();
+        const jId = crypto.randomUUID().replace(/-/g, '');
+        if (inv.invited_role === 'manager') {
+          await db.prepare(`INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, inv.team_id, userId).run();
+        } else {
+          await db.prepare(`INSERT OR IGNORE INTO team_coaches (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, inv.team_id, userId).run();
+        }
+        await db.prepare(`UPDATE team_invites SET status = 'accepted', accepted_by = ?, accepted_at = datetime('now') WHERE id = ?`).bind(userId, inv.id).run();
+        if (inv.invited_role !== data.role && !allRoles.includes(inv.invited_role)) {
+          const roleId = crypto.randomUUID().replace(/-/g, '');
+          await db.prepare(`INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)`).bind(roleId, userId, inv.invited_role).run();
+          allRoles.push(inv.invited_role);
+        }
+      }
+    } catch (err: any) {
+      console.error('Auto-link invites on register error:', err?.message || String(err));
+    }
+
     // Generate token
     const token = await generateToken(
-      { id: userId, email: data.email.toLowerCase(), roles: [data.role as UserRole] },
+      { id: userId, email: data.email.toLowerCase(), roles: allRoles as UserRole[] },
       c.env.JWT_SECRET
     );
 
@@ -61,7 +94,7 @@ authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
           email: data.email.toLowerCase(),
           firstName: data.firstName,
           lastName: data.lastName,
-          roles: [data.role],
+          roles: allRoles,
         },
       },
     }, 201);
@@ -107,6 +140,48 @@ authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
       VALUES (?, ?, ?)
     `).bind(crypto.randomUUID().replace(/-/g, ''), userId, data.role).run();
 
+    // Auto-link any pending team invites for this email
+    let teamsLinked = 0;
+    try {
+      const pendingInvites = await db.prepare(`
+        SELECT ti.id, ti.team_id, ti.invited_role
+        FROM team_invites ti
+        JOIN teams t ON t.id = ti.team_id AND t.is_active = 1
+        WHERE ti.email = ? AND ti.status = 'pending'
+      `).bind(data.email.toLowerCase()).all<{ id: string; team_id: string; invited_role: string }>();
+
+      for (const inv of pendingInvites.results || []) {
+        const memberId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
+          VALUES (?, ?, ?, ?, 'active', 'invite_auto')
+        `).bind(memberId, inv.team_id, userId, inv.invited_role).run();
+
+        // Legacy junction
+        const jId = crypto.randomUUID().replace(/-/g, '');
+        if (inv.invited_role === 'manager') {
+          await db.prepare(`INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, inv.team_id, userId).run();
+        } else {
+          await db.prepare(`INSERT OR IGNORE INTO team_coaches (id, team_id, user_id) VALUES (?, ?, ?)`).bind(jId, inv.team_id, userId).run();
+        }
+
+        // Mark invite accepted
+        await db.prepare(`
+          UPDATE team_invites SET status = 'accepted', accepted_by = ?, accepted_at = datetime('now') WHERE id = ?
+        `).bind(userId, inv.id).run();
+
+        // Add the invited role if different from signup role
+        if (inv.invited_role !== data.role) {
+          const roleId = crypto.randomUUID().replace(/-/g, '');
+          await db.prepare(`INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)`).bind(roleId, userId, inv.invited_role).run();
+        }
+
+        teamsLinked++;
+      }
+    } catch (err: any) {
+      console.error('Auto-link invites on signup error:', err?.message || String(err));
+    }
+
     // Generate magic link token
     const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
     const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -119,7 +194,7 @@ authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
     `).bind(linkId, userId, token, expiresAt).run();
 
     // Send welcome + magic link email via SendGrid
-    const baseUrl = 'https://uht-web.pages.dev';
+    const baseUrl = 'https://ultimatetournaments.com';
     const loginUrl = `${baseUrl}/login/verify?token=${token}`;
 
     if (c.env.SENDGRID_API_KEY) {
@@ -138,7 +213,7 @@ authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
               type: 'text/html',
               value: `
                 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                  <img src="https://uht-web.pages.dev/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                   <h2 style="color: #1d1d1f; margin-bottom: 8px;">Welcome, ${data.firstName}!</h2>
                   <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                     Your account has been created. Click the button below to sign in for the first time.
@@ -166,8 +241,11 @@ authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
         userId,
         email: data.email.toLowerCase(),
         role: data.role,
+        teamsLinked,
       },
-      message: 'Account created! Check your email for a sign-in link.',
+      message: teamsLinked > 0
+        ? `Account created and linked to ${teamsLinked} team(s)! Check your email for a sign-in link.`
+        : 'Account created! Check your email for a sign-in link.',
     }, 201);
   } catch (err) {
     console.error('Signup error:', err);
@@ -262,10 +340,11 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 // ==================
 const magicLinkSchema = z.object({
   email: z.string().email(),
+  redirect: z.string().optional(),
 });
 
 authRoutes.post('/magic-link', zValidator('json', magicLinkSchema), async (c) => {
-  const { email } = c.req.valid('json');
+  const { email, redirect } = c.req.valid('json');
   const db = c.env.DB;
 
   // Find user by email
@@ -299,8 +378,9 @@ authRoutes.post('/magic-link', zValidator('json', magicLinkSchema), async (c) =>
   `).bind(linkId, user.id, token, expiresAt).run();
 
   // Build login URL
-  const baseUrl = 'https://uht-web.pages.dev';
-  const loginUrl = `${baseUrl}/login/verify?token=${token}`;
+  const baseUrl = 'https://ultimatetournaments.com';
+  const redirectParam = redirect ? `&redirect=${encodeURIComponent(redirect)}` : '';
+  const loginUrl = `${baseUrl}/login/verify?token=${token}${redirectParam}`;
 
   // Send email via SendGrid (with admin-customizable template)
   if (c.env.SENDGRID_API_KEY) {
@@ -325,7 +405,7 @@ authRoutes.post('/magic-link', zValidator('json', magicLinkSchema), async (c) =>
             type: 'text/html',
             value: `
               <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                <img src="https://uht-web.pages.dev/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                 <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${user.first_name},</h2>
                 <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                   ${mlBody}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
@@ -143,7 +143,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     deposit_cents: event?.deposit_cents ? String(event.deposit_cents / 100) : '',
     multi_event_discount_pct: event?.multi_event_discount_pct ? String(event.multi_event_discount_pct) : '',
     slots_count: event?.slots_count ? String(event.slots_count) : '100',
-    age_groups: event?.age_groups ? JSON.parse(event.age_groups) as string[] : [] as string[],
+    age_groups: event?.age_groups ? (event.age_groups.startsWith('[') ? JSON.parse(event.age_groups) : event.age_groups.split(',').map((s: string) => s.trim())) as string[] : [] as string[],
     divisions: event?.divisions ? JSON.parse(event.divisions) as string[] : [] as string[],
     registration_open_date: event?.registration_open_date || '',
     registration_deadline: event?.registration_deadline || '',
@@ -2467,7 +2467,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 function EventCard({ event, onViewDetails, onEdit, onDuplicate, onDelete }: { event: EventItem; onViewDetails: (id: string) => void; onEdit: (e: EventItem) => void; onDuplicate: (id: string) => void; onDelete: (e: EventItem) => void }) {
   const days = daysUntil(event.start_date);
   const isPast = days < 0;
-  const ageGroups = event.age_groups ? JSON.parse(event.age_groups) : [];
+  const ageGroups = event.age_groups ? (event.age_groups.startsWith('[') ? JSON.parse(event.age_groups) : event.age_groups.split(',').map((s: string) => s.trim())) : [];
   const revenue = event.total_revenue_cents ? (event.total_revenue_cents / 100) : 0;
 
   return (
@@ -3207,7 +3207,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
   const summary = event.registration_summary || [];
   // Derive age groups from registration summary if the JSON field is empty
-  const ageGroups = event.age_groups ? JSON.parse(event.age_groups) : summary.length > 0 ? summary.map((s: any) => s.age_group) : [];
+  const ageGroups = event.age_groups ? (event.age_groups.startsWith('[') ? JSON.parse(event.age_groups) : event.age_groups.split(',').map((s: string) => s.trim())) : summary.length > 0 ? summary.map((s: any) => s.age_group) : [];
   const divisions = event.divisions ? JSON.parse(event.divisions) : [];
   const allRegistrations = event.registrations || [];
   // Show ALL registrations (pending + approved + denied) so admins can manage them all
@@ -3707,8 +3707,96 @@ export default function AdminEventsPage() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<EventItem | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showImport, setShowImport] = useState(false);
+  const [importState, setImportState] = useState<'idle' | 'preview' | 'importing' | 'done'>('idle');
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [importDragOver, setImportDragOver] = useState(false);
 
   const reloadEvents = () => setRefreshKey(k => k + 1);
+
+  // Excel import helpers
+  const loadXLSX = useCallback((): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      if ((window as any).XLSX) { resolve((window as any).XLSX); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = () => reject(new Error('Failed to load SheetJS'));
+      document.head.appendChild(s);
+    });
+  }, []);
+
+  const parseExcelFile = useCallback(async (file: File) => {
+    const XLSX = await loadXLSX();
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    const mapped = rows.filter((r: any) => r['Event Name']?.toString().trim()).map((r: any) => {
+      const fmtDate = (v: any) => {
+        if (!v) return '';
+        if (v instanceof Date) return v.toISOString().split('T')[0];
+        return String(v).trim();
+      };
+      return {
+        name: String(r['Event Name'] || '').trim(),
+        city: String(r['City'] || '').trim(),
+        state: String(r['State'] || '').trim(),
+        start_date: fmtDate(r['Start Date']),
+        end_date: fmtDate(r['End Date']),
+        status: String(r['Status'] || 'draft').trim().toLowerCase(),
+        age_groups: String(r['Age Groups'] || '').trim(),
+        price_dollars: r['Price ($)'] ? Number(r['Price ($)']) : null,
+        deposit_dollars: r['Deposit ($)'] ? Number(r['Deposit ($)']) : null,
+        slots_count: r['Team Slots'] ? Number(r['Team Slots']) : null,
+        registration_open_date: fmtDate(r['Reg. Opens']),
+        registration_deadline: fmtDate(r['Reg. Deadline']),
+        description: String(r['Description'] || '').trim() || null,
+        season: String(r['Season'] || '').trim() || null,
+      };
+    });
+    setImportRows(mapped);
+    setImportState('preview');
+  }, []);
+
+  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) parseExcelFile(file);
+  }, [parseExcelFile]);
+
+  const handleImportDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setImportDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) parseExcelFile(file);
+  }, [parseExcelFile]);
+
+  const runImport = useCallback(async () => {
+    setImportState('importing');
+    try {
+      const res = await fetch('https://uht.chad-157.workers.dev/api/events/admin/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: importRows }),
+      });
+      const json = await res.json();
+      setImportResult(json.data);
+      setImportState('done');
+      reloadEvents();
+    } catch {
+      setImportResult({ created: 0, failed: importRows.length, total: importRows.length, results: [{ name: 'All', error: 'Network error' }] });
+      setImportState('done');
+    }
+  }, [importRows]);
+
+  const closeImport = () => {
+    setShowImport(false);
+    setImportState('idle');
+    setImportRows([]);
+    setImportResult(null);
+    setImportDragOver(false);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -3802,6 +3890,146 @@ export default function AdminEventsPage() {
 
   return (
     <div className="bg-[#fafafa] min-h-full">
+
+      {/* Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={closeImport}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e8ed]">
+              <h2 className="text-lg font-bold text-[#1d1d1f]">Import Events from Excel</h2>
+              <button onClick={closeImport} className="text-[#86868b] hover:text-[#1d1d1f] text-xl font-bold">×</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(85vh-130px)]">
+              {importState === 'idle' && (
+                <div>
+                  <div
+                    className={`border-2 border-dashed rounded-2xl p-10 text-center transition-colors ${importDragOver ? 'border-[#003e79] bg-[#f0f7ff]' : 'border-[#e8e8ed] hover:border-[#003e79]/40'}`}
+                    onDragOver={e => { e.preventDefault(); setImportDragOver(true); }}
+                    onDragLeave={() => setImportDragOver(false)}
+                    onDrop={handleImportDrop}
+                  >
+                    <svg className="w-12 h-12 mx-auto text-[#86868b] mb-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9.75m0 0l2.25-2.25M9.75 15l2.25 2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6.75A2.25 2.25 0 0018 4.5H6A2.25 2.25 0 003.75 6.75v11.25c0 1.242 1.008 2.25 2.25 2.25z" />
+                    </svg>
+                    <p className="text-[#1d1d1f] font-semibold mb-1">Drop your Excel file here</p>
+                    <p className="text-sm text-[#86868b] mb-4">or click to browse (.xlsx, .xls, .csv)</p>
+                    <label className="inline-block px-5 py-2.5 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm cursor-pointer transition-colors">
+                      Choose File
+                      <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} className="hidden" />
+                    </label>
+                  </div>
+                  <p className="text-xs text-[#86868b] mt-3 text-center">Use the UHT Event Import Template for best results. Required columns: Event Name, City, State, Start Date, End Date</p>
+                </div>
+              )}
+
+              {importState === 'preview' && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                    </div>
+                    <p className="text-sm font-semibold text-[#1d1d1f]">{importRows.length} event{importRows.length !== 1 ? 's' : ''} found — review before importing</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-[#e8e8ed] overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[#e8e8ed] bg-[#fafafa]">
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">#</th>
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">Event Name</th>
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">Location</th>
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">Dates</th>
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">Age Groups</th>
+                          <th className="text-right px-3 py-2 font-semibold text-[#86868b] text-xs">Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.map((row, i) => {
+                          const missing = !row.name || !row.city || !row.state || !row.start_date || !row.end_date;
+                          return (
+                            <tr key={i} className={`border-b border-[#f5f5f7] ${missing ? 'bg-red-50' : ''}`}>
+                              <td className="px-3 py-2 text-[#86868b]">{i + 1}</td>
+                              <td className="px-3 py-2 font-medium text-[#1d1d1f]">{row.name || <span className="text-red-500">Missing</span>}</td>
+                              <td className="px-3 py-2 text-[#6e6e73]">{row.city}{row.state ? `, ${row.state}` : ''}</td>
+                              <td className="px-3 py-2 text-[#6e6e73] whitespace-nowrap">{row.start_date} – {row.end_date}</td>
+                              <td className="px-3 py-2 text-[#6e6e73] text-xs">{row.age_groups || '—'}</td>
+                              <td className="px-3 py-2 text-right text-[#6e6e73]">{row.price_dollars ? `$${row.price_dollars}` : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {importState === 'importing' && (
+                <div className="py-12 text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#003e79] mx-auto mb-4" />
+                  <p className="text-[#1d1d1f] font-semibold">Importing {importRows.length} events...</p>
+                  <p className="text-sm text-[#86868b] mt-1">This may take a moment</p>
+                </div>
+              )}
+
+              {importState === 'done' && importResult && (
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${importResult.failed === 0 ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                      {importResult.failed === 0 ? (
+                        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-[#1d1d1f]">{importResult.created} of {importResult.total} events created</p>
+                      {importResult.failed > 0 && <p className="text-sm text-amber-600">{importResult.failed} failed — see details below</p>}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-[#e8e8ed] overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-[#e8e8ed] bg-[#fafafa]">
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">Event</th>
+                          <th className="text-left px-3 py-2 font-semibold text-[#86868b] text-xs">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importResult.results?.map((r: any, i: number) => (
+                          <tr key={i} className="border-b border-[#f5f5f7]">
+                            <td className="px-3 py-2 font-medium text-[#1d1d1f]">{r.name}</td>
+                            <td className="px-3 py-2">
+                              {r.error ? (
+                                <span className="text-red-600 text-xs">{r.error}</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-semibold">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                                  Created
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[#e8e8ed] flex justify-between">
+              <button onClick={closeImport} className="px-4 py-2 text-[#6e6e73] hover:text-[#1d1d1f] font-semibold text-sm transition">
+                {importState === 'done' ? 'Close' : 'Cancel'}
+              </button>
+              {importState === 'preview' && (
+                <button onClick={runImport} className="px-6 py-2.5 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors">
+                  Import {importRows.length} Event{importRows.length !== 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Delete Confirmation */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
@@ -3828,9 +4056,15 @@ export default function AdminEventsPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Event Management</h1>
         </div>
-        <button onClick={() => setEditingEvent('create')} className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition">
-          + Create Event
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowImport(true)} className="px-4 py-2 bg-white hover:bg-[#fafafa] text-[#003e79] border border-[#003e79] font-semibold rounded-xl text-sm transition flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+            Import Excel
+          </button>
+          <button onClick={() => setEditingEvent('create')} className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition">
+            + Create Event
+          </button>
+        </div>
       </div>
 
       {/* Stats Bar */}
@@ -3985,7 +4219,8 @@ export default function AdminEventsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); }} className="text-[#003e79] hover:text-[#002d5a] text-xs font-semibold mr-3">Edit</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(event.id); }} className="text-[#6e6e73] hover:text-[#1d1d1f] text-xs font-semibold">Duplicate</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(event.id); }} className="text-[#6e6e73] hover:text-[#1d1d1f] text-xs font-semibold mr-3">Duplicate</button>
+                        <button onClick={(e) => { e.stopPropagation(); setDeleteConfirm(event); }} className="text-[#86868b] hover:text-red-600 text-xs font-semibold">Delete</button>
                       </td>
                     </tr>
                   );
