@@ -754,8 +754,10 @@ eventRoutes.get('/upcoming-for-upsell/:eventId', optionalAuth, async (c) => {
 eventRoutes.get('/event-hotels/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
+  // Auto-migrate
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
   const result = await db.prepare(`
-    SELECT id, hotel_name, city, state, rate_description, booking_url
+    SELECT id, hotel_name as name, city, state, rate_description, booking_url, price_per_night as rate_cents, image_url
     FROM event_hotels WHERE event_id = ? AND is_active = 1
     ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
@@ -816,8 +818,11 @@ eventRoutes.get('/event-venues/:eventId', async (c) => {
   // Fallback: If event has a specific venue_id (legacy single venue)
   if (event.venue_id) {
     const venue = await db.prepare('SELECT * FROM venues WHERE id = ? AND is_active = 1').bind(event.venue_id).first<any>();
-    const rinks = venue ? await db.prepare('SELECT * FROM venue_rinks WHERE venue_id = ?').bind(venue.id).all() : { results: [] };
-    return c.json({ success: true, data: venue ? [{ ...venue, rinks: rinks.results }] : [] });
+    if (venue) {
+      const rinks = await db.prepare('SELECT * FROM venue_rinks WHERE venue_id = ?').bind(venue.id).all();
+      return c.json({ success: true, data: [{ ...venue, rinks: rinks.results }] });
+    }
+    // If venue_id points to an inactive/deleted venue, fall through to city-match
   }
 
   // Map full state names to abbreviations (events use full names, venues use abbreviations)
@@ -1477,12 +1482,60 @@ eventRoutes.get('/admin/hotels/:eventId', async (c) => {
 eventRoutes.get('/admin/event-hotels/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
-  // Auto-migrate: add price_per_night if missing
+  // Auto-migrate: add columns if missing
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN price_per_night INTEGER").run(); } catch (_) { /* already exists */ }
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
   const result = await db.prepare(`
     SELECT * FROM event_hotels WHERE event_id = ? AND is_active = 1 ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
   return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// ADMIN: Upload hotel image to R2
+// ==================
+eventRoutes.post('/admin/hotel-image/:hotelId', async (c) => {
+  const hotelId = c.req.param('hotelId');
+  const db = c.env.DB;
+  const storage = c.env.STORAGE;
+
+  // Verify hotel exists
+  const hotel = await db.prepare('SELECT id FROM event_hotels WHERE id = ?').bind(hotelId).first();
+  if (!hotel) return c.json({ success: false, error: 'Hotel not found' }, 404);
+
+  const formData = await c.req.formData();
+  const file = formData.get('image') as File | null;
+  if (!file) return c.json({ success: false, error: 'No image provided' }, 400);
+
+  // Validate file type
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    return c.json({ success: false, error: 'Invalid image type. Use JPEG, PNG, or WebP.' }, 400);
+  }
+
+  // Max 5MB
+  if (file.size > 5 * 1024 * 1024) {
+    return c.json({ success: false, error: 'Image too large. Max 5MB.' }, 400);
+  }
+
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const key = `hotels/${hotelId}.${ext}`;
+
+  // Upload to R2
+  const arrayBuffer = await file.arrayBuffer();
+  await storage.put(key, arrayBuffer, {
+    httpMetadata: { contentType: file.type },
+  });
+
+  // Build public URL via Worker proxy
+  const imageUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+
+  // Save URL to database
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+  await db.prepare('UPDATE event_hotels SET image_url = ?, updated_at = datetime(\'now\') WHERE id = ?')
+    .bind(imageUrl, hotelId).run();
+
+  return c.json({ success: true, data: { image_url: imageUrl } });
 });
 
 // ==================
@@ -1534,6 +1587,7 @@ const updateHotelSchema = z.object({
   price_per_night: z.number().nullable().optional(),
   sort_order: z.number().optional(),
   is_active: z.number().optional(),
+  image_url: z.string().nullable().optional(),
 });
 
 eventRoutes.patch('/admin/event-hotels/:id', zValidator('json', updateHotelSchema), async (c) => {

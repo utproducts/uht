@@ -105,7 +105,7 @@ async function buildDynamicContext(db: D1Database): Promise<string> {
   // Venue info
   try {
     const venues = await db.prepare(`
-      SELECT DISTINCT v.name, v.city, v.state, v.rink_count
+      SELECT DISTINCT v.name, v.city, v.state
       FROM venues v
       INNER JOIN event_venues ev ON ev.venue_id = v.id
       INNER JOIN events e ON e.id = ev.event_id AND e.status IN ('published', 'registration_open') AND e.start_date >= date('now')
@@ -116,7 +116,7 @@ async function buildDynamicContext(db: D1Database): Promise<string> {
     if (venues.results?.length) {
       parts.push('\n## Tournament Venues');
       for (const v of venues.results as any[]) {
-        parts.push(`- ${v.name} in ${v.city}, ${v.state}${v.rink_count ? ` (${v.rink_count} rinks)` : ''}`);
+        parts.push(`- ${v.name} in ${v.city}, ${v.state}`);
       }
     }
   } catch (err) {
@@ -141,7 +141,7 @@ chatbotRoutes.post('/ask', zValidator('json', chatSchema), async (c) => {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 512,
           messages: [{ role: 'user', content: data.message }],
         }),
@@ -198,7 +198,7 @@ chatbotRoutes.post('/chat', zValidator('json', chatSchema), async (c) => {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: SYSTEM_PROMPT + dynamicContext,
         messages,

@@ -10,6 +10,9 @@ export const hotelRoutes = new Hono<{ Bindings: Env }>();
 // ==================
 hotelRoutes.get('/master', async (c) => {
   const db = c.env.DB;
+  // Auto-migrate: add image_url if missing
+  try { await db.prepare("ALTER TABLE master_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+
   const { city, state, search } = c.req.query();
 
   let query = 'SELECT * FROM master_hotels WHERE is_active = 1';
@@ -110,6 +113,7 @@ const updateMasterHotelSchema = z.object({
   contact_title: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   is_active: z.number().optional(),
+  image_url: z.string().nullable().optional(),
 });
 
 hotelRoutes.patch('/master/:id', zValidator('json', updateMasterHotelSchema), async (c) => {
@@ -138,6 +142,49 @@ hotelRoutes.delete('/master/:id', async (c) => {
   const db = c.env.DB;
   await db.prepare("UPDATE master_hotels SET is_active = 0, updated_at = datetime('now') WHERE id = ?").bind(id).run();
   return c.json({ success: true });
+});
+
+// ==================
+// ADMIN: Upload image for master hotel
+// ==================
+hotelRoutes.post('/master/:id/image', async (c) => {
+  const hotelId = c.req.param('id');
+  const db = c.env.DB;
+  const storage = c.env.STORAGE;
+
+  const hotel = await db.prepare('SELECT id FROM master_hotels WHERE id = ?').bind(hotelId).first();
+  if (!hotel) return c.json({ success: false, error: 'Hotel not found' }, 404);
+
+  const formData = await c.req.formData();
+  const file = formData.get('image') as File | null;
+  if (!file) return c.json({ success: false, error: 'No image provided' }, 400);
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    return c.json({ success: false, error: 'Invalid image type. Use JPEG, PNG, or WebP.' }, 400);
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return c.json({ success: false, error: 'Image too large. Max 5MB.' }, 400);
+  }
+
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const key = `hotels/master-${hotelId}.${ext}`;
+
+  const arrayBuffer = await file.arrayBuffer();
+  await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
+
+  const imageUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+
+  try { await db.prepare("ALTER TABLE master_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+  await db.prepare("UPDATE master_hotels SET image_url = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(imageUrl, hotelId).run();
+
+  // Propagate to all linked event_hotels
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+  await db.prepare("UPDATE event_hotels SET image_url = ? WHERE master_hotel_id = ?")
+    .bind(imageUrl, hotelId).run();
+
+  return c.json({ success: true, data: { image_url: imageUrl } });
 });
 
 // ==================
@@ -205,11 +252,14 @@ hotelRoutes.post('/link/:eventId', zValidator('json', linkHotelSchema), async (c
   const id = crypto.randomUUID().replace(/-/g, '');
   const sortOrder = await db.prepare('SELECT COUNT(*) as cnt FROM event_hotels WHERE event_id = ?').bind(eventId).first<any>();
 
+  // Ensure image_url column exists on event_hotels
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+
   await db.prepare(`
     INSERT INTO event_hotels (id, event_id, master_hotel_id, hotel_name, address, city, state, phone,
       rate_description, booking_url, booking_code, room_block_count,
-      contact_name, contact_email, contact_phone, contact_title, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      contact_name, contact_email, contact_phone, contact_title, sort_order, image_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, eventId, data.master_hotel_id,
     master.hotel_name, master.address, master.city, master.state, master.phone,
@@ -221,7 +271,8 @@ hotelRoutes.post('/link/:eventId', zValidator('json', linkHotelSchema), async (c
     data.contact_email || master.contact_email,
     data.contact_phone || master.contact_phone,
     data.contact_title || master.contact_title,
-    (sortOrder?.cnt || 0)
+    (sortOrder?.cnt || 0),
+    master.image_url || null
   ).run();
 
   const hotel = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(id).first();

@@ -55,6 +55,7 @@ interface EventHotel {
   room_block_count: number | null;
   price_per_night: number | null;
   sort_order: number;
+  image_url: string | null;
 }
 
 interface Venue {

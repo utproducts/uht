@@ -20,6 +20,7 @@ interface MasterHotel {
   contact_phone: string | null;
   contact_title: string | null;
   notes: string | null;
+  image_url: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -60,6 +61,8 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [imageUrl, setImageUrl] = useState(hotel?.image_url || '');
+  const [uploading, setUploading] = useState(false);
 
   const handleSave = async () => {
     if (!form.hotel_name.trim() || !form.city.trim() || !form.state.trim()) {
@@ -201,6 +204,65 @@ function HotelFormModal({ hotel, onClose, onSaved }: {
               </div>
             </div>
           </div>
+
+          {/* Hotel Photo */}
+          {isEdit && (
+            <div>
+              <h3 className="text-sm font-bold text-[#1d1d1f] mb-3">Hotel Photo</h3>
+              {imageUrl ? (
+                <div className="relative group">
+                  <img src={imageUrl} alt={form.hotel_name} className="w-full h-40 object-cover rounded-xl border border-[#e8e8ed]" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition rounded-xl flex items-center justify-center gap-3">
+                    <label className="cursor-pointer px-4 py-2 bg-white rounded-lg text-xs font-semibold text-[#1d1d1f] hover:bg-gray-100 transition">
+                      Replace
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
+                        setUploading(true);
+                        const fd = new FormData();
+                        fd.append('image', file);
+                        try {
+                          const res = await fetch(`${HOTEL_API}/master/${hotel!.id}/image`, { method: 'POST', body: fd });
+                          const json = await res.json();
+                          if (json.success) { setImageUrl(json.data.image_url); } else { alert(json.error || 'Upload failed'); }
+                        } catch { alert('Upload failed'); }
+                        setUploading(false);
+                      }} />
+                    </label>
+                    <button onClick={async () => {
+                      try {
+                        await fetch(`${HOTEL_API}/master/${hotel!.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_url: null }) });
+                        setImageUrl('');
+                      } catch { alert('Failed to remove image'); }
+                    }} className="px-4 py-2 bg-red-500 rounded-lg text-xs font-semibold text-white hover:bg-red-600 transition">
+                      Remove
+                    </button>
+                  </div>
+                  {uploading && <div className="absolute inset-0 bg-white/60 rounded-xl flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600" /></div>}
+                </div>
+              ) : (
+                <label className="cursor-pointer flex items-center justify-center gap-2 w-full h-32 rounded-xl border-2 border-dashed border-[#e8e8ed] hover:border-cyan-400 hover:bg-cyan-50/30 transition">
+                  <svg className="w-6 h-6 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
+                  <span className="text-sm text-[#86868b] font-medium">{uploading ? 'Uploading...' : 'Upload Hotel Photo'}</span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploading} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB'); return; }
+                    setUploading(true);
+                    const fd = new FormData();
+                    fd.append('image', file);
+                    try {
+                      const res = await fetch(`${HOTEL_API}/master/${hotel!.id}/image`, { method: 'POST', body: fd });
+                      const json = await res.json();
+                      if (json.success) { setImageUrl(json.data.image_url); } else { alert(json.error || 'Upload failed'); }
+                    } catch { alert('Upload failed'); }
+                    setUploading(false);
+                  }} />
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Notes */}
           <div>

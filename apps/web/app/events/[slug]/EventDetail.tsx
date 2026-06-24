@@ -271,7 +271,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
         // Fetch hotels
         if (eventData.id) {
           try {
-            const hotelsRes = await fetch(`${API}/events/admin/event-hotels/${eventData.id}`);
+            const hotelsRes = await fetch(`${API}/events/event-hotels/${eventData.id}`);
             if (hotelsRes.ok) {
               const hotelsJson = await hotelsRes.json();
               setHotels(hotelsJson.data || []);
@@ -751,47 +751,50 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                     <div className="space-y-3">
                       {hotels.map(hotel => (
                         <div key={hotel.id} className="group rounded-xl border border-[#e8e8ed] hover:border-[#003e79]/20 transition-all overflow-hidden">
-                          <div className="p-5">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="font-semibold text-[#1d1d1f] text-sm">{hotel.name}</h3>
-                                </div>
-                                <p className="text-xs text-[#86868b] mt-1">{hotel.city}, {hotel.state}</p>
-                                {hotel.room_type && (
-                                  <p className="text-xs text-[#6e6e73] mt-1">{hotel.room_type}</p>
-                                )}
-                                {hotel.rate_description && (
-                                  <p className="text-sm text-[#6e6e73] mt-2 leading-relaxed line-clamp-2">{hotel.rate_description}</p>
-                                )}
-                                {hotel.description && !hotel.rate_description && (
-                                  <p className="text-sm text-[#6e6e73] mt-2 leading-relaxed line-clamp-2">{hotel.description}</p>
-                                )}
-                              </div>
-                              <div className="shrink-0 text-right">
-                                {hotel.rate_cents ? (
-                                  <>
-                                    <p className="text-lg font-bold text-[#003e79]">{formatPrice(hotel.rate_cents)}</p>
-                                    <p className="text-xs text-[#86868b]">per night</p>
-                                  </>
-                                ) : hotel.rate_description && (
-                                  <p className="text-sm font-bold text-[#003e79]">{hotel.rate_description}</p>
-                                )}
-                              </div>
-                            </div>
-                            {hotel.booking_url && (
-                              <div className="mt-4 pt-3 border-t border-[#e8e8ed]">
-                                <a
-                                  href={hotel.booking_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f0f7ff] text-[#003e79] text-xs font-semibold hover:bg-[#e0efff] transition-colors"
-                                >
-                                  Book Now
-                                  <ArrowIcon />
-                                </a>
+                          <div className="flex flex-col sm:flex-row">
+                            {hotel.image_url && (
+                              <div className="sm:w-48 h-40 sm:h-auto shrink-0">
+                                <img src={hotel.image_url} alt={hotel.name} className="w-full h-full object-cover" />
                               </div>
                             )}
+                            <div className="flex-1 p-5">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-semibold text-[#1d1d1f] text-sm">{hotel.name}</h3>
+                                  </div>
+                                  {(hotel.city || hotel.state) && (
+                                    <p className="text-xs text-[#86868b] mt-1">{[hotel.city, hotel.state].filter(Boolean).join(', ')}</p>
+                                  )}
+                                  {hotel.rate_description && (
+                                    <p className="text-sm text-[#6e6e73] mt-2 leading-relaxed line-clamp-2">{hotel.rate_description}</p>
+                                  )}
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  {hotel.rate_cents ? (
+                                    <>
+                                      <p className="text-lg font-bold text-[#003e79]">{formatPrice(hotel.rate_cents)}</p>
+                                      <p className="text-xs text-[#86868b]">per night</p>
+                                    </>
+                                  ) : hotel.rate_description && (
+                                    <p className="text-sm font-bold text-[#003e79]">{hotel.rate_description}</p>
+                                  )}
+                                </div>
+                              </div>
+                              {hotel.booking_url && (
+                                <div className="mt-4 pt-3 border-t border-[#e8e8ed]">
+                                  <a
+                                    href={hotel.booking_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f0f7ff] text-[#003e79] text-xs font-semibold hover:bg-[#e0efff] transition-colors"
+                                  >
+                                    Book Now
+                                    <ArrowIcon />
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}

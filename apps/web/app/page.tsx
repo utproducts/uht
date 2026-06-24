@@ -168,7 +168,7 @@ export default function HomePage() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 mb-8">
               <span className="w-2 h-2 rounded-full bg-[#00ccff] animate-pulse" />
-              <span className="text-sm text-white/80 font-medium">2025–26 Season Now Open</span>
+              <span className="text-sm text-white/80 font-medium">2026–27 Season Now Open</span>
             </div>
 
             <h1 className={oswald.className + " text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold uppercase tracking-tight text-white leading-[0.95]"}>
