@@ -7,7 +7,6 @@ const ROLES = [
   { id: 'organization', label: 'Organization', desc: 'I manage a hockey organization with multiple teams', icon: '🏢' },
   { id: 'coach', label: 'Coach', desc: 'I coach a team and need to manage rosters and register for events', icon: '🏒' },
   { id: 'manager', label: 'Team Manager', desc: 'I manage a team, handle registrations, and coordinate logistics', icon: '📋' },
-  { id: 'parent', label: 'Parent / Player', desc: 'I want to see my player\'s schedule, stats, and game results', icon: '👨‍👩‍👧‍👦' },
   { id: 'referee', label: 'Referee', desc: 'I officiate games and need to see my assignments', icon: '🦓' },
 ];
 
@@ -167,6 +166,13 @@ export default function SignupPage() {
               >
                 Continue
               </button>
+
+              <div className="mt-5 p-4 bg-[#fefce8] border border-[#fde68a] rounded-xl text-sm text-[#92400e]">
+                <p className="font-semibold">Are you a parent?</p>
+                <p className="mt-1 text-[#a16207]">
+                  Parent accounts are created automatically when your coach shares a roster invite link with you. Ask your coach for the link!
+                </p>
+              </div>
 
               <p className="mt-6 text-center text-sm text-[#6e6e73]">
                 Already have an account?{' '}

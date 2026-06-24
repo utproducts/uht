@@ -14,7 +14,6 @@ interface Team {
   division_level: string | null;
   organization_id: string | null;
   organization_name: string | null;
-  usa_hockey_team_id: string | null;
   city: string | null;
   state: string | null;
   logo_url: string | null;
@@ -91,7 +90,6 @@ function EditTeamDrawer({ team, onClose, onSaved }: { team: Team; onClose: () =>
     division_level: team.division_level || '',
     city: team.city || '',
     state: team.state || '',
-    usa_hockey_team_id: team.usa_hockey_team_id || '',
     head_coach_name: team.head_coach_name || '',
     head_coach_email: team.head_coach_email || '',
     head_coach_phone: team.head_coach_phone || '',
@@ -119,7 +117,6 @@ function EditTeamDrawer({ team, onClose, onSaved }: { team: Team; onClose: () =>
           division_level: form.division_level || null,
           city: form.city || null,
           state: form.state || null,
-          usa_hockey_team_id: form.usa_hockey_team_id || null,
           head_coach_name: form.head_coach_name || null,
           head_coach_email: form.head_coach_email || null,
           head_coach_phone: form.head_coach_phone || null,
@@ -199,10 +196,6 @@ function EditTeamDrawer({ team, onClose, onSaved }: { team: Team; onClose: () =>
                     <option value="2025/2026">2025/2026</option>
                     <option value="2026/2027">2026/2027</option>
                   </select>
-                </div>
-                <div>
-                  <label className={lc}>USA Hockey ID</label>
-                  <input className={fc} value={form.usa_hockey_team_id} onChange={e => setForm({...form, usa_hockey_team_id: e.target.value})} placeholder="e.g. 123456" />
                 </div>
               </div>
             </div>
@@ -292,7 +285,6 @@ interface Player {
   position: string | null;
   shoots: string | null;
   date_of_birth: string | null;
-  usa_hockey_number: string | null;
   roster_status: string;
   guardians: { user_id: string; first_name: string; last_name: string; email: string; phone: string | null; relationship: string }[];
 }
@@ -364,13 +356,6 @@ function TeamRosterRow({ teamId }: { teamId: string }) {
                 </div>
               </div>
             </div>
-          </td>
-          <td className="px-5 py-2">
-            {player.usa_hockey_number ? (
-              <span className="text-[11px] text-[#6e6e73] font-mono">{player.usa_hockey_number}</span>
-            ) : (
-              <span className="text-[10px] text-[#c7c7cc] italic">No USA#</span>
-            )}
           </td>
           <td className="px-5 py-2">
             {player.guardians.length > 0 ? (

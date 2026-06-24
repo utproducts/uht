@@ -5,9 +5,16 @@ const API = 'https://uht.chad-157.workers.dev/api';
 
 interface Player {
   id: string; firstName: string; lastName: string; jerseyNumber: string | null;
-  position: string | null; shoots: string | null; usaHockeyNumber: string | null;
+  position: string | null; shoots: string | null;
   claimed: boolean; parentName: string | null; parentEmail: string | null;
+  avatarId: string | null;
 }
+
+const AVATAR_MAP: Record<string, string> = {
+  penguin: '🐧', bear: '🐻', wolf: '🐺', eagle: '🦅', shark: '🦈', dragon: '🐉',
+  lion: '🦁', tiger: '🐯', fox: '🦊', owl: '🦉', unicorn: '🦄', octopus: '🐙',
+  bat: '🦇', gorilla: '🦍', rocket: '🚀', lightning: '⚡',
+};
 interface TeamInfo {
   id: string; name: string; ageGroup: string; divisionLevel: string | null;
   city: string | null; state: string | null; headCoachName: string | null; orgName: string | null;
@@ -540,9 +547,18 @@ export default function RosterClaimPage() {
                 {players.map(player => (
                   <div key={player.id} className="px-4 py-3.5 border-b border-gray-100 last:border-b-0 flex items-center justify-between hover:bg-gray-50 transition">
                     <div className="flex items-center gap-3">
-                      <div className={"w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold " +
+                      <div className={"w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold relative " +
                         (player.claimed ? "bg-green-100 text-green-700" : "bg-gray-100 text-[#6e6e73]")}>
-                        {player.jerseyNumber || '—'}
+                        {player.avatarId ? (
+                          <span className="text-xl">{AVATAR_MAP[player.avatarId] || '🏒'}</span>
+                        ) : (
+                          player.jerseyNumber || '—'
+                        )}
+                        {player.avatarId && player.jerseyNumber && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#003e79] text-white text-[10px] font-bold flex items-center justify-center">
+                            {player.jerseyNumber}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-[#1d1d1f]">

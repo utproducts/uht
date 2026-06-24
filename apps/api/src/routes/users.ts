@@ -135,21 +135,119 @@ userRoutes.get('/',
       roles: string | null;
     }>();
 
-    const users = (results.results || []).map(u => ({
-      id: u.id,
-      email: u.email,
-      firstName: u.first_name,
-      lastName: u.last_name,
-      phone: u.phone,
-      avatarUrl: u.avatar_url,
-      emailVerified: u.email_verified === 1,
-      isActive: u.is_active === 1,
-      createdAt: u.created_at,
-      updatedAt: u.updated_at,
-      roles: u.roles ? u.roles.split(',') as UserRole[] : [],
-    }));
+    // Enrich each user with team associations, claimed players, and source
+    const userIds = (results.results || []).map(u => u.id);
+
+    // Batch: get team associations for all users
+    const teamMap: Record<string, { teamName: string; teamId: string; role: string }[]> = {};
+    if (userIds.length > 0) {
+      // Coach teams
+      const coachTeams = await db.prepare(`
+        SELECT tc.user_id, t.id as team_id, t.name as team_name
+        FROM team_coaches tc JOIN teams t ON t.id = tc.team_id
+        WHERE tc.user_id IN (${userIds.map(() => '?').join(',')})
+      `).bind(...userIds).all<{ user_id: string; team_id: string; team_name: string }>();
+      for (const ct of coachTeams.results || []) {
+        if (!teamMap[ct.user_id]) teamMap[ct.user_id] = [];
+        teamMap[ct.user_id].push({ teamName: ct.team_name, teamId: ct.team_id, role: 'coach' });
+      }
+
+      // Manager teams
+      const mgrTeams = await db.prepare(`
+        SELECT tm.user_id, t.id as team_id, t.name as team_name
+        FROM team_managers tm JOIN teams t ON t.id = tm.team_id
+        WHERE tm.user_id IN (${userIds.map(() => '?').join(',')})
+      `).bind(...userIds).all<{ user_id: string; team_id: string; team_name: string }>();
+      for (const mt of mgrTeams.results || []) {
+        if (!teamMap[mt.user_id]) teamMap[mt.user_id] = [];
+        teamMap[mt.user_id].push({ teamName: mt.team_name, teamId: mt.team_id, role: 'manager' });
+      }
+    }
+
+    // Batch: get claimed players count per user
+    const claimedMap: Record<string, number> = {};
+    if (userIds.length > 0) {
+      const claimed = await db.prepare(`
+        SELECT claimed_by, COUNT(*) as cnt
+        FROM players WHERE claimed_by IN (${userIds.map(() => '?').join(',')})
+        GROUP BY claimed_by
+      `).bind(...userIds).all<{ claimed_by: string; cnt: number }>();
+      for (const c of claimed.results || []) {
+        claimedMap[c.claimed_by] = c.cnt;
+      }
+    }
+
+    // Batch: get registration count per user (via event_registrations)
+    const regMap: Record<string, number> = {};
+    if (userIds.length > 0) {
+      try {
+        const regs = await db.prepare(`
+          SELECT registered_by, COUNT(*) as cnt
+          FROM event_registrations WHERE registered_by IN (${userIds.map(() => '?').join(',')})
+          GROUP BY registered_by
+        `).bind(...userIds).all<{ registered_by: string; cnt: number }>();
+        for (const r of regs.results || []) {
+          regMap[r.registered_by] = r.cnt;
+        }
+      } catch {}
+    }
+
+    // Batch: check who has pending invites (i.e., came through an invite)
+    const inviteMap: Record<string, boolean> = {};
+    if (userIds.length > 0) {
+      try {
+        const invites = await db.prepare(`
+          SELECT DISTINCT u.id as user_id
+          FROM users u
+          JOIN team_invites ti ON LOWER(ti.email) = LOWER(u.email)
+          WHERE u.id IN (${userIds.map(() => '?').join(',')})
+        `).bind(...userIds).all<{ user_id: string }>();
+        for (const inv of invites.results || []) {
+          inviteMap[inv.user_id] = true;
+        }
+      } catch {}
+    }
+
+    const users = (results.results || []).map(u => {
+      // Determine source
+      const roles = u.roles ? u.roles.split(',') as UserRole[] : [];
+      let source = 'signup';
+      if (roles.includes('parent') && claimedMap[u.id]) source = 'roster_claim';
+      else if (inviteMap[u.id]) source = 'invite';
+      // admin-created users typically have no magic_links record — we can't easily distinguish here,
+      // but the above covers the main paths
+
+      return {
+        id: u.id,
+        email: u.email,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        phone: u.phone,
+        avatarUrl: u.avatar_url,
+        emailVerified: u.email_verified === 1,
+        isActive: u.is_active === 1,
+        createdAt: u.created_at,
+        updatedAt: u.updated_at,
+        roles,
+        teams: teamMap[u.id] || [],
+        claimedPlayers: claimedMap[u.id] || 0,
+        registrations: regMap[u.id] || 0,
+        source,
+      };
+    });
 
     const totalPages = Math.ceil(total / per_page);
+
+    // Also return aggregate role counts across ALL users (not just this page)
+    let roleCounts: Record<string, number> = {};
+    try {
+      const rc = await db.prepare(`
+        SELECT role, COUNT(*) as cnt FROM user_roles GROUP BY role ORDER BY role
+      `).all<{ role: string; cnt: number }>();
+      for (const r of rc.results || []) {
+        roleCounts[r.role] = r.cnt;
+      }
+    } catch {}
 
     return c.json({
       success: true,
@@ -159,6 +257,46 @@ userRoutes.get('/',
         perPage: per_page,
         total,
         totalPages,
+      },
+      roleCounts,
+    });
+  }
+);
+
+// ==================
+// EXPORT USERS (CSV)
+// ==================
+userRoutes.get('/export/csv',
+  authMiddleware,
+  requireRole('admin'),
+  async (c) => {
+    const db = c.env.DB;
+
+    const results = await db.prepare(`
+      SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_active, u.created_at,
+             GROUP_CONCAT(ur.role, ',') as roles
+      FROM users u
+      LEFT JOIN user_roles ur ON u.id = ur.user_id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+    `).all<{
+      id: string; email: string; first_name: string; last_name: string;
+      phone: string | null; is_active: number; created_at: string; roles: string | null;
+    }>();
+
+    const rows = (results.results || []).map(u => [
+      u.first_name, u.last_name, u.email, u.phone || '', u.roles || '', u.is_active ? 'Active' : 'Inactive', u.created_at
+    ]);
+
+    const csv = [
+      'First Name,Last Name,Email,Phone,Roles,Status,Created',
+      ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': `attachment; filename="uht-users-${new Date().toISOString().split('T')[0]}.csv"`,
       },
     });
   }
@@ -525,3 +663,38 @@ userRoutes.put('/:userId/status',
     }
   }
 );
+
+// ==================
+// DELETE USER
+// ==================
+userRoutes.delete('/:userId',
+  authMiddleware,
+  requireRole('admin'),
+  async (c) => {
+    const userId = c.req.param('userId');
+    const db = c.env.DB;
+
+    const user = await db.prepare('SELECT id, email FROM users WHERE id = ?').bind(userId).first<{ id: string; email: string }>();
+    if (!user) {
+      return c.json({ success: false, error: 'User not found' }, 404);
+    }
+
+    try {
+      // Clean up all related records
+      await db.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(userId).run();
+      await db.prepare('DELETE FROM team_coaches WHERE user_id = ?').bind(userId).run();
+      await db.prepare('DELETE FROM team_managers WHERE user_id = ?').bind(userId).run();
+      try { await db.prepare('DELETE FROM magic_links WHERE user_id = ?').bind(userId).run(); } catch {}
+      try { await db.prepare("UPDATE players SET claimed_by = NULL, claimed_at = NULL WHERE claimed_by = ?").bind(userId).run(); } catch {}
+
+      // Delete user
+      await db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+
+      return c.json({ success: true, data: { id: userId, email: user.email } });
+    } catch (err) {
+      console.error('User delete error:', err);
+      return c.json({ success: false, error: 'Failed to delete user' }, 500);
+    }
+  }
+);
+

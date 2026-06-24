@@ -486,7 +486,6 @@ export function OrgRosters() {
                 <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">Name</th>
                 <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">Position</th>
                 <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">Team</th>
-                <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">USA Hockey #</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f0f0f2]">
@@ -498,7 +497,6 @@ export function OrgRosters() {
                   <td className="px-5 py-3">
                     <span className="px-2 py-0.5 bg-[#f5f5f7] rounded text-xs font-medium text-[#1d1d1f]">{p.team_name} ({p.age_group})</span>
                   </td>
-                  <td className="px-5 py-3 text-[#6e6e73] font-mono text-xs">{p.usa_hockey_number || '—'}</td>
                 </tr>
               ))}
             </tbody>

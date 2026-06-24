@@ -417,7 +417,7 @@ function RosterManagement() {
 
   // Add player form
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newPlayer, setNewPlayer] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
+  const [newPlayer, setNewPlayer] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
 
   // Edit player
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -508,7 +508,7 @@ function RosterManagement() {
       });
       const data = await res.json() as any;
       if (data.success) {
-        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
+        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
         setShowAddForm(false);
         loadRoster(selectedTeamId);
       }
@@ -541,7 +541,7 @@ function RosterManagement() {
     setEditForm({
       first_name: p.first_name, last_name: p.last_name,
       jersey_number: p.jersey_number || '', position: p.position || '',
-      shoots: p.shoots || '', usa_hockey_number: p.usa_hockey_number || '',
+      shoots: p.shoots || '',
     });
   };
 
@@ -628,7 +628,7 @@ function RosterManagement() {
                   <th className="px-4 py-3 font-semibold text-[#6e6e73]">Player</th>
                   <th className="px-4 py-3 font-semibold text-[#6e6e73]">Position</th>
                   <th className="px-4 py-3 font-semibold text-[#6e6e73]">Shoots</th>
-                  <th className="px-4 py-3 font-semibold text-[#6e6e73]">USA Hockey #</th>
+                  <th className="px-4 py-3 font-semibold text-[#6e6e73]">Parent / Guardian</th>
                   <th className="px-4 py-3 font-semibold text-[#6e6e73] w-24">Actions</th>
                 </tr>
               </thead>
@@ -665,10 +665,7 @@ function RosterManagement() {
                           <option value="right">Right</option>
                         </select>
                       </td>
-                      <td className="px-4 py-2">
-                        <input type="text" value={editForm.usa_hockey_number} onChange={e => setEditForm((f: any) => ({ ...f, usa_hockey_number: e.target.value }))}
-                          className="w-24 px-2 py-1 rounded border border-gray-300 text-sm" />
-                      </td>
+                      <td className="px-4 py-2 text-xs text-[#6e6e73]">{p.parent_name || '—'}</td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1">
                           <button onClick={() => handleEditSave(p.id)} className="px-2 py-1 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700">Save</button>
@@ -684,7 +681,17 @@ function RosterManagement() {
                       </td>
                       <td className="px-4 py-3 text-[#6e6e73] capitalize">{p.position || '—'}</td>
                       <td className="px-4 py-3 text-[#6e6e73] capitalize">{p.shoots || '—'}</td>
-                      <td className="px-4 py-3 text-[#6e6e73] font-mono text-xs">{p.usa_hockey_number || '—'}</td>
+                      <td className="px-4 py-3">
+                        {p.parent_name ? (
+                          <div>
+                            <p className="text-[#1d1d1f] text-xs font-medium">{p.parent_name}</p>
+                            {p.parent_email && <p className="text-[#6e6e73] text-[11px]">{p.parent_email}</p>}
+                            {p.parent_phone && <p className="text-[#86868b] text-[11px]">{p.parent_phone}</p>}
+                          </div>
+                        ) : (
+                          <span className="text-[#c7c7cc] text-xs italic">Not claimed</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
                           <button onClick={() => startEdit(p)} className="px-2 py-1 rounded text-xs font-medium text-[#003e79] hover:bg-[#f0f7ff] transition">Edit</button>
@@ -707,7 +714,7 @@ function RosterManagement() {
             <svg className="w-8 h-8 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           </div>
           <h3 className="text-lg font-semibold text-[#1d1d1f]">No players on roster</h3>
-          <p className="mt-2 text-sm text-[#6e6e73]">Import from USA Hockey, paste a roster, or add players manually.</p>
+          <p className="mt-2 text-sm text-[#6e6e73]">Paste a roster, upload a file, or add players manually.</p>
           <button onClick={() => setShowImport(true)}
             className="inline-block mt-4 px-6 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
             Add Players

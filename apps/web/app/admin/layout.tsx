@@ -1,6 +1,19 @@
 'use client';
 import { usePathname } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import RoleSwitcher from '../components/RoleSwitcher';
+
+function readUserName(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const stored = localStorage.getItem('uht_user');
+    if (stored) {
+      const u = JSON.parse(stored);
+      return u.firstName || u.first_name || '';
+    }
+  } catch {}
+  return '';
+}
 
 const ADMIN_NAV = [
   { name: 'Overview', href: '/dashboard/admin' },
@@ -24,6 +37,15 @@ const ADMIN_NAV = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [userName, setUserName] = useState(readUserName);
+
+  const refreshName = useCallback(() => setUserName(readUserName()), []);
+
+  useEffect(() => {
+    window.addEventListener('storage', refreshName);
+    refreshName();
+    return () => window.removeEventListener('storage', refreshName);
+  }, [refreshName]);
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -34,8 +56,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="text-white font-semibold">Ultimate Tournaments</span>
         </a>
         <div className="flex items-center gap-4">
-          <span className="text-white/60 text-sm font-medium">Admin Dashboard</span>
-          <button onClick={() => { localStorage.removeItem('uht_token'); localStorage.removeItem('uht_user'); localStorage.removeItem('uht_role'); window.location.href = '/login'; }} className="text-white/40 text-sm hover:text-white transition-colors">Sign out</button>
+          {userName && (
+            <span className="text-white text-sm font-medium">
+              Hi, {userName}
+            </span>
+          )}
+          <span className="text-white/40 text-xs hidden sm:inline">|</span>
+          <span className="text-white/60 text-sm font-medium hidden sm:inline">Admin</span>
+          <button onClick={() => { localStorage.removeItem('uht_token'); localStorage.removeItem('uht_user'); localStorage.removeItem('uht_role'); window.location.href = '/login'; }} className="text-white/60 text-sm hover:text-white transition-colors font-medium">Sign out</button>
         </div>
       </header>
 

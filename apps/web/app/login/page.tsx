@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
@@ -10,6 +10,11 @@ export default function LoginPage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [loginMode, setLoginMode] = useState<'magic' | 'pin'>('magic');
+  const [pin, setPin] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+  const pinRefs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -51,6 +56,70 @@ export default function LoginPage() {
     } catch {
       setStatus('error');
       setErrorMsg('Unable to connect. Please try again.');
+    }
+  };
+
+  const handlePinChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return; // digits only
+    const newPin = [...pin];
+    newPin[index] = value.slice(-1); // only last char
+    setPin(newPin);
+    setPinError('');
+
+    // Auto-focus next input
+    if (value && index < 3) {
+      pinRefs[index + 1].current?.focus();
+    }
+
+    // Auto-submit when all 4 digits entered
+    if (value && index === 3 && newPin.every(d => d)) {
+      handlePinLogin(newPin.join(''));
+    }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handlePinLogin = async (pinCode?: string) => {
+    const code = pinCode || pin.join('');
+    if (code.length !== 4 || !email) return;
+
+    setPinLoading(true);
+    setPinError('');
+
+    try {
+      const resp = await fetch(`${API}/api/auth/admin-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), pin: code }),
+      });
+      const data = await resp.json();
+
+      if (data.success && data.data) {
+        localStorage.setItem('uht_token', data.data.token);
+        localStorage.setItem('uht_user', JSON.stringify(data.data.user));
+        localStorage.setItem('uht_role', data.data.user.roles?.[0] || 'admin');
+
+        if (redirectUrl) {
+          router.push(redirectUrl);
+        } else {
+          const role = data.data.user.roles?.[0] || 'admin';
+          if (role === 'admin') router.push('/admin/events');
+          else if (role === 'director') router.push('/director');
+          else router.push('/dashboard/' + role);
+        }
+      } else {
+        setPinError(data.error || 'Invalid PIN');
+        setPin(['', '', '', '']);
+        pinRefs[0].current?.focus();
+      }
+    } catch {
+      setPinError('Unable to connect. Please try again.');
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -107,10 +176,23 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-semibold text-[#1d1d1f]">Sign in</h1>
             <p className="mt-2 text-[#6e6e73]">
-              Enter your email to receive a login link
+              {loginMode === 'magic' ? 'Enter your email to receive a login link' : 'Enter your email and 4-digit PIN'}
             </p>
           </div>
 
+          {/* Mode Toggle */}
+          <div className="flex bg-white rounded-xl border border-gray-200 p-1 mb-6">
+            <button onClick={() => setLoginMode('magic')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${loginMode === 'magic' ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
+              Email Link
+            </button>
+            <button onClick={() => setLoginMode('pin')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${loginMode === 'pin' ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
+              Admin PIN
+            </button>
+          </div>
+
+          {loginMode === 'magic' ? (
             <form onSubmit={handleMagicLink} className="bg-white rounded-2xl shadow-soft p-8">
               <div>
                 <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Email address</label>
@@ -128,12 +210,12 @@ export default function LoginPage() {
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                   <p>{errorMsg}</p>
                   {errorMsg.includes("don't have an account") && (
-                    <a href="/signup" className="mt-2 inline-flex items-center gap-1.5 font-semibold text-[#003e79] hover:underline">
+                    <> <a href="/signup" className="mt-2 inline-flex items-center gap-1.5 font-semibold text-[#003e79] hover:underline">
                       Create an account
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                       </svg>
-                    </a>
+                    </a></>
                   )}
                 </div>
               )}
@@ -156,14 +238,74 @@ export default function LoginPage() {
               <p className="mt-4 text-center text-sm text-[#6e6e73]">
                 No password needed — we&apos;ll email you a secure link to sign in instantly.
               </p>
-
-              <div className="mt-5 pt-5 border-t border-gray-100 text-center">
-                <p className="text-sm text-[#6e6e73]">
-                  Don&apos;t have an account?{' '}
-                  <a href="/signup" className="text-[#003e79] font-medium hover:underline">Create one</a>
-                </p>
-              </div>
             </form>
+          ) : (
+            /* PIN Login */
+            <div className="bg-white rounded-2xl shadow-soft p-8">
+              <div>
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Email address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setPinError(''); }}
+                  placeholder="admin@ultimatetournaments.com"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm"
+                />
+              </div>
+
+              <div className="mt-5">
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-3 text-center">Enter your 4-digit PIN</label>
+                <div className="flex justify-center gap-3">
+                  {pin.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={pinRefs[i]}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handlePinChange(i, e.target.value)}
+                      onKeyDown={(e) => handlePinKeyDown(i, e)}
+                      className="w-14 h-16 text-center text-2xl font-bold border-2 border-gray-200 rounded-xl focus:border-[#003e79] focus:ring-2 focus:ring-[#003e79]/20 outline-none transition"
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {pinError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 text-center">
+                  {pinError}
+                </div>
+              )}
+
+              <button
+                onClick={() => handlePinLogin()}
+                disabled={pin.some(d => !d) || !email || pinLoading}
+                className="mt-6 w-full btn-primary py-3 text-base font-medium disabled:opacity-50"
+              >
+                {pinLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                    Signing in...
+                  </span>
+                ) : (
+                  'Sign In'
+                )}
+              </button>
+
+              <p className="mt-4 text-center text-xs text-[#aeaeb2]">
+                PIN login is for admin and director accounts only.
+                <br />Don&apos;t have a PIN? Use the Email Link tab and set one in Settings.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-5 text-center">
+            <p className="text-sm text-[#6e6e73]">
+              Don&apos;t have an account?{' '}
+              <a href="/signup" className="text-[#003e79] font-medium hover:underline">Create one</a>
+            </p>
+          </div>
         </div>
       </div>
     </div>

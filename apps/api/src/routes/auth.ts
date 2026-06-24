@@ -545,3 +545,115 @@ authRoutes.post('/scorekeeper-pin', zValidator('json', pinLoginSchema), async (c
     },
   });
 });
+
+// ==================
+// ADMIN PIN LOGIN
+// ==================
+const adminPinSchema = z.object({
+  email: z.string().email(),
+  pin: z.string().length(4),
+});
+
+authRoutes.post('/admin-pin', zValidator('json', adminPinSchema), async (c) => {
+  const { email, pin } = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Find admin/director user by email
+  const user = await db.prepare(`
+    SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, u.pin_code
+    FROM users u
+    WHERE LOWER(u.email) = LOWER(?)
+  `).bind(email.trim()).first<{
+    id: string; email: string; first_name: string; last_name: string;
+    is_active: number; pin_code: string | null;
+  }>();
+
+  if (!user) {
+    return c.json({ success: false, error: 'Invalid email or PIN' }, 401);
+  }
+
+  if (!user.is_active) {
+    return c.json({ success: false, error: 'Account is disabled' }, 401);
+  }
+
+  if (!user.pin_code) {
+    return c.json({ success: false, error: 'PIN not set. Please use the magic link to sign in, then set your PIN in Settings.' }, 401);
+  }
+
+  if (user.pin_code !== pin) {
+    return c.json({ success: false, error: 'Invalid email or PIN' }, 401);
+  }
+
+  // Check user has admin or director role
+  const rolesResult = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+    .bind(user.id).all<{ role: UserRole }>();
+  const roles = rolesResult.results?.map(r => r.role) || [];
+
+  if (!roles.includes('admin') && !roles.includes('director')) {
+    return c.json({ success: false, error: 'PIN login is only available for admin and director accounts' }, 403);
+  }
+
+  // Generate JWT
+  const jwtToken = await generateToken(
+    { id: user.id, email: user.email, roles },
+    c.env.JWT_SECRET
+  );
+
+  return c.json({
+    success: true,
+    data: {
+      token: jwtToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        roles,
+      },
+    },
+  });
+});
+
+// ==================
+// SET ADMIN PIN
+// ==================
+const setPinSchema = z.object({
+  pin: z.string().length(4).regex(/^\d{4}$/, 'PIN must be 4 digits'),
+});
+
+authRoutes.put('/set-pin',
+  authMiddleware,
+  zValidator('json', setPinSchema),
+  async (c) => {
+    const user = (c as any).get('user');
+    const { pin } = c.req.valid('json');
+    const db = c.env.DB;
+
+    // Only admin/director can set PIN
+    const roles: string[] = user.roles || [];
+    if (!roles.includes('admin') && !roles.includes('director')) {
+      return c.json({ success: false, error: 'Only admin and director users can set a PIN' }, 403);
+    }
+
+    await db.prepare('UPDATE users SET pin_code = ?, updated_at = datetime("now") WHERE id = ?')
+      .bind(pin, user.id).run();
+
+    return c.json({ success: true, message: 'PIN set successfully' });
+  }
+);
+
+// ==================
+// MIGRATION HELPER (run once to add pin_code column)
+// ==================
+authRoutes.post('/migrate-pin', async (c) => {
+  const db = c.env.DB;
+  try {
+    await db.prepare('ALTER TABLE users ADD COLUMN pin_code TEXT DEFAULT NULL').run();
+    return c.json({ success: true, message: 'pin_code column added' });
+  } catch (err: any) {
+    if (err?.message?.includes('duplicate column')) {
+      return c.json({ success: true, message: 'pin_code column already exists' });
+    }
+    return c.json({ success: false, error: err?.message || 'Migration failed' }, 500);
+  }
+});

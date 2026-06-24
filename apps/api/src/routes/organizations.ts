@@ -196,6 +196,241 @@ organizationRoutes.post('/quick-create', authMiddleware, async (c) => {
 });
 
 // ==================
+// Admin: List ALL organizations (ordered by state, name) with team counts
+// ==================
+organizationRoutes.get('/admin/list', async (c) => {
+  const db = c.env.DB;
+
+  const result = await db.prepare(`
+    SELECT o.*,
+      (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
+    FROM organizations o
+    WHERE o.is_active = 1
+    ORDER BY o.state ASC, o.name ASC
+  `).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// Admin: Bulk-import organizations (skip duplicates)
+// ==================
+organizationRoutes.post('/admin/bulk-import', async (c) => {
+  const db = c.env.DB;
+  try {
+    const body = await c.req.json<{ organizations: { name: string; state: string }[] }>();
+
+    if (!body.organizations || !Array.isArray(body.organizations)) {
+      return c.json({ error: 'organizations array is required' }, 400);
+    }
+
+    let imported = 0;
+    const skippedNames: string[] = [];
+
+    for (const org of body.organizations) {
+      const trimmedName = (org.name || '').trim();
+      if (!trimmedName) continue;
+
+      const trimmedState = (org.state || '').trim();
+
+      // Check for existing org with same name (case-insensitive)
+      const existing = await db.prepare(
+        `SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER(?) AND is_active = 1`
+      ).bind(trimmedName).first();
+
+      if (existing) {
+        skippedNames.push(trimmedName);
+        continue;
+      }
+
+      const orgId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO organizations (id, name, state, owner_id, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, 'system_migration_user', 1, datetime('now'), datetime('now'))
+      `).bind(orgId, trimmedName, trimmedState || null).run();
+
+      imported++;
+    }
+
+    return c.json({
+      success: true,
+      imported,
+      skipped: skippedNames.length,
+      skippedNames,
+    });
+  } catch (err: any) {
+    console.error('Bulk import error:', err);
+    return c.json({ error: 'Import failed', details: err?.message || String(err) }, 500);
+  }
+});
+
+// ==================
+// Admin: Run migration to create organization_requests table
+// ==================
+organizationRoutes.post('/admin/migrate-requests', async (c) => {
+  const db = c.env.DB;
+
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS organization_requests (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      city TEXT,
+      state TEXT,
+      requested_by_email TEXT NOT NULL,
+      requested_by_name TEXT,
+      requested_by_user_id TEXT,
+      status TEXT DEFAULT 'pending',
+      admin_notes TEXT,
+      created_org_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      reviewed_at TEXT,
+      reviewed_by TEXT
+    )
+  `).run();
+
+  return c.json({ success: true, message: 'organization_requests table created' });
+});
+
+// ==================
+// Public: Request a new organization be created (for fall coaches)
+// ==================
+organizationRoutes.post('/requests', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    name: string;
+    city?: string;
+    state?: string;
+    requestedByEmail: string;
+    requestedByName?: string;
+  }>();
+
+  if (!body.name || !body.name.trim()) {
+    return c.json({ error: 'Organization name is required' }, 400);
+  }
+  if (!body.requestedByEmail || !body.requestedByEmail.trim()) {
+    return c.json({ error: 'Email is required' }, 400);
+  }
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+
+  await db.prepare(`
+    INSERT INTO organization_requests (id, name, city, state, requested_by_email, requested_by_name, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending')
+  `).bind(
+    id,
+    body.name.trim(),
+    body.city || null,
+    body.state || null,
+    body.requestedByEmail.trim().toLowerCase(),
+    body.requestedByName || null
+  ).run();
+
+  return c.json({ success: true, id }, 201);
+});
+
+// ==================
+// Admin: List all organization requests
+// ==================
+organizationRoutes.get('/admin/requests', async (c) => {
+  const db = c.env.DB;
+
+  const result = await db.prepare(`
+    SELECT * FROM organization_requests ORDER BY created_at DESC
+  `).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// Admin: Approve an organization request
+// ==================
+organizationRoutes.post('/admin/requests/:id/approve', async (c) => {
+  const requestId = c.req.param('id');
+  const db = c.env.DB;
+  const body = await c.req.json<{ adminNotes?: string }>().catch(() => ({} as { adminNotes?: string }));
+
+  // Fetch the request
+  const request = await db.prepare(
+    'SELECT * FROM organization_requests WHERE id = ?'
+  ).bind(requestId).first<any>();
+
+  if (!request) {
+    return c.json({ error: 'Request not found' }, 404);
+  }
+  if (request.status !== 'pending') {
+    return c.json({ error: `Request already ${request.status}` }, 400);
+  }
+
+  // Create the organization
+  const orgId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO organizations (id, name, city, state, owner_id, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'system_migration_user', 1, datetime('now'), datetime('now'))
+  `).bind(orgId, request.name, request.city || null, request.state || null).run();
+
+  // Update the request
+  await db.prepare(`
+    UPDATE organization_requests
+    SET status = 'approved', created_org_id = ?, admin_notes = ?, reviewed_at = datetime('now'), reviewed_by = 'admin'
+    WHERE id = ?
+  `).bind(orgId, body.adminNotes || null, requestId).run();
+
+  // Send approval email via SendGrid
+  const siteUrl = (c.env as any).SITE_URL || 'https://ultimatetournaments.com';
+  try {
+    await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: request.requested_by_email }] }],
+        from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+        subject: 'Your organization has been approved — create your team now!',
+        content: [{
+          type: 'text/html',
+          value: `<p>Great news! Your organization <strong>${request.name}</strong> has been approved on Ultimate Tournaments.</p>
+            <p>You can now create your team and register for events.</p>
+            <p><a href="${siteUrl}/create-team" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Create Your Team</a></p>
+            <p>If you have any questions, reply to this email or contact us at support@ultimatetournaments.com.</p>`,
+        }],
+      }),
+    });
+  } catch {}
+
+  return c.json({ success: true });
+});
+
+// ==================
+// Admin: Deny an organization request
+// ==================
+organizationRoutes.post('/admin/requests/:id/deny', async (c) => {
+  const requestId = c.req.param('id');
+  const db = c.env.DB;
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
+
+  const request = await db.prepare(
+    'SELECT * FROM organization_requests WHERE id = ?'
+  ).bind(requestId).first<any>();
+
+  if (!request) {
+    return c.json({ error: 'Request not found' }, 404);
+  }
+  if (request.status !== 'pending') {
+    return c.json({ error: `Request already ${request.status}` }, 400);
+  }
+
+  await db.prepare(`
+    UPDATE organization_requests
+    SET status = 'denied', admin_notes = ?, reviewed_at = datetime('now')
+    WHERE id = ?
+  `).bind(body.reason || null, requestId).run();
+
+  return c.json({ success: true });
+});
+
+// ==================
 // Get org teams with full detail (coaches, managers, player count, registrations)
 // ==================
 organizationRoutes.get('/:id/teams-full', authMiddleware, async (c) => {
@@ -574,70 +809,6 @@ organizationRoutes.delete('/:id/teams/:teamId/staff/:userId', authMiddleware, as
   await db.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
 
   return c.json({ success: true });
-});
-
-// ==================
-// Admin: List ALL organizations (ordered by state, name) with team counts
-// ==================
-organizationRoutes.get('/admin/list', async (c) => {
-  const db = c.env.DB;
-
-  const result = await db.prepare(`
-    SELECT o.*,
-      (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
-    FROM organizations o
-    WHERE o.is_active = 1
-    ORDER BY o.state ASC, o.name ASC
-  `).all();
-
-  return c.json({ success: true, data: result.results });
-});
-
-// ==================
-// Admin: Bulk-import organizations (skip duplicates)
-// ==================
-organizationRoutes.post('/admin/bulk-import', async (c) => {
-  const db = c.env.DB;
-  const body = await c.req.json<{ organizations: { name: string; state: string }[] }>();
-
-  if (!body.organizations || !Array.isArray(body.organizations)) {
-    return c.json({ error: 'organizations array is required' }, 400);
-  }
-
-  let imported = 0;
-  const skippedNames: string[] = [];
-
-  for (const org of body.organizations) {
-    const trimmedName = (org.name || '').trim();
-    if (!trimmedName) continue;
-
-    const trimmedState = (org.state || '').trim();
-
-    // Check for existing org with same name (case-insensitive)
-    const existing = await db.prepare(
-      `SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER(?) AND is_active = 1`
-    ).bind(trimmedName).first();
-
-    if (existing) {
-      skippedNames.push(trimmedName);
-      continue;
-    }
-
-    const orgId = crypto.randomUUID().replace(/-/g, '');
-    await db.prepare(`
-      INSERT INTO organizations (id, name, state, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
-    `).bind(orgId, trimmedName, trimmedState || null).run();
-
-    imported++;
-  }
-
-  return c.json({
-    success: true,
-    imported,
-    skipped: skippedNames.length,
-    skippedNames,
-  });
 });
 
 // ==================

@@ -23,6 +23,18 @@ interface ImportResult {
   skippedNames?: string[];
 }
 
+interface OrgRequest {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  requested_by_email: string;
+  requested_by_name: string;
+  status: string;
+  admin_notes: string;
+  created_at: string;
+}
+
 function getToken(): string {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('uht_token') || '';
@@ -32,17 +44,29 @@ function getToken(): string {
 
 function parseCsv(text: string): CsvRow[] {
   const rows: CsvRow[] = [];
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return rows;
+  // Strip BOM if present
+  const clean = text.replace(/^﻿/, '');
+  const lines = clean.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return rows;
 
   // Detect delimiter
-  const headerLine = lines[0];
-  const delimiter = headerLine.includes('\t') ? '\t' : ',';
+  const firstLine = lines[0];
+  const delimiter = firstLine.includes('\t') ? '\t' : ',';
 
-  for (let i = 1; i < lines.length; i++) {
+  // Check if first row looks like a header (contains letters like "name", "org", "state")
+  const firstParts = firstLine.split(delimiter).map((s) => s.trim().replace(/^"|"$/g, '').toLowerCase());
+  const looksLikeHeader = firstParts.some((p) => /^(organization|org|name|state|team)/.test(p));
+  const startIdx = looksLikeHeader ? 1 : 0;
+
+  // If only 1 line and it's a header, nothing to import
+  if (startIdx >= lines.length) return rows;
+
+  for (let i = startIdx; i < lines.length; i++) {
     const parts = lines[i].split(delimiter).map((s) => s.trim().replace(/^"|"$/g, ''));
-    if (parts.length >= 2 && parts[0] && parts[1]) {
-      rows.push({ name: parts[0], state: parts[1] });
+    const name = parts[0] || '';
+    const state = parts[1] || '';
+    if (name) {
+      rows.push({ name, state });
     }
   }
   return rows;
@@ -79,6 +103,11 @@ export default function OrganizationsPage() {
   // Delete
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  // Org requests (fall teams)
+  const [requests, setRequests] = useState<OrgRequest[]>([]);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [denyingId, setDenyingId] = useState<string | null>(null);
+
   const fetchOrgs = async () => {
     try {
       const res = await fetch(`${API}/organizations/admin/list`, {
@@ -86,7 +115,7 @@ export default function OrganizationsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setOrgs(data.organizations || data || []);
+        setOrgs(data.data || data.organizations || []);
       }
     } catch (e) {
       console.error('Failed to fetch organizations', e);
@@ -95,8 +124,74 @@ export default function OrganizationsPage() {
     }
   };
 
+  const fetchRequests = async () => {
+    try {
+      const res = await fetch(`${API}/organizations/admin/requests`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRequests(data.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch org requests', e);
+    }
+  };
+
+  const handleApprove = async (req: OrgRequest) => {
+    setApprovingId(req.id);
+    try {
+      const res = await fetch(`${API}/organizations/admin/requests/${req.id}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        fetchRequests();
+        fetchOrgs();
+      } else {
+        const err = await res.text();
+        alert('Failed to approve: ' + err);
+      }
+    } catch {
+      alert('Failed to approve request');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleDeny = async (req: OrgRequest) => {
+    const reason = prompt(`Reason for denying "${req.name}"? (optional)`);
+    if (reason === null) return; // cancelled
+    setDenyingId(req.id);
+    try {
+      const res = await fetch(`${API}/organizations/admin/requests/${req.id}/deny`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ reason: reason || undefined }),
+      });
+      if (res.ok) {
+        fetchRequests();
+      } else {
+        const err = await res.text();
+        alert('Failed to deny: ' + err);
+      }
+    } catch {
+      alert('Failed to deny request');
+    } finally {
+      setDenyingId(null);
+    }
+  };
+
   useEffect(() => {
     fetchOrgs();
+    fetchRequests();
   }, []);
 
   const filtered = useMemo(() => {
@@ -180,23 +275,28 @@ export default function OrganizationsPage() {
     }
   };
 
-  // Add org
+  // Add org (uses bulk-import with a single org for simplicity)
   const handleAdd = async () => {
     if (!newName.trim() || !newState) return;
     setAdding(true);
     try {
-      const res = await fetch(`${API}/organizations/quick-create`, {
+      const res = await fetch(`${API}/organizations/admin/bulk-import`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ name: newName.trim(), state: newState }),
+        body: JSON.stringify({ organizations: [{ name: newName.trim(), state: newState }] }),
       });
       if (res.ok) {
-        setNewName('');
-        setNewState('');
-        setShowAddForm(false);
+        const data = await res.json();
+        if (data.skipped > 0) {
+          alert(`"${newName.trim()}" already exists.`);
+        } else {
+          setNewName('');
+          setNewState('');
+          setShowAddForm(false);
+        }
         fetchOrgs();
       } else {
         const err = await res.text();
@@ -271,6 +371,80 @@ export default function OrganizationsPage() {
           + Add Organization
         </button>
       </div>
+
+      {/* Pending Organization Requests (from fall coaches) */}
+      {requests.filter((r) => r.status === 'pending').length > 0 && (
+        <div className="bg-amber-50 rounded-2xl shadow-sm border border-amber-200 p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <h3 className="text-sm font-semibold text-amber-800">
+              Pending Organization Requests
+            </h3>
+            <span className="bg-amber-200 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">
+              {requests.filter((r) => r.status === 'pending').length}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {requests
+              .filter((r) => r.status === 'pending')
+              .map((req) => (
+                <div
+                  key={req.id}
+                  className="bg-white rounded-xl border border-amber-200 p-4 flex items-center justify-between"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[#1d1d1f]">{req.name}</span>
+                      {req.state && (
+                        <span className="text-xs text-[#6e6e73] bg-[#f5f5f7] px-2 py-0.5 rounded-full">
+                          {req.city ? `${req.city}, ${req.state}` : req.state}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-[#6e6e73] mt-1">
+                      Requested by{' '}
+                      <span className="font-medium text-[#1d1d1f]">
+                        {req.requested_by_name || req.requested_by_email}
+                      </span>
+                      {req.requested_by_name && (
+                        <span className="text-[#86868b]"> ({req.requested_by_email})</span>
+                      )}
+                      <span className="text-[#86868b]">
+                        {' '}&middot;{' '}
+                        {new Date(req.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => handleApprove(req)}
+                      disabled={approvingId === req.id}
+                      className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {approvingId === req.id ? 'Approving...' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => handleDeny(req)}
+                      disabled={denyingId === req.id}
+                      className="px-4 py-1.5 bg-white text-red-600 text-xs font-semibold rounded-lg border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      {denyingId === req.id ? 'Denying...' : 'Deny'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+          <p className="text-xs text-amber-700 mt-3">
+            Approving creates the organization and sends an email to the coach with a link to create their team.
+          </p>
+        </div>
+      )}
 
       {/* Add Form */}
       {showAddForm && (

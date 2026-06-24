@@ -379,7 +379,7 @@ export default function EventsPage() {
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-16 pb-20">
           <div className="max-w-2xl">
-            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">2025–26 Season</p>
+            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">2026–27 Season</p>
             <h1 className="text-5xl sm:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
               Find Your Next Tournament
             </h1>

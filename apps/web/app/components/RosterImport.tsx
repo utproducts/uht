@@ -13,7 +13,6 @@ interface Player {
   jerseyNumber: string;
   position: string;
   shoots: string;
-  usaHockeyNumber: string;
 }
 
 interface RosterImportProps {
@@ -22,11 +21,11 @@ interface RosterImportProps {
   compact?: boolean; // For inline use in create-team wizard
 }
 
-const TEMPLATE_HEADERS = ['Jersey #', 'First Name', 'Last Name', 'Position', 'Shoots', 'USA Hockey #'];
+const TEMPLATE_HEADERS = ['Jersey #', 'First Name', 'Last Name', 'Position', 'Shoots'];
 const EXAMPLE_ROWS = [
-  ['12', 'John', 'Smith', 'Forward', 'Left', '123456789'],
-  ['7', 'Jane', 'Doe', 'Defense', 'Right', '987654321'],
-  ['30', 'Bob', 'Wilson', 'Goalie', 'Left', '555123456'],
+  ['12', 'John', 'Smith', 'Forward', 'Left'],
+  ['7', 'Jane', 'Doe', 'Defense', 'Right'],
+  ['30', 'Bob', 'Wilson', 'Goalie', 'Left'],
 ];
 
 function getAuthHeaders(): Record<string, string> {
@@ -74,25 +73,25 @@ function parseRows(rows: string[][]): Player[] {
       else if (h === 'name' || h === 'player') colMap.fullName = i;
       else if (h.includes('pos')) colMap.position = i;
       else if (h.includes('shoot')) colMap.shoots = i;
-      else if (h.includes('usa') || h.includes('hockey') || (h.includes('number') && i > 0)) colMap.usaHockey = i;
+      // skip usa hockey columns
     }
   }
 
   // If no header detected, guess by our template column order
   if (Object.keys(colMap).length === 0) {
-    // Assume template order: Jersey, First, Last, Position, Shoots, USA Hockey #
+    // Assume template order: Jersey, First, Last, Position, Shoots
     // Or detect: if first column is numeric, it's jersey
     const sample = rows[startRow] || [];
     if (sample.length >= 3) {
       if (/^\d{1,3}$/.test(sample[0]?.trim())) {
         // Starts with jersey number
-        colMap = { jersey: 0, firstName: 1, lastName: 2, position: 3, shoots: 4, usaHockey: 5 };
+        colMap = { jersey: 0, firstName: 1, lastName: 2, position: 3, shoots: 4 };
       } else if (sample[0]?.includes(',')) {
         // "Last, First" format
-        colMap = { fullName: 0, jersey: 1, position: 2, shoots: 3, usaHockey: 4 };
+        colMap = { fullName: 0, jersey: 1, position: 2, shoots: 3 };
       } else {
         // First Last format
-        colMap = { firstName: 0, lastName: 1, jersey: 2, position: 3, shoots: 4, usaHockey: 5 };
+        colMap = { firstName: 0, lastName: 1, jersey: 2, position: 3, shoots: 4 };
       }
     }
   }
@@ -129,7 +128,6 @@ function parseRows(rows: string[][]): Player[] {
       jerseyNumber: (colMap.jersey !== undefined ? row[colMap.jersey] : '')?.trim() || '',
       position: normalizePosition(colMap.position !== undefined ? row[colMap.position] || '' : ''),
       shoots: normalizeShoots(colMap.shoots !== undefined ? row[colMap.shoots] || '' : ''),
-      usaHockeyNumber: (colMap.usaHockey !== undefined ? row[colMap.usaHockey] : '')?.trim() || '',
     });
   }
 
@@ -151,7 +149,7 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
 
   // Manual entry
   const [newPlayer, setNewPlayer] = useState<Player>({
-    firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: ''
+    firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: ''
   });
 
   // Preview
@@ -257,10 +255,10 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
         const added = data.data.players.map((p: any) => ({
           id: p.id, firstName: p.firstName, lastName: p.lastName,
           jerseyNumber: p.jerseyNumber || '', position: p.position || '',
-          shoots: p.shoots || '', usaHockeyNumber: p.usaHockeyNumber || '',
+          shoots: p.shoots || '',
         }));
         onPlayersAdded(added);
-        setMessage({ type: 'success', text: `Imported ${data.data.added} players from USA Hockey!` });
+        setMessage({ type: 'success', text: `Imported ${data.data.added} players!` });
         setImportUrl('');
       } else {
         setMessage({ type: 'error', text: data.error || 'No players found at that URL. Try pasting your roster or uploading a file instead.' });
@@ -282,7 +280,7 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
       const data = await res.json() as any;
       if (data.success) {
         onPlayersAdded([{ id: data.data.id, ...newPlayer }]);
-        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
+        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
         setMessage({ type: 'success', text: `Added ${newPlayer.firstName} ${newPlayer.lastName}` });
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to add player' });
@@ -307,7 +305,7 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
         const added = data.data.players.map((p: any) => ({
           id: p.id, firstName: p.firstName, lastName: p.lastName,
           jerseyNumber: p.jerseyNumber || '', position: p.position || '',
-          shoots: p.shoots || '', usaHockeyNumber: p.usaHockeyNumber || '',
+          shoots: p.shoots || '',
         }));
         onPlayersAdded(added);
         setMessage({ type: 'success', text: `Added ${data.data.added} players to roster!` });
@@ -343,7 +341,6 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
                 <th className="px-3 py-2 font-medium text-[#6e6e73]">Last Name</th>
                 <th className="px-3 py-2 font-medium text-[#6e6e73]">Position</th>
                 <th className="px-3 py-2 font-medium text-[#6e6e73]">Shoots</th>
-                <th className="px-3 py-2 font-medium text-[#6e6e73]">USA Hockey #</th>
                 <th className="px-3 py-2 w-8"></th>
               </tr>
             </thead>
@@ -395,13 +392,6 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
                     </select>
                   </td>
                   <td className="px-3 py-1.5">
-                    <input type="text" value={p.usaHockeyNumber} onChange={e => {
-                      const updated = [...previewPlayers];
-                      updated[i] = { ...updated[i], usaHockeyNumber: e.target.value };
-                      setPreviewPlayers(updated);
-                    }} className="w-24 px-1 py-0.5 rounded border border-gray-200 text-sm" />
-                  </td>
-                  <td className="px-3 py-1.5">
                     <button onClick={() => setPreviewPlayers(prev => prev.filter((_, j) => j !== i))}
                       className="text-red-400 hover:text-red-600">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -435,7 +425,7 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
       {/* Import Method Selector */}
       <div className="grid grid-cols-4 gap-2">
         {([
-          { key: 'url', label: 'USA Hockey', desc: 'Import from URL', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
+          { key: 'url', label: 'Import URL', desc: 'Import from URL', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
           { key: 'upload', label: 'Upload File', desc: 'CSV or Excel', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12' },
           { key: 'paste', label: 'Paste', desc: 'From spreadsheet', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
           { key: 'manual', label: 'Manual', desc: 'One at a time', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' },
@@ -517,7 +507,7 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
             value={pastedText}
             onChange={e => setPastedText(e.target.value)}
             rows={compact ? 6 : 8}
-            placeholder={"Jersey #\tFirst Name\tLast Name\tPosition\tShoots\tUSA Hockey #\n12\tJohn\tSmith\tForward\tLeft\t123456789\n7\tJane\tDoe\tDefense\tRight\t987654321\n30\tBob\tWilson\tGoalie\tLeft\t555123456"}
+            placeholder={"Jersey #\tFirst Name\tLast Name\tPosition\tShoots\n12\tJohn\tSmith\tForward\tLeft\n7\tJane\tDoe\tDefense\tRight\n30\tBob\tWilson\tGoalie\tLeft"}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#003e79] focus:ring-2 focus:ring-[#003e79]/10 outline-none text-sm font-mono bg-white"
           />
           <div className="flex items-center justify-between">
@@ -530,31 +520,16 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
         </div>
       )}
 
-      {/* USA Hockey URL Tab */}
+      {/* URL Import Tab */}
       {activeTab === 'url' && (
         <div className="space-y-3">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </div>
-              <div className="text-xs text-blue-800">
-                <p className="font-semibold mb-1">How to find your USA Hockey roster URL:</p>
-                <ol className="list-decimal pl-4 space-y-0.5">
-                  <li>Go to <strong>usahockey.com</strong> and find your team page</li>
-                  <li>Navigate to your team&apos;s roster page</li>
-                  <li>Copy the URL from your browser&apos;s address bar</li>
-                </ol>
-                <p className="mt-2 text-blue-600">Note: Some pages may require login and can&apos;t be imported automatically. If import fails, use Upload File or Paste instead.</p>
-              </div>
-            </div>
-          </div>
+          <p className="text-sm text-[#6e6e73]">Paste a roster URL to import players automatically</p>
           <div className="flex gap-2">
             <input type="url" value={importUrl} onChange={e => setImportUrl(e.target.value)}
-              placeholder="https://www.usahockey.com/teams/..."
+              placeholder="https://..."
               className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-[#003e79] focus:ring-2 focus:ring-[#003e79]/10 outline-none text-sm" />
             <button onClick={handleUrlImport} disabled={!importUrl.trim() || importing}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-300 transition">
+              className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] disabled:bg-gray-300 transition">
               {importing ? 'Importing...' : 'Import'}
             </button>
           </div>
@@ -601,11 +576,6 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
                 <option value="left">Left</option>
                 <option value="right">Right</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#6e6e73] mb-1">USA Hockey #</label>
-              <input type="text" value={newPlayer.usaHockeyNumber} onChange={e => setNewPlayer(p => ({ ...p, usaHockeyNumber: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 outline-none text-sm" />
             </div>
           </div>
           <div className="flex justify-end">

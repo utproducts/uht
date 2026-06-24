@@ -382,34 +382,73 @@ function AdminDash() {
 /* OrgDash is imported from ./OrgDashboard.tsx */
 
 function CoachDash() {
+  const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  // Staff invite modal
+  const [inviteModal, setInviteModal] = useState<{ teamId: string; teamName: string; role: 'coach' | 'manager' } | null>(null);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const sendStaffInvite = async () => {
+    if (!inviteModal || !inviteName.trim() || !inviteEmail.trim()) return;
+    setInviteSending(true);
+    setInviteResult(null);
+    try {
+      const token = localStorage.getItem('uht_token');
+      const res = await fetch(`${API}/api/teams/invite-staff/${inviteModal.teamId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: inviteName.trim(), email: inviteEmail.trim(), role: inviteModal.role }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setInviteResult({ type: 'success', message: `Invite sent to ${inviteEmail}!` });
+        setInviteName('');
+        setInviteEmail('');
+        // Refresh teams to show new staff
+        const teamsRes = await fetch(`${API}/api/teams/my-teams`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const teamsJson = await teamsRes.json();
+        if (teamsJson.success) setTeams(teamsJson.data || []);
+      } else {
+        setInviteResult({ type: 'error', message: json.error || 'Failed to send invite' });
+      }
+    } catch {
+      setInviteResult({ type: 'error', message: 'Network error. Please try again.' });
+    }
+    setInviteSending(false);
+  };
 
   useEffect(() => {
     (async () => {
       try {
-        // Get team IDs from localStorage (created via Create Team page)
-        const localTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-        const ids = localTeams.map((t: any) => t.id).filter(Boolean);
-
-        if (ids.length > 0) {
-          const res = await fetch(`https://uht.chad-157.workers.dev/api/teams/by-ids?ids=${ids.join(',')}`);
-          const json = await res.json();
-          if (json.success && json.data.length > 0) {
-            setTeams(json.data);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Fallback: show localStorage data directly
-        if (localTeams.length > 0) {
-          setTeams(localTeams);
+        const token = localStorage.getItem('uht_token');
+        if (!token) { setLoading(false); return; }
+        const res = await fetch(`${API}/api/teams/my-teams`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (json.success) {
+          setTeams(json.data || []);
         }
       } catch {}
       setLoading(false);
     })();
   }, []);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  const totalPlayers = teams.reduce((sum, t) => sum + (t.player_count || 0), 0);
+  const totalEvents = teams.reduce((sum, t) => sum + (t.registered_events?.length || 0), 0);
 
   if (loading) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
@@ -417,23 +456,25 @@ function CoachDash() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="My Teams" value={teams.length} />
-        <StatCard label="Upcoming Events" value={0} sub="Register from Events page" />
-        <StatCard label="Players" value={0} sub="Add via USA Hockey" />
-        <StatCard label="Balance" value="$0" sub="No outstanding fees" />
+        <StatCard label="Players" value={totalPlayers} sub={totalPlayers === 0 ? 'Add via roster' : undefined} />
+        <StatCard label="Registered Events" value={totalEvents} sub={totalEvents === 0 ? 'Browse events below' : undefined} />
+        <StatCard label="Schedules" value="—" sub="Released before events" />
       </div>
 
-      {/* My Teams */}
+      {/* Teams Header */}
       <div className="flex items-center justify-between">
         <SectionTitle>My Teams</SectionTitle>
-        <a href="/create-team" className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
+        <a href="/create-team" className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98] shadow-sm">
           + Create Team
         </a>
       </div>
 
       {teams.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#e8e8ed] p-12 text-center shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+          <div className="text-4xl mb-4">🏒</div>
           <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">No Teams Yet</h3>
           <p className="text-sm text-[#86868b] mb-5">Create your first team to start registering for tournaments.</p>
           <a href="/create-team" className="inline-block px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
@@ -441,72 +482,295 @@ function CoachDash() {
           </a>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {teams.map((team: any) => (
-            <div key={team.id} className="bg-white rounded-2xl border border-[#e8e8ed] p-5 hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] transition-all shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-bold text-[#1d1d1f] text-lg">{team.name}</h3>
-                  <p className="text-sm text-[#6e6e73] mt-0.5">
-                    {team.age_group}{team.division_level ? ` · ${team.division_level}` : ''}
-                  </p>
+        <div className="space-y-4">
+          {teams.map((team: any) => {
+            const isExpanded = expandedTeam === team.id;
+            const rosterLink = team.roster_share_token
+              ? `${typeof window !== 'undefined' ? window.location.origin : ''}/roster/claim?token=${team.roster_share_token}`
+              : null;
+            return (
+              <div key={team.id} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] transition-all">
+                {/* Team Header */}
+                <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-5 py-4 text-white">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-bold text-lg">{team.name}</h3>
+                      <p className="text-white/70 text-sm mt-0.5">
+                        {team.age_group}{team.division_level ? ` · ${team.division_level}` : ''}
+                        {team.city || team.state ? ` · ${[team.city, team.state].filter(Boolean).join(', ')}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="bg-white/20 px-2.5 py-1 rounded-full text-xs font-medium">
+                        {team.player_count || 0} players
+                      </span>
+                      {team.registered_events?.length > 0 && (
+                        <span className="bg-green-400/30 px-2.5 py-1 rounded-full text-xs font-medium">
+                          {team.registered_events.length} event{team.registered_events.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                {team.usa_hockey_team_id && (
-                  <span className="text-[10px] font-semibold px-2 py-1 bg-blue-50 text-blue-600 rounded-full">USA Hockey</span>
+
+                {/* Action Buttons Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#e8e8ed]">
+                  {/* 1. Edit Roster */}
+                  <a href="/dashboard/coach/roster"
+                    className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group">
+                    <span className="text-xl group-hover:scale-110 transition-transform">📋</span>
+                    <span className="text-xs font-semibold text-[#003e79]">Edit Roster</span>
+                  </a>
+
+                  {/* 2. Register for Event */}
+                  <a href="/events"
+                    className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group">
+                    <span className="text-xl group-hover:scale-110 transition-transform">🏆</span>
+                    <span className="text-xs font-semibold text-[#003e79]">Register Event</span>
+                  </a>
+
+                  {/* 3. Roster Invite Link */}
+                  <button
+                    onClick={() => rosterLink && copyToClipboard(rosterLink, `roster-${team.id}`)}
+                    className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group disabled:opacity-40"
+                    disabled={!rosterLink}>
+                    <span className="text-xl group-hover:scale-110 transition-transform">🔗</span>
+                    <span className="text-xs font-semibold text-[#003e79]">
+                      {copied === `roster-${team.id}` ? '✓ Copied!' : 'Roster Link'}
+                    </span>
+                  </button>
+
+                  {/* 4. Team Code */}
+                  <button
+                    onClick={() => team.invite_code && copyToClipboard(team.invite_code, `code-${team.id}`)}
+                    className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group disabled:opacity-40"
+                    disabled={!team.invite_code}>
+                    <span className="text-xl group-hover:scale-110 transition-transform">🔑</span>
+                    <span className="text-xs font-semibold text-[#003e79]">
+                      {copied === `code-${team.id}` ? '✓ Copied!' : 'Team Code'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Expand/collapse for details */}
+                <button onClick={() => setExpandedTeam(isExpanded ? null : team.id)}
+                  className="w-full px-5 py-2.5 bg-[#fafafa] border-t border-[#e8e8ed] flex items-center justify-between hover:bg-[#f5f5f7] transition-colors">
+                  <span className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+                    {isExpanded ? 'Hide Details' : 'Show Details'}
+                  </span>
+                  <span className={`text-[#86868b] transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                </button>
+
+                {isExpanded && (
+                  <div className="px-5 py-4 border-t border-[#e8e8ed] space-y-4">
+                    {/* Team Info */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {team.head_coach_name && (
+                        <div><span className="text-[#86868b]">Coach:</span> <span className="font-medium text-[#1d1d1f]">{team.head_coach_name}</span></div>
+                      )}
+                      {team.season_record && (
+                        <div><span className="text-[#86868b]">Record:</span> <span className="font-medium text-[#1d1d1f]">{team.season_record}</span></div>
+                      )}
+                      {team.hometown_league && (
+                        <div><span className="text-[#86868b]">League:</span> <span className="font-medium text-[#1d1d1f]">{team.hometown_league}</span></div>
+                      )}
+                      {team.invite_code && (
+                        <div><span className="text-[#86868b]">Team Code:</span> <span className="font-mono font-bold text-[#003e79]">{team.invite_code}</span></div>
+                      )}
+                    </div>
+
+                    {/* Coaches & Managers */}
+                    <div className="border-t border-[#e8e8ed] pt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Coaches & Managers</h4>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setInviteModal({ teamId: team.id, teamName: team.name, role: 'coach' }); setInviteResult(null); }}
+                            className="text-xs font-semibold text-[#003e79] hover:underline">+ Add Coach</button>
+                          <button onClick={() => { setInviteModal({ teamId: team.id, teamName: team.name, role: 'manager' }); setInviteResult(null); }}
+                            className="text-xs font-semibold text-[#003e79] hover:underline">+ Add Manager</button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        {(team.coaches || []).map((c: any) => (
+                          <div key={c.id} className="flex items-center justify-between bg-[#f5f5f7] rounded-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🏒</span>
+                              <div>
+                                <span className="text-sm font-medium text-[#1d1d1f]">{c.first_name} {c.last_name}</span>
+                                <span className="text-xs text-[#86868b] ml-1.5 capitalize">({c.role || 'coach'})</span>
+                              </div>
+                            </div>
+                            <span className="text-xs text-[#86868b]">{c.email}</span>
+                          </div>
+                        ))}
+                        {(team.managers || []).map((m: any) => (
+                          <div key={m.id} className="flex items-center justify-between bg-[#f5f5f7] rounded-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">📋</span>
+                              <div>
+                                <span className="text-sm font-medium text-[#1d1d1f]">{m.first_name} {m.last_name}</span>
+                                <span className="text-xs text-[#86868b] ml-1.5">(manager)</span>
+                              </div>
+                            </div>
+                            <span className="text-xs text-[#86868b]">{m.email}</span>
+                          </div>
+                        ))}
+                        {(team.coaches || []).length === 0 && (team.managers || []).length === 0 && !team.head_coach_name && (
+                          <p className="text-sm text-[#86868b] italic">No staff linked yet. Use the buttons above to invite.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Parent Claim Status */}
+                    {(team.total_players || 0) > 0 && (
+                      <div className="border-t border-[#e8e8ed] pt-3">
+                        <h4 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Parent Registration</h4>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 bg-[#f5f5f7] rounded-lg h-3 overflow-hidden">
+                            <div className="bg-green-500 h-full rounded-lg transition-all"
+                              style={{ width: `${Math.round(((team.claimed_players || 0) / (team.total_players || 1)) * 100)}%` }} />
+                          </div>
+                          <span className="text-xs font-semibold text-[#1d1d1f] whitespace-nowrap">
+                            {team.claimed_players || 0} / {team.total_players || 0} claimed
+                          </span>
+                        </div>
+                        {(team.claimed_players || 0) < (team.total_players || 0) && (
+                          <p className="text-xs text-[#86868b] mt-1.5">
+                            {(team.total_players || 0) - (team.claimed_players || 0)} parent{(team.total_players || 0) - (team.claimed_players || 0) !== 1 ? 's' : ''} still need to register. Share the roster link above!
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 5. Coupon Codes */}
+                    <div className="border-t border-[#e8e8ed] pt-3">
+                      <a href="/dashboard/coach/coupons" className="flex items-center gap-2 text-sm text-[#003e79] font-semibold hover:underline">
+                        🎟️ Coupon Codes
+                        <span className="text-[#86868b] font-normal">— View and apply discount codes</span>
+                      </a>
+                    </div>
+
+                    {/* 6. Registered Events */}
+                    <div className="border-t border-[#e8e8ed] pt-3">
+                      <h4 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Registered Events</h4>
+                      {team.registered_events && team.registered_events.length > 0 ? (
+                        <div className="space-y-2">
+                          {team.registered_events.map((evt: any) => (
+                            <div key={evt.id || evt.event_id} className="flex items-center justify-between bg-[#f5f5f7] rounded-lg px-3 py-2">
+                              <div>
+                                <span className="text-sm font-medium text-[#1d1d1f]">{evt.event_name || evt.name}</span>
+                                {evt.event_date && (
+                                  <span className="text-xs text-[#86868b] ml-2">{evt.event_date}</span>
+                                )}
+                              </div>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                evt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                                evt.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {evt.status || 'registered'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-[#86868b] italic">No events registered yet. <a href="/events" className="text-[#003e79] font-medium hover:underline">Browse events →</a></p>
+                      )}
+                    </div>
+
+                    {/* 7. Schedule */}
+                    <div className="border-t border-[#e8e8ed] pt-3">
+                      <a href="/dashboard/coach/schedule" className="flex items-center gap-2 text-sm text-[#003e79] font-semibold hover:underline">
+                        📅 View Schedule
+                        <span className="text-[#86868b] font-normal">— Game times released before each event</span>
+                      </a>
+                    </div>
+                  </div>
                 )}
               </div>
-
-              {(team.city || team.state) && (
-                <p className="text-sm text-[#6e6e73] mb-2">
-                  📍 {[team.city, team.state].filter(Boolean).join(', ')}
-                </p>
-              )}
-
-              {team.head_coach_name && (
-                <p className="text-sm text-[#6e6e73] mb-1">
-                  🧑‍🏫 Coach: <span className="font-medium text-[#1d1d1f]">{team.head_coach_name}</span>
-                </p>
-              )}
-
-              {team.season_record && (
-                <p className="text-sm text-[#6e6e73] mb-1">
-                  📊 Record: <span className="font-medium text-[#1d1d1f]">{team.season_record}</span>
-                </p>
-              )}
-
-              {team.hometown_league && (
-                <p className="text-sm text-[#6e6e73] mb-1">
-                  🏟️ League: <span className="font-medium text-[#1d1d1f]">{team.hometown_league}</span>
-                </p>
-              )}
-
-              <div className="flex gap-2 mt-4">
-                <a href="/events" className="flex-1 text-center px-3 py-2 bg-[#f0f7ff] hover:bg-[#e0efff] text-[#003e79] font-semibold rounded-lg text-xs transition-colors">
-                  Register for Event
-                </a>
-                <button className="px-3 py-2 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-medium rounded-lg text-xs transition-colors">
-                  Edit Team
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Quick Links */}
+      {/* Quick Actions */}
       <SectionTitle>Quick Actions</SectionTitle>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Browse Events', href: '/events' },
-          { label: 'Create Team', href: '/create-team' },
-          { label: 'My Schedule', href: '/dashboard/coach/schedule' },
-          { label: 'My Roster', href: '/dashboard/coach/roster' },
+          { label: 'Browse Events', href: '/events', icon: '🏆' },
+          { label: 'Create Team', href: '/create-team', icon: '➕' },
+          { label: 'My Schedule', href: '/dashboard/coach/schedule', icon: '📅' },
+          { label: 'Coupon Codes', href: '/dashboard/coach/coupons', icon: '🎟️' },
         ].map(a => (
           <a key={a.label} href={a.href} className="bg-white rounded-2xl border border-[#e8e8ed] p-4 hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] hover:-translate-y-0.5 transition-all text-center shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+            <div className="text-2xl mb-1">{a.icon}</div>
             <div className="text-sm font-semibold text-[#003e79]">{a.label}</div>
           </a>
         ))}
       </div>
+
+      {/* Toast notification */}
+      {copied && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1d1d1f] text-white px-4 py-2.5 rounded-full text-sm font-medium shadow-lg z-50 animate-[fadeIn_0.2s_ease]">
+          ✓ Copied to clipboard
+        </div>
+      )}
+
+      {/* Staff Invite Modal */}
+      {inviteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setInviteModal(null); setInviteResult(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-6 py-4">
+              <h3 className="text-white font-bold text-lg">
+                Add {inviteModal.role === 'coach' ? 'Coach' : 'Manager'}
+              </h3>
+              <p className="text-white/70 text-sm mt-0.5">{inviteModal.teamName}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[#6e6e73]">
+                Enter their name and email. We&apos;ll send them an invite with the team code so they can join automatically.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Full Name</label>
+                <input type="text" value={inviteName} onChange={e => setInviteName(e.target.value)}
+                  placeholder="First and Last Name" autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Email Address</label>
+                <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="their@email.com"
+                  onKeyDown={e => { if (e.key === 'Enter') sendStaffInvite(); }}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none text-sm" />
+              </div>
+
+              {inviteResult && (
+                <div className={`p-3 rounded-xl text-sm flex items-center gap-2 ${
+                  inviteResult.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                  {inviteResult.type === 'success' ? '✓' : '✗'} {inviteResult.message}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => { setInviteModal(null); setInviteResult(null); setInviteName(''); setInviteEmail(''); }}
+                  className="flex-1 py-3 rounded-xl border border-[#e8e8ed] text-sm font-semibold text-[#6e6e73] hover:bg-[#f5f5f7] transition">
+                  {inviteResult?.type === 'success' ? 'Done' : 'Cancel'}
+                </button>
+                {inviteResult?.type !== 'success' && (
+                  <button onClick={sendStaffInvite} disabled={inviteSending || !inviteName.trim() || !inviteEmail.trim()}
+                    className={"flex-1 py-3 rounded-xl text-sm font-semibold transition " +
+                      (inviteSending || !inviteName.trim() || !inviteEmail.trim()
+                        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                        : "bg-[#003e79] text-white hover:bg-[#002d5a]")}>
+                    {inviteSending ? 'Sending...' : 'Send Invite'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -535,27 +799,239 @@ function ManagerDash() {
   );
 }
 
+// Hockey character avatars — fun SVG icons kids can pick
+const AVATARS: { id: string; label: string; emoji: string }[] = [
+  { id: 'penguin', label: 'Penguin', emoji: '🐧' },
+  { id: 'bear', label: 'Bear', emoji: '🐻' },
+  { id: 'wolf', label: 'Wolf', emoji: '🐺' },
+  { id: 'eagle', label: 'Eagle', emoji: '🦅' },
+  { id: 'shark', label: 'Shark', emoji: '🦈' },
+  { id: 'dragon', label: 'Dragon', emoji: '🐉' },
+  { id: 'lion', label: 'Lion', emoji: '🦁' },
+  { id: 'tiger', label: 'Tiger', emoji: '🐯' },
+  { id: 'fox', label: 'Fox', emoji: '🦊' },
+  { id: 'owl', label: 'Owl', emoji: '🦉' },
+  { id: 'unicorn', label: 'Unicorn', emoji: '🦄' },
+  { id: 'octopus', label: 'Octopus', emoji: '🐙' },
+  { id: 'bat', label: 'Bat', emoji: '🦇' },
+  { id: 'gorilla', label: 'Gorilla', emoji: '🦍' },
+  { id: 'rocket', label: 'Rocket', emoji: '🚀' },
+  { id: 'lightning', label: 'Lightning', emoji: '⚡' },
+];
+
+function getAvatarEmoji(avatarId: string | null): string {
+  if (!avatarId) return '🏒';
+  const av = AVATARS.find(a => a.id === avatarId);
+  return av ? av.emoji : '🏒';
+}
+
 function ParentDash() {
+  const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
+  const [players, setPlayers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingPlayer, setEditingPlayer] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
+  const [saving, setSaving] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState<string | null>(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('uht_token');
+    if (!token || token.startsWith('mock-')) { setLoading(false); return; }
+    fetch(`${API}/api/teams/my-players`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(json => { if (json.success) setPlayers(json.data || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [API]);
+
+  const startEdit = (p: any) => {
+    setEditingPlayer(p);
+    setEditForm({
+      firstName: p.first_name || '', lastName: p.last_name || '',
+      jerseyNumber: p.jersey_number || '', position: p.position || '', shoots: p.shoots || '',
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingPlayer) return;
+    setSaving(true);
+    const token = localStorage.getItem('uht_token');
+    try {
+      const res = await fetch(`${API}/api/teams/players/${editingPlayer.id}`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPlayers(prev => prev.map(p => p.id === editingPlayer.id ? { ...p, ...{ first_name: editForm.firstName, last_name: editForm.lastName, jersey_number: editForm.jerseyNumber, position: editForm.position, shoots: editForm.shoots } } : p));
+        setEditingPlayer(null);
+      }
+    } catch {} finally { setSaving(false); }
+  };
+
+  const setAvatar = async (playerId: string, avatarId: string) => {
+    setSavingAvatar(true);
+    const token = localStorage.getItem('uht_token');
+    try {
+      const res = await fetch(`${API}/api/teams/players/${playerId}/avatar`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, avatar_id: avatarId } : p));
+        setShowAvatarPicker(null);
+      }
+    } catch {} finally { setSavingAvatar(false); }
+  };
+
+  if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
+
+  if (players.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 text-center">
+          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">{'🏒'}</div>
+          <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">No Players Claimed Yet</h3>
+          <p className="text-sm text-[#6e6e73] max-w-md mx-auto">
+            Ask your coach for the team roster link. You can claim your child and get set up for tournament updates.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const formatPos = (p: string | null) => p ? p.charAt(0).toUpperCase() + p.slice(1) : '—';
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="My Player" value="Jake Thompson" sub="#9 - Center" />
-        <StatCard label="Next Game" value="Sat 9AM" sub="vs NJ Devils U14" />
-        <StatCard label="Events" value={2} sub="Registered" />
-        <StatCard label="Balance" value="$0" sub="All paid" />
+      {/* Player Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {players.map(p => (
+          <div key={p.id} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden shadow-sm">
+            {/* Player header */}
+            <div className="bg-gradient-to-r from-[#003e79] to-[#005599] p-4 text-white relative">
+              <button onClick={() => setShowAvatarPicker(showAvatarPicker === p.id ? null : p.id)}
+                className="absolute top-3 right-3 w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 transition flex items-center justify-center text-2xl cursor-pointer"
+                title="Pick your character!">
+                {getAvatarEmoji(p.avatar_id)}
+              </button>
+              <p className="text-xs text-white/60 font-semibold uppercase tracking-wider">{p.org_name || ''}</p>
+              <h3 className="text-lg font-bold mt-0.5">{p.first_name} {p.last_name}</h3>
+              <p className="text-sm text-white/80 mt-0.5">{p.team_name}</p>
+            </div>
+
+            {/* Avatar picker dropdown */}
+            {showAvatarPicker === p.id && (
+              <div className="bg-yellow-50 border-b border-yellow-200 p-4">
+                <p className="text-xs font-semibold text-yellow-800 mb-2 uppercase tracking-wide">Pick Your Character!</p>
+                <div className="grid grid-cols-8 gap-2">
+                  {AVATARS.map(av => (
+                    <button key={av.id} onClick={() => setAvatar(p.id, av.id)} disabled={savingAvatar}
+                      className={"w-10 h-10 rounded-xl flex items-center justify-center text-xl transition " +
+                        (p.avatar_id === av.id ? "bg-[#003e79] ring-2 ring-[#003e79] ring-offset-1" : "bg-white border border-gray-200 hover:border-[#003e79] hover:bg-blue-50")}>
+                      {av.emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Player details */}
+            <div className="p-4 space-y-2">
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[#86868b]">Jersey:</span>
+                  <span className="font-semibold text-[#1d1d1f]">#{p.jersey_number || '—'}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[#86868b]">Position:</span>
+                  <span className="font-semibold text-[#1d1d1f]">{formatPos(p.position)}</span>
+                </div>
+                {p.shoots && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#86868b]">Shoots:</span>
+                    <span className="font-semibold text-[#1d1d1f] capitalize">{p.shoots}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-[#6e6e73]">
+                <span>{p.age_group}</span>
+                {p.division_level && <><span>&middot;</span><span>{p.division_level}</span></>}
+                {(p.team_city || p.team_state) && <><span>&middot;</span><span>{[p.team_city, p.team_state].filter(Boolean).join(', ')}</span></>}
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button onClick={() => startEdit(p)}
+                  className="px-3 py-1.5 text-xs font-semibold text-[#003e79] bg-blue-50 rounded-lg hover:bg-blue-100 transition">
+                  Edit Player Details
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
-      <SectionTitle>Upcoming Schedule</SectionTitle>
-      <Table headers={['Date', 'Time', 'Event', 'Opponent', 'Rink']} rows={[
-        ['Sat Feb 15', '9:00 AM', 'Presidents Day', 'NJ Devils U14', 'Rink 2'],
-        ['Sat Feb 15', '3:30 PM', 'Presidents Day', 'NY Rangers U14', 'Rink 1'],
-        ['Sun Feb 16', '11:00 AM', 'Presidents Day', 'TBD', 'TBD'],
-      ]} />
-      <SectionTitle>Hotel Info</SectionTitle>
-      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4">
-        <p className="font-medium text-sm">Courtyard by Marriott Shelton</p>
-        <p className="text-sm text-[#6e6e73]">780 Bridgeport Ave, Shelton CT</p>
-        <p className="text-sm text-[#00ccff] mt-1">Block rate: $139/night - Code: UHT2025</p>
-      </div>
+
+      {/* Edit Modal */}
+      {editingPlayer && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-lg">Edit Player Details</h3>
+              <button onClick={() => setEditingPlayer(null)} className="text-white/70 hover:text-white text-xl">&times;</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">First Name</label>
+                  <input type="text" value={editForm.firstName} onChange={e => setEditForm({ ...editForm, firstName: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Last Name</label>
+                  <input type="text" value={editForm.lastName} onChange={e => setEditForm({ ...editForm, lastName: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Jersey #</label>
+                  <input type="text" value={editForm.jerseyNumber} onChange={e => setEditForm({ ...editForm, jerseyNumber: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Position</label>
+                  <select value={editForm.position} onChange={e => setEditForm({ ...editForm, position: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-sm">
+                    <option value="">Select...</option>
+                    <option value="forward">Forward</option>
+                    <option value="defense">Defense</option>
+                    <option value="goalie">Goalie</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Shoots</label>
+                  <select value={editForm.shoots} onChange={e => setEditForm({ ...editForm, shoots: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none text-sm">
+                    <option value="">Select...</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setEditingPlayer(null)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[#1d1d1f] font-semibold text-sm hover:bg-gray-50 transition">Cancel</button>
+                <button onClick={saveEdit} disabled={saving || !editForm.firstName.trim() || !editForm.lastName.trim()}
+                  className={"flex-1 py-2.5 rounded-xl font-semibold text-sm transition " + (saving ? "bg-gray-300 text-gray-500" : "bg-[#003e79] text-white hover:bg-[#002d5a]")}>
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
