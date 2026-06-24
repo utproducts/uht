@@ -179,6 +179,8 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
   // Venues tab state
   const [allVenuesList, setAllVenuesList] = useState<any[]>([]);
+  const [venueCities, setVenueCities] = useState<any[]>([]);
+  const [venueCityFilter, setVenueCityFilter] = useState<string | null>(null);
   const [assignedVenueIds, setAssignedVenueIds] = useState<Set<string>>(new Set());
   const [primaryVenueIdTab, setPrimaryVenueIdTab] = useState<string | null>(null);
   const [eventRinksMap, setEventRinksMap] = useState<Record<string, any[]>>({});
@@ -344,8 +346,10 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       Promise.all([
         fetch('https://uht.chad-157.workers.dev/api/venues').then(r => r.json()),
         fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${event.id}`).then(r => r.json()),
-      ]).then(async ([venuesJson, assignedJson]) => {
+        fetch('https://uht.chad-157.workers.dev/api/cities').then(r => r.json()),
+      ]).then(async ([venuesJson, assignedJson, citiesJson]) => {
         if (venuesJson.success) setAllVenuesList(venuesJson.data || []);
+        if (citiesJson.success) setVenueCities((citiesJson.data || []).filter((c: any) => c.venue_count > 0));
         if (assignedJson.success && assignedJson.data) {
           const ids = new Set<string>(assignedJson.data.map((v: any) => v.venue_id));
           setAssignedVenueIds(ids);
@@ -1278,6 +1282,23 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     </div>
                   )}
 
+                  {/* City filter pills */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button onClick={() => setVenueCityFilter(null)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition ${!venueCityFilter ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]'}`}>
+                      All ({allVenuesList.length})
+                    </button>
+                    {venueCities.map((city: any) => {
+                      const count = allVenuesList.filter((v: any) => v.city_id === city.id).length;
+                      return (
+                        <button key={city.id} onClick={() => setVenueCityFilter(venueCityFilter === city.id ? null : city.id)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold transition ${venueCityFilter === city.id ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]'}`}>
+                          {city.name} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   {/* Search */}
                   <div className="relative">
                     <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1291,6 +1312,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   <div className="space-y-2 max-h-[45vh] overflow-y-auto">
                     {(() => {
                       let venues = [...allVenuesList];
+                      if (venueCityFilter) {
+                        venues = venues.filter((v: any) => v.city_id === venueCityFilter);
+                      }
                       if (venueSearchTab) {
                         const q = venueSearchTab.toLowerCase();
                         venues = venues.filter((v: any) => v.name.toLowerCase().includes(q) || v.city?.toLowerCase().includes(q) || v.state?.toLowerCase().includes(q));
@@ -2876,27 +2900,27 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   onVenueChanged: () => void;
 }) {
   const [allVenues, setAllVenues] = useState<any[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
+  const [cityFilter, setCityFilter] = useState<string | null>(null);
   const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
   const [primaryId, setPrimaryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
   const [search, setSearch] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const [expandedVenue, setExpandedVenue] = useState<string | null>(null);
   const [venueRinksMap, setVenueRinksMap] = useState<Record<string, any[]>>({});
   const [dirty, setDirty] = useState(false);
 
-  const eventStateAbbrev = normalizeState(eventState);
-  const eventStateDisplay = ABBREV_TO_STATE[eventStateAbbrev] || eventState;
-
-  // Load all venues + currently assigned
+  // Load all venues, cities, and currently assigned
   useEffect(() => {
     Promise.all([
       fetch('https://uht.chad-157.workers.dev/api/venues').then(r => r.json()),
       fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${eventId}`).then(r => r.json()),
-    ]).then(([venuesJson, assignedJson]) => {
+      fetch('https://uht.chad-157.workers.dev/api/cities').then(r => r.json()),
+    ]).then(([venuesJson, assignedJson, citiesJson]) => {
       if (venuesJson.success) setAllVenues(venuesJson.data || []);
+      if (citiesJson.success) setCities((citiesJson.data || []).filter((c: any) => c.venue_count > 0));
       if (assignedJson.success && assignedJson.data) {
         const ids = new Set<string>(assignedJson.data.map((v: any) => v.venue_id));
         setAssignedIds(ids);
@@ -2966,20 +2990,19 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
     setSaving(false);
   };
 
-  const stateVenues = allVenues.filter(v => normalizeState(v.state) === eventStateAbbrev);
-  const otherVenues = allVenues.filter(v => normalizeState(v.state) !== eventStateAbbrev);
-
-  let displayVenues = stateVenues;
-  if (showAll || search) displayVenues = [...stateVenues, ...otherVenues];
+  // Filter venues by city and search
+  let displayVenues = [...allVenues];
+  if (cityFilter) {
+    displayVenues = displayVenues.filter(v => v.city_id === cityFilter);
+  }
   if (search) {
     const q = search.toLowerCase();
     displayVenues = displayVenues.filter(v =>
       v.name.toLowerCase().includes(q) || v.city?.toLowerCase().includes(q) || v.state?.toLowerCase().includes(q)
     );
   }
-
   // Sort: assigned first, then alphabetical
-  displayVenues = [...displayVenues].sort((a, b) => {
+  displayVenues = displayVenues.sort((a, b) => {
     const aAssigned = assignedIds.has(a.id) ? 0 : 1;
     const bAssigned = assignedIds.has(b.id) ? 0 : 1;
     if (aAssigned !== bAssigned) return aAssigned - bAssigned;
@@ -3050,36 +3073,46 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
         </div>
       )}
 
-      {/* Search + Filter */}
+      {/* City filter + Search */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-[#1d1d1f]">
-            {showAll || search ? 'All Venues' : `Venues in ${eventStateDisplay}`}
-          </h3>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input type="search" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search venues..." className="pl-9 pr-4 py-2 rounded-xl text-sm bg-[#f5f5f7] border-none focus:ring-2 focus:ring-[#003e79]/20 outline-none w-60" />
-            </div>
-            {!showAll && !search && otherVenues.length > 0 && (
-              <button onClick={() => setShowAll(true)} className="text-xs text-[#003e79] font-semibold hover:underline">
-                Show all states ({otherVenues.length} more)
+        {/* City filter pills */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            onClick={() => setCityFilter(null)}
+            className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${
+              !cityFilter ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]'
+            }`}
+          >
+            All ({allVenues.length})
+          </button>
+          {cities.map(city => {
+            const count = allVenues.filter(v => v.city_id === city.id).length;
+            return (
+              <button
+                key={city.id}
+                onClick={() => setCityFilter(cityFilter === city.id ? null : city.id)}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition ${
+                  cityFilter === city.id ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]'
+                }`}
+              >
+                {city.name} ({count})
               </button>
-            )}
-            {(showAll || search) && (
-              <button onClick={() => { setShowAll(false); setSearch(''); }} className="text-xs text-[#86868b] font-semibold hover:underline">
-                Show {eventStateDisplay} only
-              </button>
-            )}
-          </div>
+            );
+          })}
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-4">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#86868b]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input type="search" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search venues..." className="w-full pl-9 pr-4 py-2 rounded-xl text-sm bg-[#f5f5f7] border-none focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
         </div>
 
         {displayVenues.length === 0 ? (
           <p className="text-sm text-[#86868b] text-center py-8">
-            {search ? `No venues matching "${search}"` : `No venues in ${eventStateDisplay}. Search to find venues in other states.`}
+            {search ? `No venues matching "${search}"` : 'No venues in this city.'}
           </p>
         ) : (
           <div className="space-y-2">
@@ -3103,9 +3136,6 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
                       <p className="text-xs text-[#86868b]">{v.city}, {v.state}{v.address ? ` · ${v.address}` : ''}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {normalizeState(v.state) !== eventStateAbbrev && (
-                        <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full font-semibold border border-amber-200">{v.state}</span>
-                      )}
                       {isChecked && primaryId === v.id && (
                         <span className="text-[10px] px-2 py-0.5 bg-[#003e79] text-white rounded-full font-bold">PRIMARY</span>
                       )}
