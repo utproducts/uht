@@ -12,12 +12,14 @@ interface RegistrationConfirmationParams {
   headCoachName?: string;
   priceCents?: number;
   depositCents?: number;
+  eventLogoUrl?: string;
+  discountCode?: string;
   /** Admin-customized field overrides from DB */
   _overrides?: Record<string, string>;
 }
 
 export function buildConfirmationHtml(params: Partial<RegistrationConfirmationParams> & { teamName: string; ageGroup: string; eventName: string; eventDate: string; eventCity: string }): string {
-  const { teamName, ageGroup, division, eventName, eventDate, eventCity, headCoachName, priceCents, depositCents } = params;
+  const { teamName, ageGroup, division, eventName, eventDate, eventCity, headCoachName, priceCents, depositCents, eventLogoUrl, discountCode } = params;
   const o = (params as any)._overrides as Record<string, string> | undefined;
   const divisionText = division ? ` - ${division}` : '';
   const priceStr = priceCents ? `$${(priceCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '';
@@ -57,11 +59,18 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
           <!-- Header (locked) -->
           <tr>
             <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
-              <img src="https://ultimatetournaments.com/storage/logo/uht-logo-white.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
+              <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
               <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">${heading}</h1>
               <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">${headingSubtitle}</p>
             </td>
           </tr>
+
+          ${eventLogoUrl ? `<!-- Event Logo -->
+          <tr>
+            <td style="padding: 24px 32px 0 32px; text-align: center;">
+              <img src="${eventLogoUrl}" alt="${eventName}" width="100" height="100" style="border-radius: 14px; object-fit: cover; display: inline-block;">
+            </td>
+          </tr>` : ''}
 
           <!-- Event Badge (locked — dynamic data) -->
           <tr>
@@ -140,6 +149,37 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
             </td>
           </tr>
 
+          ${discountCode ? `<!-- Discount Code Section -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #059669, #10b981); border-radius: 12px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 20px 24px;">
+                    <p style="margin: 0 0 4px 0; font-size: 11px; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">YOUR MULTI-EVENT DISCOUNT CODE</p>
+                    <p style="margin: 0 0 12px 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: 3px; font-family: monospace;">${discountCode}</p>
+                    <p style="margin: 0 0 8px 0; font-size: 13px; color: rgba(255,255,255,0.9); line-height: 1.5;">
+                      Use this code when registering for your next UHT event to save:
+                    </p>
+                    <table cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px 16px; margin-right: 8px;">
+                          <p style="margin: 0; font-size: 18px; font-weight: 800; color: #ffffff;">$200 OFF</p>
+                          <p style="margin: 2px 0 0 0; font-size: 11px; color: rgba(255,255,255,0.8);">with hotel booking</p>
+                        </td>
+                        <td width="12"></td>
+                        <td style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 8px 16px;">
+                          <p style="margin: 0; font-size: 18px; font-weight: 800; color: #ffffff;">$100 OFF</p>
+                          <p style="margin: 2px 0 0 0; font-size: 11px; color: rgba(255,255,255,0.8);">local team</p>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin: 12px 0 0 0; font-size: 11px; color: rgba(255,255,255,0.6);">One-time use &middot; Valid for ${teamName} only &middot; Enter at checkout</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>` : ''}
+
           <!-- Helpful Info (editable) -->
           <tr>
             <td style="padding: 0 32px 32px 32px; font-size: 14px; line-height: 1.6; color: #6e6e73;">
@@ -184,7 +224,7 @@ export async function sendRegistrationConfirmationEmail(env: Env, params: Regist
     .replace(/\{eventName\}/g, params.eventName).replace(/\{teamName\}/g, params.teamName).replace(/\{ageGroup\}/g, params.ageGroup);
   const html = buildConfirmationHtml(params);
 
-  const plainText = `You have successfully registered for the ${params.eventName}!\n\nTeam: ${params.teamName}\nAge Group: ${params.ageGroup}${params.division ? `\nDivision: ${params.division}` : ''}\nEvent: ${params.eventName}\nDate: ${params.eventDate}\nLocation: ${params.eventCity}\n\nWhat happens next?\nOur team reviews all registrations and approves them within 24-48 hours. You'll receive a confirmation email once your spot is secured.\n\nIn the meantime, please have the following ready:\n- Your approved USA Hockey roster\n- Hotel preferences for your team\n- Payment method\n\nQuestions? Contact registration@ultimatetournaments.com\n\nUltimate Hockey Tournaments\n477 Dunlay Street, Wood Dale, IL 60191`;
+  const plainText = `You have successfully registered for the ${params.eventName}!\n\nTeam: ${params.teamName}\nAge Group: ${params.ageGroup}${params.division ? `\nDivision: ${params.division}` : ''}\nEvent: ${params.eventName}\nDate: ${params.eventDate}\nLocation: ${params.eventCity}${params.discountCode ? `\n\nYOUR MULTI-EVENT DISCOUNT CODE: ${params.discountCode}\nUse this code when registering for your next UHT event:\n- $200 OFF with hotel booking\n- $100 OFF for local team\nOne-time use. Valid for ${params.teamName} only.\n` : ''}\n\nWhat happens next?\nOur team reviews all registrations and approves them within 24-48 hours. You'll receive a confirmation email once your spot is secured.\n\nIn the meantime, please have the following ready:\n- Your approved USA Hockey roster\n- Hotel preferences for your team\n- Payment method\n\nQuestions? Contact registration@ultimatetournaments.com\n\nUltimate Hockey Tournaments\n477 Dunlay Street, Wood Dale, IL 60191`;
 
   try {
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {

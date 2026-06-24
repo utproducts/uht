@@ -255,10 +255,14 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testSentTo, setTestSentTo] = useState('');
 
   // Division builder for find_team template
   interface DivisionEntry { name: string; spots: string; enabled: boolean }
   const [divEntries, setDivEntries] = useState<DivisionEntry[]>([]);
+  const [editorKey, setEditorKey] = useState(0);
 
   // Common age groups for quick-add
   const commonDivisions = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', '8U', '10U', '12U', '14U', '16U', '18U'];
@@ -289,6 +293,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   const handleDivisionChange = useCallback((newEntries: DivisionEntry[]) => {
     setDivEntries(newEntries);
     updateEmailWithDivisions(newEntries, baseHtml);
+    setEditorKey(k => k + 1);
   }, [baseHtml, updateEmailWithDivisions]);
 
   // Load events for audience targeting
@@ -323,6 +328,9 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
       const body: any = { templateType };
       if (templateType === 'market_specific_event' || templateType === 'find_team') {
         body.eventId = selectedEventId;
+      }
+      if (templateType === 'market_specific_event' && customMessage) {
+        body.customMessage = customMessage;
       }
       const r = await authFetch(`${API_BASE}/email/templates/generate`, {
         method: 'POST',
@@ -489,6 +497,30 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
     setSending(false);
   };
 
+  const handleTestSend = async () => {
+    const emailToTest = testEmail.trim();
+    if (!emailToTest || !subject) return;
+    setSendingTest(true);
+    setTestSentTo('');
+    try {
+      const html = templateType === 'custom' ? generateCustomHtml(customMessage) : bodyHtml;
+      const r = await authFetch(`${API_BASE}/email/test-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: emailToTest, subject, html }),
+      });
+      const d = await r.json() as any;
+      if (d.success) {
+        setTestSentTo(emailToTest);
+      } else {
+        alert(d.error || 'Test send failed');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Test send failed');
+    }
+    setSendingTest(false);
+  };
+
   // Simple HTML wrapper for custom messages
   function generateCustomHtml(msg: string) {
     return msg; // The API will wrap it
@@ -497,6 +529,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   const canProceedStep1 = !!templateType;
   const needsEvent = templateType === 'market_specific_event' || templateType === 'find_team';
   const canProceedStep2 = audienceScope === 'everyone' ||
+    audienceScope === 'all_coaches' ||
     (audienceScope === 'event' && !!selectedEventId) ||
     (audienceScope === 'division' && !!selectedDivisionId) ||
     (audienceScope === 'age_group' && !!selectedAgeGroup) ||
@@ -619,7 +652,8 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
 
               <div className="space-y-3">
                 {[
-                  { value: 'everyone', label: 'Everyone', desc: 'All team contacts in our system' },
+                  { value: 'everyone', label: 'Everyone', desc: 'All users in the system (coaches, parents, managers, etc.)' },
+                  { value: 'all_coaches', label: 'All Coaches', desc: 'All team head coaches in the system' },
                   { value: 'event', label: 'By Event', desc: 'Teams registered for a specific event' },
                   { value: 'division', label: 'By Division', desc: 'Teams in a specific division' },
                   { value: 'age_group', label: 'By Age Group', desc: 'Teams in a specific age group (e.g. Mite, Squirt)' },
@@ -832,6 +866,32 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                     </div>
                   )}
 
+                  {/* Custom message for market_specific_event template */}
+                  {templateType === 'market_specific_event' && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-semibold text-[#3d3d3d] mb-1.5">Custom Message <span className="text-[#86868b] font-normal">(optional)</span></label>
+                      <textarea value={customMessage} onChange={e => {
+                        const msg = e.target.value;
+                        setCustomMessage(msg);
+                        // Live-inject into email HTML using markers
+                        if (bodyHtml.includes('<!-- CUSTOM_MESSAGE -->')) {
+                          const msgHtml = msg.trim()
+                            ? `<div style="background-color:#f0f7ff;border-left:4px solid #003e79;padding:14px 18px;margin-bottom:24px;border-radius:0 10px 10px 0;"><p style="margin:0;color:#1d1d1f;font-size:14px;line-height:1.7;">${msg.replace(/\n/g, '<br/>')}</p></div>`
+                            : '';
+                          const updated = bodyHtml.replace(
+                            /<!-- CUSTOM_MESSAGE -->[\s\S]*?<!-- \/CUSTOM_MESSAGE -->/,
+                            `<!-- CUSTOM_MESSAGE -->${msgHtml}<!-- /CUSTOM_MESSAGE -->`
+                          );
+                          setBodyHtml(updated);
+                          setEditorKey(k => k + 1);
+                        }
+                      }}
+                        rows={3} placeholder="Add a personal note, promotion, or extra details that will appear in this email..."
+                        className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] bg-white text-sm focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none resize-y" />
+                      <p className="text-[10px] text-[#86868b] mt-1">This message will appear highlighted near the top of the email. Leave blank to skip.</p>
+                    </div>
+                  )}
+
                   {/* ── Division Builder (find_team only) ── */}
                   {templateType === 'find_team' && (
                     <div className="mb-4 bg-[#f0f7ff] rounded-xl border border-[#003e79]/15 overflow-hidden">
@@ -917,7 +977,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                   {/* Email visual editor */}
                   {templateType !== 'custom' && bodyHtml && (
                     <div className="mb-4">
-                      <VisualEmailEditor html={bodyHtml} onChange={setBodyHtml} />
+                      <VisualEmailEditor key={editorKey} html={bodyHtml} onChange={setBodyHtml} />
                     </div>
                   )}
 
@@ -926,6 +986,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                     <p className="text-sm font-semibold text-[#003e79]">Audience</p>
                     <p className="text-sm text-[#3d3d3d] mt-1">
                       {audienceScope === 'everyone' ? 'Everyone in the system' :
+                       audienceScope === 'all_coaches' ? 'All team head coaches' :
                        audienceScope === 'event' ? `Teams registered for: ${events.find(e => e.id === selectedEventId)?.name || 'Unknown'}` :
                        audienceScope === 'division' ? `Division: ${divisions.find(d => d.id === selectedDivisionId)?.age_group || ''} ${divisions.find(d => d.id === selectedDivisionId)?.division_level || ''}` :
                        audienceScope === 'manual_emails' ? `Custom email list (${manualEmailList.length} addresses)` :
@@ -946,39 +1007,75 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[#e8e8ed] px-6 py-4 flex items-center justify-between flex-shrink-0 bg-[#fafafa]">
-          <button onClick={() => step > 1 ? setStep(step - 1) : onClose()}
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-white border border-transparent hover:border-[#e8e8ed] transition-all">
-            {step === 1 ? 'Cancel' : 'Back'}
-          </button>
-
-          {step < 3 ? (
-            <button
-              disabled={step === 1 ? (!canProceedStep1 || (needsEvent && !selectedEventId)) : !canProceedStep2}
-              onClick={async () => {
-                if (step === 2) {
-                  // Auto-load preview if not loaded
-                  if (!preview) await loadPreview();
-                }
-                setStep(step + 1);
-                if (step === 2) generateTemplate();
-              }}
-              className="px-6 py-2.5 rounded-xl text-sm font-bold bg-[#003e79] text-white hover:bg-[#002d5a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-              Continue
-            </button>
-          ) : (
-            <button onClick={handleSend} disabled={sending || generatingTemplate || (!subject && templateType !== 'custom') || (templateType === 'custom' && !customMessage)}
-              className="px-8 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-              {sending ? (
-                <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Sending...</>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                  Send Now
-                </>
+        <div className="border-t border-[#e8e8ed] px-6 py-4 flex-shrink-0 bg-[#fafafa]">
+          {/* Test send row — only on step 3 */}
+          {step === 3 && !generatingTemplate && (
+            <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[#e8e8ed]">
+              <span className="text-xs font-semibold text-[#6e6e73] whitespace-nowrap">Send test to:</span>
+              <input
+                type="email"
+                value={testEmail}
+                onChange={e => { setTestEmail(e.target.value); setTestSentTo(''); }}
+                placeholder="your@email.com"
+                className="flex-1 px-3 py-1.5 rounded-lg border border-[#e8e8ed] bg-white text-sm focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none"
+              />
+              <button
+                onClick={handleTestSend}
+                disabled={sendingTest || !testEmail.trim() || !subject}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-[#003e79] text-white hover:bg-[#002d5a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+              >
+                {sendingTest ? (
+                  <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" /> Sending...</>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    Send Test
+                  </>
+                )}
+              </button>
+              {testSentTo && (
+                <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1 whitespace-nowrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  Sent!
+                </span>
               )}
-            </button>
+            </div>
           )}
+
+          <div className="flex items-center justify-between">
+            <button onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-white border border-transparent hover:border-[#e8e8ed] transition-all">
+              {step === 1 ? 'Cancel' : 'Back'}
+            </button>
+
+            {step < 3 ? (
+              <button
+                disabled={step === 1 ? (!canProceedStep1 || (needsEvent && !selectedEventId)) : !canProceedStep2}
+                onClick={async () => {
+                  if (step === 2) {
+                    // Auto-load preview if not loaded
+                    if (!preview) await loadPreview();
+                  }
+                  setStep(step + 1);
+                  if (step === 2) generateTemplate();
+                }}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-[#003e79] text-white hover:bg-[#002d5a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                Continue
+              </button>
+            ) : (
+              <button onClick={handleSend} disabled={sending || generatingTemplate || (!subject && templateType !== 'custom') || (templateType === 'custom' && !customMessage)}
+                className="px-8 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                {sending ? (
+                  <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Sending...</>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                    Send to {preview?.count || 0} Recipients
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -14,7 +14,7 @@ interface EventData {
 interface Team { id: string; name: string; age_group?: string; division_level?: string; head_coach_name?: string; }
 interface EventHotel { id: string; hotel_name: string; city: string; state: string; rate_description: string | null; booking_url: string | null; }
 interface UpsellEvent {
-  id: string; name: string; city: string; state: string;
+  id: string; slug: string; name: string; city: string; state: string;
   start_date: string; end_date: string; price_cents: number | null;
   deposit_cents: number | null; multi_event_discount_pct: number | null;
   logo_url: string | null;
@@ -110,8 +110,8 @@ export default function RegisterPage() {
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [isLocalTeam, setIsLocalTeam] = useState(false);
 
-  // Steps: team → hotels → payment → upsell → card_form → submitting → confirmed
-  const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'upsell' | 'card_form' | 'submitting' | 'confirmed'>('team');
+  // Steps: team → hotels → payment → card_form → submitting → confirmed (upsell is now post-registration on confirmed page)
+  const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'card_form' | 'submitting' | 'confirmed'>('team');
   const [paymentChoice, setPaymentChoice] = useState<'pay_now' | 'pay_deposit' | 'pay_later' | null>(null);
 
   // Stripe embedded payment
@@ -126,22 +126,36 @@ export default function RegisterPage() {
 
   // Upsell
   const [upsellEvents, setUpsellEvents] = useState<UpsellEvent[]>([]);
-  const [selectedUpsellIds, setSelectedUpsellIds] = useState<Set<string>>(new Set());
   const [loadingUpsell, setLoadingUpsell] = useState(false);
-  const [upsellCityFilter, setUpsellCityFilter] = useState('');
-  const [upsellMonthFilter, setUpsellMonthFilter] = useState('');
+
+  // Division pricing (fetched separately for accurate per-age-group prices)
+  const [eventDivisions, setEventDivisions] = useState<any[]>([]);
 
   // Result
   const [regResult, setRegResult] = useState<any>(null);
   const [regError, setRegError] = useState<string | null>(null);
+
+  // Discount code
+  const [discountCode, setDiscountCode] = useState('');
+  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name: string; code_id: string } | null>(null);
+  const [validatingCode, setValidatingCode] = useState(false);
+  const [discountError, setDiscountError] = useState('');
+  const [discountExpanded, setDiscountExpanded] = useState(false);
 
   // Parse URL params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const eventSlug = params.get('event');
     const eventId = params.get('eventId');
+    const codeParam = params.get('code');
     const authData = getAuthUser();
     setAuth(authData);
+
+    // Auto-populate discount code from URL
+    if (codeParam) {
+      setDiscountCode(codeParam);
+      setDiscountExpanded(true);
+    }
 
     if (!authData) {
       window.location.href = `/login?redirect=/register${window.location.search}`;
@@ -153,14 +167,33 @@ export default function RegisterPage() {
       try {
         let ev: EventData | null = null;
         if (eventId) {
-          // Direct ID load
+          // Direct ID load — find slug from listing, then fetch full detail with divisions
           const res = await fetch(`${API}/events?per_page=100`);
           const json = await res.json() as any;
-          ev = (json.data || []).find((e: any) => e.id === eventId) || null;
+          const found = (json.data || []).find((e: any) => e.id === eventId);
+          if (found?.slug) {
+            const detailRes = await fetch(`${API}/events/${found.slug}`);
+            const detailJson = await detailRes.json() as any;
+            if (detailJson.success) {
+              ev = detailJson.data;
+              if (Array.isArray(detailJson.data?.divisions)) {
+                setEventDivisions(detailJson.data.divisions);
+              }
+            } else {
+              ev = found;
+            }
+          } else {
+            ev = found || null;
+          }
         } else if (eventSlug) {
           const res = await fetch(`${API}/events/${eventSlug}`);
           const json = await res.json() as any;
-          if (json.success) ev = json.data;
+          if (json.success) {
+            ev = json.data;
+            if (Array.isArray(json.data?.divisions)) {
+              setEventDivisions(json.data.divisions);
+            }
+          }
         }
         if (!ev) {
           setError('Event not found. Please go back and try again.');
@@ -312,6 +345,7 @@ export default function RegisterPage() {
           paymentConfirmed: true,
           amountPaid: paymentIntent.amount,
         }));
+        loadUpsellEvents();
         setStep('confirmed');
       } else if (paymentIntent && paymentIntent.status === 'requires_action') {
         setCardError('Additional authentication required. Please complete verification.');
@@ -358,11 +392,22 @@ export default function RegisterPage() {
     }
     return isLocalTeam;
   };
+  const autoAdvanceToNextTeam = () => {
+    if (!multiTeamMode || selectedTeams.length <= 1) return;
+    setTimeout(() => {
+      const nextIdx = selectedTeams.findIndex((t, i) => i !== activeHotelTeamIdx && !teamLocalFlags[t.id] && !(teamHotelPicks[t.id] && teamHotelPicks[t.id][0]));
+      if (nextIdx !== -1) setActiveHotelTeamIdx(nextIdx);
+    }, 600);
+  };
+
   const setActiveLocalFlag = (val: boolean) => {
     if (multiTeamMode && selectedTeams.length > 0) {
       const teamId = selectedTeams[activeHotelTeamIdx]?.id;
       setTeamLocalFlags(prev => ({ ...prev, [teamId]: val }));
-      if (val) setTeamHotelPicks(prev => ({ ...prev, [teamId]: ['', '', ''] }));
+      if (val) {
+        setTeamHotelPicks(prev => ({ ...prev, [teamId]: ['', '', ''] }));
+        autoAdvanceToNextTeam();
+      }
     } else {
       setIsLocalTeam(val);
       if (val) setHotelPicks(['', '', '']);
@@ -372,6 +417,7 @@ export default function RegisterPage() {
   const selectHotel = (slot: 0 | 1 | 2, hotelName: string) => {
     if (multiTeamMode && selectedTeams.length > 0) {
       const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      const hadPick = teamHotelPicks[teamId] && teamHotelPicks[teamId][0];
       setTeamHotelPicks(prev => {
         const current = prev[teamId] || ['', '', ''];
         const next = [...current] as [string, string, string];
@@ -382,6 +428,8 @@ export default function RegisterPage() {
         next[slot] = hotelName;
         return { ...prev, [teamId]: next };
       });
+      // Auto-advance to next incomplete team after all 3 picks are made
+      if (slot === 2) autoAdvanceToNextTeam();
       return;
     }
     setHotelPicks(prev => {
@@ -423,6 +471,29 @@ export default function RegisterPage() {
       setUpsellEvents(json.data || []);
     } catch { setUpsellEvents([]); }
     setLoadingUpsell(false);
+  };
+
+  // Validate discount code
+  const validateDiscountCode = async () => {
+    if (!discountCode.trim()) return;
+    setValidatingCode(true);
+    setDiscountError('');
+    try {
+      const teamId = multiTeamMode ? selectedTeams[0]?.id : selectedTeam?.id;
+      const res = await fetch(`${API}/events/validate-discount-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: discountCode.trim().toUpperCase(), teamId }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setDiscountValidation({ valid: true, ...json.data });
+      } else {
+        setDiscountError(json.error || 'Invalid code');
+        setDiscountValidation(null);
+      }
+    } catch { setDiscountError('Failed to validate code'); }
+    setValidatingCode(false);
   };
 
   // Submit registration
@@ -470,9 +541,6 @@ export default function RegisterPage() {
             return isLocalTeam ? undefined : hotelPicks[2] || undefined;
           })(),
         };
-        if (selectedUpsellIds.size > 0) {
-          body.additionalEventIds = Array.from(selectedUpsellIds);
-        }
         const res = await fetch(`${API}/events/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -520,6 +588,7 @@ export default function RegisterPage() {
               ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
               paymentNote: 'Registration submitted! We\'ll send a payment link via email.',
             });
+            loadUpsellEvents();
             setStep('confirmed');
           }
         } catch (stripeErr) {
@@ -528,62 +597,75 @@ export default function RegisterPage() {
             ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
             paymentNote: 'Registration submitted! We\'ll send a payment link via email.',
           });
+          loadUpsellEvents();
           setStep('confirmed');
         }
       } else {
         // pay_later — no payment needed now
         setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
+        loadUpsellEvents();
         setStep('confirmed');
       }
+
+      // Redeem discount code if validated
+      if (discountValidation && results.length > 0) {
+        try {
+          const primaryRegId = results[0]?.primaryRegistrationId || results[0]?.allRegistrationIds?.[0];
+          if (primaryRegId) {
+            await fetch(`${API}/events/redeem-discount-code`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: discountCode.trim().toUpperCase(), registrationId: primaryRegId }),
+            });
+          }
+        } catch (redeemErr) {
+          console.error('Failed to redeem discount code:', redeemErr);
+        }
+      }
+
     } catch {
       setRegError('Network error. Please try again.');
       setStep('payment');
     }
   };
 
-  // Advance from payment → upsell
+  // Advance from payment → submit registration directly
   const handlePaymentContinue = async () => {
     if (!paymentChoice) return;
-    await loadUpsellEvents();
-    setStep('upsell');
-  };
-
-  const toggleUpsell = (id: string) => {
-    setSelectedUpsellIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    // All payment choices go to the checkout/confirmation step
+    setStep('card_form');
   };
 
   // Compute pricing — per-team based on division pricing
   const teamsToPrice = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
   const getTeamPrice = (team: any) => {
     if (!event) return 0;
-    // divisions might be a JSON string, an array, or null
-    let divs = (event as any).divisions;
-    if (typeof divs === 'string') {
-      try { divs = JSON.parse(divs); } catch { divs = null; }
-    }
-    if (Array.isArray(divs)) {
-      const div = divs.find((d: any) => d && typeof d === 'object' && d.age_group === team.age_group);
+    // Use fetched event_divisions (has per-age-group pricing)
+    if (eventDivisions.length > 0 && team.age_group) {
+      const teamAg = team.age_group.toLowerCase();
+      // Try exact match first, then prefix match (team may have "Mite (8U)" while division has "Mite")
+      const div = eventDivisions.find((d: any) => d.age_group === team.age_group)
+        || eventDivisions.find((d: any) => teamAg.startsWith(d.age_group.toLowerCase()))
+        || eventDivisions.find((d: any) => d.age_group.toLowerCase().startsWith(teamAg.split(' ')[0].toLowerCase()));
       if (div?.price_cents) return div.price_cents;
     }
     return event.price_cents || 0;
   };
   const totalPriceCents = teamsToPrice.reduce((sum, t) => sum + getTeamPrice(t), 0);
-  const basePriceCents = teamsToPrice.length <= 1 ? (event?.price_cents || 0) : totalPriceCents;
+  // Calculate discount based on hotel selection
+  const discountAmountCents = discountValidation ? (() => {
+    // Check if any team selected "Local Team"
+    const anyLocal = multiTeamMode
+      ? Object.values(teamLocalFlags).some(v => v)
+      : isLocalTeam;
+    return anyLocal ? discountValidation.discount_local_cents : discountValidation.discount_hotel_cents;
+  })() : 0;
+  const basePriceCents = Math.max(0, totalPriceCents - discountAmountCents);
   const perTeamDeposit = event?.deposit_cents || 0;
   const depositCents = perTeamDeposit * Math.max(teamsToPrice.length, 1);
-  const discountPct = event?.multi_event_discount_pct || 0;
-  const totalUpsellEvents = selectedUpsellIds.size;
-  const upsellSavingsCents = totalUpsellEvents > 0
-    ? Math.round(basePriceCents * (discountPct / 100)) * totalUpsellEvents
-    : 0;
-
   // Step names
-  const stepNames = ['Team', 'Hotels', 'Payment', 'More Events', 'Checkout'];
-  const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'upsell' ? 3 : step === 'card_form' || step === 'confirmed' || step === 'submitting' ? 4 : 0;
+  const stepNames = ['Team', 'Hotels', 'Payment', 'Checkout'];
+  const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'card_form' || step === 'confirmed' || step === 'submitting' ? 3 : 0;
 
   if (loading) {
     return (
@@ -663,12 +745,12 @@ export default function RegisterPage() {
               <h2 className="text-xl font-bold text-[#1d1d1f]">Select Your Team{multiTeamMode ? 's' : ''}</h2>
               {teams.length > 1 && (
                 <button onClick={() => { setMultiTeamMode(!multiTeamMode); setSelectedTeams([]); setSelectedTeam(null); }}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border-2 transition ${
                     multiTeamMode
                       ? 'border-[#00ccff] bg-[#00ccff]/10 text-[#0077cc]'
-                      : 'border-[#e8e8ed] hover:bg-[#f5f5f7] text-[#6e6e73]'
+                      : 'border-red-400 bg-red-50 text-red-700 hover:bg-red-100 animate-pulse'
                   }`}>
-                  {multiTeamMode ? 'Multi-Team Mode ON — Switch to Single' : 'Register Multiple Teams'}
+                  {multiTeamMode ? 'Multi-Team Mode ON — Switch to Single' : '⚡ Register Multiple Teams'}
                 </button>
               )}
             </div>
@@ -783,30 +865,81 @@ export default function RegisterPage() {
                 : 'Select your top 3 hotel choices in priority order.'}
             </p>
 
-            {/* Multi-team tabs */}
-            {multiTeamMode && selectedTeams.length > 1 && (
-              <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-                {selectedTeams.map((team, idx) => {
-                  const hasSelection = teamLocalFlags[team.id] || (teamHotelPicks[team.id] && teamHotelPicks[team.id][0]);
-                  return (
-                    <button
-                      key={team.id}
-                      onClick={() => setActiveHotelTeamIdx(idx)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
-                        activeHotelTeamIdx === idx
-                          ? 'bg-[#003e79] text-white'
-                          : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                      }`}
-                    >
-                      {team.name}
-                      {hasSelection && (
-                        <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {/* Multi-team selector with progress */}
+            {multiTeamMode && selectedTeams.length > 1 && (() => {
+              const completedCount = selectedTeams.filter(t => teamLocalFlags[t.id] || (teamHotelPicks[t.id] && teamHotelPicks[t.id][0])).length;
+              const currentTeamDone = teamLocalFlags[selectedTeams[activeHotelTeamIdx]?.id] || (teamHotelPicks[selectedTeams[activeHotelTeamIdx]?.id] && teamHotelPicks[selectedTeams[activeHotelTeamIdx]?.id][0]);
+              const incompleteTeams = selectedTeams.filter(t => !teamLocalFlags[t.id] && !(teamHotelPicks[t.id] && teamHotelPicks[t.id][0]));
+              return (
+              <>
+                {/* Progress bar */}
+                <div className="mb-4 p-3 bg-[#f0f9ff] border border-[#bae6fd] rounded-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-[#003e79]">Team {activeHotelTeamIdx + 1} of {selectedTeams.length}</span>
+                    <span className="text-xs font-medium text-[#6e6e73]">{completedCount}/{selectedTeams.length} complete</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {selectedTeams.map((team, idx) => {
+                      const done = teamLocalFlags[team.id] || (teamHotelPicks[team.id] && teamHotelPicks[team.id][0]);
+                      return (
+                        <button key={team.id} onClick={() => setActiveHotelTeamIdx(idx)}
+                          className={`flex-1 h-2 rounded-full transition-all ${
+                            done ? 'bg-emerald-400' : idx === activeHotelTeamIdx ? 'bg-[#003e79]' : 'bg-[#d1d1d6]'
+                          }`}
+                          title={team.name} />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Team tabs */}
+                <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+                  {selectedTeams.map((team, idx) => {
+                    const hasSelection = teamLocalFlags[team.id] || (teamHotelPicks[team.id] && teamHotelPicks[team.id][0]);
+                    return (
+                      <button
+                        key={team.id}
+                        onClick={() => setActiveHotelTeamIdx(idx)}
+                        className={`px-4 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2 border-2 ${
+                          activeHotelTeamIdx === idx
+                            ? 'border-[#003e79] bg-[#003e79] text-white shadow-md'
+                            : hasSelection
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : 'border-amber-200 bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {hasSelection ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        ) : (
+                          <span className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center text-[10px] font-bold">{idx + 1}</span>
+                        )}
+                        {team.name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Reminder if current team is done but others aren't */}
+                {currentTeamDone && incompleteTeams.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const nextIdx = selectedTeams.findIndex(t => !teamLocalFlags[t.id] && !(teamHotelPicks[t.id] && teamHotelPicks[t.id][0]));
+                      if (nextIdx !== -1) setActiveHotelTeamIdx(nextIdx);
+                    }}
+                    className="w-full mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-left hover:bg-amber-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                      <span className="text-sm font-medium text-amber-800">
+                        {incompleteTeams.length === 1 ? `"${incompleteTeams[0].name}" still needs hotel selection` : `${incompleteTeams.length} teams still need hotel selections`}
+                        <span className="text-amber-600 ml-1">— tap to go next →</span>
+                      </span>
+                    </div>
+                  </button>
+                )}
+              </>
+              );
+            })()}
 
             {loadingHotels ? (
               <div className="text-center py-8">
@@ -941,13 +1074,18 @@ export default function RegisterPage() {
               <button onClick={() => setStep('team')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
                 ← Back
               </button>
-              <button
-                onClick={() => setStep('payment')}
-                disabled={!allTeamsHaveHotels}
-                className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
-              >
-                Continue
-              </button>
+              <div className="flex items-center gap-3">
+                {!allTeamsHaveHotels && multiTeamMode && selectedTeams.length > 1 && (
+                  <span className="text-xs text-amber-600 font-medium">Select hotels for all teams</span>
+                )}
+                <button
+                  onClick={() => setStep('payment')}
+                  disabled={!allTeamsHaveHotels}
+                  className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+                >
+                  Continue
+                </button>
+              </div>
             </div>
           </div>
           );
@@ -1042,6 +1180,60 @@ export default function RegisterPage() {
               </button>
             </div>
 
+            {/* Discount Code */}
+            <div className="border border-[#e8e8ed] rounded-xl overflow-hidden mb-6">
+              <button
+                onClick={() => setDiscountExpanded(!discountExpanded)}
+                className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                  Have a discount code?
+                </span>
+                <svg className={`w-4 h-4 transition-transform ${discountExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {discountExpanded && (
+                <div className="px-5 pb-4 space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={discountCode}
+                      onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                      placeholder="UHT-XXXXXX"
+                      maxLength={10}
+                      className="flex-1 px-4 py-2.5 rounded-lg border border-[#e8e8ed] text-sm font-mono tracking-wider uppercase focus:outline-none focus:border-[#00ccff] focus:ring-1 focus:ring-[#00ccff]"
+                      onKeyDown={(e) => { if (e.key === 'Enter') validateDiscountCode(); }}
+                    />
+                    <button
+                      onClick={validateDiscountCode}
+                      disabled={validatingCode || !discountCode.trim()}
+                      className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      {validatingCode ? '...' : 'Apply'}
+                    </button>
+                  </div>
+                  {discountError && (
+                    <p className="text-sm text-red-600 flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      {discountError}
+                    </p>
+                  )}
+                  {discountValidation && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                        {isLocalTeam || Object.values(teamLocalFlags).some(v => v)
+                          ? `$${(discountValidation.discount_local_cents / 100).toFixed(0)} discount applied!`
+                          : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`
+                        }
+                      </p>
+                      <p className="text-xs text-emerald-600 mt-1">Code for {discountValidation.team_name}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between pt-2">
               <button onClick={() => setStep('hotels')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
                 ← Back
@@ -1057,296 +1249,79 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════ STEP 3: MULTI-EVENT UPSELL ═══════════════════════════════════ */}
-        {step === 'upsell' && (() => {
-          // Derive unique cities and months from upsell events for filter chips
-          const upsellCities = Array.from(new Set(upsellEvents.map(ue => ue.city))).sort();
-          const upsellMonths = Array.from(new Set(upsellEvents.map(ue => {
-            const d = new Date(ue.start_date + 'T12:00:00');
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          }))).sort();
-          const monthLabel = (ym: string) => {
-            const [y, m] = ym.split('-');
-            return new Date(parseInt(y), parseInt(m) - 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
-          };
-
-          // Apply filters
-          let filteredUpsell = upsellEvents;
-          if (upsellCityFilter) {
-            filteredUpsell = filteredUpsell.filter(ue => ue.city === upsellCityFilter);
-          }
-          if (upsellMonthFilter) {
-            filteredUpsell = filteredUpsell.filter(ue => {
-              const d = new Date(ue.start_date + 'T12:00:00');
-              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === upsellMonthFilter;
-            });
-          }
-
-          // Count selected that are currently hidden by filters
-          const hiddenSelectedCount = Array.from(selectedUpsellIds).filter(id => !filteredUpsell.find(ue => ue.id === id)).length;
-
-          return (
+        {/* ═══════════════════════════════════ CHECKOUT / CARD FORM ═══════════════════════════════════ */}
+        {step === 'card_form' && paymentChoice === 'pay_later' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-full text-sm font-semibold mb-4">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Save with Multi-Event Registration!
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-full bg-[#003e79]/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </div>
-              <h2 className="text-xl font-bold text-[#1d1d1f]">Register for More Events & Save</h2>
-              {discountPct > 0 ? (
-                <p className="text-sm text-[#6e6e73] mt-2">
-                  Add another event and get <span className="font-bold text-emerald-600">{discountPct}% off</span> each additional registration!
-                </p>
-              ) : (
-                <p className="text-sm text-[#6e6e73] mt-2">Check out our other upcoming tournaments.</p>
-              )}
+              <div>
+                <h2 className="text-xl font-bold text-[#1d1d1f]">Confirm Registration</h2>
+                <p className="text-sm text-[#6e6e73]">Review your details and confirm to complete registration.</p>
+              </div>
             </div>
 
-            {loadingUpsell ? (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-2 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto" />
+            {/* Registration summary */}
+            <div className="bg-[#f5f5f7] rounded-xl p-5 my-6 space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-[#6e6e73]">Event</span>
+                <span className="font-medium text-[#1d1d1f] text-right max-w-[60%]">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
               </div>
-            ) : upsellEvents.length === 0 ? (
-              <div className="text-center py-6 text-[#86868b]">
-                <p>No other upcoming events at this time.</p>
+              <div className="flex justify-between text-sm">
+                <span className="text-[#6e6e73]">Team{multiTeamMode && selectedTeams.length > 1 ? 's' : ''}</span>
+                <span className="font-medium text-[#1d1d1f] text-right max-w-[60%]">
+                  {multiTeamMode && selectedTeams.length > 1
+                    ? selectedTeams.map(t => t.name).join(', ')
+                    : selectedTeam?.name || selectedTeams[0]?.name}
+                </span>
               </div>
-            ) : (
-              <>
-                {/* ── Filter bar ── */}
-                <div className="mb-4">
-                  {/* City filter chips */}
-                  {upsellCities.length > 1 && (
-                    <div className="mb-3">
-                      <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider mb-2">Filter by City</p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setUpsellCityFilter('')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                            !upsellCityFilter
-                              ? 'bg-[#003e79] text-white shadow-sm'
-                              : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                          }`}
-                        >
-                          All Cities
-                        </button>
-                        {upsellCities.map(city => {
-                          const count = upsellEvents.filter(ue => ue.city === city).length;
-                          return (
-                            <button
-                              key={city}
-                              onClick={() => setUpsellCityFilter(upsellCityFilter === city ? '' : city)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                                upsellCityFilter === city
-                                  ? 'bg-[#003e79] text-white shadow-sm'
-                                  : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                              }`}
-                            >
-                              {city} ({count})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+              <div className="flex justify-between text-sm">
+                <span className="text-[#6e6e73]">Hotel</span>
+                <span className="font-medium text-[#1d1d1f]">{isLocalTeam ? 'Local Team' : hotelPicks[0] || '—'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[#6e6e73]">Payment</span>
+                <span className="font-medium text-amber-600">Pay Later</span>
+              </div>
+              <div className="border-t border-[#e8e8ed] pt-3 flex justify-between">
+                <span className="text-sm font-semibold text-[#1d1d1f]">Total Due</span>
+                <span className="text-lg font-bold text-[#1d1d1f]">{formatPrice(basePriceCents)}</span>
+              </div>
+            </div>
 
-                  {/* Month filter chips */}
-                  {upsellMonths.length > 1 && (
-                    <div>
-                      <p className="text-xs font-medium text-[#86868b] uppercase tracking-wider mb-2">Filter by Month</p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setUpsellMonthFilter('')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                            !upsellMonthFilter
-                              ? 'bg-[#003e79] text-white shadow-sm'
-                              : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                          }`}
-                        >
-                          All Dates
-                        </button>
-                        {upsellMonths.map(ym => {
-                          const count = upsellEvents.filter(ue => {
-                            const d = new Date(ue.start_date + 'T12:00:00');
-                            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === ym;
-                          }).length;
-                          return (
-                            <button
-                              key={ym}
-                              onClick={() => setUpsellMonthFilter(upsellMonthFilter === ym ? '' : ym)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                                upsellMonthFilter === ym
-                                  ? 'bg-[#003e79] text-white shadow-sm'
-                                  : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
-                              }`}
-                            >
-                              {monthLabel(ym)} ({count})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+              <p className="text-sm text-amber-800">
+                <strong>Note:</strong> Full payment of {formatPrice(basePriceCents)} is due before the event. You'll receive payment instructions via email.
+              </p>
+            </div>
 
-                  {/* Active filter + result count */}
-                  {(upsellCityFilter || upsellMonthFilter) && (
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#e8e8ed]">
-                      <span className="text-xs text-[#86868b]">
-                        Showing {filteredUpsell.length} of {upsellEvents.length} events
-                        {hiddenSelectedCount > 0 && (
-                          <span className="text-emerald-600 font-medium"> · {hiddenSelectedCount} selected not shown</span>
-                        )}
-                      </span>
-                      <button
-                        onClick={() => { setUpsellCityFilter(''); setUpsellMonthFilter(''); }}
-                        className="text-xs font-medium text-[#00ccff] hover:text-[#0099bf]"
-                      >
-                        Clear Filters
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Event list ── */}
-                {filteredUpsell.length === 0 ? (
-                  <div className="text-center py-6 text-[#86868b]">
-                    <p className="text-sm">No events match your filters.</p>
-                    <button onClick={() => { setUpsellCityFilter(''); setUpsellMonthFilter(''); }} className="text-sm font-medium text-[#00ccff] mt-2">
-                      Clear Filters
-                    </button>
-                  </div>
-                ) : (
-                <div className="space-y-3 mb-6 max-h-[400px] overflow-y-auto">
-                  {filteredUpsell.map(ue => {
-                    const isSelected = selectedUpsellIds.has(ue.id);
-                    const uePriceCents = ue.price_cents || 0;
-                    const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
-                    const discountedPrice = uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
-                    return (
-                      <button
-                        key={ue.id}
-                        onClick={() => toggleUpsell(ue.id)}
-                        className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                          isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-[#e8e8ed] hover:border-[#00ccff]/40'
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          {ue.logo_url ? (
-                            <img src={ue.logo_url} alt="" className="w-12 h-12 object-contain rounded-lg flex-shrink-0" />
-                          ) : (
-                            <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] flex items-center justify-center flex-shrink-0">
-                              <span className="text-lg">🏒</span>
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-[#1d1d1f] truncate">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</p>
-                            <p className="text-xs text-[#6e6e73] mt-0.5">{ue.city}, {ue.state} · {formatDateRange(ue.start_date, ue.end_date)}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              {ueDiscountPct > 0 ? (
-                                <>
-                                  <span className="text-xs text-[#86868b] line-through">{formatPrice(uePriceCents)}</span>
-                                  <span className="text-sm font-bold text-emerald-600">{formatPrice(discountedPrice)}</span>
-                                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Save {ueDiscountPct}%</span>
-                                </>
-                              ) : (
-                                <span className="text-sm font-semibold text-[#1d1d1f]">{formatPrice(uePriceCents)}</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-1 transition-all ${
-                            isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-[#d1d1d6]'
-                          }`}>
-                            {isSelected && (
-                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                )}
-              </>
+            {regError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-3">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>{regError}</span>
+              </div>
             )}
 
-            {/* Order summary */}
-            <div className="bg-[#f5f5f7] rounded-xl p-4 mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-[#1d1d1f]">Order Summary</h4>
-                {selectedUpsellIds.size > 0 && (
-                  <span className="text-xs text-emerald-600 font-medium">{1 + selectedUpsellIds.size} events</span>
-                )}
-              </div>
-              <div className="space-y-2 text-sm">
-                {/* Primary event — always present */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[#6e6e73] flex-1">{event.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
-                  <span className="font-medium ml-3">{formatPrice(basePriceCents)}</span>
-                </div>
-                {/* Additional events — with remove button */}
-                {Array.from(selectedUpsellIds).map(id => {
-                  const ue = upsellEvents.find(e => e.id === id);
-                  if (!ue) return null;
-                  const uePriceCents = ue.price_cents || 0;
-                  const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
-                  const discountedPrice = uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
-                  return (
-                    <div key={id} className="flex items-center justify-between group">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <button
-                          onClick={() => toggleUpsell(id)}
-                          className="w-5 h-5 flex items-center justify-center rounded text-[#86868b] hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
-                          title="Remove from order"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                        <span className="text-[#6e6e73] truncate">{ue.name.replace(/^\w[\w\s.'']*\s*-\s*/, '')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                        {ueDiscountPct > 0 && <span className="text-xs text-[#86868b] line-through">{formatPrice(uePriceCents)}</span>}
-                        <span className="font-medium">{formatPrice(discountedPrice)}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {upsellSavingsCents > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-semibold pt-2 border-t border-[#e8e8ed]">
-                    <span>Multi-event savings</span>
-                    <span>-{formatPrice(upsellSavingsCents)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-[#1d1d1f] pt-2 border-t border-[#e8e8ed]">
-                  <span>Total</span>
-                  <span>{formatPrice(
-                    basePriceCents +
-                    Array.from(selectedUpsellIds).reduce((sum, id) => {
-                      const ue = upsellEvents.find(e => e.id === id);
-                      if (!ue) return sum;
-                      const uePriceCents = ue.price_cents || 0;
-                      const ueDiscountPct = discountPct || ue.multi_event_discount_pct || 0;
-                      return sum + uePriceCents - Math.round(uePriceCents * ueDiscountPct / 100);
-                    }, 0)
-                  )}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <button onClick={() => setStep('payment')} className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setStep('payment')}
+                className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              >
                 ← Back
               </button>
               <button
-                onClick={submitRegistration}
-                className="px-8 py-3.5 rounded-xl font-semibold text-white bg-[#00ccff] hover:bg-[#00b8e6] transition-all shadow-sm"
+                onClick={() => submitRegistration()}
+                className="px-8 py-3.5 rounded-xl font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition-all shadow-sm flex items-center gap-2"
               >
-                {selectedUpsellIds.size > 0 ? `Register for ${1 + selectedUpsellIds.size} Events` : 'Complete Registration'}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                Confirm Registration
               </button>
             </div>
           </div>
-          );
-        })()}
+        )}
 
-        {/* ═══════════════════════════════════ STEP 5: CARD FORM (Stripe Elements) ═══════════════════════════════════ */}
-        {step === 'card_form' && (
+        {step === 'card_form' && paymentChoice !== 'pay_later' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <div className="flex items-center gap-3 mb-1">
               <div className="w-10 h-10 rounded-full bg-[#003e79]/10 flex items-center justify-center">
@@ -1401,7 +1376,7 @@ export default function RegisterPage() {
 
             <div className="flex items-center justify-between">
               <button
-                onClick={() => { setStep('upsell'); setCardError(null); }}
+                onClick={() => { setStep('payment'); setCardError(null); }}
                 disabled={processingPayment}
                 className="text-sm font-medium text-[#6e6e73] hover:text-[#1d1d1f] transition-colors disabled:opacity-40"
               >
@@ -1510,12 +1485,6 @@ export default function RegisterPage() {
                         </span>
                       </div>
                     )}
-                    {selectedUpsellIds.size > 0 && (
-                      <div className="flex justify-between text-sm pt-2 border-t border-[#e8e8ed]">
-                        <span className="text-[#6e6e73]">Additional Events</span>
-                        <span className="font-medium text-emerald-600">+{selectedUpsellIds.size} event{selectedUpsellIds.size > 1 ? 's' : ''}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -1554,6 +1523,98 @@ export default function RegisterPage() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* ── Discount Code Card (single team) ── */}
+                {regResult?.discountCode && !regResult?.registrations && (
+                  <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-6 text-white mb-6">
+                    <p className="text-xs uppercase tracking-widest text-emerald-100 font-semibold mb-1">Your Multi-Event Discount Code</p>
+                    <p className="text-3xl font-black tracking-[4px] font-mono mb-3">{regResult.discountCode}</p>
+                    <div className="flex gap-3 mb-3">
+                      <div className="bg-white/20 rounded-lg px-4 py-2">
+                        <p className="text-lg font-extrabold">$200 OFF</p>
+                        <p className="text-[11px] text-emerald-100">with hotel booking</p>
+                      </div>
+                      <div className="bg-white/20 rounded-lg px-4 py-2">
+                        <p className="text-lg font-extrabold">$100 OFF</p>
+                        <p className="text-[11px] text-emerald-100">local team</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-emerald-200">One-time use · Enter at checkout when registering for your next event</p>
+                  </div>
+                )}
+                {/* ── Discount Code Cards (multi-team) ── */}
+                {regResult?.registrations && (
+                  <div className="space-y-4 mb-6">
+                    {regResult.registrations.filter((r: any) => r.discountCode).map((r: any, i: number) => (
+                      <div key={i} className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-6 text-white">
+                        <p className="text-xs uppercase tracking-widest text-emerald-100 font-semibold mb-1">
+                          {r.teamName ? `Discount Code for ${r.teamName}` : 'Your Multi-Event Discount Code'}
+                        </p>
+                        <p className="text-3xl font-black tracking-[4px] font-mono mb-3">{r.discountCode}</p>
+                        <div className="flex gap-3 mb-3">
+                          <div className="bg-white/20 rounded-lg px-4 py-2">
+                            <p className="text-lg font-extrabold">$200 OFF</p>
+                            <p className="text-[11px] text-emerald-100">with hotel booking</p>
+                          </div>
+                          <div className="bg-white/20 rounded-lg px-4 py-2">
+                            <p className="text-lg font-extrabold">$100 OFF</p>
+                            <p className="text-[11px] text-emerald-100">local team</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-emerald-200">One-time use · Enter at checkout when registering for your next event</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── Register for Another Event ── */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">Register for Another Event</h3>
+                  <p className="text-sm text-[#6e6e73] mb-4">
+                    {(regResult?.discountCode || regResult?.registrations?.some((r: any) => r.discountCode))
+                      ? <>Use your discount code at checkout to save!</>
+                      : 'Check out our other upcoming tournaments.'}
+                  </p>
+                  {loadingUpsell && (
+                    <div className="text-center py-6">
+                      <div className="w-8 h-8 border-2 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto" />
+                    </div>
+                  )}
+                  {!loadingUpsell && upsellEvents.length === 0 && (
+                    <button onClick={loadUpsellEvents} className="px-4 py-2 bg-[#003e79] text-white rounded-lg text-sm font-semibold hover:bg-[#002d5a] transition-colors">
+                      Browse Events
+                    </button>
+                  )}
+                  {upsellEvents.length > 0 && (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                      {upsellEvents.map(ue => {
+                        const firstCode = regResult?.discountCode || regResult?.registrations?.[0]?.discountCode;
+                        return (
+                          <a
+                            key={ue.id}
+                            href={`/register?event=${ue.slug || ue.id}${firstCode ? `&code=${firstCode}` : ''}`}
+                            className="block w-full text-left p-4 rounded-xl border-2 border-[#e8e8ed] hover:border-[#00ccff] hover:bg-[#f0f9ff] transition-all"
+                          >
+                            <div className="flex items-start gap-4">
+                              {ue.logo_url ? (
+                                <img src={ue.logo_url} alt="" className="w-12 h-12 object-contain rounded-lg flex-shrink-0" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] flex items-center justify-center flex-shrink-0">
+                                  <span className="text-lg">🏒</span>
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-[#1d1d1f] truncate">{ue.name}</p>
+                                <p className="text-xs text-[#6e6e73] mt-0.5">{ue.city}, {ue.state} · {formatDateRange(ue.start_date, ue.end_date)}</p>
+                              </div>
+                              <span className="text-sm font-semibold text-[#00ccff] flex-shrink-0">Register →</span>
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}

@@ -121,6 +121,18 @@ app.get('/api/upload/images/:filename', async (c) => {
   return new Response(object.body, { headers });
 });
 
+// Serve static brand assets from R2
+app.get('/api/assets/brand/:filename', async (c) => {
+  const filename = c.req.param('filename');
+  const object = await c.env.STORAGE.get(filename);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/png');
+  headers.set('Cache-Control', 'public, max-age=31536000');
+  return new Response(object.body, { headers });
+});
+
 // Serve hotel images from R2
 app.get('/api/assets/hotels/:filename', async (c) => {
   const filename = c.req.param('filename');

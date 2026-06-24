@@ -1,25 +1,47 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import RosterImport from '../components/RosterImport';
 
-// Fallbacks in case API is unreachable
 const FALLBACK_AGE_GROUPS = ['Mite (8U)', 'Squirt (10U)', 'Pee Wee (12U)', 'Bantam (14U)', '16U / JV', '18U / Varsity'];
 const FALLBACK_DIVISIONS = ['AA', 'Gold', 'A1', 'A2', 'Silver', 'B1', 'Bronze', 'House'];
-const FALLBACK_LEAGUES = ['COHL', 'NIHL', 'AHAI', 'Other'];
 const FALLBACK_TEAM_TYPES = ['Draft (no cuts)', 'Tournament team', 'Tryout', 'Regular Season Team', 'Added Players'];
 
 const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY',
+  { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' }, { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' }, { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' }, { code: 'HI', name: 'Hawaii' }, { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' }, { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' }, { code: 'KY', name: 'Kentucky' }, { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' }, { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' }, { code: 'MN', name: 'Minnesota' }, { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' }, { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' }, { code: 'NH', name: 'New Hampshire' }, { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' }, { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' }, { code: 'OH', name: 'Ohio' }, { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' }, { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' }, { code: 'SD', name: 'South Dakota' }, { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' }, { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' }, { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
 ];
 
 const API = 'https://uht.chad-157.workers.dev/api';
 
-interface FormData {
-  // Team info
+interface Organization {
+  id: string;
   name: string;
+  city: string | null;
+  state: string | null;
+  logo_url: string | null;
+}
+
+interface FormData {
+  // Org
+  orgId: string;
+  orgName: string;
+  // Team
   ageGroup: string;
   divisionLevel: string;
   city: string;
@@ -47,7 +69,8 @@ interface FormData {
 }
 
 const initialForm: FormData = {
-  name: '', ageGroup: '', divisionLevel: '', city: '', state: '', website: '',
+  orgId: '', orgName: '',
+  ageGroup: '', divisionLevel: '', city: '', state: '', website: '',
   hometownLeague: '', teamType: '',
   usaHockeyTeamId: '', usaHockeyRosterUrl: '',
   headCoachName: '', headCoachEmail: '', headCoachPhone: '',
@@ -63,17 +86,42 @@ function getBackLabel(path: string): string {
   return 'Back to Events';
 }
 
+// Derive display team name from org + age group + division
+function deriveTeamName(orgName: string, ageGroup: string, division: string): string {
+  const parts = [orgName];
+  if (ageGroup) parts.push(ageGroup);
+  if (division) parts.push(division);
+  return parts.join(' ');
+}
+
 export default function CreateTeamPage() {
   const router = useRouter();
   const [form, setForm] = useState<FormData>(initialForm);
-  const [step, setStep] = useState(1); // 1 = Team Info, 2 = Coaching Staff, 3 = USA Hockey & Record, 4 = Roster
+  const [step, setStep] = useState(1);
+  // Step 1: Organization search  Step 2: Age Group + Division  Step 3: Coaching Staff  Step 4: USA Hockey + Submit  Step 5: Roster
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [redirectAfter, setRedirectAfter] = useState<string | null>(null);
   const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
+  const [rosterShareToken, setRosterShareToken] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [rosterLinkCopied, setRosterLinkCopied] = useState(false);
+
+  // Duplicate team warning
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicateTeam, setDuplicateTeam] = useState<any>(null);
+
+  // Org search
+  const [orgSearch, setOrgSearch] = useState('');
+  const [orgResults, setOrgResults] = useState<Organization[]>([]);
+  const [orgSearching, setOrgSearching] = useState(false);
+  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
+  const [creatingNewOrg, setCreatingNewOrg] = useState(false);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [newOrgCity, setNewOrgCity] = useState('');
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Roster state
   const [rosterPlayers, setRosterPlayers] = useState<Array<{
@@ -81,11 +129,7 @@ export default function CreateTeamPage() {
     position: string; shoots: string; usaHockeyNumber: string;
   }>>([]);
   const [importingRoster, setImportingRoster] = useState(false);
-  const [rosterError, setRosterError] = useState('');
-  const [pasteMode, setPasteMode] = useState(false);
-  const [pastedText, setPastedText] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newPlayer, setNewPlayer] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
+  const [importResult, setImportResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Back navigation
   const [backLink, setBackLink] = useState<{ href: string; label: string }>({ href: '/events', label: 'Back to Events' });
@@ -94,26 +138,21 @@ export default function CreateTeamPage() {
   const [ageGroups, setAgeGroups] = useState<string[]>(FALLBACK_AGE_GROUPS);
   const [divisions, setDivisions] = useState<string[]>(FALLBACK_DIVISIONS);
   const [stateDivisions, setStateDivisions] = useState<Record<string, string[]>>({});
-  const [leagues, setLeagues] = useState<string[]>(FALLBACK_LEAGUES);
   const [teamTypes, setTeamTypes] = useState<string[]>(FALLBACK_TEAM_TYPES);
 
   useEffect(() => {
-    // Check auth
     const token = localStorage.getItem('uht_token');
     if (!token) {
       router.push('/login?redirect=/create-team');
       return;
     }
-    // Check for redirect param (e.g., after creating team, go back to event registration)
     const params = new URLSearchParams(window.location.search);
     const redir = params.get('redirect');
     if (redir) setRedirectAfter(redir);
-
-    // Track where the user came from for the back button
     const fromParam = params.get('from');
     if (fromParam) setBackLink({ href: fromParam, label: getBackLabel(fromParam) });
 
-    // Load dynamic lookups
+    // Load lookups
     (async () => {
       try {
         const res = await fetch(`${API}/lookups?active=true`);
@@ -122,14 +161,11 @@ export default function CreateTeamPage() {
         const byCategory = (cat: string) => items.filter(i => i.category === cat).map(i => i.value);
         const ag = byCategory('age_group');
         const dv = byCategory('division');
-        const lg = byCategory('league');
         const tt = byCategory('team_type');
         if (ag.length) setAgeGroups(ag);
         if (dv.length) setDivisions(dv);
-        if (lg.length) setLeagues(lg);
         if (tt.length) setTeamTypes(tt);
       } catch {}
-      // Load state-based divisions
       try {
         const sdRes = await fetch(`${API}/lookups/state-divisions`);
         const sdJson = await sdRes.json() as any;
@@ -145,14 +181,95 @@ export default function CreateTeamPage() {
     })();
   }, [router]);
 
+  // Org search with debounce
+  const searchOrgs = useCallback(async (query: string, state: string) => {
+    if (query.length < 2 && !state) {
+      setOrgResults([]);
+      return;
+    }
+    setOrgSearching(true);
+    try {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      if (state) params.set('state', state);
+      const res = await fetch(`${API}/organizations/search?${params}`);
+      const json = await res.json() as any;
+      setOrgResults(json.data || []);
+    } catch {
+      setOrgResults([]);
+    }
+    setOrgSearching(false);
+  }, []);
+
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (selectedOrg || creatingNewOrg) return; // Don't search while org is selected
+    searchTimeoutRef.current = setTimeout(() => {
+      searchOrgs(orgSearch, form.state);
+    }, 300);
+    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+  }, [orgSearch, form.state, selectedOrg, creatingNewOrg, searchOrgs]);
+
   const set = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const canProceedStep1 = form.name.trim() && form.ageGroup && form.city.trim();
-  const canProceedStep2 = form.headCoachName.trim() && form.headCoachEmail.trim();
+  const selectOrg = (org: Organization) => {
+    setSelectedOrg(org);
+    setForm(prev => ({ ...prev, orgId: org.id, orgName: org.name }));
+    if (org.state && !form.state) set('state', org.state);
+    if (org.city && !form.city) set('city', org.city || '');
+    setOrgSearch('');
+    setOrgResults([]);
+  };
 
-  const handleSubmit = async () => {
+  const clearOrg = () => {
+    setSelectedOrg(null);
+    setForm(prev => ({ ...prev, orgId: '', orgName: '' }));
+    setCreatingNewOrg(false);
+    setNewOrgName('');
+    setNewOrgCity('');
+  };
+
+  const startCreateNewOrg = () => {
+    setCreatingNewOrg(true);
+    setNewOrgName(orgSearch); // Pre-fill with whatever they typed
+    setOrgResults([]);
+  };
+
+  const confirmNewOrg = async () => {
+    if (!newOrgName.trim()) return;
+    setSaving(true);
+    try {
+      const authToken = localStorage.getItem('uht_token');
+      const res = await fetch(`${API}/organizations/quick-create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ name: newOrgName.trim(), city: newOrgCity.trim() || undefined, state: form.state || undefined }),
+      });
+      const json = await res.json() as any;
+      if (json.success && json.data) {
+        const org: Organization = { id: json.data.id, name: json.data.name, city: json.data.city, state: json.data.state, logo_url: null };
+        selectOrg(org);
+        setCreatingNewOrg(false);
+      } else {
+        setError(json.error || 'Failed to create organization');
+      }
+    } catch {
+      setError('Network error creating organization');
+    }
+    setSaving(false);
+  };
+
+  // Derived team name
+  const teamDisplayName = deriveTeamName(form.orgName, form.ageGroup, form.divisionLevel);
+
+  // Step validations
+  const canProceedStep1 = !!(selectedOrg || form.orgId) && !!form.state;
+  const canProceedStep2 = !!form.ageGroup;
+  const canProceedStep3 = !!(form.headCoachName.trim() && form.headCoachEmail.trim());
+
+  const createTeamRequest = async (skipDuplicate = false) => {
     setSaving(true);
     setError('');
 
@@ -160,10 +277,11 @@ export default function CreateTeamPage() {
       ? `${form.wins || '0'}-${form.losses || '0'}-${form.ties || '0'}${form.goalsFor ? ` (GF: ${form.goalsFor}, GA: ${form.goalsAgainst || '0'})` : ''}`
       : undefined;
 
-    const payload = {
-      name: form.name.trim(),
+    const payload: any = {
+      name: teamDisplayName,
       ageGroup: form.ageGroup,
       divisionLevel: form.divisionLevel || undefined,
+      organizationId: form.orgId || undefined,
       city: form.city.trim() || undefined,
       state: form.state || undefined,
       website: form.website.trim() || undefined,
@@ -180,6 +298,8 @@ export default function CreateTeamPage() {
       seasonRecord,
     };
 
+    if (skipDuplicate) payload.skipDuplicateCheck = true;
+
     try {
       const authToken = localStorage.getItem('uht_token');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -192,36 +312,48 @@ export default function CreateTeamPage() {
       });
       const data = await res.json() as any;
       if (!data.success) {
+        if (data.error === 'duplicate_team' && data.existingTeam) {
+          setDuplicateTeam(data.existingTeam);
+          setShowDuplicateWarning(true);
+          setSaving(false);
+          return;
+        }
         setError(data.error || 'Failed to create team');
         setSaving(false);
         return;
       }
 
-      // Store team info in localStorage so events page can find it
       const existingTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-      existingTeams.push({ id: data.data.id, name: form.name.trim(), ageGroup: form.ageGroup });
+      existingTeams.push({ id: data.data.id, name: teamDisplayName, ageGroup: form.ageGroup });
       localStorage.setItem('uht_teams', JSON.stringify(existingTeams));
 
       setCreatedTeamId(data.data.id);
       setCreatedInviteCode(data.data.inviteCode || null);
+      setRosterShareToken(data.data.rosterShareToken || null);
       setSaving(false);
 
-      // Auto-import from USA Hockey URL if provided
       if (form.usaHockeyRosterUrl.trim()) {
-        setStep(4);
+        setStep(5);
         handleImportFromUrl(data.data.id);
       } else {
-        setStep(4);
+        setStep(5);
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
       setSaving(false);
     }
   };
 
+  const handleSubmit = async () => { await createTeamRequest(false); };
+  const handleCreateAnyway = async () => {
+    setShowDuplicateWarning(false);
+    setDuplicateTeam(null);
+    await createTeamRequest(true);
+  };
+
   const handleImportFromUrl = async (teamId: string) => {
     setImportingRoster(true);
-    setRosterError('');
+    setImportResult(null);
     try {
       const authToken = localStorage.getItem('uht_token');
       const res = await fetch(`${API}/teams/${teamId}/import-roster`, {
@@ -236,60 +368,16 @@ export default function CreateTeamPage() {
           jerseyNumber: p.jerseyNumber || '', position: p.position || '',
           shoots: p.shoots || '', usaHockeyNumber: p.usaHockeyNumber || '',
         })));
+        setImportResult({ type: 'success', message: `Imported ${data.data.players.length} players from USA Hockey` });
+      } else if (data.success && (!data.data?.players || data.data.players.length === 0)) {
+        setImportResult({ type: 'error', message: 'No players found at that URL. The page may require login or the roster format may not be supported. Try pasting your roster below instead.' });
       } else {
-        setRosterError(data.error || 'No players found. Try pasting your roster or adding players manually.');
+        setImportResult({ type: 'error', message: data.error || 'Could not import roster from that URL. Try pasting your roster below instead.' });
       }
     } catch {
-      setRosterError('Failed to import. Try pasting your roster or adding players manually.');
+      setImportResult({ type: 'error', message: 'Network error importing roster. Try pasting your roster below instead.' });
     }
     setImportingRoster(false);
-  };
-
-  const handlePasteImport = async () => {
-    if (!pastedText.trim() || !createdTeamId) return;
-    setImportingRoster(true);
-    setRosterError('');
-    try {
-      const authToken = localStorage.getItem('uht_token');
-      const res = await fetch(`${API}/teams/${createdTeamId}/import-roster`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ pastedData: pastedText }),
-      });
-      const data = await res.json() as any;
-      if (data.success && data.data?.players?.length > 0) {
-        setRosterPlayers(prev => [...prev, ...data.data.players.map((p: any) => ({
-          id: p.id, firstName: p.firstName, lastName: p.lastName,
-          jerseyNumber: p.jerseyNumber || '', position: p.position || '',
-          shoots: p.shoots || '', usaHockeyNumber: p.usaHockeyNumber || '',
-        }))]);
-        setPastedText('');
-        setPasteMode(false);
-      } else {
-        setRosterError(data.error || 'Could not parse roster data.');
-      }
-    } catch {
-      setRosterError('Failed to import pasted data.');
-    }
-    setImportingRoster(false);
-  };
-
-  const handleAddPlayer = async () => {
-    if (!newPlayer.firstName.trim() || !newPlayer.lastName.trim() || !createdTeamId) return;
-    try {
-      const authToken = localStorage.getItem('uht_token');
-      const res = await fetch(`${API}/teams/${createdTeamId}/players`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify(newPlayer),
-      });
-      const data = await res.json() as any;
-      if (data.success) {
-        setRosterPlayers(prev => [...prev, { id: data.data.id, ...newPlayer }]);
-        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '', usaHockeyNumber: '' });
-        setShowAddForm(false);
-      }
-    } catch {}
   };
 
   const handleRemovePlayer = async (playerId: string) => {
@@ -304,9 +392,7 @@ export default function CreateTeamPage() {
     } catch {}
   };
 
-  const handleFinish = () => {
-    setSuccess(true);
-  };
+  const handleFinish = () => { setSuccess(true); };
 
   const goToDashboard = () => {
     if (redirectAfter) {
@@ -325,6 +411,9 @@ export default function CreateTeamPage() {
     }
   };
 
+  // =====================
+  // SUCCESS SCREEN
+  // =====================
   if (success) {
     const managerEmail = form.managerEmail?.trim();
     const coachEmail = form.headCoachEmail?.trim();
@@ -341,17 +430,18 @@ export default function CreateTeamPage() {
         </nav>
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md">
-            {/* Success header */}
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-[#1d1d1f]">{form.name || 'Team'} Created!</h2>
+              <h2 className="text-2xl font-bold text-[#1d1d1f]">{teamDisplayName || 'Team'} Created!</h2>
+              {form.orgName && (
+                <p className="text-sm text-[#6e6e73] mt-1">Part of <span className="font-medium">{form.orgName}</span></p>
+              )}
             </div>
 
-            {/* Invite code card */}
             {createdInviteCode && (
               <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden mb-5">
                 <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-5 py-3">
@@ -376,13 +466,45 @@ export default function CreateTeamPage() {
                     </button>
                   </div>
                   <p className="text-sm text-[#6e6e73] text-center leading-relaxed">
-                    Share this code with your {form.managerEmail ? 'coach' : 'manager'} or other team staff so they can link to this team when they create their account.
+                    Share this code with your {form.managerEmail ? 'coach' : 'manager'} or other team staff so they can link to this team.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Sent invite notice */}
+            {rosterShareToken && (
+              <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden mb-5">
+                <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-3">
+                  <p className="text-white font-semibold text-sm flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
+                    Parent Registration Link
+                  </p>
+                </div>
+                <div className="p-5">
+                  <p className="text-sm text-[#6e6e73] mb-3">
+                    Share this link with parents. They&apos;ll find their player, register, and get tournament notifications automatically.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-[#f5f5f7] rounded-xl px-4 py-2.5 border border-[#e8e8ed] text-xs font-mono text-[#1d1d1f] truncate select-all">
+                      {typeof window !== 'undefined' ? `${window.location.origin}/roster/claim?t=${rosterShareToken}` : ''}
+                    </div>
+                    <button onClick={() => {
+                      const url = `${window.location.origin}/roster/claim?t=${rosterShareToken}`;
+                      navigator.clipboard.writeText(url);
+                      setRosterLinkCopied(true);
+                      setTimeout(() => setRosterLinkCopied(false), 2500);
+                    }}
+                      className={"px-4 py-2.5 rounded-xl text-sm font-semibold transition shrink-0 " +
+                        (rosterLinkCopied ? "bg-green-100 text-green-700" : "bg-green-600 text-white hover:bg-green-700")}>
+                      {rosterLinkCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {invitedSomeone && (
               <div className="bg-[#f0f7ff] border border-[#003e79]/15 rounded-xl p-4 mb-5 flex items-start gap-3">
                 <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center text-white shrink-0 mt-0.5">
@@ -393,13 +515,12 @@ export default function CreateTeamPage() {
                   <p className="text-xs text-[#6e6e73] mt-0.5">
                     {managerEmail && managerEmail !== creatorEmail && <>We sent an invite to <span className="font-medium">{managerEmail}</span>. </>}
                     {coachEmail && coachEmail !== creatorEmail && <>We sent an invite to <span className="font-medium">{coachEmail}</span>. </>}
-                    They&apos;ll be automatically linked to {form.name || 'this team'} when they sign up.
+                    They&apos;ll be automatically linked to {teamDisplayName || 'this team'} when they sign up.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Continue button */}
             <button onClick={goToDashboard}
               className="w-full py-3.5 rounded-xl bg-[#003e79] text-white text-base font-semibold hover:bg-[#002d5a] transition">
               Go to My Teams
@@ -409,6 +530,12 @@ export default function CreateTeamPage() {
       </div>
     );
   }
+
+  // =====================
+  // STEP LABELS
+  // =====================
+  const stepLabels = ['Organization', 'Team Details', 'Coaching Staff', 'Review & Submit', 'Roster'];
+  const totalSteps = 5;
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
@@ -423,27 +550,85 @@ export default function CreateTeamPage() {
         </a>
       </nav>
 
+      {/* Duplicate Team Warning Modal */}
+      {showDuplicateWarning && duplicateTeam && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowDuplicateWarning(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-amber-50 border-b border-amber-200 px-6 py-4 flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+              </div>
+              <div>
+                <h3 className="font-bold text-[#1d1d1f]">Team Already Exists</h3>
+                <p className="text-sm text-amber-700">A team with this name and age group is already registered.</p>
+              </div>
+            </div>
+            <div className="px-6 py-5">
+              <div className="bg-[#f5f5f7] rounded-xl p-4 mb-4">
+                <p className="font-bold text-[#1d1d1f] text-lg">{duplicateTeam.name}</p>
+                <p className="text-sm text-[#6e6e73] mt-1">{duplicateTeam.ageGroup}</p>
+                {(duplicateTeam.city || duplicateTeam.state) && (
+                  <p className="text-sm text-[#6e6e73]">{[duplicateTeam.city, duplicateTeam.state].filter(Boolean).join(', ')}</p>
+                )}
+                {duplicateTeam.headCoachName && (
+                  <p className="text-sm text-[#6e6e73] mt-1">Coach: {duplicateTeam.headCoachName}</p>
+                )}
+              </div>
+              <p className="text-sm text-[#1d1d1f] mb-4">
+                If this is your team, you should <strong>join it</strong> using the invite code instead of creating a duplicate.
+              </p>
+              {duplicateTeam.inviteCode && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-center">
+                  <p className="text-xs text-blue-600 font-semibold mb-1">Team Invite Code</p>
+                  <p className="text-2xl font-mono font-bold text-[#003e79] tracking-widest">{duplicateTeam.inviteCode}</p>
+                  <a href="/dashboard/coach/teams" className="inline-block mt-2 text-sm font-medium text-[#003e79] hover:underline">
+                    Go to Dashboard to Join
+                  </a>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => { setShowDuplicateWarning(false); setDuplicateTeam(null); }}
+                  className="flex-1 py-3 rounded-xl border border-[#e8e8ed] text-sm font-semibold text-[#6e6e73] hover:bg-[#f5f5f7] transition">
+                  Cancel
+                </button>
+                <button onClick={handleCreateAnyway}
+                  className="flex-1 py-3 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition">
+                  Create Anyway
+                </button>
+              </div>
+              <p className="text-[11px] text-[#86868b] text-center mt-3">Only create a new team if you&apos;re sure this is a different team.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex items-start justify-center p-6 pt-8">
         <div className="w-full max-w-2xl">
           {/* Header */}
           <div className="text-center mb-6">
             <h1 className="text-3xl font-semibold text-[#1d1d1f]">Create Your Team</h1>
-            <p className="mt-2 text-[#6e6e73]">Register your team to start signing up for tournaments</p>
+            <p className="mt-2 text-[#6e6e73]">Find your organization and register your team for tournaments</p>
           </div>
 
           {/* Step Indicator */}
-          <div className="flex items-center justify-center gap-2 mb-8">
-            {[1, 2, 3, 4].map(s => (
-              <div key={s} className="flex items-center gap-2">
-                <div className={"w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors " +
-                  (step === s ? "bg-brand-500 text-white" : step > s ? "bg-green-500 text-white" : "bg-gray-200 text-[#6e6e73]")}>
-                  {step > s ? (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  ) : s}
+          <div className="flex items-center justify-center gap-1 mb-8">
+            {stepLabels.map((label, idx) => {
+              const s = idx + 1;
+              return (
+                <div key={s} className="flex items-center gap-1">
+                  <div className="flex flex-col items-center">
+                    <div className={"w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors " +
+                      (step === s ? "bg-brand-500 text-white" : step > s ? "bg-green-500 text-white" : "bg-gray-200 text-[#6e6e73]")}>
+                      {step > s ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      ) : s}
+                    </div>
+                    <span className="text-[10px] text-[#6e6e73] mt-1 hidden sm:block">{label}</span>
+                  </div>
+                  {s < totalSteps && <div className={"w-6 h-0.5 mb-4 sm:mb-0 " + (step > s ? "bg-green-500" : "bg-gray-200")} />}
                 </div>
-                {s < 4 && <div className={"w-8 h-0.5 " + (step > s ? "bg-green-500" : "bg-gray-200")} />}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="bg-white rounded-2xl shadow-soft p-8">
@@ -451,17 +636,174 @@ export default function CreateTeamPage() {
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>
             )}
 
-            {/* STEP 1: Team Info */}
+            {/* ========== STEP 1: Organization ========== */}
             {step === 1 && (
               <div className="space-y-5">
-                <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">Team Information</h2>
-                <p className="text-sm text-[#6e6e73] mb-4">Tell us about your team</p>
-
                 <div>
-                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Team Name <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
-                    placeholder="e.g. Chicago Hawks 12U AA"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
+                  <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">Find Your Organization</h2>
+                  <p className="text-sm text-[#6e6e73]">Select your state, then search for your organization. If it doesn&apos;t exist, you can create a new one.</p>
+                </div>
+
+                {/* State selector */}
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">State <span className="text-red-500">*</span></label>
+                  <select value={form.state} onChange={e => { set('state', e.target.value); clearOrg(); }}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
+                    <option value="">Select your state...</option>
+                    {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Selected Org Display */}
+                {selectedOrg && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-[#1d1d1f]">{selectedOrg.name}</p>
+                          <p className="text-xs text-[#6e6e73]">{[selectedOrg.city, selectedOrg.state].filter(Boolean).join(', ') || 'Organization'}</p>
+                        </div>
+                      </div>
+                      <button onClick={clearOrg} className="text-sm text-red-500 hover:text-red-700 font-medium">
+                        Change
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Create New Org Form */}
+                {creatingNewOrg && !selectedOrg && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                      <h3 className="text-sm font-semibold text-blue-900">Create New Organization</h3>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1.5">Organization Name <span className="text-red-500">*</span></label>
+                      <input type="text" value={newOrgName} onChange={e => setNewOrgName(e.target.value)}
+                        placeholder="e.g. Chicago Hawks, Affton Americans"
+                        autoFocus
+                        className="w-full px-4 py-3 rounded-xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1.5">City</label>
+                      <input type="text" value={newOrgCity} onChange={e => setNewOrgCity(e.target.value)}
+                        placeholder="e.g. Chicago"
+                        className="w-full px-4 py-3 rounded-xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white" />
+                    </div>
+                    <div className="flex gap-3">
+                      <button onClick={() => { setCreatingNewOrg(false); setNewOrgName(''); }}
+                        className="px-5 py-2.5 rounded-xl border border-blue-200 text-sm font-medium text-blue-700 hover:bg-blue-100 transition">
+                        Cancel
+                      </button>
+                      <button onClick={confirmNewOrg} disabled={!newOrgName.trim() || saving}
+                        className={"px-5 py-2.5 rounded-xl text-sm font-medium transition " +
+                          (newOrgName.trim() && !saving ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-blue-200 text-blue-400 cursor-not-allowed")}>
+                        {saving ? 'Creating...' : 'Create Organization'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Org Search — show when state selected and no org selected and not creating new */}
+                {form.state && !selectedOrg && !creatingNewOrg && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Search Organization <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        {orgSearching ? (
+                          <svg className="w-4 h-4 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                        )}
+                      </div>
+                      <input type="text" value={orgSearch} onChange={e => setOrgSearch(e.target.value)}
+                        placeholder="Start typing your organization name..."
+                        autoFocus
+                        className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
+                    </div>
+
+                    {/* Search Results */}
+                    {orgResults.length > 0 && (
+                      <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                        {orgResults.map(org => (
+                          <button key={org.id} onClick={() => selectOrg(org)}
+                            className="w-full text-left px-4 py-3 hover:bg-[#f5f5f7] transition border-b border-gray-100 last:border-b-0 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
+                              {org.logo_url ? (
+                                <img src={org.logo_url} alt="" className="w-6 h-6 rounded object-cover" />
+                              ) : (
+                                <span className="text-xs font-bold text-[#6e6e73]">{org.name.charAt(0)}</span>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-[#1d1d1f]">{org.name}</p>
+                              {(org.city || org.state) && (
+                                <p className="text-xs text-[#6e6e73]">{[org.city, org.state].filter(Boolean).join(', ')}</p>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No results + create new option */}
+                    {orgSearch.length >= 2 && !orgSearching && orgResults.length === 0 && (
+                      <div className="mt-2 border border-dashed border-gray-300 rounded-xl p-4 text-center">
+                        <p className="text-sm text-[#6e6e73] mb-3">No organizations found matching &ldquo;{orgSearch}&rdquo;</p>
+                        <button onClick={startCreateNewOrg}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                          Create &ldquo;{orgSearch}&rdquo;
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Always show create-new link at the bottom of results */}
+                    {orgSearch.length >= 2 && !orgSearching && orgResults.length > 0 && (
+                      <button onClick={startCreateNewOrg}
+                        className="mt-2 w-full text-center py-2.5 text-sm text-[#003e79] hover:text-[#002d5a] font-medium hover:bg-blue-50 rounded-xl transition flex items-center justify-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        Don&apos;t see your org? Create a new one
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="pt-4 flex justify-end">
+                  <button onClick={() => setStep(2)} disabled={!canProceedStep1}
+                    className={"px-8 py-3 rounded-xl font-medium text-sm transition-all " +
+                      (canProceedStep1 ? "bg-brand-500 text-white hover:bg-brand-600" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
+                    Next: Team Details
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ========== STEP 2: Age Group + Division ========== */}
+            {step === 2 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">Team Details</h2>
+                  <p className="text-sm text-[#6e6e73]">Select your age group and division. Your team name is automatically generated.</p>
+                </div>
+
+                {/* Org reminder */}
+                <div className="bg-[#f5f5f7] rounded-xl px-4 py-3 flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-gray-200">
+                    <span className="text-xs font-bold text-[#003e79]">{form.orgName.charAt(0)}</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-[#1d1d1f]">{form.orgName}</p>
+                    <p className="text-xs text-[#6e6e73]">{form.state}</p>
+                  </div>
+                  <button onClick={() => setStep(1)} className="text-xs text-[#003e79] hover:underline">Change</button>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -486,34 +828,25 @@ export default function CreateTeamPage() {
                   </div>
                 </div>
 
+                {/* Team name preview */}
+                {form.ageGroup && (
+                  <div className="bg-navy-50 border border-navy-100 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-navy-500 uppercase tracking-wide mb-1">Your Team Name</p>
+                    <p className="text-lg font-bold text-[#003e79]">{teamDisplayName}</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Hometown City <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Hometown City</label>
                     <input type="text" value={form.city} onChange={e => set('city', e.target.value)}
                       placeholder="e.g. Chicago"
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">State</label>
-                    <select value={form.state} onChange={e => set('state', e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
-                      <option value="">Select...</option>
-                      {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
                     <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Hometown League</label>
                     <input type="text" value={form.hometownLeague} onChange={e => set('hometownLeague', e.target.value)}
                       placeholder="e.g. COHL, NIHL, AHAI"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Team Website</label>
-                    <input type="url" value={form.website} onChange={e => set('website', e.target.value)}
-                      placeholder="https://..."
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
                   </div>
                 </div>
@@ -531,18 +864,22 @@ export default function CreateTeamPage() {
                   </div>
                 </div>
 
-                <div className="pt-4 flex justify-end">
-                  <button onClick={() => setStep(2)} disabled={!canProceedStep1}
+                <div className="pt-4 flex justify-between">
+                  <button onClick={() => setStep(1)}
+                    className="px-6 py-3 rounded-xl border border-gray-200 text-[#1d1d1f] text-sm font-medium hover:bg-gray-50 transition-all">
+                    Back
+                  </button>
+                  <button onClick={() => setStep(3)} disabled={!canProceedStep2}
                     className={"px-8 py-3 rounded-xl font-medium text-sm transition-all " +
-                      (canProceedStep1 ? "bg-brand-500 text-white hover:bg-brand-600" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
+                      (canProceedStep2 ? "bg-brand-500 text-white hover:bg-brand-600" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
                     Next: Coaching Staff
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 2: Coaching Staff */}
-            {step === 2 && (
+            {/* ========== STEP 3: Coaching Staff ========== */}
+            {step === 3 && (
               <div className="space-y-5">
                 <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">Coaching Staff</h2>
                 <p className="text-sm text-[#6e6e73] mb-4">Head coach information is required for tournament communications</p>
@@ -596,24 +933,24 @@ export default function CreateTeamPage() {
                 </div>
 
                 <div className="pt-4 flex justify-between">
-                  <button onClick={() => setStep(1)}
+                  <button onClick={() => setStep(2)}
                     className="px-6 py-3 rounded-xl border border-gray-200 text-[#1d1d1f] text-sm font-medium hover:bg-gray-50 transition-all">
                     Back
                   </button>
-                  <button onClick={() => setStep(3)} disabled={!canProceedStep2}
+                  <button onClick={() => setStep(4)} disabled={!canProceedStep3}
                     className={"px-8 py-3 rounded-xl font-medium text-sm transition-all " +
-                      (canProceedStep2 ? "bg-brand-500 text-white hover:bg-brand-600" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
-                    Next: USA Hockey & Record
+                      (canProceedStep3 ? "bg-brand-500 text-white hover:bg-brand-600" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
+                    Next: Review & Submit
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 3: USA Hockey & Season Record */}
-            {step === 3 && (
+            {/* ========== STEP 4: USA Hockey + Season Record + Summary ========== */}
+            {step === 4 && (
               <div className="space-y-5">
-                <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">USA Hockey & Season Record</h2>
-                <p className="text-sm text-[#6e6e73] mb-4">Link your USA Hockey roster to auto-import player data</p>
+                <h2 className="text-xl font-semibold text-[#1d1d1f] mb-1">Review & Submit</h2>
+                <p className="text-sm text-[#6e6e73] mb-4">Optional: link your USA Hockey roster and add season record</p>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-4">
                   <div className="flex items-start gap-3">
@@ -626,21 +963,23 @@ export default function CreateTeamPage() {
                       <h3 className="text-sm font-semibold text-blue-900">USA Hockey Roster Link</h3>
                       <p className="text-xs text-blue-700 mt-1">
                         Go to <a href="https://www.usahockey.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">usahockey.com</a>,
-                        find your team, and paste the roster URL below. We&apos;ll pull your player data automatically.
+                        find your team, and paste the roster URL below.
                       </p>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-blue-900 mb-1.5">USA Hockey Team ID</label>
-                    <input type="text" value={form.usaHockeyTeamId} onChange={e => set('usaHockeyTeamId', e.target.value)}
-                      placeholder="e.g. 123456"
-                      className="w-full px-4 py-3 rounded-xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-blue-900 mb-1.5">USA Hockey Roster URL</label>
-                    <input type="url" value={form.usaHockeyRosterUrl} onChange={e => set('usaHockeyRosterUrl', e.target.value)}
-                      placeholder="https://www.usahockey.com/teams/..."
-                      className="w-full px-4 py-3 rounded-xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1.5">USA Hockey Team ID</label>
+                      <input type="text" value={form.usaHockeyTeamId} onChange={e => set('usaHockeyTeamId', e.target.value)}
+                        placeholder="e.g. 123456"
+                        className="w-full px-4 py-3 rounded-xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-1.5">USA Hockey Roster URL</label>
+                      <input type="url" value={form.usaHockeyRosterUrl} onChange={e => set('usaHockeyRosterUrl', e.target.value)}
+                        placeholder="https://www.usahockey.com/teams/..."
+                        className="w-full px-4 py-3 rounded-xl border border-blue-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all text-sm bg-white" />
+                    </div>
                   </div>
                 </div>
 
@@ -649,34 +988,29 @@ export default function CreateTeamPage() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-[#6e6e73] mb-1">Wins</label>
-                      <input type="number" min="0" value={form.wins} onChange={e => set('wins', e.target.value)}
-                        placeholder="0"
+                      <input type="number" min="0" value={form.wins} onChange={e => set('wins', e.target.value)} placeholder="0"
                         className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm text-center" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-[#6e6e73] mb-1">Losses</label>
-                      <input type="number" min="0" value={form.losses} onChange={e => set('losses', e.target.value)}
-                        placeholder="0"
+                      <input type="number" min="0" value={form.losses} onChange={e => set('losses', e.target.value)} placeholder="0"
                         className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm text-center" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-[#6e6e73] mb-1">Ties</label>
-                      <input type="number" min="0" value={form.ties} onChange={e => set('ties', e.target.value)}
-                        placeholder="0"
+                      <input type="number" min="0" value={form.ties} onChange={e => set('ties', e.target.value)} placeholder="0"
                         className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm text-center" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-[#6e6e73] mb-1">Goals For</label>
-                      <input type="number" min="0" value={form.goalsFor} onChange={e => set('goalsFor', e.target.value)}
-                        placeholder="0"
+                      <input type="number" min="0" value={form.goalsFor} onChange={e => set('goalsFor', e.target.value)} placeholder="0"
                         className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm text-center" />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-[#6e6e73] mb-1">Goals Against</label>
-                      <input type="number" min="0" value={form.goalsAgainst} onChange={e => set('goalsAgainst', e.target.value)}
-                        placeholder="0"
+                      <input type="number" min="0" value={form.goalsAgainst} onChange={e => set('goalsAgainst', e.target.value)} placeholder="0"
                         className="w-full px-3 py-2.5 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm text-center" />
                     </div>
                   </div>
@@ -686,8 +1020,10 @@ export default function CreateTeamPage() {
                 <div className="bg-navy-50 rounded-xl p-5">
                   <h3 className="text-sm font-semibold text-navy-800 mb-3">Team Summary</h3>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                    <div className="text-[#6e6e73]">Team</div>
-                    <div className="font-medium text-[#1d1d1f]">{form.name}</div>
+                    <div className="text-[#6e6e73]">Organization</div>
+                    <div className="font-medium text-[#1d1d1f]">{form.orgName}</div>
+                    <div className="text-[#6e6e73]">Team Name</div>
+                    <div className="font-medium text-[#003e79]">{teamDisplayName}</div>
                     <div className="text-[#6e6e73]">Age Group</div>
                     <div className="font-medium text-[#1d1d1f]">{form.ageGroup}</div>
                     {form.divisionLevel && <>
@@ -695,36 +1031,32 @@ export default function CreateTeamPage() {
                       <div className="font-medium text-[#1d1d1f]">{form.divisionLevel}</div>
                     </>}
                     <div className="text-[#6e6e73]">Location</div>
-                    <div className="font-medium text-[#1d1d1f]">{form.city}{form.state ? `, ${form.state}` : ''}</div>
+                    <div className="font-medium text-[#1d1d1f]">{form.city ? `${form.city}, ` : ''}{form.state}</div>
                     <div className="text-[#6e6e73]">Head Coach</div>
                     <div className="font-medium text-[#1d1d1f]">{form.headCoachName}</div>
                     {form.managerName && <>
                       <div className="text-[#6e6e73]">Manager</div>
                       <div className="font-medium text-[#1d1d1f]">{form.managerName}</div>
                     </>}
-                    {form.usaHockeyTeamId && <>
-                      <div className="text-[#6e6e73]">USA Hockey ID</div>
-                      <div className="font-medium text-[#1d1d1f]">{form.usaHockeyTeamId}</div>
-                    </>}
                   </div>
                 </div>
 
                 <div className="pt-4 flex justify-between">
-                  <button onClick={() => setStep(2)}
+                  <button onClick={() => setStep(3)}
                     className="px-6 py-3 rounded-xl border border-gray-200 text-[#1d1d1f] text-sm font-medium hover:bg-gray-50 transition-all">
                     Back
                   </button>
                   <button onClick={handleSubmit} disabled={saving}
                     className={"px-10 py-3 rounded-xl font-medium text-sm transition-all " +
                       (saving ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-brand-500 text-white hover:bg-brand-600")}>
-                    {saving ? 'Creating Team...' : 'Next: Add Roster'}
+                    {saving ? 'Creating Team...' : 'Create Team & Add Roster'}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* STEP 4: Roster */}
-            {step === 4 && createdTeamId && (
+            {/* ========== STEP 5: Roster ========== */}
+            {step === 5 && createdTeamId && (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div>
@@ -734,6 +1066,34 @@ export default function CreateTeamPage() {
                   <span className="text-xs text-[#86868b] bg-gray-100 px-3 py-1 rounded-full">{rosterPlayers.length} players</span>
                 </div>
 
+                {/* Auto-import loading indicator */}
+                {importingRoster && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+                    <svg className="w-5 h-5 text-blue-500 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900">Importing roster from USA Hockey...</p>
+                      <p className="text-xs text-blue-700 mt-0.5">Pulling player data from the URL you provided. This may take a moment.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Import result message */}
+                {importResult && !importingRoster && (
+                  <div className={`rounded-xl p-4 flex items-start gap-3 ${importResult.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+                    {importResult.type === 'success' ? (
+                      <svg className="w-5 h-5 text-green-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                    )}
+                    <p className={`text-sm ${importResult.type === 'success' ? 'text-green-800' : 'text-amber-800'}`}>
+                      {importResult.message}
+                    </p>
+                  </div>
+                )}
+
                 <RosterImport
                   teamId={createdTeamId}
                   compact
@@ -742,7 +1102,6 @@ export default function CreateTeamPage() {
                   }}
                 />
 
-                {/* Roster Table */}
                 {rosterPlayers.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <table className="w-full text-sm">
@@ -774,6 +1133,40 @@ export default function CreateTeamPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+
+                {/* Shareable roster link for parents */}
+                {rosterShareToken && (
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-green-900">Share with Parents</h3>
+                        <p className="text-xs text-green-700 mt-1">
+                          Send this link to your team group chat or email. Parents click it, find their kid, and register — that&apos;s it. They&apos;ll automatically get tournament notifications.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-white rounded-xl px-4 py-2.5 border border-green-200 text-sm text-[#1d1d1f] font-mono truncate select-all">
+                        {typeof window !== 'undefined' ? `${window.location.origin}/roster/claim?t=${rosterShareToken}` : ''}
+                      </div>
+                      <button onClick={() => {
+                        const url = `${window.location.origin}/roster/claim?t=${rosterShareToken}`;
+                        navigator.clipboard.writeText(url);
+                        setRosterLinkCopied(true);
+                        setTimeout(() => setRosterLinkCopied(false), 2500);
+                      }}
+                        className={"px-4 py-2.5 rounded-xl text-sm font-semibold transition shrink-0 " +
+                          (rosterLinkCopied ? "bg-green-100 text-green-700" : "bg-green-600 text-white hover:bg-green-700")}>
+                        {rosterLinkCopied ? 'Copied!' : 'Copy Link'}
+                      </button>
+                    </div>
                   </div>
                 )}
 

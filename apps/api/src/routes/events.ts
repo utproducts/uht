@@ -145,7 +145,9 @@ eventRoutes.get('/:slug', optionalAuth, async (c) => {
 
   const event = await db.prepare(`
     SELECT e.*, v.name as venue_name, v.address as venue_address,
-           v.city as venue_city, v.state as venue_state
+           v.city as venue_city, v.state as venue_state,
+           (SELECT MIN(ed3.price_cents) FROM event_divisions ed3 WHERE ed3.event_id = e.id AND ed3.price_cents > 0) as price_min_cents,
+           (SELECT MAX(ed4.price_cents) FROM event_divisions ed4 WHERE ed4.event_id = e.id AND ed4.price_cents > 0) as price_max_cents
     FROM events e
     LEFT JOIN venues v ON v.id = e.venue_id
     WHERE e.slug = ?
@@ -180,7 +182,7 @@ eventRoutes.get('/debug/registrations/:eventId', async (c) => {
   const db = c.env.DB;
   const eventId = c.req.param('eventId');
 
-  const regs = await db.prepare('SELECT id, team_name, status, email1, age_group, created_at FROM event_registrations WHERE event_id = ?').bind(eventId).all();
+  const regs = await db.prepare('SELECT er.id, er.team_name, er.status, er.email1, er.age_group, er.created_at, (SELECT code FROM discount_codes WHERE registration_id = er.id LIMIT 1) as discount_code, (SELECT is_used FROM discount_codes WHERE registration_id = er.id LIMIT 1) as discount_code_used FROM event_registrations er WHERE er.event_id = ?').bind(eventId).all();
   const normalizedRegs = await db.prepare('SELECT r.id, t.name as team_name, r.status, r.created_at FROM registrations r LEFT JOIN teams t ON t.id = r.team_id WHERE r.event_id = ?').bind(eventId).all();
 
   return c.json({
@@ -412,6 +414,7 @@ const updateEventSchema = z.object({
   logo_url: z.string().nullable().optional(),
   banner_url: z.string().nullable().optional(),
   multi_event_discount_pct: z.number().nullable().optional(),
+  sanction_number: z.string().nullable().optional(),
 });
 
 // ==================
@@ -442,6 +445,7 @@ const saveDivisionsSchema = z.object({
     division_level: z.string().optional().nullable(),
     max_teams: z.number().optional().nullable(),
     price_cents: z.number(),
+    period_length_minutes: z.number().optional().nullable(),
   })),
 });
 
@@ -462,11 +466,11 @@ eventRoutes.put('/admin/:id/divisions', zValidator('json', saveDivisionsSchema),
     if (div.id && currentMap.has(div.id)) {
       // Update existing
       await db.prepare(`
-        UPDATE event_divisions SET age_group = ?, division_level = ?, max_teams = ?, price_cents = ?
+        UPDATE event_divisions SET age_group = ?, division_level = ?, max_teams = ?, price_cents = ?, period_length_minutes = ?
         WHERE id = ? AND event_id = ?
       `).bind(
         div.age_group, div.division_level || null, div.max_teams || null,
-        div.price_cents,
+        div.price_cents, div.period_length_minutes ?? null,
         div.id, eventId
       ).run();
       currentMap.delete(div.id);
@@ -474,11 +478,11 @@ eventRoutes.put('/admin/:id/divisions', zValidator('json', saveDivisionsSchema),
       // Insert new
       const newId = div.id || crypto.randomUUID().replace(/-/g, '');
       await db.prepare(`
-        INSERT INTO event_divisions (id, event_id, age_group, division_level, max_teams, price_cents)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO event_divisions (id, event_id, age_group, division_level, max_teams, price_cents, period_length_minutes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).bind(
         newId, eventId, div.age_group, div.division_level || null,
-        div.max_teams || null, div.price_cents
+        div.max_teams || null, div.price_cents, div.period_length_minutes ?? null
       ).run();
     }
   }
@@ -563,6 +567,7 @@ const createEventSimpleSchema = z.object({
   hide_availability: z.number().optional(),
   show_participants: z.number().optional(),
   multi_event_discount_pct: z.number().nullable().optional(),
+  sanction_number: z.string().nullable().optional(),
 });
 
 eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), async (c) => {
@@ -576,8 +581,8 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
     INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, venue_id, status,
       description, information, price_cents, deposit_cents, slots_count, age_groups, divisions,
       season, timezone, registration_open_date, registration_deadline, scorekeeper_pin,
-      rules_url, logo_url, banner_url, hide_availability, show_participants, multi_event_discount_pct)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      rules_url, logo_url, banner_url, hide_availability, show_participants, multi_event_discount_pct, sanction_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, data.name, slug, data.city, data.state, data.start_date, data.end_date,
     data.tournament_id || null, data.venue_id || null, data.status || 'draft',
@@ -587,7 +592,8 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
     data.season || null, data.timezone || 'Central (CST)',
     data.registration_open_date || null, data.registration_deadline || null, pin,
     data.rules_url || null, data.logo_url || null, data.banner_url || null,
-    data.hide_availability || 0, data.show_participants ?? 1, data.multi_event_discount_pct || 0
+    data.hide_availability || 0, data.show_participants ?? 1, data.multi_event_discount_pct || 0,
+    data.sanction_number || null
   ).run();
 
   return c.json({ success: true, data: { id, slug, scorekeeper_pin: pin } }, 201);
@@ -736,9 +742,10 @@ eventRoutes.get('/upcoming-for-upsell/:eventId', optionalAuth, async (c) => {
   const db = c.env.DB;
 
   const result = await db.prepare(`
-    SELECT id, name, city, state, start_date, end_date, price_cents, deposit_cents, multi_event_discount_pct, logo_url
+    SELECT id, slug, name, city, state, start_date, end_date, price_cents, deposit_cents, multi_event_discount_pct, logo_url
     FROM events
-    WHERE id != ? AND status IN ('registration_open', 'active')
+    WHERE id != ? AND status IN ('registration_open', 'active', 'published')
+      AND start_date >= date('now')
     ORDER BY start_date ASC
   `).bind(eventId).all();
 
@@ -757,7 +764,7 @@ eventRoutes.get('/event-hotels/:eventId', async (c) => {
   // Auto-migrate
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
   const result = await db.prepare(`
-    SELECT id, hotel_name as name, city, state, rate_description, booking_url, price_per_night as rate_cents, image_url
+    SELECT id, hotel_name, city, state, rate_description, booking_url, price_per_night as rate_cents, image_url
     FROM event_hotels WHERE event_id = ? AND is_active = 1
     ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
@@ -1063,7 +1070,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
 
   // Verify primary event exists and is open for registration
   const event = await db.prepare(
-    'SELECT id, name, city, state, start_date, end_date, status, price_cents, deposit_cents FROM events WHERE id = ?'
+    'SELECT id, name, city, state, start_date, end_date, status, price_cents, deposit_cents, logo_url FROM events WHERE id = ?'
   ).bind(data.eventId).first<any>();
 
   if (!event) {
@@ -1120,6 +1127,25 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   } catch {}
   try {
     await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_choice_3 TEXT").run();
+  } catch {}
+
+  // Auto-migrate: discount_codes table
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      registration_id TEXT NOT NULL,
+      team_name TEXT NOT NULL,
+      team_id TEXT,
+      event_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      discount_local_cents INTEGER NOT NULL DEFAULT 10000,
+      discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
+      is_used INTEGER NOT NULL DEFAULT 0,
+      used_registration_id TEXT,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
   } catch {}
 
   // Helper: match a team's age group (e.g. "Squirt AA", "Squirt Red 1") to an event division
@@ -1186,6 +1212,39 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     ).run();
   }
 
+  // Generate discount code for this registration
+  const SAFE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const generateCode = () => {
+    let code = '';
+    const arr = new Uint8Array(6);
+    crypto.getRandomValues(arr);
+    for (let i = 0; i < 6; i++) code += SAFE_CHARS[arr[i] % SAFE_CHARS.length];
+    return `UHT-${code}`;
+  };
+
+  let discountCode = generateCode();
+  const discountCodeId = crypto.randomUUID().replace(/-/g, '');
+  // Ensure uniqueness — retry up to 5 times
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await db.prepare(`
+        INSERT INTO discount_codes (id, code, registration_id, team_name, team_id, event_id, email)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        discountCodeId, discountCode, regId, data.teamName, data.teamId || null, data.eventId, data.email
+      ).run();
+      break;
+    } catch (e: any) {
+      if (attempt < 4 && e?.message?.includes('UNIQUE')) {
+        discountCode = generateCode();
+      } else {
+        console.error('Failed to generate discount code:', e);
+        discountCode = ''; // silently fail, don't block registration
+        break;
+      }
+    }
+  }
+
   // Send confirmation email
   const startDate = new Date(event.start_date + 'T12:00:00');
   const endDate = new Date(event.end_date + 'T12:00:00');
@@ -1207,6 +1266,8 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
       headCoachName: data.headCoachName || undefined,
       priceCents: event.price_cents || undefined,
       depositCents: event.deposit_cents || undefined,
+      eventLogoUrl: event.logo_url || undefined,
+      discountCode: discountCode || undefined,
     });
   } catch (err: any) {
     console.error('Registration confirmation email error:', err);
@@ -1220,6 +1281,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
       eventsRegistered: eventIds.length,
       status: 'pending',
       email_sent: emailResult.success,
+      discountCode: discountCode || undefined,
       message: eventIds.length > 1
         ? `Registered for ${eventIds.length} events! You will receive a confirmation email shortly. Our team reviews registrations within 24-48 hours.`
         : 'Registration received! You will receive a confirmation email shortly. Our team reviews registrations within 24-48 hours.',
@@ -2168,4 +2230,144 @@ eventRoutes.post('/admin/fix-age-groups', async (c) => {
   `).bind(event_id, event_id).run();
 
   return c.json({ success: true, updated, total: regs.results.length, divMap, results });
+});
+
+// ==================
+// PUBLIC: Validate a discount code
+// ==================
+eventRoutes.post('/validate-discount-code', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json() as { code: string; teamId?: string };
+  const { code } = body;
+
+  if (!code) {
+    return c.json({ success: false, error: 'Code is required' }, 400);
+  }
+
+  // Auto-migrate
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
+      id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, registration_id TEXT NOT NULL,
+      team_name TEXT NOT NULL, team_id TEXT, event_id TEXT NOT NULL, email TEXT NOT NULL,
+      discount_local_cents INTEGER NOT NULL DEFAULT 10000, discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
+      is_used INTEGER NOT NULL DEFAULT 0, used_registration_id TEXT, used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
+  } catch {}
+
+  const dc = await db.prepare(
+    'SELECT id, code, team_name, team_id, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE code = ?'
+  ).bind(code.trim().toUpperCase()).first<any>();
+
+  if (!dc) {
+    return c.json({ success: false, error: 'Invalid discount code' }, 404);
+  }
+  if (dc.is_used) {
+    return c.json({ success: false, error: 'This code has already been used' }, 400);
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      code_id: dc.id,
+      code: dc.code,
+      team_name: dc.team_name,
+      discount_local_cents: dc.discount_local_cents,
+      discount_hotel_cents: dc.discount_hotel_cents,
+    },
+  });
+});
+
+// ==================
+// PUBLIC: Redeem a discount code
+// ==================
+eventRoutes.post('/redeem-discount-code', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json() as { code: string; registrationId: string };
+  const { code, registrationId } = body;
+
+  if (!code || !registrationId) {
+    return c.json({ success: false, error: 'Code and registrationId are required' }, 400);
+  }
+
+  const dc = await db.prepare(
+    'SELECT id, is_used FROM discount_codes WHERE code = ?'
+  ).bind(code.trim().toUpperCase()).first<any>();
+
+  if (!dc) {
+    return c.json({ success: false, error: 'Invalid discount code' }, 404);
+  }
+  if (dc.is_used) {
+    return c.json({ success: false, error: 'This code has already been used' }, 400);
+  }
+
+  await db.prepare(
+    "UPDATE discount_codes SET is_used = 1, used_registration_id = ?, used_at = datetime('now') WHERE id = ?"
+  ).bind(registrationId, dc.id).run();
+
+  return c.json({ success: true, message: 'Discount code redeemed' });
+});
+
+// ==================
+// ADMIN: Discount code stats
+// ==================
+eventRoutes.get('/discount-code-stats', async (c) => {
+  const db = c.env.DB;
+
+  // Auto-migrate
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
+      id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, registration_id TEXT NOT NULL,
+      team_name TEXT NOT NULL, team_id TEXT, event_id TEXT NOT NULL, email TEXT NOT NULL,
+      discount_local_cents INTEGER NOT NULL DEFAULT 10000, discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
+      is_used INTEGER NOT NULL DEFAULT 0, used_registration_id TEXT, used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
+  } catch {}
+
+  const stats = await db.prepare(`
+    SELECT
+      COUNT(*) as total_created,
+      SUM(CASE WHEN is_used = 1 THEN 1 ELSE 0 END) as total_redeemed,
+      SUM(CASE WHEN is_used = 0 THEN 1 ELSE 0 END) as total_unredeemed,
+      SUM(CASE WHEN is_used = 1 THEN discount_local_cents ELSE 0 END) as total_local_savings_cents,
+      SUM(CASE WHEN is_used = 1 THEN discount_hotel_cents ELSE 0 END) as total_hotel_savings_cents
+    FROM discount_codes
+  `).first<any>();
+
+  return c.json({
+    success: true,
+    data: {
+      total_created: stats?.total_created || 0,
+      total_redeemed: stats?.total_redeemed || 0,
+      total_unredeemed: stats?.total_unredeemed || 0,
+      total_local_savings_cents: stats?.total_local_savings_cents || 0,
+      total_hotel_savings_cents: stats?.total_hotel_savings_cents || 0,
+    },
+  });
+});
+
+// ==================
+// PUBLIC: Get discount codes for a registration
+// ==================
+eventRoutes.get('/discount-codes/:registrationId', async (c) => {
+  const db = c.env.DB;
+  const registrationId = c.req.param('registrationId');
+
+  // Auto-migrate
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
+      id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, registration_id TEXT NOT NULL,
+      team_name TEXT NOT NULL, team_id TEXT, event_id TEXT NOT NULL, email TEXT NOT NULL,
+      discount_local_cents INTEGER NOT NULL DEFAULT 10000, discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
+      is_used INTEGER NOT NULL DEFAULT 0, used_registration_id TEXT, used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
+  } catch {}
+
+  const codes = await db.prepare(
+    'SELECT id, code, team_name, discount_local_cents, discount_hotel_cents, is_used, used_at, created_at FROM discount_codes WHERE registration_id = ?'
+  ).bind(registrationId).all();
+
+  return c.json({ success: true, data: codes.results || [] });
 });

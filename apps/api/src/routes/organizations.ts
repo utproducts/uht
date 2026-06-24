@@ -100,6 +100,102 @@ organizationRoutes.get('/mine', authMiddleware, async (c) => {
 });
 
 // ==================
+// Public: Search organizations by name (with optional state filter)
+// Must be before /:id routes to avoid parameter matching
+// ==================
+organizationRoutes.get('/search', async (c) => {
+  const db = c.env.DB;
+  const q = c.req.query('q') || '';
+  const state = c.req.query('state') || '';
+
+  if (q.length < 2 && !state) {
+    return c.json({ success: true, data: [] });
+  }
+
+  let sql = '';
+  const params: string[] = [];
+
+  if (q && state) {
+    // Search by name, include orgs matching the state AND orgs with no state
+    // State-matched orgs rank higher than no-state orgs
+    sql = `
+      SELECT id, name, city, state, logo_url
+      FROM organizations
+      WHERE is_active = 1
+        AND LOWER(name) LIKE LOWER(?)
+        AND (LOWER(state) = LOWER(?) OR state IS NULL OR state = '')
+      ORDER BY
+        CASE WHEN LOWER(state) = LOWER(?) THEN 0 ELSE 1 END,
+        CASE WHEN LOWER(name) = LOWER(?) THEN 0
+             WHEN LOWER(name) LIKE LOWER(?) THEN 1
+             ELSE 2 END,
+        name ASC
+      LIMIT 25
+    `;
+    params.push(`%${q}%`, state, state, q, `${q}%`);
+  } else if (q) {
+    sql = `
+      SELECT id, name, city, state, logo_url
+      FROM organizations
+      WHERE is_active = 1 AND LOWER(name) LIKE LOWER(?)
+      ORDER BY
+        CASE WHEN LOWER(name) = LOWER(?) THEN 0
+             WHEN LOWER(name) LIKE LOWER(?) THEN 1
+             ELSE 2 END,
+        name ASC
+      LIMIT 25
+    `;
+    params.push(`%${q}%`, q, `${q}%`);
+  } else if (state) {
+    sql = `
+      SELECT id, name, city, state, logo_url
+      FROM organizations
+      WHERE is_active = 1 AND LOWER(state) = LOWER(?)
+      ORDER BY name ASC
+      LIMIT 50
+    `;
+    params.push(state);
+  }
+
+  const results = await db.prepare(sql).bind(...params).all();
+  return c.json({ success: true, data: results.results });
+});
+
+// ==================
+// Quick-create organization (any authenticated user — used during team creation)
+// Only requires name + state. Checks for duplicates first.
+// ==================
+organizationRoutes.post('/quick-create', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user');
+  const body = await c.req.json<{ name: string; city?: string; state?: string }>();
+
+  if (!body.name || body.name.trim().length < 2) {
+    return c.json({ error: 'Organization name is required (min 2 characters)' }, 400);
+  }
+
+  const trimmedName = body.name.trim();
+
+  // Check for duplicate (case-insensitive)
+  const existing = await db.prepare(
+    `SELECT id, name, city, state FROM organizations WHERE LOWER(TRIM(name)) = LOWER(?) AND is_active = 1`
+  ).bind(trimmedName).first<{ id: string; name: string; city: string; state: string }>();
+
+  if (existing) {
+    return c.json({ success: true, data: existing, existed: true });
+  }
+
+  // Create new org
+  const orgId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO organizations (id, name, city, state, owner_id, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+  `).bind(orgId, trimmedName, body.city || null, body.state || null, user.id).run();
+
+  return c.json({ success: true, data: { id: orgId, name: trimmedName, city: body.city || null, state: body.state || null }, existed: false }, 201);
+});
+
+// ==================
 // Get org teams with full detail (coaches, managers, player count, registrations)
 // ==================
 organizationRoutes.get('/:id/teams-full', authMiddleware, async (c) => {
@@ -481,6 +577,70 @@ organizationRoutes.delete('/:id/teams/:teamId/staff/:userId', authMiddleware, as
 });
 
 // ==================
+// Admin: List ALL organizations (ordered by state, name) with team counts
+// ==================
+organizationRoutes.get('/admin/list', async (c) => {
+  const db = c.env.DB;
+
+  const result = await db.prepare(`
+    SELECT o.*,
+      (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
+    FROM organizations o
+    WHERE o.is_active = 1
+    ORDER BY o.state ASC, o.name ASC
+  `).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// Admin: Bulk-import organizations (skip duplicates)
+// ==================
+organizationRoutes.post('/admin/bulk-import', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ organizations: { name: string; state: string }[] }>();
+
+  if (!body.organizations || !Array.isArray(body.organizations)) {
+    return c.json({ error: 'organizations array is required' }, 400);
+  }
+
+  let imported = 0;
+  const skippedNames: string[] = [];
+
+  for (const org of body.organizations) {
+    const trimmedName = (org.name || '').trim();
+    if (!trimmedName) continue;
+
+    const trimmedState = (org.state || '').trim();
+
+    // Check for existing org with same name (case-insensitive)
+    const existing = await db.prepare(
+      `SELECT id FROM organizations WHERE LOWER(TRIM(name)) = LOWER(?) AND is_active = 1`
+    ).bind(trimmedName).first();
+
+    if (existing) {
+      skippedNames.push(trimmedName);
+      continue;
+    }
+
+    const orgId = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO organizations (id, name, state, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+    `).bind(orgId, trimmedName, trimmedState || null).run();
+
+    imported++;
+  }
+
+  return c.json({
+    success: true,
+    imported,
+    skipped: skippedNames.length,
+    skippedNames,
+  });
+});
+
+// ==================
 // Get org with teams (basic)
 // ==================
 organizationRoutes.get('/:id', authMiddleware, async (c) => {
@@ -539,12 +699,12 @@ organizationRoutes.post('/', authMiddleware, requireRole('admin', 'organization'
 organizationRoutes.patch('/:id', authMiddleware, async (c) => {
   const db = c.env.DB;
   const orgId = c.req.param('id');
-  const body = await c.req.json<{ name?: string; city?: string; state?: string; phone?: string; email?: string; website?: string; address?: string; zip?: string }>();
+  const body = await c.req.json<{ name?: string; city?: string; state?: string; phone?: string; email?: string; website?: string; address?: string; zip?: string; is_active?: number }>();
 
   const fields: string[] = [];
   const params: any[] = [];
 
-  for (const [key, col] of Object.entries({ name: 'name', city: 'city', state: 'state', phone: 'phone', email: 'email', website: 'website', address: 'address', zip: 'zip' })) {
+  for (const [key, col] of Object.entries({ name: 'name', city: 'city', state: 'state', phone: 'phone', email: 'email', website: 'website', address: 'address', zip: 'zip', is_active: 'is_active' })) {
     if ((body as any)[key] !== undefined) { fields.push(`${col} = ?`); params.push((body as any)[key]); }
   }
 
@@ -556,3 +716,5 @@ organizationRoutes.patch('/:id', authMiddleware, async (c) => {
   await db.prepare(`UPDATE organizations SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run();
   return c.json({ success: true });
 });
+
+

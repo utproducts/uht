@@ -768,12 +768,13 @@ function AddTeamModal({
 /* ══════════════════════════════════════════
    REGISTRATION DETAIL / EDIT PANEL
    ══════════════════════════════════════════ */
-function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved }: {
+function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved, onDelete }: {
   reg: Registration;
   divisions: Division[];
   eventHotels: EventHotel[];
   onClose: () => void;
   onSaved: () => void;
+  onDelete: (id: string) => void;
 }) {
   const [status, setStatus] = useState(reg.status);
   const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
@@ -1000,8 +1001,15 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
           </div>
         </div>
 
-        {/* Footer — Save */}
+        {/* Footer — Save + Delete */}
         <div className="sticky bottom-0 bg-white border-t border-[#e8e8ed] px-6 py-4 flex gap-3">
+          <button onClick={() => onDelete(reg.id)}
+            className="px-3 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-semibold rounded-xl text-sm transition"
+            title="Delete registration">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
           <button onClick={onClose}
             className="flex-1 px-4 py-2.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">
             Cancel
@@ -1117,6 +1125,22 @@ export default function AdminRegistrationsPage() {
       body: JSON.stringify({ reason: 'Rejected by admin' }),
     });
     loadAllRegistrations();
+  };
+
+  const handleDelete = async (regId: string) => {
+    if (!confirm('Are you sure you want to DELETE this registration? This cannot be undone.')) return;
+    try {
+      const res = await authFetch(`${API_BASE}/registrations/${regId}`, { method: 'DELETE' });
+      const json = await res.json() as any;
+      if (json.success) {
+        loadAllRegistrations();
+        setSelectedReg(null);
+      } else {
+        alert(json.error || 'Failed to delete registration');
+      }
+    } catch {
+      alert('Failed to delete registration.');
+    }
   };
 
   // Filters
@@ -1320,6 +1344,15 @@ export default function AdminRegistrationsPage() {
                         {(reg.status === 'rejected' || reg.status === 'denied') && (
                           <span className="text-xs text-red-500 font-medium">Denied</span>
                         )}
+                        <button
+                          onClick={() => handleDelete(reg.id)}
+                          className="p-1 rounded-lg text-[#c7c7cc] hover:text-red-500 hover:bg-red-50 transition"
+                          title="Delete registration"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1338,6 +1371,7 @@ export default function AdminRegistrationsPage() {
           eventHotels={detailHotels}
           onClose={() => setSelectedReg(null)}
           onSaved={() => loadAllRegistrations()}
+          onDelete={handleDelete}
         />
       )}
 

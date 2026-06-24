@@ -62,7 +62,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
         label: 'Body Message',
         type: 'textarea',
         defaultValue: 'You have successfully registered for the {eventName}!',
-        variables: ['eventName', 'teamName', 'ageGroup', 'division'],
+        variables: ['eventName', 'teamName', 'ageGroup', 'division', 'discountCode'],
       },
       {
         key: 'next_steps_title',

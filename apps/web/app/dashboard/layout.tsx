@@ -33,12 +33,14 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'My Teams', href: '/dashboard/coach/teams' },
     { name: 'Roster', href: '/dashboard/coach/roster' },
     { name: 'Events', href: '/dashboard/coach/events' },
+    { name: 'Coupon Codes', href: '/dashboard/coach/coupons' },
     { name: 'Schedule', href: '/dashboard/coach/schedule' },
   ]},
   manager: { label: 'Manager', items: [
     { name: 'My Teams', href: '/dashboard/manager/teams' },
     { name: 'Roster', href: '/dashboard/manager/roster' },
     { name: 'Events', href: '/dashboard/manager/events' },
+    { name: 'Coupon Codes', href: '/dashboard/manager/coupons' },
     { name: 'Schedule', href: '/dashboard/manager/schedule' },
   ]},
   parent: { label: 'Parent / Player', items: [

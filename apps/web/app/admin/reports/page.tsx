@@ -176,6 +176,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('30d');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [discountStats, setDiscountStats] = useState<any>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -190,6 +191,12 @@ export default function ReportsPage() {
       if (usersJson.success) setActiveUsers(usersJson.data || []);
       if (summaryJson.success) setSummary(summaryJson.data);
     } catch {}
+      // Discount code stats
+      try {
+        const discountRes = await authFetch(`${API_BASE}/events/discount-code-stats`);
+        const discountJson = await discountRes.json() as any;
+        if (discountJson.success) setDiscountStats(discountJson.data);
+      } catch {}
     setLoading(false);
   }, [period]);
 
@@ -232,6 +239,37 @@ export default function ReportsPage() {
           accent={summary?.pendingRegistrations > 0}
         />
       </div>
+
+      {/* Discount Code Stats */}
+      {discountStats && (discountStats.total_created > 0) && (
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-[#1d1d1f] mb-4">Discount Codes</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <SummaryCard
+              label="Total Codes Created"
+              value={discountStats.total_created}
+              sub="Generated on registration"
+            />
+            <SummaryCard
+              label="Codes Redeemed"
+              value={discountStats.total_redeemed}
+              sub={`${discountStats.total_created > 0 ? Math.round((discountStats.total_redeemed / discountStats.total_created) * 100) : 0}% redemption rate`}
+              accent
+            />
+            <SummaryCard
+              label="Codes Unredeemed"
+              value={discountStats.total_unredeemed}
+              sub="Available for use"
+            />
+            <SummaryCard
+              label="Total Savings"
+              value={`$${((discountStats.total_local_savings_cents + discountStats.total_hotel_savings_cents) / 100).toLocaleString()}`}
+              sub="Distributed to teams"
+              accent
+            />
+          </div>
+        </div>
+      )}
 
       {/* Most Active Users */}
       <div className="flex items-center justify-between mb-4">

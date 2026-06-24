@@ -305,6 +305,9 @@ function VenuesPage() {
     const rinkNames = newVenueRinkNames.filter(name => name.trim());
     if (rinkNames.length === 0) return;
 
+    const selectedCity = cities.find(c => c.id === selectedCityId);
+    if (!selectedCity) return;
+
     setSavingVenue(true);
     try {
       const res = await fetch(`${API_BASE}/venues`, {
@@ -313,8 +316,11 @@ function VenuesPage() {
         body: JSON.stringify({
           name: newVenueName,
           address: newVenueAddress || null,
-          city_id: selectedCityId,
-          rink_names: rinkNames
+          city: selectedCity.name,
+          state: selectedCity.state,
+          cityId: selectedCityId,
+          numRinks: rinkNames.length,
+          rinks: rinkNames.map(n => ({ name: n }))
         })
       });
       const json = await res.json();

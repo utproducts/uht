@@ -194,7 +194,7 @@ authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
     `).bind(linkId, userId, token, expiresAt).run();
 
     // Send welcome + magic link email via SendGrid
-    const baseUrl = 'https://ultimatetournaments.com';
+    const baseUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
     const loginUrl = `${baseUrl}/login/verify?token=${token}`;
 
     if (c.env.SENDGRID_API_KEY) {
@@ -213,7 +213,7 @@ authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
               type: 'text/html',
               value: `
                 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                  <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                   <h2 style="color: #1d1d1f; margin-bottom: 8px;">Welcome, ${data.firstName}!</h2>
                   <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                     Your account has been created. Click the button below to sign in for the first time.
@@ -378,7 +378,7 @@ authRoutes.post('/magic-link', zValidator('json', magicLinkSchema), async (c) =>
   `).bind(linkId, user.id, token, expiresAt).run();
 
   // Build login URL
-  const baseUrl = 'https://ultimatetournaments.com';
+  const baseUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
   const redirectParam = redirect ? `&redirect=${encodeURIComponent(redirect)}` : '';
   const loginUrl = `${baseUrl}/login/verify?token=${token}${redirectParam}`;
 
@@ -405,7 +405,7 @@ authRoutes.post('/magic-link', zValidator('json', magicLinkSchema), async (c) =>
             type: 'text/html',
             value: `
               <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                 <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${user.first_name},</h2>
                 <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                   ${mlBody}

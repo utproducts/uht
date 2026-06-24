@@ -534,7 +534,243 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     ORDER BY t.age_group ASC, t.name ASC
   `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
 
-  return c.json({ success: true, data: result.results });
+  // Enrich each team with its registered events (from both tables)
+  const teams = result.results || [];
+  for (const team of teams) {
+    const teamEvents: any[] = [];
+
+    // From normalized registrations table (by team_id)
+    try {
+      const normRegs = await db.prepare(`
+        SELECT r.id as reg_id, r.status, r.payment_status, e.id as event_id, e.name as event_name,
+          e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        WHERE r.team_id = ? AND r.status NOT IN ('withdrawn','denied','rejected')
+        ORDER BY e.start_date ASC
+      `).bind((team as any).id).all();
+      for (const r of (normRegs.results || [])) {
+        teamEvents.push(r);
+      }
+    } catch {}
+
+    // From event_registrations table (by team_name match)
+    try {
+      const legacyRegs = await db.prepare(`
+        SELECT er.id as reg_id, er.status, er.payment_status, e.id as event_id, e.name as event_name,
+          e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
+        FROM event_registrations er
+        JOIN events e ON e.id = er.event_id
+        WHERE er.team_name = ? AND er.status NOT IN ('withdrawn','denied','rejected')
+        ORDER BY e.start_date ASC
+      `).bind((team as any).name).all();
+      // Deduplicate by event_id
+      const existingEventIds = new Set(teamEvents.map((te: any) => te.event_id));
+      for (const r of (legacyRegs.results || [])) {
+        if (!existingEventIds.has((r as any).event_id)) {
+          teamEvents.push(r);
+        }
+      }
+    } catch {}
+
+    (team as any).registered_events = teamEvents;
+  }
+
+  return c.json({ success: true, data: teams });
+});
+
+// ==================
+// PUBLIC: Get team roster by share token (NO auth required)
+// ==================
+teamRoutes.get('/roster/share/:token', async (c) => {
+  const token = c.req.param('token');
+  const db = c.env.DB;
+
+  const team = await db.prepare(`
+    SELECT t.id, t.name, t.age_group, t.division_level, t.city, t.state,
+           t.head_coach_name, o.name as org_name
+    FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
+    WHERE t.roster_share_token = ? AND t.is_active = 1
+  `).bind(token).first<{
+    id: string; name: string; age_group: string; division_level: string | null;
+    city: string | null; state: string | null; head_coach_name: string | null;
+    org_name: string | null;
+  }>();
+
+  if (!team) {
+    return c.json({ success: false, error: 'Team not found or link is invalid' }, 404);
+  }
+
+  const players = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.jersey_number, p.position,
+           p.shoots, p.usa_hockey_number, p.claimed_by, p.parent_name, p.parent_email
+    FROM players p
+    JOIN team_players tp ON tp.player_id = p.id
+    WHERE tp.team_id = ? AND tp.status = 'active'
+    ORDER BY CAST(COALESCE(NULLIF(p.jersey_number, ''), '999') AS INTEGER), p.last_name
+  `).bind(team.id).all<{
+    id: string; first_name: string; last_name: string; jersey_number: string | null;
+    position: string | null; shoots: string | null; usa_hockey_number: string | null;
+    claimed_by: string | null; parent_name: string | null; parent_email: string | null;
+  }>();
+
+  return c.json({
+    success: true,
+    data: {
+      team: {
+        id: team.id, name: team.name, ageGroup: team.age_group,
+        divisionLevel: team.division_level, city: team.city, state: team.state,
+        headCoachName: team.head_coach_name, orgName: team.org_name,
+      },
+      players: (players.results || []).map(p => ({
+        id: p.id, firstName: p.first_name, lastName: p.last_name,
+        jerseyNumber: p.jersey_number, position: p.position, shoots: p.shoots,
+        usaHockeyNumber: p.usa_hockey_number, claimed: !!p.claimed_by,
+        parentName: p.parent_name,
+        parentEmail: p.claimed_by && p.parent_email
+          ? p.parent_email.replace(/(.{2}).*(@.*)/, '$1***$2') : null,
+      })),
+    },
+  });
+});
+
+// ==================
+// PUBLIC: Claim a player on the roster (creates parent account)
+// ==================
+teamRoutes.post('/roster/share/:token/claim', async (c) => {
+  const token = c.req.param('token');
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    playerId: string; parentFirstName: string; parentLastName: string;
+    email: string; phone: string;
+  }>();
+
+  if (!body.playerId || !body.parentFirstName || !body.parentLastName || !body.email) {
+    return c.json({ success: false, error: 'Player ID, parent name, and email are required' }, 400);
+  }
+
+  const team = await db.prepare(`
+    SELECT id, name FROM teams WHERE roster_share_token = ? AND is_active = 1
+  `).bind(token).first<{ id: string; name: string }>();
+  if (!team) return c.json({ success: false, error: 'Invalid roster link' }, 404);
+
+  const player = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.claimed_by
+    FROM players p JOIN team_players tp ON tp.player_id = p.id
+    WHERE p.id = ? AND tp.team_id = ? AND tp.status = 'active'
+  `).bind(body.playerId, team.id).first<{
+    id: string; first_name: string; last_name: string; claimed_by: string | null;
+  }>();
+  if (!player) return c.json({ success: false, error: 'Player not found on this team' }, 404);
+  if (player.claimed_by) return c.json({ success: false, error: 'This player has already been claimed by another parent' }, 409);
+
+  const email = body.email.toLowerCase().trim();
+  const parentName = `${body.parentFirstName.trim()} ${body.parentLastName.trim()}`;
+
+  let userId: string;
+  const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>();
+
+  if (existingUser) {
+    userId = existingUser.id;
+    try { await db.prepare(`INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, 'parent')`).bind(crypto.randomUUID().replace(/-/g, ''), userId).run(); } catch {}
+    if (body.phone) await db.prepare(`UPDATE users SET phone = COALESCE(phone, ?) WHERE id = ?`).bind(body.phone, userId).run();
+  } else {
+    userId = crypto.randomUUID().replace(/-/g, '');
+    const dummyHash = await (async () => {
+      const data = new TextEncoder().encode(crypto.randomUUID());
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    })();
+    await db.prepare(`INSERT INTO users (id, email, password_hash, first_name, last_name, phone, email_verified) VALUES (?, ?, ?, ?, ?, ?, 1)`)
+      .bind(userId, email, dummyHash, body.parentFirstName.trim(), body.parentLastName.trim(), body.phone || null).run();
+    await db.prepare(`INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, 'parent')`)
+      .bind(crypto.randomUUID().replace(/-/g, ''), userId, 'parent').run();
+  }
+
+  await db.prepare(`UPDATE players SET claimed_by = ?, parent_name = ?, parent_email = ?, parent_phone = ? WHERE id = ?`)
+    .bind(userId, parentName, email, body.phone || null, body.playerId).run();
+
+  try {
+    const memberId = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via) VALUES (?, ?, ?, 'parent', 'active', 'roster_claim')`)
+      .bind(memberId, team.id, userId).run();
+  } catch {}
+
+  return c.json({ success: true, data: {
+    playerId: body.playerId, playerName: `${player.first_name} ${player.last_name}`,
+    parentName, email, teamName: team.name,
+  }});
+});
+
+// ==================
+// PUBLIC: Register a NEW player not on roster (creates parent account + player)
+// ==================
+teamRoutes.post('/roster/share/:token/register', async (c) => {
+  const token = c.req.param('token');
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    playerFirstName: string; playerLastName: string; jerseyNumber?: string; position?: string;
+    parentFirstName: string; parentLastName: string; email: string; phone: string;
+  }>();
+
+  if (!body.playerFirstName || !body.playerLastName || !body.parentFirstName || !body.parentLastName || !body.email) {
+    return c.json({ success: false, error: 'Player name, parent name, and email are required' }, 400);
+  }
+
+  const team = await db.prepare(`SELECT id, name FROM teams WHERE roster_share_token = ? AND is_active = 1`)
+    .bind(token).first<{ id: string; name: string }>();
+  if (!team) return c.json({ success: false, error: 'Invalid roster link' }, 404);
+
+  const email = body.email.toLowerCase().trim();
+  const parentName = `${body.parentFirstName.trim()} ${body.parentLastName.trim()}`;
+
+  let userId: string;
+  const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>();
+  if (existingUser) {
+    userId = existingUser.id;
+    try { await db.prepare(`INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, 'parent')`).bind(crypto.randomUUID().replace(/-/g, ''), userId).run(); } catch {}
+    if (body.phone) await db.prepare(`UPDATE users SET phone = COALESCE(phone, ?) WHERE id = ?`).bind(body.phone, userId).run();
+  } else {
+    userId = crypto.randomUUID().replace(/-/g, '');
+    const dummyHash = await (async () => {
+      const data = new TextEncoder().encode(crypto.randomUUID());
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    })();
+    await db.prepare(`INSERT INTO users (id, email, password_hash, first_name, last_name, phone, email_verified) VALUES (?, ?, ?, ?, ?, ?, 1)`)
+      .bind(userId, email, dummyHash, body.parentFirstName.trim(), body.parentLastName.trim(), body.phone || null).run();
+    await db.prepare(`INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, 'parent')`)
+      .bind(crypto.randomUUID().replace(/-/g, ''), userId, 'parent').run();
+  }
+
+  const playerId = crypto.randomUUID().replace(/-/g, '');
+  const normalizePos = (p?: string): string | null => {
+    if (!p) return null;
+    const lp = p.toLowerCase().trim();
+    if (lp.startsWith('f') || lp === 'c' || lp === 'lw' || lp === 'rw') return 'forward';
+    if (lp.startsWith('d') || lp === 'ld' || lp === 'rd') return 'defense';
+    if (lp.startsWith('g')) return 'goalie';
+    return null;
+  };
+
+  await db.prepare(`INSERT INTO players (id, first_name, last_name, jersey_number, position, claimed_by, parent_name, parent_email, parent_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(playerId, body.playerFirstName.trim(), body.playerLastName.trim(), body.jerseyNumber || null, normalizePos(body.position), userId, parentName, email, body.phone || null).run();
+
+  const tpId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`INSERT INTO team_players (id, team_id, player_id, status) VALUES (?, ?, ?, 'active')`)
+    .bind(tpId, team.id, playerId).run();
+
+  try {
+    const memberId = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via) VALUES (?, ?, ?, 'parent', 'active', 'roster_register')`)
+      .bind(memberId, team.id, userId).run();
+  } catch {}
+
+  return c.json({ success: true, data: {
+    playerId, playerName: `${body.playerFirstName.trim()} ${body.playerLastName.trim()}`,
+    parentName, email, teamName: team.name,
+  }});
 });
 
 // ==================
@@ -603,6 +839,99 @@ teamRoutes.get('/:id', authMiddleware, async (c) => {
 });
 
 // ==================
+// Check for duplicate teams before creation
+// ==================
+teamRoutes.get('/check-duplicate', async (c) => {
+  const db = c.env.DB;
+  const name = c.req.query('name')?.trim();
+  const ageGroup = c.req.query('ageGroup')?.trim();
+
+  if (!name || !ageGroup) {
+    return c.json({ success: true, duplicates: [] });
+  }
+
+  // Search for teams with similar names and matching age group
+  // Use LIKE for fuzzy matching (handles slight variations)
+  const results = await db.prepare(`
+    SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code,
+      t.head_coach_name, t.head_coach_email, t.created_by,
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
+      (SELECT COUNT(*) FROM event_registrations er WHERE er.team_name = t.name AND er.status NOT IN ('denied','withdrawn')) as reg_count
+    FROM teams t
+    WHERE LOWER(t.name) = LOWER(?) AND LOWER(t.age_group) = LOWER(?)
+    AND t.is_active = 1
+    ORDER BY t.created_at DESC
+    LIMIT 5
+  `).bind(name, ageGroup).all();
+
+  // Also check for close matches (same name, different age group)
+  const similarResults = await db.prepare(`
+    SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code,
+      t.head_coach_name, t.created_by
+    FROM teams t
+    WHERE LOWER(t.name) = LOWER(?) AND LOWER(t.age_group) != LOWER(?)
+    AND t.is_active = 1
+    ORDER BY t.age_group ASC
+    LIMIT 5
+  `).bind(name, ageGroup).all();
+
+  return c.json({
+    success: true,
+    exactMatches: results.results || [],
+    similarMatches: similarResults.results || [],
+    hasDuplicates: (results.results?.length || 0) > 0,
+  });
+});
+
+// ==================
+// Get discount/coupon codes for logged-in user
+// ==================
+teamRoutes.get('/my-discount-codes', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Get user email
+  const userRecord = await db.prepare('SELECT email FROM users WHERE id = ?').bind(user.id).first<{ email: string }>();
+  const userEmail = userRecord?.email || '';
+
+  if (!userEmail) {
+    return c.json({ success: true, data: [] });
+  }
+
+  // Ensure discount_codes table exists
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      registration_id TEXT NOT NULL,
+      team_name TEXT NOT NULL,
+      team_id TEXT,
+      event_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      discount_local_cents INTEGER NOT NULL DEFAULT 10000,
+      discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
+      is_used INTEGER NOT NULL DEFAULT 0,
+      used_registration_id TEXT,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
+  } catch {}
+
+  const codes = await db.prepare(`
+    SELECT dc.id, dc.code, dc.team_name, dc.event_id, dc.discount_local_cents,
+      dc.discount_hotel_cents, dc.is_used, dc.used_at, dc.created_at,
+      e.name as event_name, e.city as event_city, e.state as event_state,
+      e.start_date as event_start_date
+    FROM discount_codes dc
+    LEFT JOIN events e ON e.id = dc.event_id
+    WHERE dc.email = ?
+    ORDER BY dc.created_at DESC
+  `).bind(userEmail).all();
+
+  return c.json({ success: true, data: codes.results || [] });
+});
+
+// ==================
 // Create team (full — with coach/manager/league info)
 // ==================
 const createTeamSchema = z.object({
@@ -624,11 +953,41 @@ const createTeamSchema = z.object({
   managerName: z.string().optional(),
   managerEmail: z.string().optional(),
   managerPhone: z.string().optional(),
+  skipDuplicateCheck: z.boolean().optional(),
 });
 
 teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
+
+  // Duplicate team prevention — check for existing teams with same name + age group
+  if (!data.skipDuplicateCheck) {
+    const existing = await db.prepare(`
+      SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code,
+        t.head_coach_name, t.head_coach_email
+      FROM teams t
+      WHERE LOWER(t.name) = LOWER(?) AND LOWER(t.age_group) = LOWER(?)
+      AND t.is_active = 1
+      LIMIT 1
+    `).bind(data.name.trim(), data.ageGroup.trim()).first();
+
+    if (existing) {
+      return c.json({
+        success: false,
+        error: 'duplicate_team',
+        message: `A team named "${(existing as any).name}" already exists for ${(existing as any).age_group}. You may want to join the existing team instead of creating a new one.`,
+        existingTeam: {
+          id: (existing as any).id,
+          name: (existing as any).name,
+          ageGroup: (existing as any).age_group,
+          city: (existing as any).city,
+          state: (existing as any).state,
+          inviteCode: (existing as any).invite_code,
+          headCoachName: (existing as any).head_coach_name,
+        },
+      }, 409);
+    }
+  }
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
@@ -637,6 +996,12 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
   let inviteCode = '';
   const randBytes = crypto.getRandomValues(new Uint8Array(6));
   for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
+
+  // Generate a roster share token (URL-safe, 12 chars) for parent/player claim link
+  const tokenChars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  let rosterShareToken = '';
+  const tokenRandBytes = crypto.getRandomValues(new Uint8Array(12));
+  for (let i = 0; i < 12; i++) rosterShareToken += tokenChars[tokenRandBytes[i] % tokenChars.length];
 
   // Resolve user ID from auth token if available
   let createdByUserId: string | null = null;
@@ -661,8 +1026,8 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
       usa_hockey_team_id, usa_hockey_roster_url, city, state,
       website, hometown_league, team_type, season_record,
       head_coach_name, head_coach_email, head_coach_phone,
-      manager_name, manager_email, manager_phone, created_by, invite_code)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      manager_name, manager_email, manager_phone, created_by, invite_code, roster_share_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, data.organizationId || null, data.name, data.ageGroup,
     data.divisionLevel || null, data.usaHockeyTeamId || null,
@@ -671,7 +1036,7 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
     data.teamType || null, data.seasonRecord || null,
     data.headCoachName || null, data.headCoachEmail || null, data.headCoachPhone || null,
     data.managerName || null, data.managerEmail || null, data.managerPhone || null,
-    createdByUserId, inviteCode
+    createdByUserId, inviteCode, rosterShareToken
   ).run();
 
   // Link creator as a team_member
@@ -720,7 +1085,8 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
 
         // Send invite email
         if (c.env.SENDGRID_API_KEY) {
-          const signupUrl = `https://ultimatetournaments.com/signup?invite=${inviteCode}&email=${encodeURIComponent(coachEmail)}&role=coach`;
+          const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
+          const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(coachEmail)}&role=coach`;
           try {
             await fetch('https://api.sendgrid.com/v3/mail/send', {
               method: 'POST',
@@ -731,7 +1097,7 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 content: [{ type: 'text/html', value: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -781,7 +1147,8 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
         `).bind(invId, teamId, mgrEmail, data.managerPhone || null, inviteCode, createdByUserId).run();
 
         if (c.env.SENDGRID_API_KEY) {
-          const signupUrl = `https://ultimatetournaments.com/signup?invite=${inviteCode}&email=${encodeURIComponent(mgrEmail)}&role=manager`;
+          const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
+          const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(mgrEmail)}&role=manager`;
           try {
             await fetch('https://api.sendgrid.com/v3/mail/send', {
               method: 'POST',
@@ -792,7 +1159,7 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 content: [{ type: 'text/html', value: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -820,7 +1187,7 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
     }
   }
 
-  return c.json({ success: true, data: { id: teamId, inviteCode } }, 201);
+  return c.json({ success: true, data: { id: teamId, inviteCode, rosterShareToken } }, 201);
 });
 
 // ==================
@@ -1497,4 +1864,108 @@ teamRoutes.post('/admin/backfill-invite-codes', async (c) => {
   }
 
   return c.json({ success: true, updated });
+});
+
+// ==================
+// MIGRATION: Add roster_share_token and claimed_by columns
+// ==================
+teamRoutes.post('/admin/migrate-roster-claim', async (c) => {
+  const db = c.env.DB;
+  const results: string[] = [];
+
+  // Add roster_share_token to teams
+  try {
+    await db.prepare(`ALTER TABLE teams ADD COLUMN roster_share_token TEXT`).run();
+    results.push('Added roster_share_token to teams');
+  } catch (e: any) {
+    if (e.message?.includes('duplicate column')) results.push('roster_share_token already exists');
+    else results.push(`roster_share_token error: ${e.message}`);
+  }
+
+  // Add claimed_by (user_id) to players
+  try {
+    await db.prepare(`ALTER TABLE players ADD COLUMN claimed_by TEXT REFERENCES users(id)`).run();
+    results.push('Added claimed_by to players');
+  } catch (e: any) {
+    if (e.message?.includes('duplicate column')) results.push('claimed_by already exists');
+    else results.push(`claimed_by error: ${e.message}`);
+  }
+
+  // Add parent_email and parent_phone to players for contact info
+  try {
+    await db.prepare(`ALTER TABLE players ADD COLUMN parent_email TEXT`).run();
+    results.push('Added parent_email to players');
+  } catch (e: any) {
+    if (e.message?.includes('duplicate column')) results.push('parent_email already exists');
+    else results.push(`parent_email error: ${e.message}`);
+  }
+  try {
+    await db.prepare(`ALTER TABLE players ADD COLUMN parent_phone TEXT`).run();
+    results.push('Added parent_phone to players');
+  } catch (e: any) {
+    if (e.message?.includes('duplicate column')) results.push('parent_phone already exists');
+    else results.push(`parent_phone error: ${e.message}`);
+  }
+
+  // Add parent_name to players
+  try {
+    await db.prepare(`ALTER TABLE players ADD COLUMN parent_name TEXT`).run();
+    results.push('Added parent_name to players');
+  } catch (e: any) {
+    if (e.message?.includes('duplicate column')) results.push('parent_name already exists');
+    else results.push(`parent_name error: ${e.message}`);
+  }
+
+  // Backfill roster_share_token for existing teams (batch of 50 to avoid timeout)
+  const tokenChars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  const teams = await db.prepare(`SELECT id FROM teams WHERE (roster_share_token IS NULL OR roster_share_token = '') AND is_active = 1 LIMIT 50`).all<{ id: string }>();
+  let backfilled = 0;
+  for (const team of teams.results || []) {
+    let token = '';
+    const rb = crypto.getRandomValues(new Uint8Array(12));
+    for (let i = 0; i < 12; i++) token += tokenChars[rb[i] % tokenChars.length];
+    await db.prepare(`UPDATE teams SET roster_share_token = ? WHERE id = ?`).bind(token, team.id).run();
+    backfilled++;
+  }
+  const remaining = await db.prepare(`SELECT COUNT(*) as cnt FROM teams WHERE (roster_share_token IS NULL OR roster_share_token = '') AND is_active = 1`).first<{ cnt: number }>();
+  results.push(`Backfilled ${backfilled} roster_share_tokens (${remaining?.cnt || 0} remaining — run again if needed)`);
+
+  return c.json({ success: true, results });
+});
+
+// ==================
+// Get roster share token for a team (auth required — coach/manager only)
+// ==================
+teamRoutes.get('/:id/roster-link', authMiddleware, async (c) => {
+  const teamId = c.req.param('id');
+  const db = c.env.DB;
+
+  const team = await db.prepare(`
+    SELECT roster_share_token, name FROM teams WHERE id = ? AND is_active = 1
+  `).bind(teamId).first<{ roster_share_token: string | null; name: string }>();
+
+  if (!team) {
+    return c.json({ success: false, error: 'Team not found' }, 404);
+  }
+
+  // Generate token if missing
+  let token = team.roster_share_token;
+  if (!token) {
+    const tokenChars = 'abcdefghijkmnpqrstuvwxyz23456789';
+    token = '';
+    const rb = crypto.getRandomValues(new Uint8Array(12));
+    for (let i = 0; i < 12; i++) token += tokenChars[rb[i] % tokenChars.length];
+    await db.prepare(`UPDATE teams SET roster_share_token = ? WHERE id = ?`).bind(token, teamId).run();
+  }
+
+  const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+
+  return c.json({
+    success: true,
+    data: {
+      token,
+      url: `${siteUrl}/roster/claim?t=${token}`,
+      teamName: team.name,
+    },
+  });
 });

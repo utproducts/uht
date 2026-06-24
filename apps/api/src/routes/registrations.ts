@@ -91,7 +91,7 @@ registrationRoutes.post('/', authMiddleware, requireRole('admin', 'director', 'o
   try {
     const team = await db.prepare('SELECT name, age_group, head_coach_name, head_coach_email FROM teams WHERE id = ?')
       .bind(data.teamId).first<any>();
-    const event = await db.prepare('SELECT name, city, state, start_date, end_date, price_cents, deposit_cents FROM events WHERE id = ?')
+    const event = await db.prepare('SELECT name, city, state, start_date, end_date, price_cents, deposit_cents, logo_url FROM events WHERE id = ?')
       .bind(division.event_id).first<any>();
 
     if (team && event) {
@@ -118,6 +118,7 @@ registrationRoutes.post('/', authMiddleware, requireRole('admin', 'director', 'o
         headCoachName: team.head_coach_name || undefined,
         priceCents: event.price_cents || undefined,
         depositCents: event.deposit_cents || undefined,
+        eventLogoUrl: event.logo_url || undefined,
         _overrides: overrides,
       } as any);
       emailSent = result.success;
@@ -520,6 +521,43 @@ registrationRoutes.post('/:id/reject', authMiddleware, requireRole('admin', 'dir
   `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ reason: body.reason, source: isConsumer ? 'consumer' : 'normalized' })).run();
 
   return c.json({ success: true, message: 'Registration rejected' });
+});
+
+// ==================
+// ADMIN: Delete registration (for testing/cleanup)
+// ==================
+registrationRoutes.delete('/:id', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const regId = c.req.param('id');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Check both tables
+  let tableName = 'registrations';
+  let reg = await db.prepare('SELECT id, event_id FROM registrations WHERE id = ?').bind(regId).first<any>();
+  if (!reg) {
+    reg = await db.prepare('SELECT id, event_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+    if (reg) tableName = 'event_registrations';
+    else return c.json({ success: false, error: 'Registration not found' }, 404);
+  }
+
+  // Delete related discount codes
+  await db.prepare('DELETE FROM discount_codes WHERE registration_id = ?').bind(regId).run().catch(() => {});
+
+  // Delete the registration
+  await db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(regId).run();
+
+  // Audit log
+  await db.prepare(`
+    INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
+    VALUES (?, ?, 'registration.deleted', 'registration', ?, ?)
+  `).bind(
+    crypto.randomUUID().replace(/-/g, ''),
+    user.id,
+    regId,
+    JSON.stringify({ source: tableName === 'event_registrations' ? 'consumer' : 'normalized' })
+  ).run();
+
+  return c.json({ success: true, message: 'Registration deleted' });
 });
 
 // ==================

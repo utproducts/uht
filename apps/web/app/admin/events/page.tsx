@@ -39,6 +39,7 @@ interface EventItem {
   multi_event_discount_pct: number | null;
   registration_open_date: string | null;
   registration_deadline: string | null;
+  sanction_number: string | null;
 }
 
 interface EventHotel {
@@ -156,6 +157,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     hide_availability: event?.hide_availability || 0,
     show_participants: event?.show_participants ?? 1,
     is_sold_out: event?.is_sold_out || 0,
+    sanction_number: event?.sanction_number || '',
   });
 
   // Hotels state
@@ -225,6 +227,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     division_level: string | null;
     max_teams: number | null;
     price_cents: number;
+    period_length_minutes?: number | null;
     registered_count?: number;
   }
   const [divisionConfigs, setDivisionConfigs] = useState<DivisionConfig[]>([]);
@@ -382,6 +385,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
             division_level: d.division_level,
             max_teams: d.max_teams,
             price_cents: d.price_cents,
+            period_length_minutes: d.period_length_minutes ?? null,
             registered_count: d.registered_count || 0,
           })));
         }
@@ -401,7 +405,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
           if (existing.has(ag)) {
             updated.push(existing.get(ag)!);
           } else {
-            updated.push({ age_group: ag, division_level: null, max_teams: null, price_cents: defaultPrice });
+            updated.push({ age_group: ag, division_level: null, max_teams: null, price_cents: defaultPrice, period_length_minutes: 12 });
           }
         }
         return updated;
@@ -424,7 +428,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       if (json.success) {
         setDivisionConfigs(json.data.map((d: any) => ({
           id: d.id, age_group: d.age_group, division_level: d.division_level,
-          max_teams: d.max_teams, price_cents: d.price_cents, registered_count: d.registered_count || 0,
+          max_teams: d.max_teams, price_cents: d.price_cents, period_length_minutes: d.period_length_minutes ?? null, registered_count: d.registered_count || 0,
         })));
         setDivisionSaveStatus('saved');
         setTimeout(() => setDivisionSaveStatus('idle'), 2000);
@@ -657,6 +661,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
         hide_availability: form.hide_availability,
         show_participants: form.show_participants,
         is_sold_out: form.is_sold_out,
+        sanction_number: form.sanction_number || null,
       };
 
       const url = isEdit ? `${API_BASE}/admin/update/${event!.id}` : `${API_BASE}/admin/create`;
@@ -947,7 +952,12 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                   </select>
                 </div>
-                <div className="sm:col-span-2">
+                <div>
+                  <label className={labelCls}>Sanction #</label>
+                  <input type="text" value={form.sanction_number} onChange={e => setForm({ ...form, sanction_number: e.target.value })}
+                    placeholder="e.g. 2026-IL-0001" className={inputCls} />
+                </div>
+                <div>
                   <label className={labelCls}>Rules URL</label>
                   <input type="url" value={form.rules_url} onChange={e => setForm({ ...form, rules_url: e.target.value })}
                     placeholder="https://..." className={inputCls} />
@@ -1037,13 +1047,14 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[1fr_80px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
+                    <div className="grid grid-cols-[1fr_80px_90px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
                       <span>Age Group</span>
                       <span>Price ($)</span>
+                      <span>Period (min)</span>
                       <span>Registered</span>
                     </div>
                     {divisionConfigs.map((div, idx) => (
-                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_80px_80px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
+                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_80px_90px_80px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
                         <span className="text-sm font-semibold text-[#1d1d1f]">{div.age_group}</span>
                         <input type="number" step="1" min="0"
                           value={div.price_cents ? (div.price_cents / 100).toFixed(0) : ''}
@@ -1052,6 +1063,14 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                             setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, price_cents: val } : d));
                           }}
                           placeholder="0"
+                          className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
+                        <input type="number" step="1" min="1" max="30"
+                          value={div.period_length_minutes ?? ''}
+                          onChange={e => {
+                            const val = e.target.value ? parseInt(e.target.value) : null;
+                            setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, period_length_minutes: val } : d));
+                          }}
+                          placeholder="12"
                           className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
                         <span className="text-sm text-center text-[#86868b]">{div.registered_count || 0}</span>
                       </div>
@@ -2209,10 +2228,15 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Rules URL</label>
-                  <input type="url" value={form.rules_url} onChange={e => setForm({ ...form, rules_url: e.target.value })}
-                    placeholder="https://..." className={inputCls} />
+                  <label className={labelCls}>Sanction #</label>
+                  <input type="text" value={form.sanction_number} onChange={e => setForm({ ...form, sanction_number: e.target.value })}
+                    placeholder="e.g. 2026-IL-0001" className={inputCls} />
                 </div>
+              </div>
+              <div>
+                <label className={labelCls}>Rules URL</label>
+                <input type="url" value={form.rules_url} onChange={e => setForm({ ...form, rules_url: e.target.value })}
+                  placeholder="https://..." className={inputCls} />
               </div>
             </>
           )}
@@ -2248,12 +2272,13 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   <label className="block text-sm font-medium text-[#3d3d3d] mb-3">Pricing by Age Group</label>
                   <p className="text-xs text-[#86868b] mb-3">Set different prices for younger vs older divisions. Leave blank to use the base price (${form.price_cents || '0'}).</p>
                   <div className="space-y-2">
-                    <div className="grid grid-cols-[1fr_100px_80px] gap-2 text-xs font-semibold text-[#86868b] px-1">
+                    <div className="grid grid-cols-[1fr_100px_90px] gap-2 text-xs font-semibold text-[#86868b] px-1">
                       <span>Age Group</span>
                       <span>Price ($)</span>
+                      <span>Period (min)</span>
                     </div>
                     {divisionConfigs.map((div, idx) => (
-                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_100px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
+                      <div key={div.age_group + idx} className="grid grid-cols-[1fr_100px_90px] gap-2 items-center bg-white rounded-lg p-2 border border-[#e8e8ed]">
                         <span className="text-sm font-semibold text-[#1d1d1f]">{div.age_group}</span>
                         <input type="number" step="1" min="0"
                           value={div.price_cents ? (div.price_cents / 100).toFixed(0) : ''}
@@ -2262,6 +2287,14 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                             setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, price_cents: val } : d));
                           }}
                           placeholder={form.price_cents || '0'}
+                          className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
+                        <input type="number" step="1" min="1" max="30"
+                          value={div.period_length_minutes ?? ''}
+                          onChange={e => {
+                            const val = e.target.value ? parseInt(e.target.value) : null;
+                            setDivisionConfigs(prev => prev.map((d, i) => i === idx ? { ...d, period_length_minutes: val } : d));
+                          }}
+                          placeholder="12"
                           className="w-full px-2 py-1.5 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
                       </div>
                     ))}

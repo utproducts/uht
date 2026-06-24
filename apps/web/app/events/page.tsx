@@ -49,7 +49,7 @@ function formatPriceRange(event: Event): string {
   // If we have division-level pricing, show a range
   if (min && max && min > 0 && max > 0) {
     if (min === max) return `$${(min / 100).toLocaleString()}`;
-    return `$${(min / 100).toLocaleString()} – $${(max / 100).toLocaleString()}`;
+    return `$${(min / 100).toLocaleString()}–$${(max / 100).toLocaleString()}`;
   }
   // Fall back to base event price
   if (event.price_cents) return `$${(event.price_cents / 100).toLocaleString()}`;
@@ -123,7 +123,7 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
   const accent = cityAccent(event.city);
 
   return (
-    <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] flex flex-col h-full ${past ? 'opacity-75 hover:opacity-100' : ''}`}>
+    <div className={`group bg-white rounded-2xl overflow-hidden shadow-[0_2px_20px_-6px_rgba(0,62,121,0.12)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.22)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] flex flex-col h-full ${past ? 'opacity-75 hover:opacity-100' : ''}`}>
       <div className="h-1.5 w-full" style={{ background: `linear-gradient(to right, ${accent}, ${accent}88)` }} />
       <div className="p-5 flex flex-col flex-1">
         <div className="flex gap-4">
@@ -139,16 +139,22 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-bold text-[#1d1d1f] leading-snug group-hover:text-[#003e79] transition-colors line-clamp-2">{event.name}</h3>
-            <div className="mt-1.5 space-y-0.5">
-              <p className="flex items-center gap-1.5 text-sm text-[#3d3d3d]">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="text-base font-bold text-[#1d1d1f] leading-snug group-hover:text-[#003e79] transition-colors line-clamp-2">{event.name}</h3>
+              {(event.price_min_cents || event.price_cents) && isUpcoming && (
+                <span className="shrink-0 text-sm font-bold text-[#003e79] whitespace-nowrap">{formatPriceRange(event)}</span>
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-3 text-sm text-[#3d3d3d]">
+              <span className="flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5 text-[#86868b] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 {event.city}, {event.state}
-              </p>
-              <p className="flex items-center gap-1.5 text-sm text-[#3d3d3d]">
+              </span>
+              <span className="text-[#c8c8cd]">·</span>
+              <span className="flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5 text-[#86868b] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 {formatDateRange(event.start_date, event.end_date)}
-              </p>
+              </span>
             </div>
           </div>
         </div>
@@ -172,11 +178,6 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
           {!isNextUp && isUpcoming && days > 0 && days <= 90 && (
             <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#f0f7ff] text-[#003e79] border border-[#003e79]/10">
               {days} day{days !== 1 ? 's' : ''} away
-            </span>
-          )}
-          {(event.price_min_cents || event.price_cents) && isUpcoming && (
-            <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-bold text-[#003e79] bg-[#f0f7ff] border border-[#003e79]/10 ml-auto">
-              {formatPriceRange(event)}
             </span>
           )}
         </div>
@@ -578,8 +579,8 @@ export default function EventsPage() {
           </div>
         ) : viewMode === 'list' ? (
           /* ── LIST VIEW ── */
-          <div className="bg-white rounded-2xl shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] border border-[#e8e8ed] overflow-hidden">
-            <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_120px_200px] items-center px-5 py-3 border-b border-[#e8e8ed] bg-[#fafafa]">
+          <div className="bg-white rounded-2xl shadow-[0_2px_20px_-6px_rgba(0,62,121,0.12)] border border-[#e8e8ed] overflow-hidden">
+            <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_150px_200px] items-center px-5 py-3 border-b border-[#e8e8ed] bg-[#fafafa]">
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest"></span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Event</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Location</span>
@@ -660,7 +661,7 @@ export default function EventsPage() {
                   </div>
 
                   {/* Desktop layout */}
-                  <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_120px_200px] items-center px-5 py-3.5">
+                  <div className="hidden lg:grid lg:grid-cols-[60px_1fr_130px_150px_110px_150px_200px] items-center px-5 py-3.5">
                     <div>
                       {event.logo_url ? (
                         <div className="w-12 h-12 rounded-lg bg-[#f5f5f7] border border-[#e8e8ed] flex items-center justify-center overflow-hidden group-hover:border-[#003e79]/20 transition-colors">
@@ -717,7 +718,7 @@ export default function EventsPage() {
 
                     <div className="text-right pl-4 border-l border-[#e8e8ed]">
                       {(event.price_min_cents || event.price_cents) && isUp ? (
-                        <span className="text-sm font-bold text-[#003e79]">{formatPriceRange(event)}</span>
+                        <span className="text-sm font-bold text-[#003e79] whitespace-nowrap">{formatPriceRange(event)}</span>
                       ) : (
                         <span className="text-sm text-[#c7c7cc]">—</span>
                       )}

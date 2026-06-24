@@ -23,6 +23,7 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinMsg, setJoinMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [rosterLinkCopied, setRosterLinkCopied] = useState<string | null>(null);
 
   const loadTeams = useCallback(() => {
     const token = localStorage.getItem('uht_token');
@@ -163,6 +164,11 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
         <div className="grid gap-5">
           {teams.map((team: any) => {
             const playerCount = team.player_count ?? 0;
+            const regEvents = team.registered_events || [];
+            const now = new Date().toISOString().split('T')[0];
+            const upcomingEvents = regEvents.filter((e: any) => e.end_date >= now);
+            const pastEvents = regEvents.filter((e: any) => e.end_date < now);
+
             return (
               <div key={team.id} className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
                 {/* Team header */}
@@ -202,11 +208,57 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                       <span className="text-lg font-bold text-[#1d1d1f]">{playerCount}</span>
                     </div>
                     <p className="text-[11px] text-[#86868b] mt-0.5">{playerCount === 1 ? 'player' : 'players'}</p>
-                    {team.active_registrations != null && team.active_registrations > 0 && (
-                      <p className="text-[11px] text-[#003e79] font-medium mt-1">{team.active_registrations} event{team.active_registrations !== 1 ? 's' : ''}</p>
+                    {regEvents.length > 0 && (
+                      <p className="text-[11px] text-[#003e79] font-medium mt-1">{regEvents.length} event{regEvents.length !== 1 ? 's' : ''}</p>
                     )}
                   </div>
                 </div>
+
+                {/* Registered Events */}
+                {regEvents.length > 0 && (
+                  <div className="border-t border-[#f0f0f2] px-5 py-3">
+                    <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">Registered Events</p>
+                    <div className="space-y-2">
+                      {upcomingEvents.map((ev: any) => {
+                        const startDt = ev.start_date ? new Date(ev.start_date + 'T12:00:00') : null;
+                        const statusColors: Record<string, string> = {
+                          approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                          pending: 'bg-amber-50 text-amber-700 border-amber-200',
+                          awaiting_payment: 'bg-blue-50 text-blue-700 border-blue-200',
+                        };
+                        const statusLabel: Record<string, string> = {
+                          approved: 'Approved',
+                          pending: 'Pending',
+                          awaiting_payment: 'Awaiting Payment',
+                        };
+                        return (
+                          <a key={ev.reg_id} href={`/events/${ev.slug}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f5f5f7] transition group">
+                            {ev.logo_url ? (
+                              <img src={ev.logo_url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-[#003e79]/10 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-[#1d1d1f] truncate group-hover:text-[#003e79] transition">{ev.event_name}</p>
+                              <p className="text-xs text-[#86868b]">
+                                {ev.city}, {ev.state}
+                                {startDt && ` · ${startDt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${statusColors[ev.status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                              {statusLabel[ev.status] || ev.status}
+                            </span>
+                          </a>
+                        );
+                      })}
+                      {pastEvents.length > 0 && (
+                        <p className="text-[11px] text-[#86868b] pl-2">{pastEvents.length} past event{pastEvents.length !== 1 ? 's' : ''}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Action buttons */}
                 <div className="border-t border-[#f0f0f2] bg-[#fafafa] px-5 py-3 flex items-center gap-2 flex-wrap">
@@ -220,11 +272,6 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                     Register for Event
                   </a>
-                  <a href={`/dashboard/${role}/schedule?team=${team.id}`}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-[#e8e8ed] text-[#6e6e73] text-xs font-semibold hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    Schedule
-                  </a>
                   <a href={`/create-team?edit=${team.id}&from=/dashboard/${role}/teams`}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-[#e8e8ed] text-[#6e6e73] text-xs font-semibold hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -235,6 +282,19 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                       className="ml-auto flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-dashed border-[#d2d2d7] text-[#86868b] text-xs font-semibold hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                       {copiedId === team.id ? 'Copied!' : `Code: ${team.invite_code}`}
+                    </button>
+                  )}
+                  {team.roster_share_token && (
+                    <button onClick={() => {
+                      const url = `${window.location.origin}/roster/claim?t=${team.roster_share_token}`;
+                      navigator.clipboard.writeText(url);
+                      setRosterLinkCopied(team.id);
+                      setTimeout(() => setRosterLinkCopied(null), 2500);
+                    }}
+                      className={"flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition " +
+                        (rosterLinkCopied === team.id ? "bg-green-100 text-green-700 border border-green-300" : "bg-green-50 border border-green-200 text-green-700 hover:bg-green-100")}>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                      {rosterLinkCopied === team.id ? 'Link Copied!' : 'Parent Registration Link'}
                     </button>
                   )}
                 </div>
@@ -659,6 +719,118 @@ function RosterManagement() {
 }
 
 // ==================
+// My Coupon Codes
+// ==================
+function MyCouponCodes() {
+  const [codes, setCodes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('uht_token');
+    if (!token || token.startsWith('mock-')) { setLoading(false); return; }
+
+    fetch(`${API}/api/teams/my-discount-codes`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(json => { if (json.success) setCodes(json.data || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const copyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
+
+  const activeCodes = codes.filter(c => !c.is_used);
+  const usedCodes = codes.filter(c => c.is_used);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-[#1d1d1f]">My Coupon Codes</h1>
+        <p className="text-sm text-[#6e6e73] mt-1">Share these codes with other teams to save on registration. Codes are generated when you register for an event.</p>
+      </div>
+
+      {codes.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-12 text-center">
+          <div className="w-16 h-16 bg-[#f0f7ff] rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+          </div>
+          <h3 className="text-lg font-semibold text-[#1d1d1f]">No coupon codes yet</h3>
+          <p className="mt-2 text-sm text-[#6e6e73]">Register for an event to receive a shareable coupon code.</p>
+          <a href="/events" className="inline-block mt-4 px-6 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
+            Browse Events
+          </a>
+        </div>
+      ) : (
+        <>
+          {/* Active Codes */}
+          {activeCodes.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-3">Active Codes</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {activeCodes.map((c: any) => (
+                  <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-emerald-200 p-5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-50 rounded-bl-[40px] -mr-2 -mt-2" />
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">Active</span>
+                        <button onClick={() => copyCode(c.code)}
+                          className="flex items-center gap-1 text-xs font-medium text-[#003e79] hover:text-[#002d5a] transition">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          {copiedCode === c.code ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-2xl font-mono font-bold text-[#1d1d1f] tracking-wider mb-2">{c.code}</p>
+                      <p className="text-sm text-[#6e6e73]">{c.event_name || 'Event'}</p>
+                      <p className="text-xs text-[#86868b] mt-1">
+                        {c.team_name}
+                        {c.event_city && ` · ${c.event_city}, ${c.event_state}`}
+                      </p>
+                      <div className="flex items-center gap-3 mt-3 text-xs text-[#86868b]">
+                        <span>Saves ${(c.discount_local_cents / 100).toFixed(0)} for local teams</span>
+                        <span>·</span>
+                        <span>Saves ${(c.discount_hotel_cents / 100).toFixed(0)} for hotel teams</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Used Codes */}
+          {usedCodes.length > 0 && (
+            <div>
+              <h2 className="text-sm font-semibold text-[#86868b] uppercase tracking-wider mb-3">Used Codes</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {usedCodes.map((c: any) => (
+                  <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-5 opacity-60">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-[#86868b] bg-[#f5f5f7] px-2.5 py-1 rounded-full">Used</span>
+                    </div>
+                    <p className="text-2xl font-mono font-bold text-[#86868b] tracking-wider mb-2 line-through">{c.code}</p>
+                    <p className="text-sm text-[#86868b]">{c.event_name || 'Event'}</p>
+                    <p className="text-xs text-[#86868b] mt-1">{c.team_name}</p>
+                    {c.used_at && <p className="text-xs text-[#86868b] mt-2">Used on {new Date(c.used_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ==================
 // Generic placeholder for unbuilt sub-pages
 // ==================
 function ComingSoon({ title }: { title: string }) {
@@ -685,6 +857,7 @@ export default function SubPageContent() {
       case 'teams': return <CoachTeams role="coach" />;
       case 'events': return <RoleEvents role="coach" />;
       case 'roster': return <RosterManagement />;
+      case 'coupons': return <MyCouponCodes />;
       case 'schedule': return <ComingSoon title="Game Schedule" />;
     }
   }
@@ -695,6 +868,7 @@ export default function SubPageContent() {
       case 'teams': return <CoachTeams role="manager" />;
       case 'events': return <RoleEvents role="manager" />;
       case 'roster': return <RosterManagement />;
+      case 'coupons': return <MyCouponCodes />;
       case 'schedule': return <ComingSoon title="Game Schedule" />;
     }
   }

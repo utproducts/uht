@@ -22,6 +22,8 @@ interface EventData {
   age_groups: string | null;
   divisions: string | null;
   price_cents: number | null;
+  price_min_cents: number | null;
+  price_max_cents: number | null;
   deposit_cents: number | null;
   multi_event_discount_pct: number | null;
   slots_count: number | null;
@@ -38,12 +40,13 @@ interface EventData {
   venue_city: string | null;
   venue_state: string | null;
   schedule_published: number | null;
+  sanction_number: string | null;
 }
 
 interface Hotel {
   id: string;
   event_id: string;
-  name: string;
+  hotel_name: string;
   city: string;
   state: string;
   rate_description: string | null;
@@ -112,7 +115,13 @@ function formatDateRange(start: string, end: string) {
 
 function formatPrice(cents: number | null) {
   if (!cents) return '';
-  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}`;
+}
+
+function getStartingPrice(event: EventData): number | null {
+  if (event.price_min_cents && event.price_min_cents > 0) return event.price_min_cents;
+  if (event.price_cents && event.price_cents > 0) return event.price_cents;
+  return null;
 }
 
 function parseJsonArray(s: string | null): string[] {
@@ -169,7 +178,15 @@ const ageDefinitions: Record<string, string> = {
   'Varsity': 'Varsity',
 };
 
-const skillLevels = ['AA', 'A', 'B', 'C', 'D', 'House'];
+const skillLevels = ['AA', 'A', 'B', 'C', 'House'];
+
+const ageAbbreviations: Record<string, string> = {
+  'Mite': 'M',
+  'Squirt': 'SQ',
+  'Pee Wee': 'PW',
+  'Bantam': 'BAN',
+  'Midget': 'MID',
+};
 
 const TABS = ['Event Info', 'Schedule', 'Hotels', 'Rules'] as const;
 type Tab = (typeof TABS)[number];
@@ -461,17 +478,17 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
 
             {/* CTA */}
             <div className="shrink-0 flex flex-col items-end gap-3">
-              {event.price_cents && (
+              {getStartingPrice(event) && (
                 <div className="text-right">
                   <p className="text-white/50 text-xs font-medium uppercase tracking-wider">Starting at</p>
-                  <p className="text-white text-3xl font-bold">{formatPrice(event.price_cents)}</p>
+                  <p className="text-white text-3xl font-bold">{formatPrice(getStartingPrice(event))}</p>
                   <p className="text-white/50 text-xs">per team</p>
                 </div>
               )}
               {isUpcoming && (
                 <a
                   href={`/register?event=${event.slug}&eventId=${event.id}`}
-                  className="mt-2 px-8 py-3.5 rounded-full bg-[#00ccff] text-[#003e79] font-bold text-base hover:bg-[#00e6ff] active:scale-95 transition-all shadow-lg shadow-[#00ccff]/30"
+                  className="mt-2 px-8 py-3.5 rounded-full bg-[#dc2626] text-white font-bold text-base hover:bg-[#b91c1c] active:scale-95 transition-all shadow-lg shadow-red-600/40"
                 >
                   Register Now
                 </a>
@@ -542,7 +559,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                         {ageGroups.map(ag => (
                           <div key={ag} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
                             <div className="w-9 h-9 rounded-lg bg-[#003e79]/10 flex items-center justify-center shrink-0">
-                              <span className="text-[#003e79] font-bold text-xs">{ag.slice(0, 2).toUpperCase()}</span>
+                              <span className="text-[#003e79] font-bold text-xs">{ageAbbreviations[ag] || ag.slice(0, 2).toUpperCase()}</span>
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-semibold text-[#1d1d1f] truncate">{ag}</p>
@@ -627,7 +644,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                           </div>
                           {v.address && (
                             <a
-                              href={`https://www.google.com/maps/place/${encodeURIComponent((v.address || '') + ', ' + (v.city || '') + ', ' + (v.state || '') + ' ' + (v.zip || ''))}`}
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(v.address)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003e79] text-white text-xs font-semibold hover:bg-[#002d5a] transition-colors"
@@ -658,9 +675,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                         <thead>
                           <tr className="bg-[#003e79]">
                             <th className="text-left px-5 py-3 text-xs font-bold text-white uppercase tracking-wider">Age Group</th>
-                            <th className="text-center px-5 py-3 text-xs font-bold text-white uppercase tracking-wider">Format</th>
                             <th className="text-center px-5 py-3 text-xs font-bold text-white uppercase tracking-wider">Period Length</th>
-                            <th className="text-center px-5 py-3 text-xs font-bold text-white uppercase tracking-wider">Spots</th>
                             <th className="text-right px-5 py-3 text-xs font-bold text-white uppercase tracking-wider">Price</th>
                           </tr>
                         </thead>
@@ -675,20 +690,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                                   )}
                                 </td>
                                 <td className="px-5 py-3.5 text-center text-[#6e6e73]">
-                                  {div.game_format || `${div.num_periods}x${div.period_length_minutes}`}
-                                </td>
-                                <td className="px-5 py-3.5 text-center text-[#6e6e73]">
                                   {div.period_length_minutes} min
-                                </td>
-                                <td className="px-5 py-3.5 text-center text-[#6e6e73]">
-                                  {div.max_teams ? (
-                                    <span>
-                                      {div.registered_count}/{div.max_teams}
-                                      {div.registered_count >= (div.max_teams || 0) && (
-                                        <span className="ml-1 text-xs font-bold text-red-500">FULL</span>
-                                      )}
-                                    </span>
-                                  ) : '—'}
                                 </td>
                                 <td className="px-5 py-3.5 text-right font-bold text-[#003e79]">
                                   {formatPrice(div.price_cents)}
@@ -699,8 +701,6 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                             ageGroups.map((ag, idx) => (
                               <tr key={ag} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}>
                                 <td className="px-5 py-3.5 font-semibold text-[#1d1d1f]">{ag}</td>
-                                <td className="px-5 py-3.5 text-center text-[#6e6e73]">—</td>
-                                <td className="px-5 py-3.5 text-center text-[#6e6e73]">—</td>
                                 <td className="px-5 py-3.5 text-center text-[#6e6e73]">—</td>
                                 <td className="px-5 py-3.5 text-right font-bold text-[#003e79]">
                                   {formatPrice(event.price_cents)}
@@ -754,14 +754,14 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                           <div className="flex flex-col sm:flex-row">
                             {hotel.image_url && (
                               <div className="sm:w-48 h-40 sm:h-auto shrink-0">
-                                <img src={hotel.image_url} alt={hotel.name} className="w-full h-full object-cover" />
+                                <img src={hotel.image_url} alt={hotel.hotel_name} className="w-full h-full object-cover" />
                               </div>
                             )}
                             <div className="flex-1 p-5">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <h3 className="font-semibold text-[#1d1d1f] text-sm">{hotel.name}</h3>
+                                    <h3 className="font-semibold text-[#1d1d1f] text-sm">{hotel.hotel_name}</h3>
                                   </div>
                                   {(hotel.city || hotel.state) && (
                                     <p className="text-xs text-[#86868b] mt-1">{[hotel.city, hotel.state].filter(Boolean).join(', ')}</p>
@@ -887,15 +887,29 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                     </div>
                   </>
                 )}
+                {event.sanction_number && (
+                  <>
+                    <div className="h-px bg-[#e8e8ed]" />
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                      </svg>
+                      <div>
+                        <p className="text-xs text-[#86868b] font-medium uppercase tracking-wider">Sanction #</p>
+                        <p className="font-semibold text-[#1d1d1f] mt-0.5">{event.sanction_number}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Pricing */}
-              {event.price_cents && (
+              {getStartingPrice(event) && (
                 <div className="px-6 pb-5 pt-1">
                   <div className="p-4 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-[#86868b] font-medium">Starting at</span>
-                      <span className="text-lg font-bold text-[#003e79]">{formatPrice(event.price_cents)}</span>
+                      <span className="text-lg font-bold text-[#003e79]">{formatPrice(getStartingPrice(event))}</span>
                     </div>
                     {event.deposit_cents && (
                       <div className="flex items-center justify-between mb-2">
@@ -918,7 +932,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                 <div className="px-6 pb-6">
                   <a
                     href={`/register?event=${event.slug}&eventId=${event.id}`}
-                    className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#003e79] text-white font-bold text-sm hover:bg-[#002d5a] transition-colors shadow-sm"
+                    className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#dc2626] text-white font-bold text-sm hover:bg-[#b91c1c] transition-colors shadow-sm"
                   >
                     Register Your Team
                     <ArrowIcon />

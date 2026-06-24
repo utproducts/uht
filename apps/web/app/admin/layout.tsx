@@ -6,6 +6,7 @@ const ADMIN_NAV = [
   { name: 'Overview', href: '/dashboard/admin' },
   { name: 'Events', href: '/admin/events' },
   { name: 'Teams', href: '/admin/teams' },
+  { name: 'Organizations', href: '/admin/organizations' },
   { name: 'Users', href: '/admin/users' },
   { name: 'Registrations', href: '/admin/registrations' },
   { name: 'Schedule Builder', href: '/admin/schedule' },
