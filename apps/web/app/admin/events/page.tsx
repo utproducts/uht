@@ -114,6 +114,91 @@ const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','
 const TIMEZONES = ['Eastern (EST)', 'Central (CST)', 'Mountain (MST)', 'Pacific (PST)'];
 const SEASONS = ['fall', 'winter', 'spring', 'summer'];
 
+// --- Hotel Notification Banner ---
+function HotelNotificationBanner({ eventId }: { eventId: string }) {
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ sent: number; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!eventId) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/admin/needs-hotel-count/${eventId}`);
+        const json = await res.json() as any;
+        if (json.success) setCount(json.data.count || 0);
+      } catch {} finally { setLoading(false); }
+    })();
+  }, [eventId]);
+
+  const sendNotifications = async () => {
+    setSending(true);
+    setResult(null);
+    try {
+      const token = localStorage.getItem('uht_token');
+      const res = await fetch(`${API_BASE}/${eventId}/notify-hotels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setResult({ sent: json.data.emailsSent, message: json.data.message });
+        setCount(0);
+      } else {
+        setResult({ sent: 0, message: json.error || 'Failed to send notifications.' });
+      }
+    } catch {
+      setResult({ sent: 0, message: 'Network error. Please try again.' });
+    } finally { setSending(false); }
+  };
+
+  if (loading || (count === 0 && !result)) return null;
+
+  return (
+    <div className="mb-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+          </div>
+          <div>
+            {count > 0 ? (
+              <>
+                <p className="text-sm font-semibold text-amber-900">{count} team{count !== 1 ? 's' : ''} waiting for hotel info</p>
+                <p className="text-xs text-amber-700">These teams indicated they need a hotel during registration.</p>
+              </>
+            ) : result ? (
+              <>
+                <p className="text-sm font-semibold text-emerald-800">{result.message}</p>
+              </>
+            ) : null}
+          </div>
+        </div>
+        {count > 0 && (
+          <button
+            onClick={sendNotifications}
+            disabled={sending}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            {sending ? 'Sending...' : 'Send Hotel Notifications'}
+          </button>
+        )}
+      </div>
+      {result && result.sent > 0 && (
+        <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <p className="text-sm text-emerald-800 font-medium">{result.message}</p>
+        </div>
+      )}
+      {result && result.sent === 0 && result.message.includes('Failed') && (
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700">{result.message}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Event Form Modal ---
 function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   event: EventItem | null; // null = create mode
@@ -1843,6 +1928,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
           {activeTab === 'hotels' && (
             <>
+              {/* Hotel Notification Banner */}
+              <HotelNotificationBanner eventId={event?.id || ''} />
+
               {/* Linked Hotels for this Event */}
               <div>
                 <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Event Hotels ({hotels.length})</p>

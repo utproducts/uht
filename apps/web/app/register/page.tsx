@@ -109,6 +109,7 @@ export default function RegisterPage() {
   const [activeHotelTeamIdx, setActiveHotelTeamIdx] = useState(0);
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [isLocalTeam, setIsLocalTeam] = useState(false);
+  const [needsHotel, setNeedsHotel] = useState(false);
 
   // Steps: team → hotels → payment → card_form → submitting → confirmed (upsell is now post-registration on confirmed page)
   const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'card_form' | 'submitting' | 'confirmed'>('team');
@@ -540,6 +541,7 @@ export default function RegisterPage() {
             }
             return isLocalTeam ? undefined : hotelPicks[2] || undefined;
           })(),
+          needsHotel: needsHotel,
         };
         const res = await fetch(`${API}/events/register`, {
           method: 'POST',
@@ -947,8 +949,58 @@ export default function RegisterPage() {
                 <p className="text-sm text-[#6e6e73]">Loading hotels...</p>
               </div>
             ) : eventHotels.length === 0 ? (
-              <div className="text-center py-6">
-                <p className="text-[#6e6e73] mb-4">No hotel partners for this event yet.</p>
+              <div className="py-4 space-y-4">
+                <div className="text-center p-6 bg-gradient-to-br from-[#f0f7ff] to-[#f5f5f7] rounded-2xl border border-[#bae6fd]">
+                  <div className="w-14 h-14 bg-[#003e79]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-7 h-7 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3H21m-3.75 3H21" /></svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">Hotel Booking Coming Soon</h3>
+                  <p className="text-sm text-[#6e6e73] max-w-sm mx-auto">We're finalizing hotel partnerships for this tournament. Let us know if you'll need a hotel and we'll notify you as soon as booking opens.</p>
+                </div>
+
+                {/* Need Hotel toggle */}
+                <button
+                  onClick={() => { setNeedsHotel(true); setIsLocalTeam(false); }}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    needsHotel ? 'border-[#00ccff] bg-[#00ccff]/5 shadow-sm' : 'border-[#e8e8ed] hover:border-[#00ccff]/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-[#1d1d1f]">We'll Need a Hotel</p>
+                      <p className="text-sm text-[#6e6e73] mt-0.5">We'll email you when hotel booking opens for this event.</p>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                      needsHotel ? 'border-[#00ccff] bg-[#00ccff]' : 'border-[#d1d1d6]'
+                    }`}>
+                      {needsHotel && (
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                    </div>
+                  </div>
+                </button>
+
+                {/* Local team toggle */}
+                <button
+                  onClick={() => { setIsLocalTeam(true); setNeedsHotel(false); }}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    isLocalTeam && !needsHotel ? 'border-[#003e79] bg-[#003e79]/5 shadow-sm' : 'border-[#e8e8ed] hover:border-[#003e79]/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-[#1d1d1f]">We're Local</p>
+                      <p className="text-sm text-[#6e6e73] mt-0.5">We don't need a hotel — we live nearby.</p>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                      isLocalTeam && !needsHotel ? 'border-[#003e79] bg-[#003e79]' : 'border-[#d1d1d6]'
+                    }`}>
+                      {isLocalTeam && !needsHotel && (
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                    </div>
+                  </div>
+                </button>
               </div>
             ) : (
               <>
@@ -1528,7 +1580,9 @@ export default function RegisterPage() {
                 {/* ── Discount Code Card (single team) ── */}
                 {regResult?.discountCode && !regResult?.registrations && (
                   <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-6 text-white mb-6">
-                    <p className="text-xs uppercase tracking-widest text-emerald-100 font-semibold mb-1">Your Multi-Event Discount Code</p>
+                    <p className="text-xs uppercase tracking-widest text-emerald-100 font-semibold mb-1">
+                      Discount Code for {selectedTeams?.[0]?.name || 'Your Team'}{selectedTeams?.[0]?.age_group ? ` · ${selectedTeams[0].age_group}` : ''}
+                    </p>
                     <p className="text-3xl font-black tracking-[4px] font-mono mb-3">{regResult.discountCode}</p>
                     <div className="flex gap-3 mb-3">
                       <div className="bg-white/20 rounded-lg px-4 py-2">
@@ -1540,7 +1594,7 @@ export default function RegisterPage() {
                         <p className="text-[11px] text-emerald-100">local team</p>
                       </div>
                     </div>
-                    <p className="text-xs text-emerald-200">One-time use · Enter at checkout when registering for your next event</p>
+                    <p className="text-xs text-emerald-200">One-time use · Valid only for {selectedTeams?.[0]?.name || 'this team'} · Cannot be used for other teams</p>
                   </div>
                 )}
                 {/* ── Discount Code Cards (multi-team) ── */}
@@ -1549,7 +1603,7 @@ export default function RegisterPage() {
                     {regResult.registrations.filter((r: any) => r.discountCode).map((r: any, i: number) => (
                       <div key={i} className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl p-6 text-white">
                         <p className="text-xs uppercase tracking-widest text-emerald-100 font-semibold mb-1">
-                          {r.teamName ? `Discount Code for ${r.teamName}` : 'Your Multi-Event Discount Code'}
+                          {r.teamName ? `Discount Code for ${r.teamName}${r.ageGroup ? ` · ${r.ageGroup}` : ''}` : 'Your Multi-Event Discount Code'}
                         </p>
                         <p className="text-3xl font-black tracking-[4px] font-mono mb-3">{r.discountCode}</p>
                         <div className="flex gap-3 mb-3">
@@ -1562,7 +1616,7 @@ export default function RegisterPage() {
                             <p className="text-[11px] text-emerald-100">local team</p>
                           </div>
                         </div>
-                        <p className="text-xs text-emerald-200">One-time use · Enter at checkout when registering for your next event</p>
+                        <p className="text-xs text-emerald-200">One-time use · Valid only for {r.teamName || 'this team'} · Cannot be used for other teams</p>
                       </div>
                     ))}
                   </div>

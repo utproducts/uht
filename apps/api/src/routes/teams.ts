@@ -83,6 +83,12 @@ teamRoutes.get('/admin/list', async (c) => {
   let whereClause = ' WHERE t.is_active = 1';
   const params: string[] = [...eventParams];
 
+  // new_only=true filters to only teams created through new infrastructure
+  const { new_only } = c.req.query();
+  if (new_only === 'true') {
+    whereClause += ' AND t.created_by IS NOT NULL';
+  }
+
   if (search) {
     whereClause += ` AND (LOWER(t.name) LIKE ? OR LOWER(t.city) LIKE ? OR LOWER(t.head_coach_name) LIKE ? OR LOWER(t.head_coach_email) LIKE ?)`;
     const term = `%${search.toLowerCase()}%`;
@@ -342,10 +348,11 @@ teamRoutes.get('/admin/team-roster/:teamId', async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param('teamId');
 
-  // Get players on this team
+  // Get players on this team (include claim fields for parent contact)
   const players = await db.prepare(`
     SELECT p.id, p.first_name, p.last_name, p.date_of_birth, p.usa_hockey_number,
            p.jersey_number, p.position, p.shoots,
+           p.claimed_by, p.parent_name, p.parent_email, p.parent_phone,
            tp.status as roster_status, tp.added_at
     FROM players p
     JOIN team_players tp ON tp.player_id = p.id
@@ -353,7 +360,7 @@ teamRoutes.get('/admin/team-roster/:teamId', async (c) => {
     ORDER BY CAST(p.jersey_number AS INTEGER), p.last_name ASC
   `).bind(teamId).all();
 
-  // Get guardian/parent contacts for each player
+  // Get guardian/parent contacts for each player (from player_guardians table)
   const guardians = await db.prepare(`
     SELECT pg.player_id, pg.relationship, u.id as user_id,
            u.first_name, u.last_name, u.email, u.phone
@@ -364,7 +371,7 @@ teamRoutes.get('/admin/team-roster/:teamId', async (c) => {
     ORDER BY pg.player_id, u.last_name
   `).bind(teamId).all();
 
-  // Merge guardians into players
+  // Merge guardians into players — use player_guardians first, fall back to claim fields
   const guardianMap: Record<string, any[]> = {};
   for (const g of (guardians.results || [])) {
     const pid = g.player_id as string;
@@ -372,10 +379,26 @@ teamRoutes.get('/admin/team-roster/:teamId', async (c) => {
     guardianMap[pid].push(g);
   }
 
-  const roster = (players.results || []).map((p: any) => ({
-    ...p,
-    guardians: guardianMap[p.id] || [],
-  }));
+  const roster = (players.results || []).map((p: any) => {
+    let playerGuardians = guardianMap[p.id] || [];
+    // If no player_guardians records but player was claimed, use claim data
+    if (playerGuardians.length === 0 && p.claimed_by && p.parent_name) {
+      const nameParts = (p.parent_name as string).split(' ');
+      playerGuardians = [{
+        player_id: p.id,
+        relationship: 'Parent/Guardian',
+        user_id: p.claimed_by,
+        first_name: nameParts[0] || '',
+        last_name: nameParts.slice(1).join(' ') || '',
+        email: p.parent_email || null,
+        phone: p.parent_phone || null,
+      }];
+    }
+    return {
+      ...p,
+      guardians: playerGuardians,
+    };
+  });
 
   return c.json({ success: true, data: roster, count: roster.length });
 });
@@ -449,6 +472,71 @@ teamRoutes.patch('/admin/:id', async (c) => {
 });
 
 // ==================
+// Coach/Manager: Update own team
+// ==================
+teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const teamId = c.req.param('teamId');
+
+  // Admins/directors can edit any team; coaches/managers must own or be staff on it
+  const isAdmin = user.roles?.includes('admin') || user.roles?.includes('director');
+  let team: any;
+  if (isAdmin) {
+    team = await db.prepare(`SELECT id FROM teams WHERE id = ?`).bind(teamId).first();
+  } else {
+    team = await db.prepare(`
+      SELECT t.id FROM teams t
+      LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
+      LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
+      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
+    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+  }
+
+  if (!team) return c.json({ success: false, error: 'Not authorized to edit this team' }, 403);
+
+  const body = await c.req.json();
+  const fields: string[] = [];
+  const params: any[] = [];
+
+  const allowedFields: Record<string, string> = {
+    ageGroup: 'age_group',
+    divisionLevel: 'division_level',
+    city: 'city',
+    state: 'state',
+    website: 'website',
+    hometownLeague: 'hometown_league',
+    teamType: 'team_type',
+    season: 'season',
+    headCoachName: 'head_coach_name',
+    headCoachEmail: 'head_coach_email',
+    headCoachPhone: 'head_coach_phone',
+    managerName: 'manager_name',
+    managerEmail: 'manager_email',
+    managerPhone: 'manager_phone',
+    seasonRecord: 'season_record',
+    name: 'name',
+  };
+
+  for (const [jsKey, dbCol] of Object.entries(allowedFields)) {
+    if (body[jsKey] !== undefined) {
+      fields.push(`${dbCol} = ?`);
+      params.push(body[jsKey] || null);
+    }
+  }
+
+  if (fields.length === 0) {
+    return c.json({ success: false, error: 'No fields to update' }, 400);
+  }
+
+  fields.push(`updated_at = datetime('now')`);
+  params.push(teamId);
+
+  await db.prepare(`UPDATE teams SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run();
+  return c.json({ success: true });
+});
+
+// ==================
 // ADMIN: Delete team (soft)
 // ==================
 teamRoutes.delete('/admin/:id', async (c) => {
@@ -456,6 +544,56 @@ teamRoutes.delete('/admin/:id', async (c) => {
   const id = c.req.param('id');
   await db.prepare(`UPDATE teams SET is_active = 0, updated_at = datetime('now') WHERE id = ?`).bind(id).run();
   return c.json({ success: true });
+});
+
+// ==================
+// Coach/Manager: Delete (soft) own team
+// ==================
+teamRoutes.delete('/:teamId', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as any;
+  const teamId = c.req.param('teamId');
+
+  // Check ownership: created_by, team_coaches, or team_managers — or admin/director
+  const isAdmin = user.roles?.includes('admin') || user.roles?.includes('director');
+  let team: any;
+  if (isAdmin) {
+    team = await db.prepare(`SELECT id, name FROM teams WHERE id = ? AND is_active = 1`).bind(teamId).first();
+  } else {
+    team = await db.prepare(`
+      SELECT t.id, t.name FROM teams t
+      LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
+      LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
+      WHERE t.id = ? AND t.is_active = 1 AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
+    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+  }
+
+  if (!team) {
+    return c.json({ success: false, error: 'Team not found or not authorized' }, 404);
+  }
+
+  // Check if team has active registrations (registrations table uses team_id, event_registrations uses team_name)
+  const activeReg = await db.prepare(`
+    SELECT COUNT(*) as cnt FROM registrations
+    WHERE team_id = ? AND status NOT IN ('cancelled', 'withdrawn', 'denied', 'rejected')
+  `).bind(teamId).first() as any;
+
+  const activeEventReg = await db.prepare(`
+    SELECT COUNT(*) as cnt FROM event_registrations
+    WHERE team_name = ? AND status NOT IN ('cancelled', 'withdrawn', 'denied', 'rejected')
+  `).bind(team.name).first() as any;
+
+  const totalActive = (activeReg?.cnt || 0) + (activeEventReg?.cnt || 0);
+  if (totalActive > 0) {
+    return c.json({
+      success: false,
+      error: `This team has ${totalActive} active event registration${totalActive > 1 ? 's' : ''}. Please withdraw from events before deleting.`
+    }, 400);
+  }
+
+  // Soft delete
+  await db.prepare(`UPDATE teams SET is_active = 0, updated_at = datetime('now') WHERE id = ?`).bind(teamId).run();
+  return c.json({ success: true, message: `Team "${team.name}" has been deleted.` });
 });
 
 // ==================
@@ -490,6 +628,50 @@ teamRoutes.post('/admin/purge-no-contact', async (c) => {
   const remaining = await db.prepare(`SELECT COUNT(*) as cnt FROM teams WHERE is_active = 1`).first();
 
   return c.json({ success: true, deactivated: result.meta.changes, remaining_active: (remaining as any)?.cnt });
+});
+
+// ==================
+// PUBLIC: Get active teams for an organization (for mobile app team follow)
+// ==================
+teamRoutes.get('/by-org/:orgId', async (c) => {
+  const db = c.env.DB;
+  const orgId = c.req.param('orgId');
+
+  const result = await db.prepare(`
+    SELECT t.id, t.name, t.age_group, t.division_level, t.city, t.state,
+           o.name as organization_name
+    FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
+    WHERE t.organization_id = ? AND t.is_active = 1
+    ORDER BY t.age_group ASC, t.name ASC
+  `).bind(orgId).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// PUBLIC: Search teams by name (for mobile app)
+// ==================
+teamRoutes.get('/search', async (c) => {
+  const db = c.env.DB;
+  const q = c.req.query('q') || '';
+  if (q.length < 2) return c.json({ success: true, data: [] });
+
+  const result = await db.prepare(`
+    SELECT t.id, t.name, t.age_group, t.city, t.state,
+           o.name as organization_name
+    FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
+    WHERE t.is_active = 1 AND LOWER(t.name) LIKE LOWER(?)
+    ORDER BY
+      CASE WHEN LOWER(t.name) = LOWER(?) THEN 0
+           WHEN LOWER(t.name) LIKE LOWER(?) THEN 1
+           ELSE 2 END,
+      t.name ASC
+    LIMIT 25
+  `).bind('%' + q + '%', q, q + '%').all();
+
+  return c.json({ success: true, data: result.results });
 });
 
 // ==================
@@ -691,7 +873,8 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
   try {
     const inviterName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'A coach';
     const roleLabel = body.role === 'coach' ? 'Coach' : 'Team Manager';
-    const signupUrl = `https://ultimatetournaments.com/signup?invite=${inviteCode}&email=${encodeURIComponent(email)}&role=${body.role}`;
+    const siteBase = c.env.SITE_URL || 'https://uht-web.pages.dev';
+    const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(email)}&role=${body.role}`;
 
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -723,7 +906,7 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
                 <p style="color: #003e79; font-size: 28px; font-weight: bold; font-family: monospace; letter-spacing: 4px; margin: 0;">${inviteCode}</p>
               </div>
               <p style="color: #aeaeb2; font-size: 12px; text-align: center; margin-top: 20px;">
-                You can also sign up at ultimatetournaments.com and use this team code to join.
+                You can also sign up at uht-web.pages.dev and use this team code to join.
               </p>
             </div>
           </div>
@@ -765,7 +948,7 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     LEFT JOIN team_managers tm ON tm.team_id = t.id
     LEFT JOIN team_members tmem ON tmem.team_id = t.id AND tmem.status = 'active'
     LEFT JOIN organizations org ON org.id = t.organization_id AND org.owner_id = ?
-    WHERE t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR org.owner_id = ?
+    WHERE t.is_active = 1 AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR org.owner_id = ?)
     ORDER BY t.age_group ASC, t.name ASC
   `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
 
@@ -1049,6 +1232,57 @@ teamRoutes.post('/roster/share/:token/register', async (c) => {
 // ==================
 // Get single team with roster
 // ==================
+// ==================
+// Get discount/coupon codes for logged-in user
+// ==================
+teamRoutes.get('/my-discount-codes', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // Get user email
+  const userRecord = await db.prepare('SELECT email FROM users WHERE id = ?').bind(user.id).first<{ email: string }>();
+  const userEmail = userRecord?.email || '';
+
+  if (!userEmail) {
+    return c.json({ success: true, data: [] });
+  }
+
+  // Ensure discount_codes table exists
+  try {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      registration_id TEXT NOT NULL,
+      team_name TEXT NOT NULL,
+      team_id TEXT,
+      event_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      discount_local_cents INTEGER NOT NULL DEFAULT 10000,
+      discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
+      is_used INTEGER NOT NULL DEFAULT 0,
+      used_registration_id TEXT,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`).run();
+  } catch {}
+
+  const codes = await db.prepare(`
+    SELECT dc.id, dc.code, dc.team_name, dc.age_group, dc.event_id, dc.discount_local_cents,
+      dc.discount_hotel_cents, dc.is_used, dc.used_at, dc.created_at,
+      e.name as event_name, e.city as event_city, e.state as event_state,
+      e.start_date as event_start_date
+    FROM discount_codes dc
+    LEFT JOIN events e ON e.id = dc.event_id
+    WHERE dc.email = ?
+    ORDER BY dc.created_at DESC
+  `).bind(userEmail).all();
+
+  return c.json({ success: true, data: codes.results || [] });
+});
+
+// ==================
+// Get team by ID
+// ==================
 teamRoutes.get('/:id', authMiddleware, async (c) => {
   const teamId = c.req.param('id');
   const db = c.env.DB;
@@ -1154,54 +1388,6 @@ teamRoutes.get('/check-duplicate', async (c) => {
     similarMatches: similarResults.results || [],
     hasDuplicates: (results.results?.length || 0) > 0,
   });
-});
-
-// ==================
-// Get discount/coupon codes for logged-in user
-// ==================
-teamRoutes.get('/my-discount-codes', authMiddleware, async (c) => {
-  const user = c.get('user');
-  const db = c.env.DB;
-
-  // Get user email
-  const userRecord = await db.prepare('SELECT email FROM users WHERE id = ?').bind(user.id).first<{ email: string }>();
-  const userEmail = userRecord?.email || '';
-
-  if (!userEmail) {
-    return c.json({ success: true, data: [] });
-  }
-
-  // Ensure discount_codes table exists
-  try {
-    await db.prepare(`CREATE TABLE IF NOT EXISTS discount_codes (
-      id TEXT PRIMARY KEY,
-      code TEXT NOT NULL UNIQUE,
-      registration_id TEXT NOT NULL,
-      team_name TEXT NOT NULL,
-      team_id TEXT,
-      event_id TEXT NOT NULL,
-      email TEXT NOT NULL,
-      discount_local_cents INTEGER NOT NULL DEFAULT 10000,
-      discount_hotel_cents INTEGER NOT NULL DEFAULT 20000,
-      is_used INTEGER NOT NULL DEFAULT 0,
-      used_registration_id TEXT,
-      used_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`).run();
-  } catch {}
-
-  const codes = await db.prepare(`
-    SELECT dc.id, dc.code, dc.team_name, dc.event_id, dc.discount_local_cents,
-      dc.discount_hotel_cents, dc.is_used, dc.used_at, dc.created_at,
-      e.name as event_name, e.city as event_city, e.state as event_state,
-      e.start_date as event_start_date
-    FROM discount_codes dc
-    LEFT JOIN events e ON e.id = dc.event_id
-    WHERE dc.email = ?
-    ORDER BY dc.created_at DESC
-  `).bind(userEmail).all();
-
-  return c.json({ success: true, data: codes.results || [] });
 });
 
 // ==================

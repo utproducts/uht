@@ -115,7 +115,7 @@ emailRoutes.get('/campaigns/:id', authMiddleware, requireRole('admin', 'director
 // Preview audience — returns count and sample for a given filter
 // ==================
 const audienceFilterSchema = z.object({
-  scope: z.enum(['everyone', 'all_coaches', 'event', 'division', 'age_group', 'manual_emails']),
+  scope: z.enum(['everyone', 'all_coaches', 'event', 'division', 'age_group', 'manual_emails', 'past_contacts', 'icontacts', 'registered_users']),
   eventId: z.string().optional(),
   divisionId: z.string().optional(),
   ageGroup: z.string().optional(),
@@ -915,6 +915,48 @@ function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionI
     }
     query += ' ORDER BY t.name';
     return { query, params };
+  }
+
+  // "past_contacts" → legacy team contacts from contacts table
+  if (filter.scope === 'past_contacts') {
+    const query = `
+      SELECT DISTINCT c.email,
+        COALESCE(c.first_name || ' ' || c.last_name, c.email) as name,
+        COALESCE(c.organization_name, '') as team_name,
+        '' as age_group,
+        '' as event_name
+      FROM contacts c
+      WHERE c.source = 'legacy_team' AND c.email IS NOT NULL AND c.email != ''
+      ORDER BY c.last_name, c.first_name
+    `;
+    return { query, params: [] };
+  }
+
+  // "icontacts" → iContact imports from email_list_contacts table
+  if (filter.scope === 'icontacts') {
+    const query = `
+      SELECT DISTINCT elc.email,
+        COALESCE(elc.first_name || ' ' || elc.last_name, elc.email) as name,
+        '' as team_name, '' as age_group, '' as event_name
+      FROM email_list_contacts elc
+      WHERE elc.is_active = 1 AND elc.email IS NOT NULL AND elc.email != ''
+      ORDER BY elc.last_name, elc.first_name
+    `;
+    return { query, params: [] };
+  }
+
+  // "registered_users" → users table (site registrants)
+  if (filter.scope === 'registered_users') {
+    const query = `
+      SELECT DISTINCT u.email,
+        COALESCE(u.first_name || ' ' || u.last_name, u.email) as name,
+        '' as team_name, '' as age_group, '' as event_name
+      FROM users u
+      WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''
+        AND u.email NOT LIKE '%@system.internal'
+      ORDER BY u.last_name, u.first_name
+    `;
+    return { query, params: [] };
   }
 
   // Event/division/age_group scopes → pull from event_registrations + registrations (both tables)

@@ -530,6 +530,9 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   const needsEvent = templateType === 'market_specific_event' || templateType === 'find_team';
   const canProceedStep2 = audienceScope === 'everyone' ||
     audienceScope === 'all_coaches' ||
+    audienceScope === 'past_contacts' ||
+    audienceScope === 'icontacts' ||
+    audienceScope === 'registered_users' ||
     (audienceScope === 'event' && !!selectedEventId) ||
     (audienceScope === 'division' && !!selectedDivisionId) ||
     (audienceScope === 'age_group' && !!selectedAgeGroup) ||
@@ -650,9 +653,30 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
               <h3 className="text-xl font-bold text-[#1d1d1f] mb-2">Who should receive this?</h3>
               <p className="text-sm text-[#86868b] mb-6">Choose your audience</p>
 
+              {/* Source group labels */}
+              <p className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-1">Contact Sources</p>
+              <div className="space-y-3 mb-6">
+                {[
+                  { value: 'everyone', label: 'Everyone', desc: 'All contacts across all sources combined' },
+                  { value: 'past_contacts', label: 'Past Contacts', desc: 'Coaches and managers from previous seasons (imported team data)' },
+                  { value: 'icontacts', label: 'iContacts', desc: 'Email list imported from iContact' },
+                  { value: 'registered_users', label: 'Registered Users', desc: 'Users who created accounts on the new site' },
+                ].map(opt => (
+                  <button key={opt.value} onClick={() => { setAudienceScope(opt.value); setPreview(null); }}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                      audienceScope === opt.value
+                        ? 'border-[#003e79] bg-[#f0f7ff] shadow-sm'
+                        : 'border-[#e8e8ed] hover:border-[#c8c8cd] bg-white'
+                    }`}>
+                    <p className={`font-semibold ${audienceScope === opt.value ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>{opt.label}</p>
+                    <p className="text-sm text-[#86868b] mt-0.5">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-1">Event-Based</p>
               <div className="space-y-3">
                 {[
-                  { value: 'everyone', label: 'Everyone', desc: 'All users in the system (coaches, parents, managers, etc.)' },
                   { value: 'all_coaches', label: 'All Coaches', desc: 'All team head coaches in the system' },
                   { value: 'event', label: 'By Event', desc: 'Teams registered for a specific event' },
                   { value: 'division', label: 'By Division', desc: 'Teams in a specific division' },
@@ -985,7 +1009,10 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                   <div className="bg-[#f0f7ff] rounded-xl p-4 mb-4 border border-[#003e79]/10">
                     <p className="text-sm font-semibold text-[#003e79]">Audience</p>
                     <p className="text-sm text-[#3d3d3d] mt-1">
-                      {audienceScope === 'everyone' ? 'Everyone in the system' :
+                      {audienceScope === 'everyone' ? 'Everyone across all contact sources' :
+                       audienceScope === 'past_contacts' ? 'Past contacts from previous seasons' :
+                       audienceScope === 'icontacts' ? 'iContact email list' :
+                       audienceScope === 'registered_users' ? 'Registered site users' :
                        audienceScope === 'all_coaches' ? 'All team head coaches' :
                        audienceScope === 'event' ? `Teams registered for: ${events.find(e => e.id === selectedEventId)?.name || 'Unknown'}` :
                        audienceScope === 'division' ? `Division: ${divisions.find(d => d.id === selectedDivisionId)?.age_group || ''} ${divisions.find(d => d.id === selectedDivisionId)?.division_level || ''}` :

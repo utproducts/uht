@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "UHT",
+    "slug": "uht",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#003e79"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ultimatetournaments.uht",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to quickly sign in to your UHT account"
+      }
+    },
+    "android": {
+      "package": "com.ultimatetournaments.uht",
+      "adaptiveIcon": {
+        "backgroundColor": "#003e79",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to sign in to UHT"
+        }
+      ]
+    ]
+  }
+}

@@ -1056,6 +1056,7 @@ const consumerRegisterSchema = z.object({
   hotelChoice1: z.string().optional(),
   hotelChoice2: z.string().optional(),
   hotelChoice3: z.string().optional(),
+  needsHotel: z.boolean().optional(),
 });
 
 eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async (c) => {
@@ -1128,6 +1129,13 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   try {
     await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_choice_3 TEXT").run();
   } catch {}
+  // Ensure needs_hotel column exists (auto-migrate)
+  try {
+    await db.prepare("ALTER TABLE event_registrations ADD COLUMN needs_hotel INTEGER DEFAULT 0").run();
+  } catch {}
+  try {
+    await db.prepare("ALTER TABLE registrations ADD COLUMN needs_hotel INTEGER DEFAULT 0").run();
+  } catch {}
 
   // Auto-migrate: discount_codes table
   try {
@@ -1182,15 +1190,16 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   const matchedDivisionId = await findMatchingDivision(data.eventId, data.ageGroup);
 
   await db.prepare(`
-    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
     initialStatus, initialPaymentStatus,
     data.hotelChoice1 || null, data.hotelChoice2 || null, data.hotelChoice3 || null,
-    matchedDivisionId
+    matchedDivisionId,
+    data.needsHotel ? 1 : 0
   ).run();
 
   // Create registrations for additional events
@@ -1228,10 +1237,10 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       await db.prepare(`
-        INSERT INTO discount_codes (id, code, registration_id, team_name, team_id, event_id, email)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO discount_codes (id, code, registration_id, team_name, team_id, event_id, email, age_group)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        discountCodeId, discountCode, regId, data.teamName, data.teamId || null, data.eventId, data.email
+        discountCodeId, discountCode, regId, data.teamName, data.teamId || null, data.eventId, data.email, data.ageGroup || null
       ).run();
       break;
     } catch (e: any) {
@@ -2370,4 +2379,257 @@ eventRoutes.get('/discount-codes/:registrationId', async (c) => {
   ).bind(registrationId).all();
 
   return c.json({ success: true, data: codes.results || [] });
+});
+
+// ==================
+// NOTIFY: Send hotel notification emails to teams who need hotels
+// ==================
+eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+
+  // Auto-migrate columns
+  try {
+    await db.prepare("ALTER TABLE events ADD COLUMN hotels_notified_at TEXT").run();
+  } catch {}
+  try {
+    await db.prepare("ALTER TABLE event_registrations ADD COLUMN needs_hotel INTEGER DEFAULT 0").run();
+  } catch {}
+
+  // Get event info
+  const event = await db.prepare('SELECT id, name, city, state, start_date, end_date, logo_url FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // Find registrations that need hotel but haven't selected one yet
+  const regs = await db.prepare(
+    `SELECT id, team_name, email1, manager_first_name, manager_last_name
+     FROM event_registrations
+     WHERE event_id = ? AND needs_hotel = 1 AND (hotel_choice_1 IS NULL OR hotel_choice_1 = '')
+     AND status NOT IN ('denied', 'rejected', 'withdrawn')`
+  ).bind(eventId).all<any>();
+
+  const registrations = regs.results || [];
+  if (registrations.length === 0) {
+    return c.json({ success: true, data: { emailsSent: 0, message: 'No teams need hotel notifications.' } });
+  }
+
+  const siteBase = c.env.SITE_URL || 'https://uht-web.pages.dev';
+  let sentCount = 0;
+
+  for (const reg of registrations) {
+    if (!reg.email1) continue;
+
+    const startDate = new Date(event.start_date + 'T12:00:00');
+    const endDate = new Date(event.end_date + 'T12:00:00');
+    const dateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    const recipientName = reg.manager_first_name ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim() : reg.team_name;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f7; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
+              <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
+              <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">Hotels Now Available!</h1>
+              <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">Book your team's hotel for the tournament</p>
+            </td>
+          </tr>
+
+          ${event.logo_url ? `<tr>
+            <td style="padding: 24px 32px 0 32px; text-align: center;">
+              <img src="${event.logo_url}" alt="${event.name}" width="100" height="100" style="border-radius: 14px; object-fit: cover; display: inline-block;">
+            </td>
+          </tr>` : ''}
+
+          <!-- Event Badge -->
+          <tr>
+            <td style="padding: 24px 32px 0 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <p style="margin: 0; font-size: 13px; color: #6e6e73; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Event</p>
+                    <p style="margin: 4px 0 0 0; font-size: 18px; color: #003e79; font-weight: 700;">${event.name}</p>
+                    <p style="margin: 4px 0 0 0; font-size: 14px; color: #6e6e73;">${dateStr} &middot; ${event.city}, ${event.state}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 0 20px 16px 20px;">
+                    <table cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="background-color: #003e79; color: #ffffff; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px;">${reg.team_name}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 24px 32px 0 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
+              <p style="margin: 0 0 16px 0;">Hi ${recipientName},</p>
+              <p style="margin: 0 0 16px 0;">Great news! Hotel booking is now open for the <strong>${event.name}</strong>. We've partnered with local hotels to offer special tournament rates for your team.</p>
+              <p style="margin: 0 0 24px 0;">Click below to view available hotels and select your top preferences. Rooms fill up fast, so we recommend booking early!</p>
+            </td>
+          </tr>
+
+          <!-- CTA Button -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;" align="center">
+              <a href="${siteBase}/register/update-hotel?reg=${reg.id}&event=${eventId}"
+                 style="display: inline-block; background: linear-gradient(135deg, #00ccff, #0099cc); color: #ffffff; font-size: 16px; font-weight: 700; padding: 14px 40px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 12px rgba(0,204,255,0.3);">
+                Select Your Hotel
+              </a>
+            </td>
+          </tr>
+
+          <!-- Info Box -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #92400e;">How It Works</p>
+                    <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">
+                      Select your top 3 hotel preferences and we'll do our best to accommodate your first choice. Tournament hotel rates are typically lower than standard rates.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f5f5f7; padding: 24px 32px; border-top: 1px solid #e8e8ed;">
+              <p style="margin: 0; font-size: 12px; color: #86868b; text-align: center;">
+                Ultimate Hockey Tournaments &middot; ultimatetournaments.com
+              </p>
+              <p style="margin: 8px 0 0 0; font-size: 11px; color: #aeaeb2; text-align: center;">
+                You're receiving this because you registered for ${event.name} and indicated you need a hotel.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${c.env.RESEND_API}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+          to: [reg.email1],
+          subject: `Hotels Now Available for ${event.name}!`,
+          html,
+        }),
+      });
+      if (response.ok) sentCount++;
+    } catch (err) {
+      console.error(`Failed to send hotel email to ${reg.email1}:`, err);
+    }
+  }
+
+  // Update event with notification timestamp
+  try {
+    await db.prepare("UPDATE events SET hotels_notified_at = datetime('now') WHERE id = ?").bind(eventId).run();
+  } catch (err) {
+    console.error('Failed to update hotels_notified_at:', err);
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      emailsSent: sentCount,
+      totalEligible: registrations.length,
+      message: `Sent ${sentCount} hotel notification email${sentCount !== 1 ? 's' : ''}.`,
+    },
+  });
+});
+
+// ==================
+// PUBLIC: Update registration hotel choices (from hotel notification email link)
+// ==================
+eventRoutes.patch('/registration/:regId/hotels', async (c) => {
+  const db = c.env.DB;
+  const regId = c.req.param('regId');
+  const body = await c.req.json() as any;
+
+  const { hotelChoice1, hotelChoice2, hotelChoice3 } = body;
+
+  // Verify registration exists
+  const reg = await db.prepare('SELECT id FROM event_registrations WHERE id = ?').bind(regId).first();
+  if (!reg) {
+    return c.json({ success: false, error: 'Registration not found' }, 404);
+  }
+
+  await db.prepare(`
+    UPDATE event_registrations
+    SET hotel_choice_1 = ?, hotel_choice_2 = ?, hotel_choice_3 = ?, needs_hotel = 0
+    WHERE id = ?
+  `).bind(
+    hotelChoice1 || null, hotelChoice2 || null, hotelChoice3 || null,
+    regId
+  ).run();
+
+  return c.json({ success: true, data: { message: 'Hotel preferences updated!' } });
+});
+
+// ==================
+// PUBLIC: Get registration info for hotel update page
+// ==================
+eventRoutes.get('/registration/:regId/info', async (c) => {
+  const db = c.env.DB;
+  const regId = c.req.param('regId');
+
+  const reg = await db.prepare(
+    'SELECT id, event_id, team_name, age_group, email1, hotel_choice_1, hotel_choice_2, hotel_choice_3, needs_hotel FROM event_registrations WHERE id = ?'
+  ).bind(regId).first<any>();
+
+  if (!reg) {
+    return c.json({ success: false, error: 'Registration not found' }, 404);
+  }
+
+  return c.json({ success: true, data: reg });
+});
+
+// ==================
+// ADMIN: Get count of teams needing hotel notifications
+// ==================
+eventRoutes.get('/admin/needs-hotel-count/:eventId', async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+
+  // Auto-migrate
+  try {
+    await db.prepare("ALTER TABLE event_registrations ADD COLUMN needs_hotel INTEGER DEFAULT 0").run();
+  } catch {}
+
+  const result = await db.prepare(
+    `SELECT COUNT(*) as count FROM event_registrations
+     WHERE event_id = ? AND needs_hotel = 1 AND (hotel_choice_1 IS NULL OR hotel_choice_1 = '')
+     AND status NOT IN ('denied', 'rejected', 'withdrawn')`
+  ).bind(eventId).first<any>();
+
+  return c.json({ success: true, data: { count: result?.count || 0 } });
 });

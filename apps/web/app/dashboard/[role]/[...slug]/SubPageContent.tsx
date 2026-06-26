@@ -24,6 +24,8 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
   const [joinMsg, setJoinMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [rosterLinkCopied, setRosterLinkCopied] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadTeams = useCallback(() => {
     const token = localStorage.getItem('uht_token');
@@ -89,6 +91,29 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
     navigator.clipboard.writeText(code);
     setCopiedId(teamId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDeleteTeam = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      const token = localStorage.getItem('uht_token');
+      const res = await fetch(`${API}/api/teams/${deleteConfirm.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.success) {
+        setDeleteConfirm(null);
+        loadTeams();
+      } else {
+        alert(json.error || 'Failed to delete team');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
@@ -277,6 +302,11 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     Edit Team
                   </a>
+                  <button onClick={() => setDeleteConfirm({ id: team.id, name: team.name })}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-red-200 text-red-500 text-xs font-semibold hover:bg-red-50 hover:text-red-700 transition">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    Delete
+                  </button>
                   {team.invite_code && (
                     <button onClick={() => copyInviteCode(team.invite_code, team.id)}
                       className="ml-auto flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-dashed border-[#d2d2d7] text-[#86868b] text-xs font-semibold hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition">
@@ -301,6 +331,37 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !deleteLoading && setDeleteConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </div>
+              <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">Delete Team?</h3>
+              <p className="text-sm text-[#6e6e73]">
+                Are you sure you want to delete <span className="font-semibold text-[#1d1d1f]">{deleteConfirm.name}</span>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="border-t border-[#f0f0f2] p-4 flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-[#1d1d1f] text-sm font-semibold hover:bg-[#e8e8ed] transition disabled:opacity-50">
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteTeam}
+                disabled={deleteLoading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50">
+                {deleteLoading ? 'Deleting...' : 'Delete Team'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -423,6 +484,13 @@ function RosterManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
 
+  // Staff invite
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [staffRole, setStaffRole] = useState<'coach' | 'manager'>('coach');
+  const [staffForm, setStaffForm] = useState({ name: '', email: '', phone: '' });
+  const [staffInviting, setStaffInviting] = useState(false);
+  const [staffMsg, setStaffMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // Load teams
   useEffect(() => {
     const token = localStorage.getItem('uht_token');
@@ -433,7 +501,14 @@ function RosterManagement() {
       .then(json => {
         if (json.success && json.data?.length > 0) {
           setTeams(json.data);
-          setSelectedTeamId(json.data[0].id);
+          // Check for ?team= query param to pre-select correct team
+          const params = new URLSearchParams(window.location.search);
+          const teamParam = params.get('team');
+          if (teamParam && json.data.some((t: any) => t.id === teamParam)) {
+            setSelectedTeamId(teamParam);
+          } else {
+            setSelectedTeamId(json.data[0].id);
+          }
         }
       })
       .catch(() => {})
@@ -543,6 +618,38 @@ function RosterManagement() {
       jersey_number: p.jersey_number || '', position: p.position || '',
       shoots: p.shoots || '',
     });
+  };
+
+  const handleStaffInvite = async () => {
+    if (!staffForm.name.trim() || !staffForm.email.trim() || !selectedTeamId) return;
+    setStaffInviting(true);
+    setStaffMsg(null);
+    try {
+      const res = await fetch(`${API}/api/teams/invite-staff/${selectedTeamId}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ name: staffForm.name.trim(), email: staffForm.email.trim(), role: staffRole }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setStaffMsg({ type: 'success', text: `${staffRole === 'coach' ? 'Coach' : 'Manager'} invited! They'll receive an email.` });
+        setStaffForm({ name: '', email: '', phone: '' });
+        // Reload teams to refresh coaches/managers lists
+        const token = localStorage.getItem('uht_token');
+        if (token && !token.startsWith('mock-')) {
+          const r = await fetch(`${API}/api/teams/my-teams`, { headers: { Authorization: `Bearer ${token}` } });
+          const d = await r.json() as any;
+          if (d.success && d.data) setTeams(d.data);
+        }
+        setTimeout(() => { setShowStaffModal(false); setStaffMsg(null); }, 1500);
+      } else {
+        setStaffMsg({ type: 'error', text: json.error || 'Failed to invite' });
+      }
+    } catch {
+      setStaffMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setStaffInviting(false);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
@@ -721,6 +828,154 @@ function RosterManagement() {
           </button>
         </div>
       )}
+
+      {/* Coaches & Managers Section */}
+      {selectedTeam && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+          <div className="px-5 py-4 flex items-center justify-between border-b border-[#e8e8ed]">
+            <div>
+              <h3 className="text-lg font-semibold text-[#1d1d1f]">Coaches & Managers</h3>
+              <p className="text-xs text-[#6e6e73] mt-0.5">Team staff for {selectedTeam.name}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setStaffRole('coach'); setShowStaffModal(true); setStaffMsg(null); setStaffForm({ name: '', email: '', phone: '' }); }}
+                className="px-3.5 py-2 rounded-lg bg-[#003e79] text-white text-xs font-semibold hover:bg-[#002d5a] transition">
+                + Add Coach
+              </button>
+              <button onClick={() => { setStaffRole('manager'); setShowStaffModal(true); setStaffMsg(null); setStaffForm({ name: '', email: '', phone: '' }); }}
+                className="px-3.5 py-2 rounded-lg bg-white border border-[#e8e8ed] text-[#003e79] text-xs font-semibold hover:bg-[#f5f5f7] transition">
+                + Add Manager
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5">
+            {/* Coaches */}
+            {(selectedTeam.coaches?.length > 0 || selectedTeam.head_coach_name) && (
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">Coaches</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {selectedTeam.head_coach_name && !(selectedTeam.coaches || []).some((c: any) => `${c.first_name} ${c.last_name}`.toLowerCase() === selectedTeam.head_coach_name.toLowerCase()) && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-[#f0f7ff] border border-[#d0e4f7]">
+                      <div className="w-9 h-9 bg-[#003e79] rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                        {selectedTeam.head_coach_name[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1d1d1f] truncate">{selectedTeam.head_coach_name}</p>
+                        <p className="text-[11px] text-[#003e79] font-medium">Head Coach</p>
+                        {selectedTeam.head_coach_email && <p className="text-[11px] text-[#6e6e73] truncate">{selectedTeam.head_coach_email}</p>}
+                        {selectedTeam.head_coach_phone && <p className="text-[11px] text-[#86868b]">{selectedTeam.head_coach_phone}</p>}
+                      </div>
+                    </div>
+                  )}
+                  {(selectedTeam.coaches || []).map((c: any) => (
+                    <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
+                      <div className="w-9 h-9 bg-[#4a7fb5] rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                        {(c.first_name || '?')[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1d1d1f] truncate">{c.first_name} {c.last_name}</p>
+                        <p className="text-[11px] text-[#6e6e73] capitalize">{c.role === 'head' ? 'Head Coach' : 'Assistant Coach'}</p>
+                        {c.email && <p className="text-[11px] text-[#6e6e73] truncate">{c.email}</p>}
+                        {c.phone && <p className="text-[11px] text-[#86868b]">{c.phone}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Managers */}
+            {(selectedTeam.managers?.length > 0 || selectedTeam.manager_name) && (
+              <div className="mb-2">
+                <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-2">Managers</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {selectedTeam.manager_name && !(selectedTeam.managers || []).some((m: any) => `${m.first_name} ${m.last_name}`.toLowerCase() === selectedTeam.manager_name.toLowerCase()) && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
+                      <div className="w-9 h-9 bg-[#6e6e73] rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                        {selectedTeam.manager_name[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1d1d1f] truncate">{selectedTeam.manager_name}</p>
+                        <p className="text-[11px] text-[#6e6e73]">Team Manager</p>
+                        {selectedTeam.manager_email && <p className="text-[11px] text-[#6e6e73] truncate">{selectedTeam.manager_email}</p>}
+                        {selectedTeam.manager_phone && <p className="text-[11px] text-[#86868b]">{selectedTeam.manager_phone}</p>}
+                      </div>
+                    </div>
+                  )}
+                  {(selectedTeam.managers || []).map((m: any) => (
+                    <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
+                      <div className="w-9 h-9 bg-[#6e6e73] rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0">
+                        {(m.first_name || '?')[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1d1d1f] truncate">{m.first_name} {m.last_name}</p>
+                        <p className="text-[11px] text-[#6e6e73]">Team Manager</p>
+                        {m.email && <p className="text-[11px] text-[#6e6e73] truncate">{m.email}</p>}
+                        {m.phone && <p className="text-[11px] text-[#86868b]">{m.phone}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!selectedTeam.head_coach_name && !(selectedTeam.coaches?.length > 0) && !selectedTeam.manager_name && !(selectedTeam.managers?.length > 0) && (
+              <div className="text-center py-6">
+                <p className="text-sm text-[#6e6e73]">No coaches or managers added yet.</p>
+                <p className="text-xs text-[#86868b] mt-1">Use the buttons above to invite staff to your team.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Staff Invite Modal */}
+      {showStaffModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowStaffModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">
+              Add {staffRole === 'coach' ? 'Coach' : 'Manager'}
+            </h3>
+            <p className="text-sm text-[#6e6e73] mb-4">
+              They&apos;ll receive an email invitation to join the team.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Full Name *</label>
+                <input type="text" value={staffForm.name} onChange={e => setStaffForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="John Smith" className="w-full px-4 py-2.5 border border-[#d2d2d7] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" autoFocus />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Email *</label>
+                <input type="email" value={staffForm.email} onChange={e => setStaffForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="john@example.com" className="w-full px-4 py-2.5 border border-[#d2d2d7] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Phone (optional)</label>
+                <input type="tel" value={staffForm.phone} onChange={e => setStaffForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="555-123-4567" className="w-full px-4 py-2.5 border border-[#d2d2d7] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79] focus:border-transparent outline-none" />
+              </div>
+            </div>
+            {staffMsg && (
+              <p className={`mt-3 text-sm font-medium ${staffMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                {staffMsg.text}
+              </p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowStaffModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-[#e8e8ed] text-sm font-semibold text-[#6e6e73] hover:bg-[#f5f5f7] transition">
+                Cancel
+              </button>
+              <button onClick={handleStaffInvite} disabled={staffInviting || !staffForm.name.trim() || !staffForm.email.trim()}
+                className="flex-1 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition disabled:opacity-50">
+                {staffInviting ? 'Sending...' : `Invite ${staffRole === 'coach' ? 'Coach' : 'Manager'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -795,11 +1050,11 @@ function MyCouponCodes() {
                         </button>
                       </div>
                       <p className="text-2xl font-mono font-bold text-[#1d1d1f] tracking-wider mb-2">{c.code}</p>
+                      <div className="bg-[#f0f7ff] border border-[#003e79]/15 rounded-lg px-3 py-2 mb-2">
+                        <p className="text-xs font-semibold text-[#003e79]">Valid only for: {c.team_name}{c.age_group ? ` · ${c.age_group}` : ''}</p>
+                      </div>
                       <p className="text-sm text-[#6e6e73]">{c.event_name || 'Event'}</p>
-                      <p className="text-xs text-[#86868b] mt-1">
-                        {c.team_name}
-                        {c.event_city && ` · ${c.event_city}, ${c.event_state}`}
-                      </p>
+                      {c.event_city && <p className="text-xs text-[#86868b] mt-0.5">{c.event_city}, {c.event_state}</p>}
                       <div className="flex items-center gap-3 mt-3 text-xs text-[#86868b]">
                         <span>Saves ${(c.discount_local_cents / 100).toFixed(0)} for local teams</span>
                         <span>·</span>
@@ -824,7 +1079,7 @@ function MyCouponCodes() {
                     </div>
                     <p className="text-2xl font-mono font-bold text-[#86868b] tracking-wider mb-2 line-through">{c.code}</p>
                     <p className="text-sm text-[#86868b]">{c.event_name || 'Event'}</p>
-                    <p className="text-xs text-[#86868b] mt-1">{c.team_name}</p>
+                    <p className="text-xs text-[#86868b] mt-1">{c.team_name}{c.age_group ? ` · ${c.age_group}` : ''}</p>
                     {c.used_at && <p className="text-xs text-[#86868b] mt-2">Used on {new Date(c.used_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>}
                   </div>
                 ))}

@@ -100,6 +100,9 @@ export default function CreateTeamPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editTeamId, setEditTeamId] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
   const [redirectAfter, setRedirectAfter] = useState<string | null>(null);
   const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
@@ -163,6 +166,63 @@ export default function CreateTeamPage() {
     if (redir) setRedirectAfter(redir);
     const fromParam = params.get('from');
     if (fromParam) setBackLink({ href: fromParam, label: getBackLabel(fromParam) });
+
+    // Check for edit mode
+    const editParam = params.get('edit');
+    if (editParam) {
+      setIsEditMode(true);
+      setEditTeamId(editParam);
+      setEditLoading(true);
+      (async () => {
+        try {
+          const authToken = localStorage.getItem('uht_token');
+          const headers: Record<string, string> = {};
+          if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+          const res = await fetch(`${API}/teams/${editParam}`, { headers });
+          const json = await res.json() as any;
+          if (json.success && json.data) {
+            const t = json.data;
+            // Parse season record if it exists (format: "5-3-1 (GF: 20, GA: 15)")
+            let wins = '', losses = '', ties = '', goalsFor = '', goalsAgainst = '';
+            if (t.season_record) {
+              const recordMatch = t.season_record.match(/^(\d+)-(\d+)-(\d+)/);
+              if (recordMatch) { wins = recordMatch[1]; losses = recordMatch[2]; ties = recordMatch[3]; }
+              const gfMatch = t.season_record.match(/GF:\s*(\d+)/);
+              const gaMatch = t.season_record.match(/GA:\s*(\d+)/);
+              if (gfMatch) goalsFor = gfMatch[1];
+              if (gaMatch) goalsAgainst = gaMatch[1];
+            }
+            setForm({
+              orgId: t.organization_id || '',
+              orgName: t.organization_name || '',
+              ageGroup: t.age_group || '',
+              divisionLevel: t.division_level || '',
+              city: t.city || '',
+              state: t.state || '',
+              website: t.website || '',
+              hometownLeague: t.hometown_league || '',
+              teamType: t.team_type || '',
+              season: t.season || '',
+              headCoachName: t.head_coach_name || '',
+              headCoachEmail: t.head_coach_email || '',
+              headCoachPhone: t.head_coach_phone || '',
+              managerName: t.manager_name || '',
+              managerEmail: t.manager_email || '',
+              managerPhone: t.manager_phone || '',
+              wins, losses, ties, goalsFor, goalsAgainst,
+            });
+            if (t.organization_id && t.organization_name) {
+              setSelectedOrg({ id: t.organization_id, name: t.organization_name, city: t.city, state: t.state, logo_url: null });
+            }
+            if (t.season === 'spring' || t.season === 'fall') setSeasonType(t.season as 'spring' | 'fall');
+            setStep(2); // Skip org selection in edit mode
+          }
+        } catch {
+          setError('Failed to load team data');
+        }
+        setEditLoading(false);
+      })();
+    }
 
     // Load lookups
     (async () => {
@@ -316,6 +376,34 @@ export default function CreateTeamPage() {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
+      // Edit mode: PATCH existing team
+      if (isEditMode && editTeamId) {
+        const res = await fetch(`${API}/teams/${editTeamId}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json() as any;
+        if (!data.success) {
+          setError(data.error || 'Failed to update team');
+          setSaving(false);
+          return;
+        }
+        // Update localStorage teams cache
+        try {
+          const existingTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+          const idx = existingTeams.findIndex((t: any) => t.id === editTeamId);
+          if (idx >= 0) {
+            existingTeams[idx] = { ...existingTeams[idx], name: teamDisplayName, ageGroup: form.ageGroup };
+            localStorage.setItem('uht_teams', JSON.stringify(existingTeams));
+          }
+        } catch {}
+        setSaving(false);
+        setSuccess(true);
+        return;
+      }
+
+      // Create mode: POST new team
       const res = await fetch(`${API}/teams`, {
         method: 'POST',
         headers,
@@ -413,13 +501,13 @@ export default function CreateTeamPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-[#1d1d1f]">{teamDisplayName || 'Team'} Created!</h2>
+              <h2 className="text-2xl font-bold text-[#1d1d1f]">{teamDisplayName || 'Team'} {isEditMode ? 'Updated!' : 'Created!'}</h2>
               {form.orgName && (
                 <p className="text-sm text-[#6e6e73] mt-1">Part of <span className="font-medium">{form.orgName}</span></p>
               )}
             </div>
 
-            {createdInviteCode && (
+            {!isEditMode && createdInviteCode && (
               <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden mb-5">
                 <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-5 py-3">
                   <p className="text-white font-semibold text-sm flex items-center gap-2">
@@ -449,7 +537,7 @@ export default function CreateTeamPage() {
               </div>
             )}
 
-            {rosterShareToken && (
+            {!isEditMode && rosterShareToken && (
               <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden mb-5">
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-3">
                   <p className="text-white font-semibold text-sm flex items-center gap-2">
@@ -482,7 +570,7 @@ export default function CreateTeamPage() {
               </div>
             )}
 
-            {invitedSomeone && (
+            {!isEditMode && invitedSomeone && (
               <div className="bg-[#f0f7ff] border border-[#003e79]/15 rounded-xl p-4 mb-5 flex items-start gap-3">
                 <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center text-white shrink-0 mt-0.5">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -511,8 +599,10 @@ export default function CreateTeamPage() {
   // =====================
   // STEP LABELS
   // =====================
-  const stepLabels = ['Organization', 'Team Details', 'Coaching Staff', 'Review & Submit', 'Roster'];
-  const totalSteps = 5;
+  const stepLabels = isEditMode ? ['Team Details', 'Coaching Staff', 'Review & Save'] : ['Organization', 'Team Details', 'Coaching Staff', 'Review & Submit', 'Roster'];
+  const totalSteps = isEditMode ? 3 : 5;
+  // Map visual step index to actual step number for edit mode
+  const editStepMap = [2, 3, 4]; // visual steps 1,2,3 map to actual steps 2,3,4
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
@@ -583,18 +673,32 @@ export default function CreateTeamPage() {
         <div className="w-full max-w-2xl">
           {/* Header */}
           <div className="text-center mb-6">
-            <h1 className="text-3xl font-semibold text-[#1d1d1f]">Create Your Team</h1>
-            <p className="mt-2 text-[#6e6e73]">Find your organization and register your team for tournaments</p>
+            <h1 className="text-3xl font-semibold text-[#1d1d1f]">{isEditMode ? 'Edit Team' : 'Create Your Team'}</h1>
+            <p className="mt-2 text-[#6e6e73]">{isEditMode ? 'Update your team details below' : 'Find your organization and register your team for tournaments'}</p>
           </div>
 
+          {/* Edit mode loading */}
+          {editLoading && (
+            <div className="flex items-center justify-center py-12">
+              <svg className="w-8 h-8 text-brand-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="ml-3 text-[#6e6e73]">Loading team data...</span>
+            </div>
+          )}
+
           {/* Step Indicator — clickable for completed steps */}
+          {!editLoading && (
           <div className="flex items-center justify-center gap-1 mb-8">
             {stepLabels.map((label, idx) => {
-              const s = idx + 1;
+              const visualStep = idx + 1;
+              // In edit mode, map visual step to actual step number
+              const s = isEditMode ? editStepMap[idx] : visualStep;
               const isCompleted = step > s;
               const isCurrent = step === s;
               // Can go back to any completed step (but not forward past current, and not step 5 since team is already created)
-              const canClick = isCompleted && s < 5;
+              const canClick = isCompleted && (isEditMode || s < 5);
               return (
                 <div key={s} className="flex items-center gap-1">
                   <div className="flex flex-col items-center">
@@ -606,18 +710,19 @@ export default function CreateTeamPage() {
                         (isCurrent ? "bg-brand-500 text-white" : isCompleted ? "bg-green-500 text-white hover:bg-green-600 cursor-pointer" : "bg-gray-200 text-[#6e6e73] cursor-default")}>
                       {isCompleted ? (
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      ) : s}
+                      ) : visualStep}
                     </button>
                     <span className={"text-[10px] mt-1 hidden sm:block " + (canClick ? "text-green-600 font-medium cursor-pointer" : "text-[#6e6e73]")}
                       onClick={() => { if (canClick) setStep(s); }}>
                       {label}
                     </span>
                   </div>
-                  {s < totalSteps && <div className={"w-6 h-0.5 mb-4 sm:mb-0 " + (step > s ? "bg-green-500" : "bg-gray-200")} />}
+                  {visualStep < totalSteps && <div className={"w-6 h-0.5 mb-4 sm:mb-0 " + (step > s ? "bg-green-500" : "bg-gray-200")} />}
                 </div>
               );
             })}
           </div>
+          )}
 
           <div className="bg-white rounded-2xl shadow-soft p-8">
             {error && (
@@ -928,7 +1033,8 @@ export default function CreateTeamPage() {
                     <p className="text-sm font-medium text-[#1d1d1f]">{form.orgName}</p>
                     <p className="text-xs text-[#6e6e73]">{form.state}</p>
                   </div>
-                  <button onClick={() => setStep(1)} className="text-xs text-[#003e79] hover:underline">Change</button>
+                  {!isEditMode && <button onClick={() => setStep(1)} className="text-xs text-[#003e79] hover:underline">Change</button>}
+                  {isEditMode && <span className="text-xs text-[#86868b]">Locked</span>}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -945,7 +1051,7 @@ export default function CreateTeamPage() {
                     <select value={form.divisionLevel} onChange={e => set('divisionLevel', e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
                       <option value="">Select...</option>
-                      {(form.state && stateDivisions[form.state]?.length ? stateDivisions[form.state] : divisions).map(d => <option key={d} value={d}>{d}</option>)}
+                      {[...(form.state && stateDivisions[form.state]?.length ? stateDivisions[form.state] : divisions)].sort((a, b) => a.localeCompare(b)).map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                     {form.state && stateDivisions[form.state]?.length > 0 && (
                       <p className="text-xs text-[#86868b] mt-1">Showing divisions for {form.state}</p>
@@ -990,10 +1096,17 @@ export default function CreateTeamPage() {
                 </div>
 
                 <div className="pt-4 flex justify-between">
-                  <button onClick={() => setStep(1)}
-                    className="px-6 py-3 rounded-xl border border-gray-200 text-[#1d1d1f] text-sm font-medium hover:bg-gray-50 transition-all">
-                    Back
-                  </button>
+                  {!isEditMode ? (
+                    <button onClick={() => setStep(1)}
+                      className="px-6 py-3 rounded-xl border border-gray-200 text-[#1d1d1f] text-sm font-medium hover:bg-gray-50 transition-all">
+                      Back
+                    </button>
+                  ) : (
+                    <a href={backLink.href}
+                      className="px-6 py-3 rounded-xl border border-gray-200 text-[#1d1d1f] text-sm font-medium hover:bg-gray-50 transition-all inline-flex items-center">
+                      Cancel
+                    </a>
+                  )}
                   <button onClick={() => setStep(3)} disabled={!canProceedStep2}
                     className={"px-8 py-3 rounded-xl font-medium text-sm transition-all " +
                       (canProceedStep2 ? "bg-brand-500 text-white hover:bg-brand-600" : "bg-gray-200 text-gray-400 cursor-not-allowed")}>
@@ -1143,7 +1256,7 @@ export default function CreateTeamPage() {
                   <button onClick={handleSubmit} disabled={saving}
                     className={"px-10 py-3 rounded-xl font-medium text-sm transition-all " +
                       (saving ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-brand-500 text-white hover:bg-brand-600")}>
-                    {saving ? 'Creating Team...' : 'Create Team & Add Roster'}
+                    {saving ? (isEditMode ? 'Saving Changes...' : 'Creating Team...') : (isEditMode ? 'Save Changes' : 'Create Team & Add Roster')}
                   </button>
                 </div>
               </div>

@@ -1,0 +1,116 @@
+import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '../constants/api';
+
+const TOKEN_KEY = 'uht_token';
+const USER_KEY = 'uht_user';
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  roles: string[];
+}
+
+export async function getToken(): Promise<string | null> {
+  return SecureStore.getItemAsync(TOKEN_KEY);
+}
+
+export async function setToken(token: string): Promise<void> {
+  await SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+export async function getUser(): Promise<User | null> {
+  const raw = await SecureStore.getItemAsync(USER_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export async function setUser(user: User): Promise<void> {
+  await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+}
+
+export async function clearAuth(): Promise<void> {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(USER_KEY);
+}
+
+export async function signup(data: {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+}): Promise<{ success: boolean; token?: string; user?: User; error?: string }> {
+  try {
+    const nameParts = data.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const res = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        email: data.email,
+        phone: data.phone,
+        password: data.password,
+        role: 'parent',
+      }),
+    });
+    const json = await res.json();
+    if (json.success && json.data?.token) {
+      await setToken(json.data.token);
+      const user: User = {
+        id: json.data.user?.id || '',
+        name: `${json.data.user?.firstName || firstName} ${json.data.user?.lastName || lastName}`.trim(),
+        email: data.email,
+        phone: data.phone,
+        roles: json.data.user?.roles || ['parent'],
+      };
+      await setUser(user);
+      return { success: true, token: json.data.token, user };
+    }
+    return { success: false, error: json.error || 'Registration failed' };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Network error' };
+  }
+}
+
+export async function login(email: string, password: string): Promise<{ success: boolean; token?: string; user?: User; error?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json();
+    if (json.success && json.data?.token) {
+      await setToken(json.data.token);
+      const user: User = {
+        id: json.data.user?.id || '',
+        name: `${json.data.user?.firstName || ''} ${json.data.user?.lastName || ''}`.trim() || email,
+        email: json.data.user?.email || email,
+        phone: json.data.user?.phone || '',
+        roles: json.data.user?.roles || [],
+      };
+      await setUser(user);
+      return { success: true, token: json.data.token, user };
+    }
+    return { success: false, error: json.error || 'Login failed' };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Network error' };
+  }
+}
+
+export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getToken();
+  return fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+}

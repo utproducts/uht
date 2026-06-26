@@ -155,10 +155,10 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
               <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #059669, #10b981); border-radius: 12px; overflow: hidden;">
                 <tr>
                   <td style="padding: 20px 24px;">
-                    <p style="margin: 0 0 4px 0; font-size: 11px; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">YOUR MULTI-EVENT DISCOUNT CODE</p>
+                    <p style="margin: 0 0 4px 0; font-size: 11px; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">DISCOUNT CODE FOR ${teamName}${ageGroup ? ` · ${ageGroup}` : ''}</p>
                     <p style="margin: 0 0 12px 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: 3px; font-family: monospace;">${discountCode}</p>
                     <p style="margin: 0 0 8px 0; font-size: 13px; color: rgba(255,255,255,0.9); line-height: 1.5;">
-                      Use this code when registering for your next UHT event to save:
+                      Use this code when registering <strong>${teamName}</strong> for your next UHT event to save:
                     </p>
                     <table cellpadding="0" cellspacing="0">
                       <tr>
@@ -173,7 +173,7 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
                         </td>
                       </tr>
                     </table>
-                    <p style="margin: 12px 0 0 0; font-size: 11px; color: rgba(255,255,255,0.6);">One-time use &middot; Valid for ${teamName} only &middot; Enter at checkout</p>
+                    <p style="margin: 12px 0 0 0; font-size: 11px; color: rgba(255,255,255,0.6);">One-time use &middot; Valid only for <strong>${teamName}${ageGroup ? ` (${ageGroup})` : ''}</strong> &middot; Cannot be used for other teams</p>
                   </td>
                 </tr>
               </table>

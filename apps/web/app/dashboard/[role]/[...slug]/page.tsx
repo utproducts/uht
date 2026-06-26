@@ -3,8 +3,8 @@ import SubPageContent from './SubPageContent';
 export function generateStaticParams() {
   const roles = ['coach', 'manager', 'organization', 'parent', 'scorekeeper', 'referee'];
   const slugsByRole: Record<string, string[][]> = {
-    coach: [['teams'], ['events'], ['roster'], ['schedule']],
-    manager: [['teams'], ['events'], ['roster'], ['schedule']],
+    coach: [['teams'], ['events'], ['roster'], ['schedule'], ['coupons']],
+    manager: [['teams'], ['events'], ['roster'], ['schedule'], ['coupons']],
     organization: [['teams'], ['coaches'], ['rosters'], ['events']],
     parent: [['teams'], ['schedule'], ['results'], ['stats']],
     scorekeeper: [['assignments'], ['completed']],

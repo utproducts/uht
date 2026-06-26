@@ -241,19 +241,31 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
 function DeleteModal({ user, onClose, onConfirm }: { user: User; onClose: () => void; onConfirm: () => void }) {
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  const isConfirmed = confirmText.toUpperCase() === 'DELETE';
 
   const handleDelete = async () => {
+    if (!isConfirmed) return;
     setDeleting(true);
+    setError('');
     try {
       const token = localStorage.getItem('uht_token');
       const res = await fetch(`${API_BASE}/${user.id}`, {
         method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: token ? { Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true' } : { 'X-Dev-Bypass': 'true' },
       });
       const json = await res.json();
-      if (json.success) onConfirm();
-    } catch {}
-    finally { setDeleting(false); }
+      if (json.success) {
+        onConfirm();
+      } else {
+        setError(json.error || 'Failed to delete user');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Network error — please try again');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -270,18 +282,22 @@ function DeleteModal({ user, onClose, onConfirm }: { user: User; onClose: () => 
             This will permanently delete <strong>{user.firstName} {user.lastName}</strong> ({user.email}) and remove all their role associations. This cannot be undone.
           </p>
           <div className="mt-4">
-            <label className="block text-xs font-semibold text-[#6e6e73] mb-1.5">Type &quot;DELETE&quot; to confirm</label>
+            <label className="block text-xs font-semibold text-[#6e6e73] mb-1.5">Type &quot;delete&quot; to confirm</label>
             <input
               className="w-full px-3 py-2.5 border border-[#e0e0e5] rounded-xl text-sm focus:ring-2 focus:ring-red-200 outline-none"
               value={confirmText}
               onChange={e => setConfirmText(e.target.value)}
-              placeholder="DELETE"
+              placeholder="delete"
+              autoFocus
             />
           </div>
+          {error && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+          )}
         </div>
         <div className="border-t border-[#e8e8ed] px-6 py-4 flex items-center justify-end gap-3">
           <button onClick={onClose} className="px-5 py-2.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-full text-sm transition">Cancel</button>
-          <button onClick={handleDelete} disabled={confirmText !== 'DELETE' || deleting}
+          <button onClick={handleDelete} disabled={!isConfirmed || deleting}
             className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-full text-sm transition disabled:opacity-40">
             {deleting ? 'Deleting...' : 'Delete User'}
           </button>

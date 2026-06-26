@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 
 function getAuthState(): { loggedIn: boolean; role: string; name: string } {
   if (typeof window === 'undefined') return { loggedIn: false, role: '', name: '' };
@@ -24,12 +25,16 @@ function getDashboardUrl(role: string): string {
 }
 
 export default function Navigation() {
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [auth, setAuth] = useState<{ loggedIn: boolean; role: string; name: string }>({ loggedIn: false, role: '', name: '' });
 
   useEffect(() => {
     setAuth(getAuthState());
   }, []);
+
+  // Hide consumer nav on dashboard and admin pages (they have their own nav)
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) return null;
 
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e8e8ed]">
