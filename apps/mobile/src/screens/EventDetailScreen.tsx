@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getEventDetail, getEventSchedule } from '../services/api';
+import { getEventDetail, getEventSchedule, getEventScores, getEventStandings } from '../services/api';
 
 type TabKey = 'schedule' | 'scores' | 'standings';
 
@@ -27,6 +28,42 @@ interface GameSlot {
   home_score?: number | null;
   away_score?: number | null;
   division_name?: string;
+}
+
+interface ScoreGame {
+  id: string;
+  game_number?: number;
+  start_time?: string;
+  home_team_name?: string;
+  away_team_name?: string;
+  home_score: number;
+  away_score: number;
+  status: string;
+  rink_name?: string;
+  venue_name?: string;
+  age_group?: string;
+  division_level?: string;
+  period?: number;
+  is_overtime?: number;
+  is_shootout?: number;
+}
+
+interface StandingEntry {
+  team_id: string;
+  team_name: string;
+  team_logo?: string;
+  age_group: string;
+  division_level: string;
+  pool_name?: string;
+  event_division_id: string;
+  games_played: number;
+  wins: number;
+  losses: number;
+  ties: number;
+  points: number;
+  goals_for: number;
+  goals_against: number;
+  goal_differential: number;
 }
 
 interface EventInfo {
@@ -51,13 +88,27 @@ export default function EventDetailScreen({
   const [activeTab, setActiveTab] = useState<TabKey>('schedule');
   const [event, setEvent] = useState<EventInfo | null>(null);
   const [schedule, setSchedule] = useState<GameSlot[]>([]);
+  const [scores, setScores] = useState<ScoreGame[]>([]);
+  const [standings, setStandings] = useState<StandingEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scoresLoading, setScoresLoading] = useState(false);
+  const [standingsLoading, setStandingsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [scoresLoaded, setScoresLoaded] = useState(false);
+  const [standingsLoaded, setStandingsLoaded] = useState(false);
 
   useEffect(() => {
     loadData();
   }, [eventId]);
+
+  useEffect(() => {
+    if (activeTab === 'scores' && !scoresLoaded) {
+      loadScores();
+    } else if (activeTab === 'standings' && !standingsLoaded) {
+      loadStandings();
+    }
+  }, [activeTab]);
 
   async function loadData(isRefresh = false) {
     if (!isRefresh) setLoading(true);
@@ -77,9 +128,45 @@ export default function EventDetailScreen({
     }
   }
 
+  async function loadScores() {
+    setScoresLoading(true);
+    try {
+      const data = await getEventScores(eventId);
+      setScores((data as ScoreGame[]) || []);
+      setScoresLoaded(true);
+    } catch {
+      setScores([]);
+      setScoresLoaded(true);
+    } finally {
+      setScoresLoading(false);
+    }
+  }
+
+  async function loadStandings() {
+    setStandingsLoading(true);
+    try {
+      const data = await getEventStandings(eventId);
+      setStandings((data as StandingEntry[]) || []);
+      setStandingsLoaded(true);
+    } catch {
+      setStandings([]);
+      setStandingsLoaded(true);
+    } finally {
+      setStandingsLoading(false);
+    }
+  }
+
   function handleRefresh() {
     setRefreshing(true);
-    loadData(true);
+    if (activeTab === 'schedule') {
+      loadData(true);
+    } else if (activeTab === 'scores') {
+      setScoresLoaded(false);
+      loadScores().then(() => setRefreshing(false));
+    } else {
+      setStandingsLoaded(false);
+      loadStandings().then(() => setRefreshing(false));
+    }
   }
 
   function formatDateRange(startDate?: string, endDate?: string): string {
@@ -123,6 +210,98 @@ export default function EventDetailScreen({
     return parts.join(' at ');
   }
 
+  // --- Scores helpers ---
+
+  function formatScoreTime(startTime?: string): string {
+    if (!startTime) return 'TBD';
+    try {
+      const d = new Date(startTime);
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch {
+      return 'TBD';
+    }
+  }
+
+  function formatScoreDate(startTime?: string): string {
+    if (!startTime) return '';
+    try {
+      const d = new Date(startTime);
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  }
+
+  function getDateKey(startTime?: string): string {
+    if (!startTime) return 'TBD';
+    try {
+      const d = new Date(startTime);
+      return d.toISOString().split('T')[0];
+    } catch {
+      return 'TBD';
+    }
+  }
+
+  function getStatusLabel(status: string): string {
+    switch (status) {
+      case 'final': return 'Final';
+      case 'in_progress': return 'Live';
+      case 'intermission': return 'Intermission';
+      case 'warmup': return 'Warmup';
+      case 'scheduled': return 'Scheduled';
+      case 'delayed': return 'Delayed';
+      default: return status;
+    }
+  }
+
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case 'final': return colors.navy;
+      case 'in_progress': return colors.success;
+      case 'intermission': return '#f57c00';
+      case 'warmup': return colors.info;
+      case 'delayed': return colors.warning;
+      default: return colors.textMuted;
+    }
+  }
+
+  // Group scores by date
+  const scoresByDate = scores.reduce<Record<string, ScoreGame[]>>((acc, game) => {
+    const key = getDateKey(game.start_time);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(game);
+    return acc;
+  }, {});
+
+  const sortedDateKeys = Object.keys(scoresByDate).sort();
+
+  // Group standings by division + pool
+  interface StandingsGroup {
+    label: string;
+    key: string;
+    entries: StandingEntry[];
+  }
+
+  const standingsGroups: StandingsGroup[] = [];
+  const groupMap: Record<string, StandingEntry[]> = {};
+
+  standings.forEach((entry) => {
+    const poolLabel = entry.pool_name || 'Pool';
+    const key = `${entry.age_group || ''}|${entry.division_level || ''}|${poolLabel}`;
+    if (!groupMap[key]) groupMap[key] = [];
+    groupMap[key].push(entry);
+  });
+
+  Object.keys(groupMap).sort().forEach((key) => {
+    const parts = key.split('|');
+    const label = [parts[0], parts[1], parts[2]].filter(Boolean).join(' ');
+    const entries = groupMap[key].sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      return b.goal_differential - a.goal_differential;
+    });
+    standingsGroups.push({ label, key, entries });
+  });
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'schedule', label: 'Schedule' },
     { key: 'scores', label: 'Scores' },
@@ -144,6 +323,266 @@ export default function EventDetailScreen({
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
       </SafeAreaView>
+    );
+  }
+
+  // --- Render Scores Tab ---
+  function renderScoresTab() {
+    if (scoresLoading) {
+      return (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      );
+    }
+
+    if (scores.length === 0) {
+      return (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.navy}
+              colors={[colors.navy]}
+            />
+          }
+        >
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No Scores Yet</Text>
+            <Text style={styles.emptyText}>
+              Scores will appear here once games have started. Pull down to refresh.
+            </Text>
+          </View>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.navy}
+            colors={[colors.navy]}
+          />
+        }
+      >
+        {sortedDateKeys.map((dateKey) => {
+          const gamesForDate = scoresByDate[dateKey];
+          const dateLabel = dateKey === 'TBD' ? 'Date TBD' : formatScoreDate(gamesForDate[0].start_time);
+          return (
+            <View key={dateKey}>
+              <Text style={styles.dateSectionHeader}>{dateLabel}</Text>
+              {gamesForDate.map((game) => {
+                const isFinal = game.status === 'final';
+                const isLive = game.status === 'in_progress' || game.status === 'intermission';
+                const homeWins = isFinal && game.home_score > game.away_score;
+                const awayWins = isFinal && game.away_score > game.home_score;
+                const statusColor = getStatusColor(game.status);
+
+                return (
+                  <View key={game.id} style={styles.scoreCard}>
+                    {/* Top row: time + rink + status */}
+                    <View style={styles.scoreCardTopRow}>
+                      <View style={styles.scoreCardMeta}>
+                        <Text style={styles.scoreCardTime}>{formatScoreTime(game.start_time)}</Text>
+                        {game.rink_name ? (
+                          <Text style={styles.scoreCardRink}>{game.rink_name}</Text>
+                        ) : null}
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+                        <Text style={styles.statusBadgeText}>{getStatusLabel(game.status)}</Text>
+                        {isLive ? <View style={styles.liveDot} /> : null}
+                      </View>
+                    </View>
+
+                    {/* Division label */}
+                    {game.age_group || game.division_level ? (
+                      <Text style={styles.scoreCardDivision}>
+                        {[game.age_group, game.division_level].filter(Boolean).join(' ')}
+                      </Text>
+                    ) : null}
+
+                    {/* Matchup row */}
+                    <View style={styles.scoreMatchup}>
+                      {/* Away team */}
+                      <View style={styles.scoreTeamCol}>
+                        <Text style={styles.scoreTeamLabel}>AWAY</Text>
+                        <Text
+                          style={[
+                            styles.scoreTeamName,
+                            awayWins ? styles.scoreTeamWinner : null,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {game.away_team_name || 'TBD'}
+                        </Text>
+                      </View>
+
+                      {/* Score */}
+                      <View style={styles.scoreCenter}>
+                        {game.status === 'scheduled' ? (
+                          <Text style={styles.scoreVs}>vs</Text>
+                        ) : (
+                          <View style={styles.scoreNumbers}>
+                            <Text
+                              style={[
+                                styles.scoreValue,
+                                awayWins ? styles.scoreValueWinner : null,
+                              ]}
+                            >
+                              {game.away_score}
+                            </Text>
+                            <Text style={styles.scoreDash}>-</Text>
+                            <Text
+                              style={[
+                                styles.scoreValue,
+                                homeWins ? styles.scoreValueWinner : null,
+                              ]}
+                            >
+                              {game.home_score}
+                            </Text>
+                          </View>
+                        )}
+                        {isFinal && (game.is_overtime || game.is_shootout) ? (
+                          <Text style={styles.otLabel}>
+                            {game.is_shootout ? 'SO' : 'OT'}
+                          </Text>
+                        ) : null}
+                        {isLive && game.period ? (
+                          <Text style={styles.periodLabel}>
+                            {game.status === 'intermission' ? `INT ${game.period}` : `P${game.period}`}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      {/* Home team */}
+                      <View style={[styles.scoreTeamCol, styles.scoreTeamColRight]}>
+                        <Text style={styles.scoreTeamLabel}>HOME</Text>
+                        <Text
+                          style={[
+                            styles.scoreTeamName,
+                            homeWins ? styles.scoreTeamWinner : null,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {game.home_team_name || 'TBD'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  }
+
+  // --- Render Standings Tab ---
+  function renderStandingsTab() {
+    if (standingsLoading) {
+      return (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      );
+    }
+
+    if (standings.length === 0) {
+      return (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.navy}
+              colors={[colors.navy]}
+            />
+          }
+        >
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No Standings Available</Text>
+            <Text style={styles.emptyText}>
+              Standings will be updated as pool play games are completed. Pull down to refresh.
+            </Text>
+          </View>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.navy}
+            colors={[colors.navy]}
+          />
+        }
+      >
+        {standingsGroups.map((group) => (
+          <View key={group.key} style={styles.standingsSection}>
+            <Text style={styles.standingsSectionHeader}>{group.label}</Text>
+            <View style={styles.standingsTable}>
+              {/* Header row */}
+              <View style={styles.standingsHeaderRow}>
+                <Text style={[styles.standingsHeaderCell, styles.standingsRankCol]}>#</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsTeamCol]}>Team</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GP</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>W</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>L</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>T</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PTS</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GF</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GA</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>DIFF</Text>
+              </View>
+
+              {/* Data rows */}
+              {group.entries.map((entry, idx) => (
+                <View
+                  key={entry.team_id}
+                  style={[
+                    styles.standingsRow,
+                    idx % 2 === 1 ? styles.standingsRowAlt : null,
+                  ]}
+                >
+                  <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText]}>
+                    {idx + 1}
+                  </Text>
+                  <Text
+                    style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]}
+                    numberOfLines={1}
+                  >
+                    {entry.team_name}
+                  </Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.games_played}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.wins}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.losses}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.ties}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>
+                    {entry.points}
+                  </Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_for}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_against}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsDiffText]}>
+                    {entry.goal_differential > 0 ? `+${entry.goal_differential}` : entry.goal_differential}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
     );
   }
 
@@ -254,15 +693,10 @@ export default function EventDetailScreen({
             </View>
           }
         />
+      ) : activeTab === 'scores' ? (
+        renderScoresTab()
       ) : (
-        <View style={styles.comingSoon}>
-          <Text style={styles.comingSoonTitle}>Coming Soon</Text>
-          <Text style={styles.comingSoonText}>
-            {activeTab === 'scores'
-              ? 'Live scores will be available once games begin.'
-              : 'Standings will be updated as games are played.'}
-          </Text>
-        </View>
+        renderStandingsTab()
       )}
     </SafeAreaView>
   );
@@ -446,23 +880,240 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  comingSoon: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xxl,
-  },
-  comingSoonTitle: {
-    fontSize: 20,
-    color: colors.text,
-    ...fonts.bold,
-    marginBottom: spacing.md,
-  },
-  comingSoonText: {
+
+  // ===========================
+  // Scores styles
+  // ===========================
+  dateSectionHeader: {
     fontSize: 15,
+    color: colors.navy,
+    ...fonts.bold,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scoreCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  scoreCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  scoreCardMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  scoreCardTime: {
+    fontSize: 13,
+    color: colors.textMuted,
+    ...fonts.semibold,
+  },
+  scoreCardRink: {
+    fontSize: 12,
+    color: colors.info,
+    ...fonts.medium,
+  },
+  scoreCardDivision: {
+    fontSize: 12,
+    color: colors.navy,
+    ...fonts.semibold,
+    marginBottom: spacing.sm,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    gap: 4,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    color: colors.white,
+    ...fonts.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.white,
+  },
+  scoreMatchup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+  },
+  scoreTeamCol: {
+    flex: 1,
+  },
+  scoreTeamColRight: {
+    alignItems: 'flex-end',
+  },
+  scoreTeamLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+    ...fonts.semibold,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  scoreTeamName: {
+    fontSize: 14,
+    color: colors.text,
+    ...fonts.semibold,
+  },
+  scoreTeamWinner: {
+    ...fonts.bold,
+    color: colors.navy,
+  },
+  scoreCenter: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    minWidth: 70,
+  },
+  scoreNumbers: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  scoreValue: {
+    fontSize: 24,
     color: colors.textSecondary,
+    ...fonts.semibold,
+  },
+  scoreValueWinner: {
+    color: colors.navy,
+    ...fonts.bold,
+  },
+  scoreDash: {
+    fontSize: 20,
+    color: colors.textMuted,
+    ...fonts.regular,
+    marginHorizontal: 2,
+  },
+  scoreVs: {
+    fontSize: 14,
+    color: colors.textMuted,
+    ...fonts.medium,
+  },
+  otLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+    ...fonts.bold,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  periodLabel: {
+    fontSize: 10,
+    color: colors.success,
+    ...fonts.bold,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+
+  // ===========================
+  // Standings styles
+  // ===========================
+  standingsSection: {
+    marginBottom: spacing.xxl,
+  },
+  standingsSectionHeader: {
+    fontSize: 15,
+    color: colors.navy,
+    ...fonts.bold,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  standingsTable: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  standingsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.navy,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  standingsHeaderCell: {
+    fontSize: 10,
+    color: colors.white,
+    ...fonts.bold,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  standingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  standingsRowAlt: {
+    backgroundColor: '#f8f9fa',
+  },
+  standingsCell: {
+    fontSize: 12,
+    color: colors.text,
     ...fonts.regular,
     textAlign: 'center',
-    lineHeight: 22,
+  },
+  standingsRankCol: {
+    width: 22,
+  },
+  standingsTeamCol: {
+    flex: 1,
+    textAlign: 'left',
+    paddingLeft: spacing.xs,
+  },
+  standingsStatCol: {
+    width: 26,
+  },
+  standingsStatColWide: {
+    width: 32,
+  },
+  standingsRankText: {
+    ...fonts.bold,
+    color: colors.navy,
+  },
+  standingsTeamText: {
+    ...fonts.semibold,
+    textAlign: 'left',
+  },
+  standingsPointsText: {
+    ...fonts.bold,
+    color: colors.navy,
+  },
+  standingsDiffText: {
+    ...fonts.semibold,
+    fontSize: 11,
   },
 });

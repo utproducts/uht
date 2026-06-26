@@ -72,3 +72,18 @@ export async function getEventSchedule(eventId: string) {
   const json = await res.json();
   return json.success ? json.data : [];
 }
+
+// ==================
+// Scores & Standings
+// ==================
+export async function getEventScores(eventId: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/games`);
+  const json = await res.json() as { success: boolean; data?: unknown[] };
+  return json.success ? json.data : [];
+}
+
+export async function getEventStandings(eventId: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings`);
+  const json = await res.json() as { success: boolean; data?: unknown[] };
+  return json.success ? json.data : [];
+}

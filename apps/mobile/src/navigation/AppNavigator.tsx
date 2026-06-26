@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, StyleSheet, ActivityIndicator, View } from 'react-native';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
+import { registerForPushNotifications } from '../services/notifications';
 
 // Screens
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -59,6 +60,8 @@ export default function AppNavigator() {
         const token = await getToken();
         if (token) {
           setInitialRoute('Main');
+          // Register for push notifications when user is already logged in
+          registerForPushNotifications();
         }
       } catch {}
       setChecking(false);
