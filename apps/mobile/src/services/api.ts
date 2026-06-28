@@ -3,8 +3,17 @@ import { authFetch } from './auth';
 // ==================
 // Organizations
 // ==================
-export async function searchOrganizations(query: string) {
-  const res = await fetch(`https://uht.chad-157.workers.dev/api/organizations/search?q=${encodeURIComponent(query)}`);
+export async function searchOrganizations(query: string, state?: string) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (state) params.set('state', state);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/organizations/search?${params.toString()}`);
+  const json = await res.json();
+  return json.success ? json.data : [];
+}
+
+export async function getOrganizationsByState(state: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/organizations/search?state=${encodeURIComponent(state)}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }

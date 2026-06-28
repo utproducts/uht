@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,63 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { searchOrganizations, getTeamsByOrg, followTeam } from '../services/api';
+import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam } from '../services/api';
+
+const US_STATES = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' },
+];
 
 interface Organization {
   id: string;
@@ -26,26 +80,54 @@ interface Team {
   division?: string;
 }
 
-type ScreenState = 'search' | 'teams';
+type ScreenState = 'state' | 'orgs' | 'teams';
 
 export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
-  const [screenState, setScreenState] = useState<ScreenState>('search');
-  const [query, setQuery] = useState('');
+  const [screenState, setScreenState] = useState<ScreenState>('state');
+  const [selectedState, setSelectedState] = useState<{ code: string; name: string } | null>(null);
+  const [stateFilter, setStateFilter] = useState('');
   const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [orgSearch, setOrgSearch] = useState('');
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
-  const [searching, setSearching] = useState(false);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSearch = useCallback(async () => {
-    if (!query.trim()) return;
+  // Filter state list as user types
+  const filteredStates = stateFilter
+    ? US_STATES.filter(
+        (s) =>
+          s.name.toLowerCase().includes(stateFilter.toLowerCase()) ||
+          s.code.toLowerCase().includes(stateFilter.toLowerCase())
+      )
+    : US_STATES;
+
+  // Load orgs when state is selected
+  async function handleSelectState(state: { code: string; name: string }) {
+    setSelectedState(state);
+    setScreenState('orgs');
+    setLoadingOrgs(true);
     setError('');
-    setSearching(true);
     try {
-      const results = await searchOrganizations(query.trim());
+      const results = await getOrganizationsByState(state.code);
+      setOrgs(results);
+    } catch {
+      setError('Failed to load organizations. Please try again.');
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }
+
+  // Search within selected state
+  const handleOrgSearch = useCallback(async () => {
+    if (!orgSearch.trim() || !selectedState) return;
+    setError('');
+    setLoadingOrgs(true);
+    try {
+      const results = await searchOrganizations(orgSearch.trim(), selectedState.code);
       setOrgs(results);
       if (results.length === 0) {
         setError('No organizations found. Try a different search.');
@@ -53,9 +135,24 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
     } catch {
       setError('Search failed. Please try again.');
     } finally {
-      setSearching(false);
+      setLoadingOrgs(false);
     }
-  }, [query]);
+  }, [orgSearch, selectedState]);
+
+  // Clear search and reload all orgs for state
+  async function handleClearOrgSearch() {
+    setOrgSearch('');
+    if (!selectedState) return;
+    setLoadingOrgs(true);
+    try {
+      const results = await getOrganizationsByState(selectedState.code);
+      setOrgs(results);
+    } catch {
+      setError('Failed to load organizations.');
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }
 
   async function handleSelectOrg(org: Organization) {
     setSelectedOrg(org);
@@ -103,22 +200,33 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  function handleBack() {
-    setScreenState('search');
+  function handleBackToStates() {
+    setScreenState('state');
+    setSelectedState(null);
+    setOrgs([]);
+    setOrgSearch('');
+    setError('');
+  }
+
+  function handleBackToOrgs() {
+    setScreenState('orgs');
     setSelectedOrg(null);
     setTeams([]);
     setSelectedTeamIds(new Set());
     setError('');
   }
 
+  // ==================
+  // STEP 3: Select Teams
+  // ==================
   if (screenState === 'teams') {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <TouchableOpacity onPress={handleBackToOrgs} style={styles.backButton}>
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
             {selectedOrg?.name}
           </Text>
         </View>
@@ -146,14 +254,14 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
               const selected = selectedTeamIds.has(item.id);
               return (
                 <TouchableOpacity
-                  style={[styles.teamCard, selected ? styles.teamCardSelected : null]}
+                  style={[styles.card, selected ? styles.cardSelected : null]}
                   onPress={() => toggleTeam(item.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.teamInfo}>
-                    <Text style={styles.teamName}>{item.name}</Text>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardTitle}>{item.name}</Text>
                     {item.age_group || item.division ? (
-                      <Text style={styles.teamMeta}>
+                      <Text style={styles.cardSubtitle}>
                         {[item.age_group, item.division].filter(Boolean).join(' - ')}
                       </Text>
                     ) : null}
@@ -165,9 +273,7 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                     ]}
                   >
                     {selected ? (
-                      <Text style={styles.checkmark}>
-                        {'✓'}
-                      </Text>
+                      <Text style={styles.checkmark}>{'✓'}</Text>
                     ) : null}
                   </View>
                 </TouchableOpacity>
@@ -189,8 +295,8 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
         <View style={styles.bottomSection}>
           <TouchableOpacity
             style={[
-              styles.followButton,
-              selectedTeamIds.size === 0 ? styles.followButtonDisabled : null,
+              styles.primaryButton,
+              selectedTeamIds.size === 0 ? styles.primaryButtonDisabled : null,
             ]}
             onPress={handleFollowSelected}
             disabled={selectedTeamIds.size === 0 || saving}
@@ -199,7 +305,7 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
             {saving ? (
               <ActivityIndicator color={colors.white} />
             ) : (
-              <Text style={styles.followButtonText}>
+              <Text style={styles.primaryButtonText}>
                 Follow Selected Teams ({selectedTeamIds.size})
               </Text>
             )}
@@ -209,38 +315,56 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Follow Your Teams</Text>
-        <Text style={styles.subtitle}>
-          Search for your organization to find and follow your teams.
-        </Text>
-
-        <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search organizations..."
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-          />
-          <TouchableOpacity
-            style={styles.searchButton}
-            onPress={handleSearch}
-            disabled={searching || !query.trim()}
-            activeOpacity={0.85}
-          >
-            {searching ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Text style={styles.searchButtonText}>Search</Text>
-            )}
+  // ==================
+  // STEP 2: Select Organization
+  // ==================
+  if (screenState === 'orgs') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackToStates} style={styles.backButton}>
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {selectedState?.name}
+          </Text>
+        </View>
+
+        <View style={styles.searchSection}>
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              value={orgSearch}
+              onChangeText={setOrgSearch}
+              placeholder="Search organizations..."
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={handleOrgSearch}
+            />
+            {orgSearch.length > 0 ? (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={handleClearOrgSearch}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.clearButtonText}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={handleOrgSearch}
+              disabled={loadingOrgs || !orgSearch.trim()}
+              activeOpacity={0.85}
+            >
+              {loadingOrgs ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.searchButtonText}>Search</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {error ? (
@@ -249,33 +373,97 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
           </View>
         ) : null}
 
+        {loadingOrgs && orgs.length === 0 ? (
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={colors.navy} />
+          </View>
+        ) : (
+          <FlatList
+            data={orgs}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() => handleSelectOrg(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardTitle}>{item.name}</Text>
+                  {item.city ? (
+                    <Text style={styles.cardSubtitle}>{item.city}</Text>
+                  ) : null}
+                </View>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              !loadingOrgs ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No Organizations</Text>
+                  <Text style={styles.emptyText}>
+                    No organizations found in {selectedState?.name}. Try searching by name above.
+                  </Text>
+                </View>
+              ) : null
+            }
+          />
+        )}
+
+        <View style={styles.bottomSection}>
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={() => navigation.replace('Main')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipText}>Skip for now</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ==================
+  // STEP 1: Select Your State
+  // ==================
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Select Your State</Text>
+        <Text style={styles.subtitle}>
+          Choose your state to find local organizations and teams to follow.
+        </Text>
+
+        <TextInput
+          style={styles.stateSearchInput}
+          value={stateFilter}
+          onChangeText={setStateFilter}
+          placeholder="Search states..."
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
         <FlatList
-          data={orgs}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          data={filteredStates}
+          keyExtractor={(item) => item.code}
+          contentContainerStyle={styles.stateListContent}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.orgCard}
-              onPress={() => handleSelectOrg(item)}
+              style={styles.stateCard}
+              onPress={() => handleSelectState(item)}
               activeOpacity={0.7}
             >
-              <Text style={styles.orgName}>{item.name}</Text>
-              {item.city || item.state ? (
-                <Text style={styles.orgLocation}>
-                  {[item.city, item.state].filter(Boolean).join(', ')}
-                </Text>
-              ) : null}
+              <Text style={styles.stateCode}>{item.code}</Text>
+              <Text style={styles.stateName}>{item.name}</Text>
+              <Text style={styles.chevron}>{'>'}</Text>
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            !searching && query.length > 0 && orgs.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>No Results</Text>
-                <Text style={styles.emptyText}>
-                  Try searching with a different name.
-                </Text>
-              </View>
-            ) : null
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No Match</Text>
+              <Text style={styles.emptyText}>No states match your search.</Text>
+            </View>
           }
         />
       </View>
@@ -310,6 +498,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
     gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   backButton: {
     paddingVertical: spacing.xs,
@@ -320,17 +510,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     ...fonts.semibold,
   },
-  title: {
-    fontSize: 24,
+  headerTitle: {
+    fontSize: 20,
     color: colors.text,
     ...fonts.bold,
     flex: 1,
+  },
+  title: {
+    fontSize: 26,
+    color: colors.text,
+    ...fonts.bold,
+    marginBottom: spacing.sm,
   },
   subtitle: {
     fontSize: 15,
     color: colors.textSecondary,
     ...fonts.regular,
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
     lineHeight: 22,
   },
   instruction: {
@@ -339,11 +535,60 @@ const styles = StyleSheet.create({
     ...fonts.regular,
     marginBottom: spacing.lg,
     paddingHorizontal: spacing.xxl,
+    marginTop: spacing.md,
+  },
+  // State search
+  stateSearchInput: {
+    backgroundColor: colors.card,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.regular,
+    marginBottom: spacing.md,
+  },
+  stateListContent: {
+    paddingBottom: spacing.lg,
+  },
+  stateCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stateCode: {
+    fontSize: 16,
+    color: colors.navy,
+    ...fonts.bold,
+    width: 36,
+  },
+  stateName: {
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.medium,
+    flex: 1,
+  },
+  chevron: {
+    fontSize: 18,
+    color: colors.textMuted,
+    ...fonts.regular,
+  },
+  // Org search
+  searchSection: {
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   searchRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginBottom: spacing.lg,
   },
   searchInput: {
     flex: 1,
@@ -356,6 +601,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     ...fonts.regular,
+  },
+  clearButton: {
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  clearButtonText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    ...fonts.medium,
   },
   searchButton: {
     backgroundColor: colors.navy,
@@ -370,42 +624,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     ...fonts.semibold,
   },
-  errorBanner: {
-    backgroundColor: colors.errorBg,
-    borderRadius: radii.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    marginHorizontal: spacing.xxl,
-  },
-  errorBannerText: {
-    color: colors.error,
-    fontSize: 14,
-    ...fonts.medium,
-  },
-  listContent: {
-    paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.lg,
-  },
-  orgCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  orgName: {
-    fontSize: 16,
-    color: colors.text,
-    ...fonts.semibold,
-  },
-  orgLocation: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    marginTop: spacing.xs,
-  },
-  teamCard: {
+  // Shared cards
+  card: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
     padding: spacing.lg,
@@ -415,24 +635,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  teamCardSelected: {
+  cardSelected: {
     borderColor: colors.navy,
     backgroundColor: colors.highlight,
   },
-  teamInfo: {
+  cardInfo: {
     flex: 1,
   },
-  teamName: {
+  cardTitle: {
     fontSize: 16,
     color: colors.text,
     ...fonts.semibold,
   },
-  teamMeta: {
+  cardSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
     ...fonts.regular,
     marginTop: spacing.xs,
   },
+  // Checkbox (teams)
   checkbox: {
     width: 24,
     height: 24,
@@ -451,6 +672,24 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 14,
     ...fonts.bold,
+  },
+  // Shared
+  errorBanner: {
+    backgroundColor: colors.errorBg,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.xxl,
+  },
+  errorBannerText: {
+    color: colors.error,
+    fontSize: 14,
+    ...fonts.medium,
+  },
+  listContent: {
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.lg,
+    paddingTop: spacing.sm,
   },
   centerContent: {
     flex: 1,
@@ -472,6 +711,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...fonts.regular,
     textAlign: 'center',
+    paddingHorizontal: spacing.xxl,
   },
   bottomSection: {
     paddingHorizontal: spacing.xxl,
@@ -479,16 +719,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  followButton: {
+  primaryButton: {
     backgroundColor: colors.navy,
     borderRadius: radii.md,
     paddingVertical: spacing.lg,
     alignItems: 'center',
   },
-  followButtonDisabled: {
+  primaryButtonDisabled: {
     opacity: 0.5,
   },
-  followButtonText: {
+  primaryButtonText: {
     color: colors.white,
     fontSize: 17,
     ...fonts.semibold,
