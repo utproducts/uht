@@ -39,7 +39,8 @@
           "faceIDPermission": "Use Face ID to sign in to UHT"
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-updates"
     ]
   }
 }
