@@ -42,6 +42,34 @@ const DIVISION_LEVELS = [
   'Travel',
 ];
 
+const US_STATES = [
+  { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' }, { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' }, { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' }, { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' }, { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' }, { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' }, { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' }, { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' }, { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' }, { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' }, { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' }, { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' }, { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' }, { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
+];
+
 export default function CreateTeamScreen({
   route,
   navigation,
@@ -54,7 +82,6 @@ export default function CreateTeamScreen({
   const [teamName, setTeamName] = useState('');
   const [ageGroup, setAgeGroup] = useState('');
   const [divisionLevel, setDivisionLevel] = useState('');
-  const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [coachName, setCoachName] = useState('');
   const [coachEmail, setCoachEmail] = useState('');
@@ -63,6 +90,7 @@ export default function CreateTeamScreen({
   const [error, setError] = useState('');
   const [showAgeGroupPicker, setShowAgeGroupPicker] = useState(false);
   const [showDivisionPicker, setShowDivisionPicker] = useState(false);
+  const [showStatePicker, setShowStatePicker] = useState(false);
 
   async function handleCreate() {
     if (!teamName.trim()) {
@@ -73,11 +101,19 @@ export default function CreateTeamScreen({
       setError('Age group is required');
       return;
     }
+    if (!state) {
+      setError('State is required');
+      return;
+    }
 
     setSaving(true);
     setError('');
 
     try {
+      // Find the full state name from code for consistent DB storage
+      const stateEntry = US_STATES.find((s) => s.code === state);
+      const stateName = stateEntry ? stateEntry.name : state;
+
       const res = await authFetch('/api/teams', {
         method: 'POST',
         body: JSON.stringify({
@@ -85,8 +121,7 @@ export default function CreateTeamScreen({
           ageGroup,
           divisionLevel: divisionLevel || undefined,
           organizationId: organizationId || undefined,
-          city: city.trim() || undefined,
-          state: state.trim() || undefined,
+          state: stateName || undefined,
           headCoachName: coachName.trim() || undefined,
           headCoachEmail: coachEmail.trim() || undefined,
           headCoachPhone: coachPhone.trim() || undefined,
@@ -123,6 +158,8 @@ export default function CreateTeamScreen({
               onPress: async () => {
                 setSaving(true);
                 try {
+                  const stEntry = US_STATES.find((s) => s.code === state);
+                  const stName = stEntry ? stEntry.name : state;
                   const res2 = await authFetch('/api/teams', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -130,8 +167,7 @@ export default function CreateTeamScreen({
                       ageGroup,
                       divisionLevel: divisionLevel || undefined,
                       organizationId: organizationId || undefined,
-                      city: city.trim() || undefined,
-                      state: state.trim() || undefined,
+                      state: stName || undefined,
                       headCoachName: coachName.trim() || undefined,
                       headCoachEmail: coachEmail.trim() || undefined,
                       headCoachPhone: coachPhone.trim() || undefined,
@@ -172,6 +208,7 @@ export default function CreateTeamScreen({
     selected: string,
     onSelect: (v: string) => void,
     onClose: () => void,
+    displayLabels?: string[],
   ) {
     return (
       <View style={styles.pickerOverlay}>
@@ -183,7 +220,7 @@ export default function CreateTeamScreen({
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.pickerScroll}>
-            {items.map((item) => (
+            {items.map((item, idx) => (
               <TouchableOpacity
                 key={item}
                 style={[
@@ -201,7 +238,7 @@ export default function CreateTeamScreen({
                     selected === item && styles.pickerItemTextSelected,
                   ]}
                 >
-                  {item}
+                  {displayLabels ? displayLabels[idx] : item}
                 </Text>
                 {selected === item && (
                   <Ionicons name="checkmark" size={20} color={colors.cyan} />
@@ -291,32 +328,24 @@ export default function CreateTeamScreen({
             <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
           </TouchableOpacity>
 
-          {/* City & State */}
-          <View style={styles.row}>
-            <View style={styles.halfField}>
-              <Text style={styles.label}>City</Text>
-              <TextInput
-                style={styles.input}
-                value={city}
-                onChangeText={setCity}
-                placeholder="City"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={styles.halfField}>
-              <Text style={styles.label}>State</Text>
-              <TextInput
-                style={styles.input}
-                value={state}
-                onChangeText={setState}
-                placeholder="State"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="characters"
-                maxLength={2}
-              />
-            </View>
-          </View>
+          {/* State */}
+          <Text style={styles.label}>State *</Text>
+          <TouchableOpacity
+            style={styles.selectInput}
+            onPress={() => setShowStatePicker(true)}
+          >
+            <Text
+              style={[
+                styles.selectInputText,
+                !state && styles.selectInputPlaceholder,
+              ]}
+            >
+              {state
+                ? `${US_STATES.find((s) => s.code === state)?.name} (${state})`
+                : 'Select state'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
 
           {/* Coach Info Section */}
           <View style={styles.sectionDivider} />
@@ -392,6 +421,14 @@ export default function CreateTeamScreen({
           divisionLevel,
           setDivisionLevel,
           () => setShowDivisionPicker(false),
+        )}
+      {showStatePicker &&
+        renderPicker(
+          US_STATES.map((s) => s.code),
+          state,
+          setState,
+          () => setShowStatePicker(false),
+          US_STATES.map((s) => `${s.name} (${s.code})`),
         )}
     </View>
   );
@@ -472,13 +509,6 @@ const styles = StyleSheet.create({
   },
   selectInputPlaceholder: {
     color: colors.textMuted,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  halfField: {
-    flex: 1,
   },
   sectionDivider: {
     height: 1,
