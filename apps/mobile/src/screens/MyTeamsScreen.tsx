@@ -118,8 +118,16 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         <Ionicons name="people-outline" size={64} color={colors.textMuted} />
         <Text style={styles.emptyTitle}>No Teams Yet</Text>
         <Text style={styles.emptySubtitle}>
-          Create or join a team to get started.
+          Follow teams to track their schedules and scores.
         </Text>
+        <TouchableOpacity
+          style={styles.findTeamsButton}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('FollowTeams')}
+        >
+          <Ionicons name="search" size={18} color={colors.white} />
+          <Text style={styles.findTeamsButtonText}>Find Teams</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -129,7 +137,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <TouchableOpacity
         style={styles.addButton}
         activeOpacity={0.7}
-        onPress={() => console.log('Add Team tapped')}
+        onPress={() => navigation.navigate('FollowTeams')}
       >
         <Ionicons name="add" size={18} color={colors.white} />
         <Text style={styles.addButtonText}>Add Team</Text>
@@ -313,5 +321,20 @@ const styles = StyleSheet.create({
     ...fonts.regular,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  findTeamsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.cyan,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    marginTop: spacing.xl,
+    gap: spacing.sm,
+  },
+  findTeamsButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    ...fonts.semibold,
   },
 });

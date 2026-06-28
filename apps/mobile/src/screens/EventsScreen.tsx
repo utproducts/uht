@@ -10,6 +10,7 @@ import {
   TextInput,
   Image,
   Share,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,6 +55,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedState, setSelectedState] = useState<string>('All');
 
   const loadEvents = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -106,12 +108,32 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
     [allEvents, today],
   );
 
+  const uniqueStates = useMemo(() => {
+    const states = new Set<string>();
+    allEvents.forEach((e) => {
+      if (e.state && e.state.trim()) {
+        states.add(e.state.trim().toUpperCase());
+      }
+    });
+    return Array.from(states).sort();
+  }, [allEvents]);
+
   const displayedEvents = useMemo(() => {
     const source = activeTab === 'upcoming' ? upcomingEvents : pastEvents;
-    if (!searchQuery.trim()) return source;
-    const q = searchQuery.toLowerCase();
-    return source.filter((e) => e.name.toLowerCase().includes(q));
-  }, [activeTab, upcomingEvents, pastEvents, searchQuery]);
+    return source.filter((e) => {
+      // State filter
+      if (selectedState !== 'All') {
+        const eventState = e.state ? e.state.trim().toUpperCase() : '';
+        if (eventState !== selectedState) return false;
+      }
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        if (!e.name.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [activeTab, upcomingEvents, pastEvents, searchQuery, selectedState]);
 
   function handleRefresh() {
     setRefreshing(true);
@@ -199,6 +221,61 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         </View>
       </View>
 
+      {/* State filter pills */}
+      {uniqueStates.length > 0 && (
+        <View style={styles.filterContainer}>
+          <Ionicons
+            name="filter"
+            size={16}
+            color={colors.cyan}
+            style={styles.filterIcon}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
+          >
+            <TouchableOpacity
+              style={[
+                styles.filterPill,
+                selectedState === 'All' && styles.filterPillActive,
+              ]}
+              onPress={() => setSelectedState('All')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  selectedState === 'All' && styles.filterPillTextActive,
+                ]}
+              >
+                All
+              </Text>
+            </TouchableOpacity>
+            {uniqueStates.map((state) => (
+              <TouchableOpacity
+                key={state}
+                style={[
+                  styles.filterPill,
+                  selectedState === state && styles.filterPillActive,
+                ]}
+                onPress={() => setSelectedState(state)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    selectedState === state && styles.filterPillTextActive,
+                  ]}
+                >
+                  {state}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {error ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error}</Text>
@@ -273,15 +350,19 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
               color={colors.textMuted}
             />
             <Text style={styles.emptyTitle}>
-              {searchQuery
+              {searchQuery || selectedState !== 'All'
                 ? 'No Matching Events'
                 : activeTab === 'upcoming'
                 ? 'No Upcoming Events'
                 : 'No Past Events'}
             </Text>
             <Text style={styles.emptyText}>
-              {searchQuery
+              {searchQuery && selectedState !== 'All'
+                ? `No events found matching "${searchQuery}" in ${selectedState}.`
+                : searchQuery
                 ? `No events found matching "${searchQuery}".`
+                : selectedState !== 'All'
+                ? `No ${activeTab === 'upcoming' ? 'upcoming' : 'past'} events in ${selectedState}.`
                 : activeTab === 'upcoming'
                 ? 'There are no upcoming events at this time. Check back soon!'
                 : 'No past events to display.'}
@@ -359,6 +440,43 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     paddingVertical: spacing.xs,
     ...fonts.regular,
+  },
+
+  // State filter
+  filterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.xs,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.bg,
+  },
+  filterIcon: {
+    marginRight: spacing.sm,
+  },
+  filterScrollContent: {
+    paddingRight: spacing.lg,
+    gap: spacing.sm,
+  },
+  filterPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.md,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.navy,
+  },
+  filterPillActive: {
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
+  },
+  filterPillText: {
+    fontSize: 13,
+    color: colors.navy,
+    ...fonts.bold,
+  },
+  filterPillTextActive: {
+    color: colors.white,
   },
 
   // Error

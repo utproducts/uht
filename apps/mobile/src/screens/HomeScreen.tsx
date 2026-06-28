@@ -9,11 +9,12 @@ import {
   RefreshControl,
   Image,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getFollowedTeams, getEvents } from '../services/api';
-import ScreenHeader from '../components/ScreenHeader';
+import { getUser } from '../services/auth';
 
 interface FollowedTeam {
   id: string;
@@ -47,6 +48,8 @@ function formatDateRange(startDate: string, endDate: string): string {
 }
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
+  const insets = useSafeAreaInsets();
+  const [userName, setUserName] = useState('');
   const [teams, setTeams] = useState<FollowedTeam[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,10 +58,12 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const loadData = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [teamData, eventData] = await Promise.all([
+      const [teamData, eventData, user] = await Promise.all([
         getFollowedTeams(),
         getEvents(),
+        getUser(),
       ]);
+      if (user?.name) setUserName(user.name);
       setTeams(teamData);
       // Show only upcoming events (next 3)
       const today = new Date().toISOString().split('T')[0];
@@ -83,10 +88,44 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     loadData(true);
   }
 
+  const firstName = userName ? userName.split(' ')[0] : '';
+
+  // --------------- Hero Banner ---------------
+  function HeroBanner() {
+    return (
+      <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
+        {/* Background diagonal accent stripes */}
+        <View style={styles.heroAccent1} />
+        <View style={styles.heroAccent2} />
+        <View style={styles.heroAccent3} />
+
+        {/* Bottom cyan edge stripe */}
+        <View style={styles.heroCyanStripe} />
+
+        {/* Content */}
+        <View style={styles.heroContent}>
+          <View style={styles.heroLeft}>
+            <Text style={styles.heroLogo}>UHT</Text>
+            <Text style={styles.heroGreeting}>
+              {firstName ? `Welcome, ${firstName}!` : 'Welcome!'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.heroSettingsBtn}
+            onPress={() => navigation.navigate('Menu' as never)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="settings-outline" size={24} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Dashboard" />
+        <HeroBanner />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
@@ -96,7 +135,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Dashboard" />
+      <HeroBanner />
       <FlatList
         data={[]}
         renderItem={() => null}
@@ -143,7 +182,10 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             {/* Followed Teams */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Your Teams</Text>
+                <View style={styles.sectionTitleRow}>
+                  <View style={styles.sectionAccent} />
+                  <Text style={styles.sectionTitle}>Your Teams</Text>
+                </View>
                 <TouchableOpacity onPress={() => navigation.navigate('My Teams' as never)}>
                   <Text style={styles.seeAll}>See All</Text>
                 </TouchableOpacity>
@@ -154,11 +196,17 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   onPress={() => navigation.navigate('FollowTeams')}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="add-circle-outline" size={32} color={colors.cyan} />
+                  <View style={styles.emptyIconWrap}>
+                    <Ionicons name="add-circle-outline" size={36} color={colors.cyan} />
+                  </View>
                   <Text style={styles.emptyTitle}>Follow a Team</Text>
                   <Text style={styles.emptyText}>
-                    Tap to find and follow your favorite teams
+                    Stay updated on schedules, scores, and standings by following your favorite teams
                   </Text>
+                  <View style={styles.emptyActionRow}>
+                    <Text style={styles.emptyActionText}>Find Teams</Text>
+                    <Ionicons name="arrow-forward" size={16} color={colors.cyan} />
+                  </View>
                 </TouchableOpacity>
               ) : (
                 teams.slice(0, 4).map((team) => (
@@ -188,14 +236,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             {/* Upcoming Events */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Upcoming Events</Text>
+                <View style={styles.sectionTitleRow}>
+                  <View style={styles.sectionAccent} />
+                  <Text style={styles.sectionTitle}>My Upcoming Events</Text>
+                </View>
                 <TouchableOpacity onPress={() => navigation.navigate('Events' as never)}>
                   <Text style={styles.seeAll}>See All</Text>
                 </TouchableOpacity>
               </View>
               {upcomingEvents.length === 0 ? (
                 <View style={styles.emptyCard}>
-                  <Ionicons name="calendar-outline" size={32} color={colors.textMuted} />
+                  <View style={styles.emptyIconWrap}>
+                    <Ionicons name="calendar-outline" size={36} color={colors.textMuted} />
+                  </View>
                   <Text style={styles.emptyTitle}>No Upcoming Events</Text>
                   <Text style={styles.emptyText}>
                     Check back soon for upcoming UHT events
@@ -206,7 +259,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   <TouchableOpacity
                     key={event.id}
                     style={styles.eventCard}
-                    onPress={() => navigation.navigate('EventDetail', { eventId: event.id, eventName: event.name })}
+                    onPress={() => navigation.navigate('EventDetail', { eventId: event.id, eventName: event.name, event: event })}
                     activeOpacity={0.7}
                   >
                     <View style={styles.eventLogo}>
@@ -218,10 +271,20 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     </View>
                     <View style={styles.eventInfo}>
                       <Text style={styles.eventName} numberOfLines={2}>{event.name}</Text>
-                      <Text style={styles.eventMeta}>
-                        {formatDateRange(event.start_date, event.end_date)}
-                        {event.city ? ` · ${event.city}, ${event.state || ''}` : ''}
-                      </Text>
+                      <View style={styles.eventMetaRow}>
+                        <Ionicons name="calendar-outline" size={13} color={colors.cyan} style={{ marginRight: 4 }} />
+                        <Text style={styles.eventMeta}>
+                          {formatDateRange(event.start_date, event.end_date)}
+                        </Text>
+                      </View>
+                      {event.city ? (
+                        <View style={styles.eventMetaRow}>
+                          <Ionicons name="location-outline" size={13} color={colors.cyan} style={{ marginRight: 4 }} />
+                          <Text style={styles.eventMeta}>
+                            {event.city}{event.state ? `, ${event.state}` : ''}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
                   </TouchableOpacity>
@@ -248,7 +311,90 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxxl,
   },
-  // Quick actions
+
+  // ==================
+  // Hero Banner
+  // ==================
+  hero: {
+    backgroundColor: colors.navy,
+    paddingBottom: spacing.xxl,
+    overflow: 'hidden',
+  },
+  heroAccent1: {
+    position: 'absolute',
+    top: -30,
+    right: -20,
+    width: 180,
+    height: '180%',
+    backgroundColor: colors.cyan,
+    opacity: 0.08,
+    transform: [{ rotate: '-18deg' }],
+  },
+  heroAccent2: {
+    position: 'absolute',
+    top: -10,
+    right: 40,
+    width: 100,
+    height: '160%',
+    backgroundColor: colors.cyan,
+    opacity: 0.06,
+    transform: [{ rotate: '-18deg' }],
+  },
+  heroAccent3: {
+    position: 'absolute',
+    top: 0,
+    left: -60,
+    width: 120,
+    height: '150%',
+    backgroundColor: colors.white,
+    opacity: 0.03,
+    transform: [{ rotate: '-18deg' }],
+  },
+  heroCyanStripe: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: colors.cyan,
+  },
+  heroContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+  },
+  heroLeft: {
+    flex: 1,
+  },
+  heroLogo: {
+    fontSize: 36,
+    color: colors.white,
+    ...fonts.extrabold,
+    letterSpacing: 3,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 204, 255, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
+  },
+  heroGreeting: {
+    fontSize: 16,
+    color: colors.cyanLight,
+    ...fonts.medium,
+    opacity: 0.9,
+  },
+  heroSettingsBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ==================
+  // Quick Actions
+  // ==================
   quickActions: {
     flexDirection: 'row',
     paddingHorizontal: spacing.xl,
@@ -277,7 +423,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...fonts.semibold,
   },
-  // Section
+
+  // ==================
+  // Sections
+  // ==================
   section: {
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.xl,
@@ -287,6 +436,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionAccent: {
+    width: 4,
+    height: 20,
+    backgroundColor: colors.cyan,
+    borderRadius: 2,
+    marginRight: spacing.sm,
   },
   sectionTitle: {
     fontSize: 18,
@@ -298,7 +458,10 @@ const styles = StyleSheet.create({
     color: colors.cyan,
     ...fonts.semibold,
   },
-  // Empty
+
+  // ==================
+  // Empty State
+  // ==================
   emptyCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -307,11 +470,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  emptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.highlight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   emptyTitle: {
     fontSize: 16,
     color: colors.text,
     ...fonts.semibold,
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
   },
   emptyText: {
     fontSize: 14,
@@ -319,8 +491,23 @@ const styles = StyleSheet.create({
     ...fonts.regular,
     marginTop: spacing.xs,
     textAlign: 'center',
+    lineHeight: 20,
   },
-  // Team cards
+  emptyActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: 6,
+  },
+  emptyActionText: {
+    fontSize: 14,
+    color: colors.cyan,
+    ...fonts.semibold,
+  },
+
+  // ==================
+  // Team Cards
+  // ==================
   teamCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -366,13 +553,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.cyan,
   },
   ageBadgeText: {
     fontSize: 11,
-    color: colors.navy,
+    color: colors.cyanDark,
     ...fonts.semibold,
   },
-  // Event cards
+
+  // ==================
+  // Event Cards
+  // ==================
   eventCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -410,11 +602,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
     ...fonts.semibold,
+    marginBottom: 4,
+  },
+  eventMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
   },
   eventMeta: {
     fontSize: 13,
     color: colors.textSecondary,
     ...fonts.regular,
-    marginTop: 2,
   },
 });

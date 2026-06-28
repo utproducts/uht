@@ -9,11 +9,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
+  Image,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings } from '../services/api';
 
-type TabKey = 'schedule' | 'scores' | 'standings';
+type TabKey = 'schedule' | 'scores' | 'standings' | 'info';
 
 interface GameSlot {
   id: string;
@@ -69,6 +70,17 @@ interface StandingEntry {
 interface EventInfo {
   id: string;
   name: string;
+  logo_url?: string;
+  city?: string;
+  state?: string;
+  start_date?: string;
+  end_date?: string;
+  description?: string;
+  status?: string;
+}
+
+interface NavEventParam {
+  logo_url?: string;
   city?: string;
   state?: string;
   start_date?: string;
@@ -84,9 +96,23 @@ export default function EventDetailScreen({
   route: any;
   navigation: any;
 }) {
-  const { eventId, eventName } = route.params || {};
+  const { eventId, eventName, event: navEvent } = route.params || {};
   const [activeTab, setActiveTab] = useState<TabKey>('schedule');
-  const [event, setEvent] = useState<EventInfo | null>(null);
+  const [event, setEvent] = useState<EventInfo | null>(
+    navEvent
+      ? {
+          id: eventId,
+          name: eventName || '',
+          logo_url: (navEvent as NavEventParam).logo_url,
+          city: (navEvent as NavEventParam).city,
+          state: (navEvent as NavEventParam).state,
+          start_date: (navEvent as NavEventParam).start_date,
+          end_date: (navEvent as NavEventParam).end_date,
+          description: (navEvent as NavEventParam).description,
+          status: (navEvent as NavEventParam).status,
+        }
+      : null,
+  );
   const [schedule, setSchedule] = useState<GameSlot[]>([]);
   const [scores, setScores] = useState<ScoreGame[]>([]);
   const [standings, setStandings] = useState<StandingEntry[]>([]);
@@ -163,9 +189,12 @@ export default function EventDetailScreen({
     } else if (activeTab === 'scores') {
       setScoresLoaded(false);
       loadScores().then(() => setRefreshing(false));
-    } else {
+    } else if (activeTab === 'standings') {
       setStandingsLoaded(false);
       loadStandings().then(() => setRefreshing(false));
+    } else {
+      // Info tab - refresh event data
+      loadData(true);
     }
   }
 
@@ -184,6 +213,32 @@ export default function EventDetailScreen({
 
       const end = new Date(endDate);
       const endStr = end.toLocaleDateString('en-US', opts);
+
+      return `${startStr} - ${endStr}`;
+    } catch {
+      return startDate;
+    }
+  }
+
+  function formatDateRangeShort(startDate?: string, endDate?: string): string {
+    if (!startDate) return 'Dates TBD';
+    try {
+      const start = new Date(startDate);
+      const shortOpts: Intl.DateTimeFormatOptions = {
+        month: 'short',
+        day: 'numeric',
+      };
+      const startStr = start.toLocaleDateString('en-US', shortOpts);
+
+      if (!endDate) return startStr;
+
+      const end = new Date(endDate);
+      const yearOpts: Intl.DateTimeFormatOptions = {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      };
+      const endStr = end.toLocaleDateString('en-US', yearOpts);
 
       return `${startStr} - ${endStr}`;
     } catch {
@@ -265,6 +320,32 @@ export default function EventDetailScreen({
     }
   }
 
+  function getEventStatusLabel(status?: string): string {
+    if (!status) return '';
+    switch (status) {
+      case 'upcoming': return 'Upcoming';
+      case 'active': return 'Active';
+      case 'in_progress': return 'In Progress';
+      case 'completed': return 'Completed';
+      case 'cancelled': return 'Cancelled';
+      case 'registration_open': return 'Registration Open';
+      default: return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+    }
+  }
+
+  function getEventStatusColor(status?: string): string {
+    if (!status) return colors.textMuted;
+    switch (status) {
+      case 'upcoming': return colors.info;
+      case 'active':
+      case 'in_progress': return colors.success;
+      case 'completed': return colors.navy;
+      case 'cancelled': return colors.error;
+      case 'registration_open': return colors.cyan;
+      default: return colors.textMuted;
+    }
+  }
+
   // Group scores by date
   const scoresByDate = scores.reduce<Record<string, ScoreGame[]>>((acc, game) => {
     const key = getDateKey(game.start_time);
@@ -302,13 +383,90 @@ export default function EventDetailScreen({
     standingsGroups.push({ label, key, entries });
   });
 
+  // Extract unique venues/rinks from schedule data
+  const venueSet = new Set<string>();
+  schedule.forEach((game) => {
+    const rink = game.rink_name || game.rink;
+    if (rink) venueSet.add(rink);
+  });
+  const venues = Array.from(venueSet).sort();
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'schedule', label: 'Schedule' },
     { key: 'scores', label: 'Scores' },
     { key: 'standings', label: 'Standings' },
+    { key: 'info', label: 'Info' },
   ];
 
-  if (loading) {
+  // Display data: prefer loaded API event, fall back to nav params
+  const displayEvent = event;
+
+  // --- Render Hero Section ---
+  function renderHero() {
+    if (!displayEvent) return null;
+
+    return (
+      <View style={styles.heroCard}>
+        <View style={styles.heroTop}>
+          {/* Logo */}
+          {displayEvent.logo_url ? (
+            <Image
+              source={{ uri: displayEvent.logo_url }}
+              style={styles.heroLogo}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={styles.heroLogoPlaceholder}>
+              <Text style={styles.heroLogoPlaceholderText}>UHT</Text>
+            </View>
+          )}
+
+          {/* Event Info */}
+          <View style={styles.heroInfo}>
+            <Text style={styles.heroEventName} numberOfLines={2}>
+              {displayEvent.name || eventName || 'Event'}
+            </Text>
+
+            {/* Date Range */}
+            <View style={styles.heroMetaRow}>
+              <Text style={styles.heroMetaIcon}>{'📅'}</Text>
+              <Text style={styles.heroDateText}>
+                {formatDateRangeShort(displayEvent.start_date, displayEvent.end_date)}
+              </Text>
+            </View>
+
+            {/* Location */}
+            {(displayEvent.city || displayEvent.state) ? (
+              <View style={styles.heroMetaRow}>
+                <Text style={styles.heroMetaIcon}>{'📍'}</Text>
+                <Text style={styles.heroLocationText}>
+                  {[displayEvent.city, displayEvent.state].filter(Boolean).join(', ')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Status Badge */}
+        {displayEvent.status ? (
+          <View style={styles.heroStatusRow}>
+            <View
+              style={[
+                styles.heroStatusBadge,
+                { backgroundColor: getEventStatusColor(displayEvent.status) },
+              ]}
+            >
+              <Text style={styles.heroStatusText}>
+                {getEventStatusLabel(displayEvent.status)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
+  if (loading && !displayEvent) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -586,6 +744,101 @@ export default function EventDetailScreen({
     );
   }
 
+  // --- Render Info Tab ---
+  function renderInfoTab() {
+    return (
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.navy}
+            colors={[colors.navy]}
+          />
+        }
+      >
+        {/* Event Description */}
+        {displayEvent?.description ? (
+          <View style={styles.infoSection}>
+            <Text style={styles.infoSectionTitle}>About This Event</Text>
+            <View style={styles.infoCard}>
+              <Text style={styles.infoDescriptionText}>{displayEvent.description}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Locker Room Assignments */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoSectionTitle}>Locker Room Assignments</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.lockerRoomContent}>
+              <View style={styles.lockerRoomIconContainer}>
+                <Text style={styles.lockerRoomIcon}>{'🔒'}</Text>
+              </View>
+              <View style={styles.lockerRoomTextContainer}>
+                <View style={styles.lockerRoomHeaderRow}>
+                  <Text style={styles.lockerRoomTitle}>Locker Room Info</Text>
+                  <View style={styles.comingSoonBadge}>
+                    <Text style={styles.comingSoonBadgeText}>Coming Soon</Text>
+                  </View>
+                </View>
+                <Text style={styles.lockerRoomDescription}>
+                  Locker room assignments will be posted before event day
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Venues / Rinks */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoSectionTitle}>Venues & Rinks</Text>
+          {venues.length > 0 ? (
+            <View style={styles.infoCard}>
+              {venues.map((venue, idx) => (
+                <View
+                  key={venue}
+                  style={[
+                    styles.venueRow,
+                    idx < venues.length - 1 ? styles.venueRowBorder : null,
+                  ]}
+                >
+                  <Text style={styles.venueIcon}>{'🏟️'}</Text>
+                  <Text style={styles.venueName}>{venue}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoPlaceholderText}>
+                Venue information will be available once the schedule is published.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Hotels */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoSectionTitle}>Hotels</Text>
+          <View style={styles.infoCard}>
+            <View style={styles.lockerRoomContent}>
+              <View style={styles.lockerRoomIconContainer}>
+                <Text style={styles.lockerRoomIcon}>{'🏨'}</Text>
+              </View>
+              <View style={styles.lockerRoomTextContainer}>
+                <Text style={styles.lockerRoomTitle}>Hotel Information</Text>
+                <Text style={styles.lockerRoomDescription}>
+                  Hotel partner details and booking links will be available soon.
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -593,22 +846,11 @@ export default function EventDetailScreen({
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {event?.name || eventName || 'Event'}
+          {displayEvent?.name || eventName || 'Event'}
         </Text>
       </View>
 
-      {event ? (
-        <View style={styles.eventInfo}>
-          {event.city || event.state ? (
-            <Text style={styles.eventLocation}>
-              {[event.city, event.state].filter(Boolean).join(', ')}
-            </Text>
-          ) : null}
-          <Text style={styles.eventDates}>
-            {formatDateRange(event.start_date, event.end_date)}
-          </Text>
-        </View>
-      ) : null}
+      {renderHero()}
 
       {error ? (
         <View style={styles.errorBanner}>
@@ -636,7 +878,11 @@ export default function EventDetailScreen({
         ))}
       </View>
 
-      {activeTab === 'schedule' ? (
+      {loading && !displayEvent ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      ) : activeTab === 'schedule' ? (
         <FlatList
           data={schedule}
           keyExtractor={(item, index) => item.id || String(index)}
@@ -695,8 +941,10 @@ export default function EventDetailScreen({
         />
       ) : activeTab === 'scores' ? (
         renderScoresTab()
-      ) : (
+      ) : activeTab === 'standings' ? (
         renderStandingsTab()
+      ) : (
+        renderInfoTab()
       )}
     </SafeAreaView>
   );
@@ -732,24 +980,85 @@ const styles = StyleSheet.create({
     ...fonts.bold,
     flex: 1,
   },
-  eventInfo: {
+
+  // ===========================
+  // Hero Section
+  // ===========================
+  heroCard: {
+    backgroundColor: colors.navy,
     paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingVertical: spacing.lg,
   },
-  eventLocation: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    ...fonts.medium,
+  heroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
   },
-  eventDates: {
-    fontSize: 14,
-    color: colors.textMuted,
-    ...fonts.regular,
+  heroLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.md,
+    backgroundColor: colors.white,
+  },
+  heroLogoPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroLogoPlaceholderText: {
+    color: colors.cyan,
+    fontSize: 18,
+    ...fonts.extrabold,
+    letterSpacing: 1,
+  },
+  heroInfo: {
+    flex: 1,
+  },
+  heroEventName: {
+    fontSize: 20,
+    color: colors.white,
+    ...fonts.bold,
+    marginBottom: spacing.xs,
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     marginTop: spacing.xs,
   },
+  heroMetaIcon: {
+    fontSize: 14,
+  },
+  heroDateText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    ...fonts.medium,
+  },
+  heroLocationText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.85)',
+    ...fonts.medium,
+  },
+  heroStatusRow: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+  },
+  heroStatusBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+  },
+  heroStatusText: {
+    fontSize: 12,
+    color: colors.white,
+    ...fonts.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
   centerContent: {
     flex: 1,
     justifyContent: 'center',
@@ -1115,5 +1424,112 @@ const styles = StyleSheet.create({
   standingsDiffText: {
     ...fonts.semibold,
     fontSize: 11,
+  },
+
+  // ===========================
+  // Info Tab styles
+  // ===========================
+  infoSection: {
+    marginBottom: spacing.xxl,
+  },
+  infoSectionTitle: {
+    fontSize: 15,
+    color: colors.navy,
+    ...fonts.bold,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  infoCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  infoDescriptionText: {
+    fontSize: 15,
+    color: colors.text,
+    ...fonts.regular,
+    lineHeight: 23,
+  },
+  infoPlaceholderText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    ...fonts.regular,
+    lineHeight: 21,
+  },
+  lockerRoomContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  lockerRoomIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    backgroundColor: colors.bg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lockerRoomIcon: {
+    fontSize: 24,
+  },
+  lockerRoomTextContainer: {
+    flex: 1,
+  },
+  lockerRoomHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  lockerRoomTitle: {
+    fontSize: 15,
+    color: colors.text,
+    ...fonts.semibold,
+  },
+  comingSoonBadge: {
+    backgroundColor: colors.cyan,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  comingSoonBadgeText: {
+    fontSize: 10,
+    color: colors.white,
+    ...fonts.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  lockerRoomDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    lineHeight: 19,
+  },
+  venueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  venueRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  venueIcon: {
+    fontSize: 18,
+  },
+  venueName: {
+    fontSize: 15,
+    color: colors.text,
+    ...fonts.medium,
+    flex: 1,
   },
 });

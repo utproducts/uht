@@ -11,10 +11,12 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { signup } from '../services/auth';
 
 export default function SignUpScreen({ navigation }: { navigation: any }) {
+  const [role, setRole] = useState<'coach' | 'parent'>('parent');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -64,6 +66,7 @@ export default function SignUpScreen({ navigation }: { navigation: any }) {
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
         password,
+        role,
       });
 
       if (result.success) {
@@ -93,6 +96,44 @@ export default function SignUpScreen({ navigation }: { navigation: any }) {
           <Text style={styles.subtitle}>
             Sign up to follow your teams and stay updated.
           </Text>
+
+          <Text style={styles.roleLabel}>I am a...</Text>
+          <View style={styles.roleRow}>
+            <TouchableOpacity
+              style={[
+                styles.roleCard,
+                role === 'coach' ? styles.roleCardSelected : styles.roleCardUnselected,
+              ]}
+              onPress={() => setRole('coach')}
+              activeOpacity={0.8}
+            >
+              {role === 'coach' && (
+                <View style={styles.roleCheckmark}>
+                  <Ionicons name="checkmark" size={14} color="#ffffff" />
+                </View>
+              )}
+              <Ionicons name="clipboard-outline" size={32} color="#003e79" />
+              <Text style={styles.roleCardTitle}>Coach / Manager</Text>
+              <Text style={styles.roleCardSubtitle}>Create & manage teams</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.roleCard,
+                role === 'parent' ? styles.roleCardSelected : styles.roleCardUnselected,
+              ]}
+              onPress={() => setRole('parent')}
+              activeOpacity={0.8}
+            >
+              {role === 'parent' && (
+                <View style={styles.roleCheckmark}>
+                  <Ionicons name="checkmark" size={14} color="#ffffff" />
+                </View>
+              )}
+              <Ionicons name="people-outline" size={32} color="#003e79" />
+              <Text style={styles.roleCardTitle}>Parent / Player</Text>
+              <Text style={styles.roleCardSubtitle}>Follow teams & scores</Text>
+            </TouchableOpacity>
+          </View>
 
           {error ? (
             <View style={styles.errorBanner}>
@@ -252,8 +293,61 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textSecondary,
     ...fonts.regular,
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.lg,
     lineHeight: 22,
+  },
+  roleLabel: {
+    fontSize: 15,
+    color: '#1a1a2e',
+    ...fonts.semibold,
+    marginBottom: spacing.sm,
+  },
+  roleRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: spacing.xxl,
+  },
+  roleCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    position: 'relative',
+  },
+  roleCardSelected: {
+    borderColor: '#003e79',
+    backgroundColor: '#e6f9ff',
+  },
+  roleCardUnselected: {
+    borderColor: '#e0e2e8',
+    backgroundColor: '#ffffff',
+  },
+  roleCheckmark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#00ccff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleCardTitle: {
+    fontSize: 14,
+    color: '#1a1a2e',
+    ...fonts.semibold,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  roleCardSubtitle: {
+    fontSize: 12,
+    color: '#5a5e6e',
+    ...fonts.regular,
+    marginTop: 2,
+    textAlign: 'center',
   },
   errorBanner: {
     backgroundColor: colors.errorBg,

@@ -40,6 +40,7 @@ export async function signup(data: {
   email: string;
   phone: string;
   password: string;
+  role?: 'coach' | 'parent';
 }): Promise<{ success: boolean; token?: string; user?: User; error?: string }> {
   try {
     const nameParts = data.name.trim().split(/\s+/);
@@ -55,7 +56,7 @@ export async function signup(data: {
         email: data.email,
         phone: data.phone,
         password: data.password,
-        role: 'parent',
+        role: data.role || 'parent',
       }),
     });
     const json = await res.json();
