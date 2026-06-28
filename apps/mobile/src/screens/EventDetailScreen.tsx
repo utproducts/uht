@@ -1090,7 +1090,7 @@ export default function EventDetailScreen({
           eventVenues.map((venue) => (
             <View key={venue.venue_id} style={styles.venueCard}>
               <View style={styles.venueHeader}>
-                <Text style={styles.venueIcon}>{'🏟️'}</Text>
+                <Text style={styles.venueIcon}>{'🏒'}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.venueName}>{venue.venue_name}</Text>
                   {venue.address || venue.city || venue.state ? (
