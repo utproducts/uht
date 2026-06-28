@@ -6,6 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b26f3538-a6ef-485a-b9e1-b2fff20ac9b0"
+    },
     "splash": {
       "backgroundColor": "#003e79"
     },
