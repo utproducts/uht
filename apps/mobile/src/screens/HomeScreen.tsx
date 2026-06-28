@@ -106,7 +106,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         <View style={styles.heroContent}>
           <View style={styles.heroLeft}>
             <Image
-              source={require('../../../assets/icon.png')}
+              source={require('../../assets/icon.png')}
               style={styles.heroLogoImage}
               resizeMode="contain"
             />
