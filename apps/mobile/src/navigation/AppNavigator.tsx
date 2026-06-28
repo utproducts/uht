@@ -19,6 +19,7 @@ import EventDetailScreen from '../screens/EventDetailScreen';
 import MyTeamsScreen from '../screens/MyTeamsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import MenuScreen from '../screens/MenuScreen';
+import CreateTeamScreen from '../screens/CreateTeamScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -102,6 +103,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="EventDetail"
           component={EventDetailScreen}
+          options={{ headerShown: false, animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="CreateTeam"
+          component={CreateTeamScreen}
           options={{ headerShown: false, animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

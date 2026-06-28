@@ -284,32 +284,70 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyTitle}>No Teams Found</Text>
                   <Text style={styles.emptyText}>
-                    This organization doesn't have any active teams yet.
+                    This organization doesn't have any teams yet.
                   </Text>
                 </View>
               ) : null
+            }
+            ListFooterComponent={
+              <TouchableOpacity
+                style={styles.createTeamCard}
+                activeOpacity={0.7}
+                onPress={() =>
+                  (navigation as any).navigate('CreateTeam', {
+                    organizationId: selectedOrg?.id,
+                    organizationName: selectedOrg?.name,
+                    fromOnboarding: true,
+                  })
+                }
+              >
+                <View style={styles.createTeamIcon}>
+                  <Text style={{ fontSize: 24, color: colors.cyan }}>+</Text>
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text style={[styles.cardTitle, { color: colors.navy }]}>
+                    Create a New Team
+                  </Text>
+                  <Text style={styles.cardSubtitle}>
+                    Coach? Set up your team here
+                  </Text>
+                </View>
+              </TouchableOpacity>
             }
           />
         )}
 
         <View style={styles.bottomSection}>
-          <TouchableOpacity
-            style={[
-              styles.primaryButton,
-              selectedTeamIds.size === 0 ? styles.primaryButtonDisabled : null,
-            ]}
-            onPress={handleFollowSelected}
-            disabled={selectedTeamIds.size === 0 || saving}
-            activeOpacity={0.85}
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                Follow Selected Teams ({selectedTeamIds.size})
-              </Text>
-            )}
-          </TouchableOpacity>
+          {selectedTeamIds.size > 0 ? (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleFollowSelected}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              {saving ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  Follow Selected Teams ({selectedTeamIds.size})
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: colors.cyan }]}
+              onPress={() =>
+                (navigation as any).navigate('CreateTeam', {
+                  organizationId: selectedOrg?.id,
+                  organizationName: selectedOrg?.name,
+                  fromOnboarding: true,
+                })
+              }
+              activeOpacity={0.85}
+            >
+              <Text style={styles.primaryButtonText}>Create My Team</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -695,6 +733,28 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  createTeamCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.infoBg,
+    borderWidth: 2,
+    borderColor: colors.cyan,
+    borderStyle: 'dashed',
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  createTeamIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.cyan,
   },
   emptyState: {
     alignItems: 'center',

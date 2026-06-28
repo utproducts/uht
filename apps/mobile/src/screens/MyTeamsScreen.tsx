@@ -137,10 +137,10 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <TouchableOpacity
         style={styles.addButton}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate('FollowTeams')}
+        onPress={() => navigation.navigate('CreateTeam' as never, {} as never)}
       >
         <Ionicons name="add" size={18} color={colors.white} />
-        <Text style={styles.addButtonText}>Add Team</Text>
+        <Text style={styles.addButtonText}>Create Team</Text>
       </TouchableOpacity>
     );
   }

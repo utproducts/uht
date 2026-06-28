@@ -13,6 +13,7 @@ import {
   Linking,
   Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings } from '../services/api';
 
@@ -34,20 +35,20 @@ type TabKey =
 interface TabDef {
   key: TabKey;
   label: string;
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
 }
 
 const EVENT_TABS: TabDef[] = [
-  { key: 'info', label: 'Event Info', icon: 'ℹ️' },
-  { key: 'merchandise', label: 'Merchandise', icon: '🛍️' },
-  { key: 'my_schedule', label: 'My Schedule', icon: '📋' },
-  { key: 'game_center', label: 'Game Center', icon: '🏒' },
-  { key: 'updates', label: 'Event Updates', icon: '💬' },
-  { key: 'promotions', label: 'Promotions', icon: '⭐' },
-  { key: 'venues', label: 'Venues', icon: '🏟️' },
-  { key: 'lodging', label: 'Lodging', icon: '🏨' },
-  { key: 'whos_coming', label: "Who's Coming", icon: '👥' },
-  { key: 'contact', label: 'Contact', icon: '✉️' },
+  { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
+  { key: 'merchandise', label: 'Merchandise', icon: 'cart-outline' },
+  { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
+  { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
+  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
+  { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
+  { key: 'venues', label: 'Venues', icon: 'location-outline' },
+  { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
+  { key: 'whos_coming', label: "Who's Coming", icon: 'people-outline' },
+  { key: 'contact', label: 'Contact', icon: 'mail-outline' },
 ];
 
 // ==================
@@ -511,9 +512,11 @@ export default function EventDetailScreen({
                 onPress={() => setActiveTab(tab.key)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.tabIcon, isActive ? styles.tabIconActive : null]}>
-                  {tab.icon}
-                </Text>
+                <Ionicons
+                  name={tab.icon}
+                  size={22}
+                  color={isActive ? colors.navy : '#999999'}
+                />
                 <Text
                   style={[styles.tabLabel, isActive ? styles.tabLabelActive : null]}
                   numberOfLines={1}
@@ -661,7 +664,7 @@ export default function EventDetailScreen({
       >
         <View style={styles.merchandiseContainer}>
           <Image
-            source={require('../../assets/icon.png')}
+            source={require('../../assets/uht-logo.png')}
             style={styles.merchandiseLogo}
             resizeMode="contain"
           />
@@ -1352,12 +1355,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   tabIcon: {
-    fontSize: 20,
     marginBottom: 2,
-    opacity: 0.5,
-  },
-  tabIconActive: {
-    opacity: 1,
   },
   tabLabel: {
     fontSize: 11,

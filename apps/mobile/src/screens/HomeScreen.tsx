@@ -14,7 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getFollowedTeams, getEvents } from '../services/api';
-import { getUser } from '../services/auth';
+import { getUser, authFetch } from '../services/auth';
 
 interface FollowedTeam {
   id: string;
@@ -59,12 +59,38 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     if (!isRefresh) setLoading(true);
     try {
       const [teamData, eventData, user] = await Promise.all([
-        getFollowedTeams(),
+        getFollowedTeams().catch(() => []),
         getEvents(),
         getUser(),
       ]);
       if (user?.name) setUserName(user.name);
-      setTeams(teamData);
+
+      // Also fetch "my teams" (teams where user is coach/manager/creator)
+      let myTeamsData: FollowedTeam[] = [];
+      try {
+        const res = await authFetch('/api/teams/my-teams');
+        const json = await res.json() as { success: boolean; data?: any[] };
+        if (json.success && Array.isArray(json.data)) {
+          myTeamsData = json.data.map((t: any) => ({
+            id: t.id,
+            team_id: t.id,
+            team_name: t.name,
+            org_name: t.organization_name,
+            age_group: t.age_group,
+          }));
+        }
+      } catch {}
+
+      // Merge followed teams and my teams, dedup by team_id
+      const allTeams = [...(teamData || []), ...myTeamsData];
+      const seen = new Set<string>();
+      const uniqueTeams = allTeams.filter((t: FollowedTeam) => {
+        const key = t.team_id || t.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setTeams(uniqueTeams);
       // Show only upcoming events (next 3)
       const today = new Date().toISOString().split('T')[0];
       const upcoming = (eventData as Event[])
@@ -106,7 +132,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         <View style={styles.heroContent}>
           <View style={styles.heroLeft}>
             <Image
-              source={require('../../assets/icon.png')}
+              source={require('../../assets/uht-logo.png')}
               style={styles.heroLogoImage}
               resizeMode="contain"
             />
