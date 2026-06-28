@@ -40,14 +40,14 @@ interface TabDef {
 
 const EVENT_TABS: TabDef[] = [
   { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
-  { key: 'merchandise', label: 'Merchandise', icon: 'cart-outline' },
+  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
   { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
   { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
-  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
   { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
   { key: 'venues', label: 'Venues', icon: 'location-outline' },
   { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
   { key: 'whos_coming', label: "Who's Coming", icon: 'people-outline' },
+  { key: 'merchandise', label: 'Merchandise', icon: 'cart-outline' },
   { key: 'contact', label: 'Contact', icon: 'mail-outline' },
 ];
 
@@ -155,6 +155,7 @@ interface EventInfo {
   id: string;
   name: string;
   logo_url?: string;
+  banner_url?: string;
   city?: string;
   state?: string;
   start_date?: string;
@@ -466,14 +467,14 @@ export default function EventDetailScreen({
               {displayEvent.name || eventName || 'Event'}
             </Text>
             <View style={styles.heroMetaRow}>
-              <Text style={styles.heroMetaIcon}>{'📅'}</Text>
+              <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
               <Text style={styles.heroDateText}>
                 {formatDateRangeShort(displayEvent.start_date, displayEvent.end_date)}
               </Text>
             </View>
             {(displayEvent.city || displayEvent.state) ? (
               <View style={styles.heroMetaRow}>
-                <Text style={styles.heroMetaIcon}>{'📍'}</Text>
+                <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
                 <Text style={styles.heroLocationText}>
                   {[displayEvent.city, displayEvent.state].filter(Boolean).join(', ')}
                 </Text>
@@ -541,10 +542,21 @@ export default function EventDetailScreen({
         contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
+        {/* Banner Image */}
+        {displayEvent?.banner_url ? (
+          <Image source={{ uri: displayEvent.banner_url }} style={styles.infoBanner} resizeMode="cover" />
+        ) : null}
+
+        {/* 4-Game Guarantee badge */}
+        <View style={styles.guaranteeBadge}>
+          <Ionicons name="shield-checkmark" size={18} color={colors.navy} />
+          <Text style={styles.guaranteeText}>3-4 Game Guarantee</Text>
+        </View>
+
         {/* Stature */}
         <View style={styles.infoRow}>
           <View style={styles.infoIconBox}>
-            <Text style={styles.infoIconText}>{'📋'}</Text>
+            <Ionicons name="ribbon-outline" size={20} color={colors.navy} />
           </View>
           <View>
             <Text style={styles.infoRowLabel}>Stature</Text>
@@ -556,9 +568,9 @@ export default function EventDetailScreen({
         {displayEvent?.age_groups ? (
           <View style={styles.infoRow}>
             <View style={styles.infoIconBox}>
-              <Text style={styles.infoIconText}>{'🏒'}</Text>
+              <Ionicons name="people-circle-outline" size={20} color={colors.navy} />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.infoRowLabel}>Age Groups</Text>
               <Text style={styles.infoRowValue}>{displayEvent.age_groups}</Text>
             </View>
@@ -566,9 +578,9 @@ export default function EventDetailScreen({
         ) : eventDivisions.length > 0 ? (
           <View style={styles.infoRow}>
             <View style={styles.infoIconBox}>
-              <Text style={styles.infoIconText}>{'🏒'}</Text>
+              <Ionicons name="people-circle-outline" size={20} color={colors.navy} />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.infoRowLabel}>Age Groups</Text>
               <Text style={styles.infoRowValue}>
                 {[...new Set(eventDivisions.map(d => d.age_group))].join(', ')}
@@ -577,47 +589,42 @@ export default function EventDetailScreen({
           </View>
         ) : null}
 
-        {/* Event Lodging (collapsible) */}
-        <CollapsibleSection title="Event Lodging" icon="🏨">
-          {eventHotels.length > 0 ? (
-            eventHotels.map((hotel) => (
-              <View key={hotel.id} style={styles.hotelCard}>
-                <Text style={styles.hotelName}>{hotel.hotel_name}</Text>
-                {hotel.city || hotel.state ? (
-                  <Text style={styles.hotelLocation}>{[hotel.city, hotel.state].filter(Boolean).join(', ')}</Text>
+        {/* Venues section */}
+        {eventVenues.length > 0 ? (
+          <View style={styles.infoSection}>
+            <View style={styles.infoSectionHeader}>
+              <Ionicons name="location-outline" size={20} color={colors.navy} />
+              <Text style={styles.infoSectionTitle}>Venues</Text>
+            </View>
+            {eventVenues.map((venue) => (
+              <View key={venue.venue_id} style={styles.venueInfoCard}>
+                <Text style={styles.venueInfoName}>{venue.venue_name}</Text>
+                {venue.address || venue.city ? (
+                  <Text style={styles.venueInfoAddress}>
+                    {[venue.address, venue.city, venue.state].filter(Boolean).join(', ')}
+                  </Text>
                 ) : null}
-                {hotel.rate_description ? <Text style={styles.hotelRate}>{hotel.rate_description}</Text> : null}
-                {hotel.price_per_night ? (
-                  <Text style={styles.hotelPrice}>${(hotel.price_per_night / 100).toFixed(0)}/night</Text>
-                ) : null}
-                {hotel.booking_url ? (
-                  <TouchableOpacity onPress={() => Linking.openURL(hotel.booking_url!)} style={styles.hotelBookBtn}>
-                    <Text style={styles.hotelBookBtnText}>Book Now</Text>
-                  </TouchableOpacity>
+                {venue.rinks && venue.rinks.length > 0 ? (
+                  <View style={styles.rinkPillRow}>
+                    {venue.rinks.map((r) => (
+                      <View key={r.id} style={styles.rinkPill}>
+                        <Text style={styles.rinkPillText}>{r.name}</Text>
+                      </View>
+                    ))}
+                  </View>
                 ) : null}
               </View>
-            ))
-          ) : (
-            <Text style={styles.placeholderText}>Hotel information will be available closer to the event.</Text>
-          )}
-        </CollapsibleSection>
+            ))}
+          </View>
+        ) : null}
 
-        {/* Event Details (collapsible) */}
-        <CollapsibleSection title="Event Details" icon="📝">
-          {displayEvent?.description ? (
-            <Text style={styles.descriptionText}>{displayEvent.description}</Text>
-          ) : null}
-          {displayEvent?.information ? (
-            <Text style={styles.descriptionText}>{displayEvent.information}</Text>
-          ) : null}
-          {!displayEvent?.description && !displayEvent?.information ? (
-            <Text style={styles.placeholderText}>Event details will be posted soon.</Text>
-          ) : null}
-        </CollapsibleSection>
-
-        {/* Entry Fee (collapsible) */}
-        <CollapsibleSection title="Entry Fee" icon="💲">
-          {eventDivisions.length > 0 ? (
+        {/* Entry Fee section */}
+        <View style={styles.infoSection}>
+          <View style={styles.infoSectionHeader}>
+            <Ionicons name="pricetag-outline" size={20} color={colors.navy} />
+            <Text style={styles.infoSectionTitle}>Entry Fee</Text>
+          </View>
+          {eventDivisions.length > 0 && eventDivisions.some(d => d.price_cents && d.price_cents > 0) ? (
             eventDivisions.filter(d => d.price_cents && d.price_cents > 0).map((div) => (
               <View key={div.id} style={styles.feeRow}>
                 <Text style={styles.feeDivision}>{div.age_group} {div.division_level || ''}</Text>
@@ -625,20 +632,57 @@ export default function EventDetailScreen({
               </View>
             ))
           ) : displayEvent?.price_min_cents ? (
-            <Text style={styles.feeAmount}>
-              {displayEvent.price_min_cents === displayEvent.price_max_cents
-                ? `$${(displayEvent.price_min_cents / 100).toFixed(0)}`
-                : `$${(displayEvent.price_min_cents / 100).toFixed(0)} - $${((displayEvent.price_max_cents || displayEvent.price_min_cents) / 100).toFixed(0)}`}
-            </Text>
+            <View style={styles.feeRow}>
+              <Text style={styles.feeDivision}>Entry Fee</Text>
+              <Text style={styles.feeAmount}>
+                {displayEvent.price_min_cents === displayEvent.price_max_cents
+                  ? `$${(displayEvent.price_min_cents / 100).toFixed(0)}`
+                  : `$${(displayEvent.price_min_cents / 100).toFixed(0)} - $${((displayEvent.price_max_cents || displayEvent.price_min_cents) / 100).toFixed(0)}`}
+              </Text>
+            </View>
           ) : (
             <Text style={styles.placeholderText}>Pricing will be announced soon.</Text>
           )}
-        </CollapsibleSection>
+        </View>
+
+        {/* Event Details section */}
+        {(displayEvent?.description || displayEvent?.information) ? (
+          <View style={styles.infoSection}>
+            <View style={styles.infoSectionHeader}>
+              <Ionicons name="document-text-outline" size={20} color={colors.navy} />
+              <Text style={styles.infoSectionTitle}>Event Details</Text>
+            </View>
+            {displayEvent.description ? (
+              <Text style={styles.descriptionText}>{displayEvent.description}</Text>
+            ) : null}
+            {displayEvent.information ? (
+              <Text style={styles.descriptionText}>{displayEvent.information}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Hotels quick preview */}
+        {eventHotels.length > 0 ? (
+          <View style={styles.infoSection}>
+            <View style={styles.infoSectionHeader}>
+              <Ionicons name="bed-outline" size={20} color={colors.navy} />
+              <Text style={styles.infoSectionTitle}>Lodging ({eventHotels.length} hotels)</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => setActiveTab('lodging')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.viewAllBtnText}>View All Hotels</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.cyan} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* Locker Room */}
         <View style={styles.infoRow}>
           <View style={styles.infoIconBox}>
-            <Text style={styles.infoIconText}>{'🔒'}</Text>
+            <Ionicons name="lock-closed-outline" size={20} color={colors.navy} />
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -964,7 +1008,7 @@ export default function EventDetailScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>{'💬'}</Text>
+          <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>No Updates Yet</Text>
           <Text style={styles.emptyText}>
             Event updates, weather alerts, delays, and important announcements will appear here. Pull down to refresh.
@@ -983,7 +1027,7 @@ export default function EventDetailScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>{'⭐'}</Text>
+          <Ionicons name="star-outline" size={48} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>Promotions & Sponsors</Text>
           <Text style={styles.emptyText}>
             Sponsor deals, coupons, and special offers for this event will be posted here.
@@ -1041,7 +1085,7 @@ export default function EventDetailScreen({
           ))
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>{'🏟️'}</Text>
+            <Ionicons name="location-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>Venues Coming Soon</Text>
             <Text style={styles.emptyText}>Venue and rink information will be posted when the schedule is published.</Text>
           </View>
@@ -1089,7 +1133,7 @@ export default function EventDetailScreen({
           ))
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>{'🏨'}</Text>
+            <Ionicons name="bed-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>Lodging Information</Text>
             <Text style={styles.emptyText}>Hotel information and booking links will be available once lodging partners are confirmed.</Text>
           </View>
@@ -1114,7 +1158,7 @@ export default function EventDetailScreen({
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         >
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>{'👥'}</Text>
+            <Ionicons name="people-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>Coming Soon</Text>
             <Text style={styles.emptyText}>
               The team list for this event will be available 1 month prior to the event date. Check back closer to the event!
@@ -1148,7 +1192,7 @@ export default function EventDetailScreen({
           </>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>{'👥'}</Text>
+            <Ionicons name="people-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No Teams Yet</Text>
             <Text style={styles.emptyText}>Teams that have registered will appear here once approved.</Text>
           </View>
@@ -1273,7 +1317,7 @@ export default function EventDetailScreen({
 // ==================
 // Collapsible Section Component
 // ==================
-function CollapsibleSection({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function CollapsibleSection({ title, iconName, children }: { title: string; iconName: keyof typeof Ionicons.glyphMap; children: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <View style={styles.collapsibleContainer}>
@@ -1284,13 +1328,13 @@ function CollapsibleSection({ title, icon, children }: { title: string; icon: st
       >
         <View style={styles.collapsibleLeft}>
           <View style={styles.infoIconBox}>
-            <Text style={styles.infoIconText}>{icon}</Text>
+            <Ionicons name={iconName} size={18} color={colors.navy} />
           </View>
           <Text style={styles.collapsibleTitle}>{title}</Text>
         </View>
-        <Text style={styles.collapsibleChevron}>{expanded ? '▲' : '▼'}</Text>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
       </TouchableOpacity>
-      {expanded ? <View style={styles.collapsibleBody}>{children}</View> : null}
+      {expanded ? <View style={styles.collapsibleBody}>{children as any}</View> : null}
     </View>
   );
 }
@@ -1414,9 +1458,18 @@ const styles = StyleSheet.create({
   tabContent: { padding: spacing.lg, paddingBottom: 40 },
 
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: spacing.lg },
-  emptyIcon: { fontSize: 40, marginBottom: spacing.md },
-  emptyTitle: { fontSize: 18, color: colors.text, ...fonts.bold, marginBottom: spacing.sm, textAlign: 'center' },
+  emptyTitle: { fontSize: 18, color: colors.text, ...fonts.bold, marginBottom: spacing.sm, marginTop: spacing.md, textAlign: 'center' },
   emptyText: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, textAlign: 'center', lineHeight: 22 },
+
+  // Info Tab — banner + guarantee
+  infoBanner: { width: '100%', height: 180, borderRadius: radii.md, marginBottom: spacing.md },
+  guaranteeBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.highlight, borderRadius: radii.sm,
+    padding: spacing.md, marginBottom: spacing.md,
+    borderWidth: 1, borderColor: colors.cyan,
+  },
+  guaranteeText: { fontSize: 15, color: colors.navy, ...fonts.bold },
 
   // Info Tab rows
   infoRow: {
@@ -1434,10 +1487,39 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: radii.sm,
     backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center',
   },
-  infoIconText: { fontSize: 18 },
   infoRowLabel: { fontSize: 14, color: colors.text, ...fonts.bold },
   infoRowValue: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, marginTop: 2 },
   infoRowSub: { fontSize: 12, color: colors.textMuted, ...fonts.regular, marginTop: 2 },
+
+  // Info Tab — sections
+  infoSection: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  infoSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md,
+  },
+  infoSectionTitle: { fontSize: 16, color: colors.text, ...fonts.bold },
+  venueInfoCard: {
+    backgroundColor: colors.bg, borderRadius: radii.sm, padding: spacing.md, marginBottom: spacing.sm,
+  },
+  venueInfoName: { fontSize: 15, color: colors.text, ...fonts.semibold },
+  venueInfoAddress: { fontSize: 13, color: colors.textSecondary, ...fonts.regular, marginTop: 4 },
+  rinkPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  rinkPill: {
+    backgroundColor: colors.white, borderRadius: radii.full, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  rinkPillText: { fontSize: 11, color: colors.textSecondary, ...fonts.medium },
+  viewAllBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  viewAllBtnText: { fontSize: 14, color: colors.cyan, ...fonts.semibold },
   comingSoonBadge: {
     backgroundColor: colors.infoBg,
     paddingHorizontal: spacing.sm,
