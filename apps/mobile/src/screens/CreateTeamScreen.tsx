@@ -101,6 +101,7 @@ export default function CreateTeamScreen({
       if (user) {
         if (user.name && !coachName) setCoachName(user.name);
         if (user.email && !coachEmail) setCoachEmail(user.email);
+        if (user.phone && !coachPhone) setCoachPhone(user.phone);
       }
     })();
   }, []);
@@ -448,10 +449,10 @@ export default function CreateTeamScreen({
           <View style={styles.sectionDivider} />
           <Text style={styles.sectionTitle}>Head Coach Info</Text>
           <Text style={styles.sectionSubtitle}>
-            Auto-filled from your account. Edit if creating for another coach.
+            Auto-filled from your account. Edit if creating team for your head coach.
           </Text>
 
-          <Text style={styles.label}>Coach Name</Text>
+          <Text style={styles.label}>Head Coach Name</Text>
           <TextInput
             style={styles.input}
             value={coachName}
@@ -461,7 +462,7 @@ export default function CreateTeamScreen({
             autoCapitalize="words"
           />
 
-          <Text style={styles.label}>Coach Email</Text>
+          <Text style={styles.label}>Head Coach Email</Text>
           <TextInput
             style={styles.input}
             value={coachEmail}
@@ -472,7 +473,7 @@ export default function CreateTeamScreen({
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Coach Phone</Text>
+          <Text style={styles.label}>Head Coach Phone</Text>
           <TextInput
             style={styles.input}
             value={coachPhone}
