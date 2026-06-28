@@ -59,7 +59,7 @@ export async function getFollowedTeams() {
 // Events
 // ==================
 export async function getEvents() {
-  const res = await fetch('https://uht.chad-157.workers.dev/api/events');
+  const res = await fetch('https://uht.chad-157.workers.dev/api/events?per_page=100');
   const json = await res.json();
   return json.success ? json.data : [];
 }
