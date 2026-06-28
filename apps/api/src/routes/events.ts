@@ -178,10 +178,14 @@ eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
   // Get rinks for each venue
   const venuesWithRinks = [];
   for (const venue of eventVenues.results as any[]) {
-    const rinks = await db.prepare(`
-      SELECT id, name, surface_type FROM rinks WHERE venue_id = ? AND is_active = 1 ORDER BY name ASC
-    `).bind(venue.venue_id).all();
-    venuesWithRinks.push({ ...venue, rinks: rinks.results });
+    let rinkResults: any[] = [];
+    try {
+      const rinks = await db.prepare(`
+        SELECT id, name, surface_size FROM venue_rinks WHERE venue_id = ? ORDER BY name ASC
+      `).bind(venue.venue_id).all();
+      rinkResults = rinks.results as any[];
+    } catch (_) { /* table may not exist */ }
+    venuesWithRinks.push({ ...venue, rinks: rinkResults });
   }
 
   // Get event hotels
