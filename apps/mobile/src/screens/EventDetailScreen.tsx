@@ -12,10 +12,12 @@ import {
   Image,
   Linking,
   Dimensions,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings } from '../services/api';
+import { getUser, User } from '../services/auth';
 
 // ==================
 // Tab configuration matching USSSA layout
@@ -154,6 +156,7 @@ interface EventDivision {
 interface EventInfo {
   id: string;
   name: string;
+  slug?: string;
   logo_url?: string;
   banner_url?: string;
   city?: string;
@@ -216,9 +219,11 @@ export default function EventDetailScreen({
   const [error, setError] = useState('');
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [standingsLoaded, setStandingsLoaded] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
     loadData();
+    getUser().then(u => setCurrentUser(u));
   }, [eventId]);
 
   useEffect(() => {
@@ -552,6 +557,42 @@ export default function EventDetailScreen({
           <Ionicons name="shield-checkmark" size={18} color={colors.navy} />
           <Text style={styles.guaranteeText}>3-4 Game Guarantee</Text>
         </View>
+
+        {/* Register / Share CTA */}
+        {currentUser && (
+          <View style={styles.ctaContainer}>
+            {currentUser.roles?.some(r => ['coach', 'manager', 'admin', 'tournament_director'].includes(r)) ? (
+              <TouchableOpacity
+                style={styles.registerBtn}
+                activeOpacity={0.7}
+                onPress={() => {
+                  const slug = displayEvent?.slug || displayEvent?.id || eventId;
+                  Linking.openURL(`https://uht-web.pages.dev/events/${slug}`);
+                }}
+              >
+                <Ionicons name="clipboard-outline" size={20} color={colors.white} />
+                <Text style={styles.registerBtnText}>Register Now</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.shareCoachBtn}
+                activeOpacity={0.7}
+                onPress={async () => {
+                  const slug = displayEvent?.slug || displayEvent?.id || eventId;
+                  const eventName = displayEvent?.name || 'this tournament';
+                  try {
+                    await Share.share({
+                      message: `Hey Coach! Check out ${eventName} on UHT and register our team: https://uht-web.pages.dev/events/${slug}`,
+                    });
+                  } catch {}
+                }}
+              >
+                <Ionicons name="share-outline" size={20} color={colors.navy} />
+                <Text style={styles.shareCoachBtnText}>Share with Coach</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Stature */}
         <View style={styles.infoRow}>
@@ -1470,6 +1511,43 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.cyan,
   },
   guaranteeText: { fontSize: 15, color: colors.navy, ...fonts.bold },
+
+  // Register / Share CTA
+  ctaContainer: {
+    marginBottom: spacing.md,
+  },
+  registerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  registerBtnText: {
+    color: colors.white,
+    fontSize: 17,
+    ...fonts.bold,
+  },
+  shareCoachBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.highlight,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.navy,
+  },
+  shareCoachBtnText: {
+    color: colors.navy,
+    fontSize: 17,
+    ...fonts.bold,
+  },
 
   // Info Tab rows
   infoRow: {
