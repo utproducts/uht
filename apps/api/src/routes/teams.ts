@@ -642,7 +642,7 @@ teamRoutes.get('/by-org/:orgId', async (c) => {
            o.name as organization_name
     FROM teams t
     LEFT JOIN organizations o ON o.id = t.organization_id
-    WHERE t.organization_id = ? AND t.is_active = 1
+    WHERE t.organization_id = ? AND t.is_active = 1 AND t.created_by IS NOT NULL
     ORDER BY t.age_group ASC, t.name ASC
   `).bind(orgId).all();
 
@@ -662,7 +662,7 @@ teamRoutes.get('/search', async (c) => {
            o.name as organization_name
     FROM teams t
     LEFT JOIN organizations o ON o.id = t.organization_id
-    WHERE t.is_active = 1 AND LOWER(t.name) LIKE LOWER(?)
+    WHERE t.is_active = 1 AND t.created_by IS NOT NULL AND LOWER(t.name) LIKE LOWER(?)
     ORDER BY
       CASE WHEN LOWER(t.name) = LOWER(?) THEN 0
            WHEN LOWER(t.name) LIKE LOWER(?) THEN 1
