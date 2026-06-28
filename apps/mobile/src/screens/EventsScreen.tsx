@@ -32,6 +32,30 @@ interface UHTEvent {
 
 type TabKey = 'upcoming' | 'past';
 
+const STATE_ABBREV_TO_NAME: Record<string, string> = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+  CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
+  HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland',
+  MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri',
+  MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio',
+  OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+  SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+  VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+};
+
+function normalizeState(raw: string): string {
+  const trimmed = raw.trim();
+  const upper = trimmed.toUpperCase();
+  // If it's a 2-letter abbreviation, convert to full name
+  if (upper.length === 2 && STATE_ABBREV_TO_NAME[upper]) {
+    return STATE_ABBREV_TO_NAME[upper];
+  }
+  // Otherwise return as-is with title case
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
 function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
@@ -112,7 +136,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
     const states = new Set<string>();
     allEvents.forEach((e) => {
       if (e.state && e.state.trim()) {
-        states.add(e.state.trim().toUpperCase());
+        states.add(normalizeState(e.state));
       }
     });
     return Array.from(states).sort();
@@ -123,7 +147,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
     return source.filter((e) => {
       // State filter
       if (selectedState !== 'All') {
-        const eventState = e.state ? e.state.trim().toUpperCase() : '';
+        const eventState = e.state ? normalizeState(e.state) : '';
         if (eventState !== selectedState) return false;
       }
       // Search filter
