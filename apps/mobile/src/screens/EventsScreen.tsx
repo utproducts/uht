@@ -1,54 +1,71 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  Image,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
+import ScreenHeader from '../components/ScreenHeader';
 import { getEvents } from '../services/api';
 
 interface UHTEvent {
   id: string;
   name: string;
+  slug?: string;
   city?: string;
   state?: string;
   start_date?: string;
   end_date?: string;
+  logo_url?: string;
   status?: string;
 }
 
+type TabKey = 'upcoming' | 'past';
+
+function formatDateRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (start.getMonth() === end.getMonth()) {
+    return `${months[start.getMonth()]} ${start.getDate()} - ${end.getDate()}`;
+  }
+  return `${months[start.getMonth()]} ${start.getDate()} - ${months[end.getMonth()]} ${end.getDate()}`;
+}
+
+async function shareEvent(event: UHTEvent) {
+  await Share.share({
+    message: `Check out ${event.name} at Ultimate Tournaments!\nhttps://ultimatetournaments.com/events/${event.slug}`,
+  });
+}
+
 export default function EventsScreen({ navigation }: { navigation: any }) {
-  const [events, setEvents] = useState<UHTEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<UHTEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<TabKey>('upcoming');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadEvents = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     setError('');
     try {
       const data = await getEvents();
-      // Sort by start_date ascending (upcoming first)
       const sorted = [...data].sort((a: UHTEvent, b: UHTEvent) => {
         const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
         const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
         return dateA - dateB;
       });
-      // Filter to upcoming events (start_date >= today)
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      const upcoming = sorted.filter((e) => {
-        if (!e.start_date) return true;
-        return new Date(e.start_date) >= now;
-      });
-      // If no upcoming, show all sorted
-      setEvents(upcoming.length > 0 ? upcoming : sorted);
+      setAllEvents(sorted);
     } catch {
       setError('Failed to load events. Pull to refresh.');
     } finally {
@@ -63,74 +80,123 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
     }, [loadEvents]),
   );
 
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const upcomingEvents = useMemo(
+    () =>
+      allEvents.filter((e) => {
+        if (!e.end_date) return true;
+        return new Date(e.end_date + 'T00:00:00') >= today;
+      }),
+    [allEvents, today],
+  );
+
+  const pastEvents = useMemo(
+    () =>
+      allEvents
+        .filter((e) => {
+          if (!e.end_date) return false;
+          return new Date(e.end_date + 'T00:00:00') < today;
+        })
+        .reverse(),
+    [allEvents, today],
+  );
+
+  const displayedEvents = useMemo(() => {
+    const source = activeTab === 'upcoming' ? upcomingEvents : pastEvents;
+    if (!searchQuery.trim()) return source;
+    const q = searchQuery.toLowerCase();
+    return source.filter((e) => e.name.toLowerCase().includes(q));
+  }, [activeTab, upcomingEvents, pastEvents, searchQuery]);
+
   function handleRefresh() {
     setRefreshing(true);
     loadEvents(true);
   }
 
-  function formatDateRange(startDate?: string, endDate?: string): string {
-    if (!startDate) return 'Dates TBD';
-    try {
-      const start = new Date(startDate);
-      const opts: Intl.DateTimeFormatOptions = {
-        month: 'short',
-        day: 'numeric',
-      };
-      const startStr = start.toLocaleDateString('en-US', opts);
-
-      if (!endDate) return startStr;
-
-      const end = new Date(endDate);
-      const endStr = end.toLocaleDateString('en-US', {
-        ...opts,
-        year: 'numeric',
-      });
-
-      if (start.getMonth() === end.getMonth()) {
-        return `${startStr} - ${end.getDate()}, ${end.getFullYear()}`;
-      }
-      return `${startStr} - ${endStr}`;
-    } catch {
-      return startDate;
+  function renderEventLogo(event: UHTEvent) {
+    if (event.logo_url) {
+      return (
+        <Image
+          source={{ uri: event.logo_url }}
+          style={styles.eventLogo}
+          resizeMode="cover"
+        />
+      );
     }
+    return (
+      <View style={styles.eventLogoPlaceholder}>
+        <Text style={styles.eventLogoText}>UHT</Text>
+      </View>
+    );
   }
 
-  function getStatusStyle(status?: string) {
-    switch (status?.toLowerCase()) {
-      case 'open':
-      case 'registration_open':
-        return { bg: colors.successBg, text: colors.success, label: 'Open' };
-      case 'sold_out':
-        return { bg: colors.errorBg, text: colors.error, label: 'Sold Out' };
-      case 'closed':
-      case 'registration_closed':
-        return { bg: colors.warningBg, text: colors.warning, label: 'Closed' };
-      case 'completed':
-        return { bg: colors.infoBg, text: colors.info, label: 'Completed' };
-      default:
-        return status
-          ? { bg: colors.infoBg, text: colors.info, label: status }
-          : null;
-    }
+  function renderTab(tab: TabKey, label: string, icon: string) {
+    const isActive = activeTab === tab;
+    return (
+      <TouchableOpacity
+        key={tab}
+        style={[styles.tab, isActive && styles.tabActive]}
+        onPress={() => setActiveTab(tab)}
+        activeOpacity={0.7}
+      >
+        <Ionicons
+          name={icon as any}
+          size={18}
+          color={isActive ? colors.navy : colors.textMuted}
+          style={styles.tabIcon}
+        />
+        <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
   }
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Events</Text>
-        </View>
+      <View style={styles.container}>
+        <ScreenHeader title="Events" />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Events</Text>
+    <View style={styles.container}>
+      <ScreenHeader title="Events" />
+
+      {/* Tab bar */}
+      <View style={styles.tabBar}>
+        {renderTab('upcoming', 'Upcoming', 'calendar-outline')}
+        {renderTab('past', 'Past Events', 'time-outline')}
+      </View>
+
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={18} color={colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search events..."
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+              <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {error ? (
@@ -140,7 +206,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
       ) : null}
 
       <FlatList
-        data={events}
+        data={displayedEvents}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
@@ -151,51 +217,79 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
             colors={[colors.navy]}
           />
         }
-        renderItem={({ item }) => {
-          const statusInfo = getStatusStyle(item.status);
-          return (
-            <TouchableOpacity
-              style={styles.eventCard}
-              onPress={() =>
-                navigation.navigate('EventDetail', { eventId: item.id, eventName: item.name })
-              }
-              activeOpacity={0.7}
-            >
-              <View style={styles.eventCardHeader}>
-                <Text style={styles.eventName}>{item.name}</Text>
-                {statusInfo ? (
-                  <View
-                    style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}
-                  >
-                    <Text style={[styles.statusText, { color: statusInfo.text }]}>
-                      {statusInfo.label}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.eventCard}
+            onPress={() =>
+              navigation.navigate('EventDetail', {
+                eventId: item.id,
+                eventName: item.name,
+              })
+            }
+            activeOpacity={0.7}
+          >
+            <View style={styles.eventCardRow}>
+              {renderEventLogo(item)}
+
+              <View style={styles.eventInfo}>
+                <Text style={styles.eventName} numberOfLines={2}>
+                  {item.name}
+                </Text>
+                <Text style={styles.eventDates}>
+                  {item.start_date && item.end_date
+                    ? formatDateRange(item.start_date, item.end_date)
+                    : 'Dates TBD'}
+                </Text>
+                {(item.city || item.state) && (
+                  <View style={styles.locationRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={14}
+                      color={colors.textMuted}
+                    />
+                    <Text style={styles.eventLocation}>
+                      {[item.city, item.state].filter(Boolean).join(', ')}
                     </Text>
                   </View>
-                ) : null}
+                )}
               </View>
 
-              {item.city || item.state ? (
-                <Text style={styles.eventLocation}>
-                  {[item.city, item.state].filter(Boolean).join(', ')}
-                </Text>
-              ) : null}
-
-              <Text style={styles.eventDates}>
-                {formatDateRange(item.start_date, item.end_date)}
-              </Text>
-            </TouchableOpacity>
-          );
-        }}
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={() => shareEvent(item)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="share-outline" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No Events</Text>
+            <Ionicons
+              name={activeTab === 'upcoming' ? 'calendar-outline' : 'time-outline'}
+              size={48}
+              color={colors.textMuted}
+            />
+            <Text style={styles.emptyTitle}>
+              {searchQuery
+                ? 'No Matching Events'
+                : activeTab === 'upcoming'
+                ? 'No Upcoming Events'
+                : 'No Past Events'}
+            </Text>
             <Text style={styles.emptyText}>
-              There are no upcoming events at this time. Check back soon.
+              {searchQuery
+                ? `No events found matching "${searchQuery}".`
+                : activeTab === 'upcoming'
+                ? 'There are no upcoming events at this time. Check back soon!'
+                : 'No past events to display.'}
             </Text>
           </View>
         }
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -204,28 +298,74 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  header: {
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTitle: {
-    fontSize: 28,
-    color: colors.text,
-    ...fonts.bold,
-  },
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Tabs
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: colors.navy,
+  },
+  tabIcon: {
+    marginRight: spacing.xs,
+  },
+  tabLabel: {
+    fontSize: 14,
+    color: colors.textMuted,
+    ...fonts.medium,
+  },
+  tabLabelActive: {
+    color: colors.navy,
+    ...fonts.bold,
+  },
+
+  // Search
+  searchContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.bg,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    marginLeft: spacing.sm,
+    paddingVertical: spacing.xs,
+    ...fonts.regular,
+  },
+
+  // Error
   errorBanner: {
     backgroundColor: colors.errorBg,
     padding: spacing.md,
-    marginHorizontal: spacing.xxl,
-    marginTop: spacing.md,
+    marginHorizontal: spacing.lg,
     borderRadius: radii.sm,
   },
   errorBannerText: {
@@ -233,10 +373,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     ...fonts.medium,
   },
+
+  // List
   listContent: {
-    padding: spacing.xxl,
+    padding: spacing.lg,
     paddingBottom: 40,
   },
+
+  // Event card
   eventCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -250,49 +394,71 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  eventCardHeader: {
+  eventCardRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  eventLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: radii.sm,
+  },
+  eventLogoPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: radii.sm,
+    backgroundColor: colors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventLogoText: {
+    color: colors.white,
+    fontSize: 16,
+    ...fonts.bold,
+  },
+  eventInfo: {
+    flex: 1,
+    marginLeft: spacing.md,
   },
   eventName: {
-    fontSize: 17,
+    fontSize: 16,
     color: colors.text,
     ...fonts.bold,
-    flex: 1,
-  },
-  statusBadge: {
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  statusText: {
-    fontSize: 12,
-    ...fonts.semibold,
-  },
-  eventLocation: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   eventDates: {
-    fontSize: 14,
-    color: colors.textMuted,
+    fontSize: 13,
+    color: colors.textSecondary,
     ...fonts.medium,
-    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
   },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventLocation: {
+    fontSize: 13,
+    color: colors.textMuted,
+    ...fonts.regular,
+    marginLeft: 4,
+  },
+  shareButton: {
+    padding: spacing.sm,
+    marginLeft: spacing.sm,
+  },
+
+  // Empty state
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
     paddingHorizontal: spacing.lg,
   },
   emptyTitle: {
-    fontSize: 22,
+    fontSize: 20,
     color: colors.text,
     ...fonts.bold,
-    marginBottom: spacing.md,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptyText: {
     fontSize: 15,

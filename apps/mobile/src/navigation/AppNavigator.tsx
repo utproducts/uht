@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
 import { registerForPushNotifications } from '../services/notifications';
@@ -15,37 +16,49 @@ import FollowTeamsScreen from '../screens/FollowTeamsScreen';
 import HomeScreen from '../screens/HomeScreen';
 import EventsScreen from '../screens/EventsScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
-import AlertsScreen from '../screens/AlertsScreen';
-import TeamsScreen from '../screens/TeamsScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import MyTeamsScreen from '../screens/MyTeamsScreen';
+import ShopScreen from '../screens/ShopScreen';
+import MenuScreen from '../screens/MenuScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Bottom tab navigator — text only, no icons
+const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
+  Home: { active: 'home', inactive: 'home-outline' },
+  Events: { active: 'calendar', inactive: 'calendar-outline' },
+  'My Teams': { active: 'people', inactive: 'people-outline' },
+  Shop: { active: 'cart', inactive: 'cart-outline' },
+  Menu: { active: 'menu', inactive: 'menu-outline' },
+};
+
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: () => null,
-        tabBarLabel: ({ focused }) => (
-          <Text style={[
-            styles.tabLabel,
-            focused ? styles.tabLabelActive : styles.tabLabelInactive,
-          ]}>
-            {route.name}
-          </Text>
-        ),
+        tabBarIcon: ({ focused, size }) => {
+          const icons = TAB_ICONS[route.name];
+          const iconName = focused ? icons.active : icons.inactive;
+          return (
+            <Ionicons
+              name={iconName}
+              size={22}
+              color={focused ? colors.navy : colors.tabInactive}
+            />
+          );
+        },
+        tabBarActiveTintColor: colors.navy,
+        tabBarInactiveTintColor: colors.tabInactive,
+        tabBarLabelStyle: styles.tabLabel,
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Events" component={EventsScreen} />
-      <Tab.Screen name="Alerts" component={AlertsScreen} />
-      <Tab.Screen name="Teams" component={TeamsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="My Teams" component={MyTeamsScreen} />
+      <Tab.Screen name="Shop" component={ShopScreen} />
+      <Tab.Screen name="Menu" component={MenuScreen} />
     </Tab.Navigator>
   );
 }
@@ -60,7 +73,6 @@ export default function AppNavigator() {
         const token = await getToken();
         if (token) {
           setInitialRoute('Main');
-          // Register for push notifications when user is already logged in
           registerForPushNotifications();
         }
       } catch {}
@@ -108,24 +120,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    height: 56,
-    paddingBottom: 6,
+    height: Platform.OS === 'ios' ? 88 : 64,
     paddingTop: 6,
-    elevation: 0,
-    shadowOpacity: 0,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
   tabItem: {
     paddingTop: 0,
   },
   tabLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
-    textAlign: 'center',
-  },
-  tabLabelActive: {
-    color: colors.navy,
-  },
-  tabLabelInactive: {
-    color: colors.textMuted,
+    marginTop: 2,
   },
 });
