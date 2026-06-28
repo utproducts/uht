@@ -96,3 +96,21 @@ export async function getEventStandings(eventId: string) {
   const json = await res.json() as { success: boolean; data?: unknown[] };
   return json.success ? json.data : [];
 }
+
+// ==================
+// Event Hotels
+// ==================
+export async function getEventHotels(eventId: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/event-hotels/${eventId}`);
+  const json = await res.json() as { success: boolean; data?: unknown[] };
+  return json.success ? json.data : [];
+}
+
+// ==================
+// Event Divisions (for pricing display)
+// ==================
+export async function getEventDivisions(eventId: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/event-divisions/${eventId}`);
+  const json = await res.json() as { success: boolean; data?: unknown[] };
+  return json.success ? json.data : [];
+}

@@ -184,12 +184,53 @@ eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
     venuesWithRinks.push({ ...venue, rinks: rinks.results });
   }
 
+  // Get event hotels
+  let eventHotels: any[] = [];
+  try {
+    const hotels = await db.prepare(`
+      SELECT id, hotel_name, city, state, rate_description, booking_url, price_per_night, image_url
+      FROM event_hotels WHERE event_id = ? AND is_active = 1
+      ORDER BY sort_order ASC, hotel_name ASC
+    `).bind((event as any).id).all();
+    eventHotels = hotels.results as any[];
+  } catch (_) { /* table may not exist */ }
+
+  // Get registered teams count (for Who's Coming)
+  let registeredTeams: any[] = [];
+  try {
+    const regs = await db.prepare(`
+      SELECT t.name as team_name, t.city, t.state, o.name as org_name, ed.age_group, ed.division_level
+      FROM registrations r
+      JOIN teams t ON t.id = r.team_id
+      LEFT JOIN organizations o ON o.id = t.organization_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      WHERE r.event_id = ? AND r.status = 'approved'
+      ORDER BY ed.age_group ASC, t.name ASC
+    `).bind((event as any).id).all();
+    registeredTeams = regs.results as any[];
+  } catch (_) { /* fallback */ }
+
+  // Also try event_registrations table for legacy data
+  if (registeredTeams.length === 0) {
+    try {
+      const legacyRegs = await db.prepare(`
+        SELECT team_name, city, state, age_group, division_level
+        FROM event_registrations
+        WHERE event_id = ? AND status = 'approved'
+        ORDER BY age_group ASC, team_name ASC
+      `).bind((event as any).id).all();
+      registeredTeams = legacyRegs.results as any[];
+    } catch (_) { /* table may not exist */ }
+  }
+
   return c.json({
     success: true,
     data: {
       ...event,
       divisions: divisions.results,
       venues: venuesWithRinks,
+      hotels: eventHotels,
+      registered_teams: registeredTeams,
     },
   });
 });

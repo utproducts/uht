@@ -10,12 +10,49 @@ import {
   RefreshControl,
   ScrollView,
   Image,
+  Linking,
+  Dimensions,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings } from '../services/api';
 
-type TabKey = 'schedule' | 'scores' | 'standings' | 'info';
+// ==================
+// Tab configuration matching USSSA layout
+// ==================
+type TabKey =
+  | 'info'
+  | 'merchandise'
+  | 'my_schedule'
+  | 'game_center'
+  | 'updates'
+  | 'promotions'
+  | 'venues'
+  | 'lodging'
+  | 'whos_coming'
+  | 'contact';
 
+interface TabDef {
+  key: TabKey;
+  label: string;
+  icon: string;
+}
+
+const EVENT_TABS: TabDef[] = [
+  { key: 'info', label: 'Event Info', icon: 'ℹ️' },
+  { key: 'merchandise', label: 'Merchandise', icon: '🛍️' },
+  { key: 'my_schedule', label: 'My Schedule', icon: '📋' },
+  { key: 'game_center', label: 'Game Center', icon: '🏒' },
+  { key: 'updates', label: 'Event Updates', icon: '💬' },
+  { key: 'promotions', label: 'Promotions', icon: '⭐' },
+  { key: 'venues', label: 'Venues', icon: '🏟️' },
+  { key: 'lodging', label: 'Lodging', icon: '🏨' },
+  { key: 'whos_coming', label: "Who's Coming", icon: '👥' },
+  { key: 'contact', label: 'Contact', icon: '✉️' },
+];
+
+// ==================
+// Interfaces
+// ==================
 interface GameSlot {
   id: string;
   time?: string;
@@ -79,7 +116,38 @@ interface EventVenue {
   address?: string;
   city?: string;
   state?: string;
+  zip?: string;
   rinks?: VenueRink[];
+}
+
+interface EventHotel {
+  id: string;
+  hotel_name: string;
+  city?: string;
+  state?: string;
+  rate_description?: string;
+  booking_url?: string;
+  price_per_night?: number;
+  image_url?: string;
+}
+
+interface RegisteredTeam {
+  team_name: string;
+  city?: string;
+  state?: string;
+  org_name?: string;
+  age_group?: string;
+  division_level?: string;
+}
+
+interface EventDivision {
+  id: string;
+  age_group: string;
+  division_level?: string;
+  price_cents?: number;
+  game_format?: string;
+  period_length_minutes?: number;
+  num_periods?: number;
 }
 
 interface EventInfo {
@@ -91,8 +159,15 @@ interface EventInfo {
   start_date?: string;
   end_date?: string;
   description?: string;
+  information?: string;
   status?: string;
+  age_groups?: string;
   venues?: EventVenue[];
+  hotels?: EventHotel[];
+  registered_teams?: RegisteredTeam[];
+  divisions?: EventDivision[];
+  price_min_cents?: number;
+  price_max_cents?: number;
 }
 
 interface NavEventParam {
@@ -113,7 +188,7 @@ export default function EventDetailScreen({
   navigation: any;
 }) {
   const { eventId, eventName, event: navEvent } = route.params || {};
-  const [activeTab, setActiveTab] = useState<TabKey>('schedule');
+  const [activeTab, setActiveTab] = useState<TabKey>('info');
   const [event, setEvent] = useState<EventInfo | null>(
     navEvent
       ? {
@@ -145,9 +220,10 @@ export default function EventDetailScreen({
   }, [eventId]);
 
   useEffect(() => {
-    if (activeTab === 'scores' && !scoresLoaded) {
+    if (activeTab === 'game_center' && !scoresLoaded) {
       loadScores();
-    } else if (activeTab === 'standings' && !standingsLoaded) {
+    }
+    if (activeTab === 'game_center' && !standingsLoaded) {
       loadStandings();
     }
   }, [activeTab]);
@@ -200,62 +276,30 @@ export default function EventDetailScreen({
 
   function handleRefresh() {
     setRefreshing(true);
-    if (activeTab === 'schedule') {
-      loadData(true);
-    } else if (activeTab === 'scores') {
+    loadData(true);
+    if (scoresLoaded) {
       setScoresLoaded(false);
-      loadScores().then(() => setRefreshing(false));
-    } else if (activeTab === 'standings') {
+      loadScores();
+    }
+    if (standingsLoaded) {
       setStandingsLoaded(false);
-      loadStandings().then(() => setRefreshing(false));
-    } else {
-      // Info tab - refresh event data
-      loadData(true);
+      loadStandings();
     }
   }
 
-  function formatDateRange(startDate?: string, endDate?: string): string {
-    if (!startDate) return 'Dates TBD';
-    try {
-      const start = new Date(startDate);
-      const opts: Intl.DateTimeFormatOptions = {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      };
-      const startStr = start.toLocaleDateString('en-US', opts);
-
-      if (!endDate) return startStr;
-
-      const end = new Date(endDate);
-      const endStr = end.toLocaleDateString('en-US', opts);
-
-      return `${startStr} - ${endStr}`;
-    } catch {
-      return startDate;
-    }
-  }
-
+  // ==================
+  // Date Helpers
+  // ==================
   function formatDateRangeShort(startDate?: string, endDate?: string): string {
     if (!startDate) return 'Dates TBD';
     try {
       const start = new Date(startDate);
-      const shortOpts: Intl.DateTimeFormatOptions = {
-        month: 'short',
-        day: 'numeric',
-      };
+      const shortOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
       const startStr = start.toLocaleDateString('en-US', shortOpts);
-
       if (!endDate) return startStr;
-
       const end = new Date(endDate);
-      const yearOpts: Intl.DateTimeFormatOptions = {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      };
+      const yearOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
       const endStr = end.toLocaleDateString('en-US', yearOpts);
-
       return `${startStr} - ${endStr}`;
     } catch {
       return startDate;
@@ -268,20 +312,14 @@ export default function EventDetailScreen({
     if (date) {
       try {
         const d = new Date(date);
-        parts.push(
-          d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
-        );
+        parts.push(d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
       } catch {
         parts.push(date);
       }
     }
-    if (time) {
-      parts.push(time);
-    }
+    if (time) parts.push(time);
     return parts.join(' at ');
   }
-
-  // --- Scores helpers ---
 
   function formatScoreTime(startTime?: string): string {
     if (!startTime) return 'TBD';
@@ -306,8 +344,7 @@ export default function EventDetailScreen({
   function getDateKey(startTime?: string): string {
     if (!startTime) return 'TBD';
     try {
-      const d = new Date(startTime);
-      return d.toISOString().split('T')[0];
+      return new Date(startTime).toISOString().split('T')[0];
     } catch {
       return 'TBD';
     }
@@ -362,6 +399,15 @@ export default function EventDetailScreen({
     }
   }
 
+  // ==================
+  // Derived data
+  // ==================
+  const displayEvent = event;
+  const eventVenues: EventVenue[] = displayEvent?.venues || [];
+  const eventHotels: EventHotel[] = displayEvent?.hotels || [];
+  const registeredTeams: RegisteredTeam[] = displayEvent?.registered_teams || [];
+  const eventDivisions: EventDivision[] = (displayEvent?.divisions || []) as EventDivision[];
+
   // Group scores by date
   const scoresByDate = scores.reduce<Record<string, ScoreGame[]>>((acc, game) => {
     const key = getDateKey(game.start_time);
@@ -369,26 +415,18 @@ export default function EventDetailScreen({
     acc[key].push(game);
     return acc;
   }, {});
-
   const sortedDateKeys = Object.keys(scoresByDate).sort();
 
   // Group standings by division + pool
-  interface StandingsGroup {
-    label: string;
-    key: string;
-    entries: StandingEntry[];
-  }
-
+  interface StandingsGroup { label: string; key: string; entries: StandingEntry[]; }
   const standingsGroups: StandingsGroup[] = [];
   const groupMap: Record<string, StandingEntry[]> = {};
-
   standings.forEach((entry) => {
     const poolLabel = entry.pool_name || 'Pool';
     const key = `${entry.age_group || ''}|${entry.division_level || ''}|${poolLabel}`;
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(entry);
   });
-
   Object.keys(groupMap).sort().forEach((key) => {
     const parts = key.split('|');
     const label = [parts[0], parts[1], parts[2]].filter(Boolean).join(' ');
@@ -399,54 +437,39 @@ export default function EventDetailScreen({
     standingsGroups.push({ label, key, entries });
   });
 
-  // Get venues from event data (API now returns venues with rinks)
-  const eventVenues: EventVenue[] = (event as any)?.venues || [];
+  // Group registered teams by age group
+  const teamsByAge = registeredTeams.reduce<Record<string, RegisteredTeam[]>>((acc, team) => {
+    const key = team.age_group || 'Other';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(team);
+    return acc;
+  }, {});
 
-  const tabs: { key: TabKey; label: string }[] = [
-    { key: 'schedule', label: 'Schedule' },
-    { key: 'scores', label: 'Scores' },
-    { key: 'standings', label: 'Standings' },
-    { key: 'info', label: 'Info' },
-  ];
-
-  // Display data: prefer loaded API event, fall back to nav params
-  const displayEvent = event;
-
-  // --- Render Hero Section ---
+  // ==================
+  // HERO
+  // ==================
   function renderHero() {
     if (!displayEvent) return null;
-
     return (
       <View style={styles.heroCard}>
         <View style={styles.heroTop}>
-          {/* Logo */}
           {displayEvent.logo_url ? (
-            <Image
-              source={{ uri: displayEvent.logo_url }}
-              style={styles.heroLogo}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: displayEvent.logo_url }} style={styles.heroLogo} resizeMode="contain" />
           ) : (
             <View style={styles.heroLogoPlaceholder}>
               <Text style={styles.heroLogoPlaceholderText}>UHT</Text>
             </View>
           )}
-
-          {/* Event Info */}
           <View style={styles.heroInfo}>
             <Text style={styles.heroEventName} numberOfLines={2}>
               {displayEvent.name || eventName || 'Event'}
             </Text>
-
-            {/* Date Range */}
             <View style={styles.heroMetaRow}>
               <Text style={styles.heroMetaIcon}>{'📅'}</Text>
               <Text style={styles.heroDateText}>
                 {formatDateRangeShort(displayEvent.start_date, displayEvent.end_date)}
               </Text>
             </View>
-
-            {/* Location */}
             {(displayEvent.city || displayEvent.state) ? (
               <View style={styles.heroMetaRow}>
                 <Text style={styles.heroMetaIcon}>{'📍'}</Text>
@@ -457,19 +480,10 @@ export default function EventDetailScreen({
             ) : null}
           </View>
         </View>
-
-        {/* Status Badge */}
         {displayEvent.status ? (
           <View style={styles.heroStatusRow}>
-            <View
-              style={[
-                styles.heroStatusBadge,
-                { backgroundColor: getEventStatusColor(displayEvent.status) },
-              ]}
-            >
-              <Text style={styles.heroStatusText}>
-                {getEventStatusLabel(displayEvent.status)}
-              </Text>
+            <View style={[styles.heroStatusBadge, { backgroundColor: getEventStatusColor(displayEvent.status) }]}>
+              <Text style={styles.heroStatusText}>{getEventStatusLabel(displayEvent.status)}</Text>
             </View>
           </View>
         ) : null}
@@ -477,68 +491,339 @@ export default function EventDetailScreen({
     );
   }
 
-  if (loading && !displayEvent) {
+  // ==================
+  // TAB BAR (USSSA-style horizontal scrollable with icons)
+  // ==================
+  function renderTabBar() {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {eventName || 'Event'}
-          </Text>
-        </View>
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={colors.navy} />
-        </View>
-      </SafeAreaView>
+      <View style={styles.tabBarContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBarScroll}
+        >
+          {EVENT_TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={styles.tabItem}
+                onPress={() => setActiveTab(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabIcon, isActive ? styles.tabIconActive : null]}>
+                  {tab.icon}
+                </Text>
+                <Text
+                  style={[styles.tabLabel, isActive ? styles.tabLabelActive : null]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+                {isActive ? <View style={styles.tabIndicator} /> : null}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
     );
   }
 
-  // --- Render Scores Tab ---
-  function renderScoresTab() {
-    if (scoresLoading) {
-      return (
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={colors.navy} />
+  // ==================
+  // TAB: Event Info
+  // ==================
+  function renderInfoTab() {
+    return (
+      <ScrollView
+        contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        {/* Stature */}
+        <View style={styles.infoRow}>
+          <View style={styles.infoIconBox}>
+            <Text style={styles.infoIconText}>{'📋'}</Text>
+          </View>
+          <View>
+            <Text style={styles.infoRowLabel}>Stature</Text>
+            <Text style={styles.infoRowValue}>UHT Tournament</Text>
+          </View>
         </View>
-      );
-    }
 
+        {/* Age Groups */}
+        {displayEvent?.age_groups ? (
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconBox}>
+              <Text style={styles.infoIconText}>{'🏒'}</Text>
+            </View>
+            <View>
+              <Text style={styles.infoRowLabel}>Age Groups</Text>
+              <Text style={styles.infoRowValue}>{displayEvent.age_groups}</Text>
+            </View>
+          </View>
+        ) : eventDivisions.length > 0 ? (
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconBox}>
+              <Text style={styles.infoIconText}>{'🏒'}</Text>
+            </View>
+            <View>
+              <Text style={styles.infoRowLabel}>Age Groups</Text>
+              <Text style={styles.infoRowValue}>
+                {[...new Set(eventDivisions.map(d => d.age_group))].join(', ')}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Event Lodging (collapsible) */}
+        <CollapsibleSection title="Event Lodging" icon="🏨">
+          {eventHotels.length > 0 ? (
+            eventHotels.map((hotel) => (
+              <View key={hotel.id} style={styles.hotelCard}>
+                <Text style={styles.hotelName}>{hotel.hotel_name}</Text>
+                {hotel.city || hotel.state ? (
+                  <Text style={styles.hotelLocation}>{[hotel.city, hotel.state].filter(Boolean).join(', ')}</Text>
+                ) : null}
+                {hotel.rate_description ? <Text style={styles.hotelRate}>{hotel.rate_description}</Text> : null}
+                {hotel.price_per_night ? (
+                  <Text style={styles.hotelPrice}>${(hotel.price_per_night / 100).toFixed(0)}/night</Text>
+                ) : null}
+                {hotel.booking_url ? (
+                  <TouchableOpacity onPress={() => Linking.openURL(hotel.booking_url!)} style={styles.hotelBookBtn}>
+                    <Text style={styles.hotelBookBtnText}>Book Now</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.placeholderText}>Hotel information will be available closer to the event.</Text>
+          )}
+        </CollapsibleSection>
+
+        {/* Event Details (collapsible) */}
+        <CollapsibleSection title="Event Details" icon="📝">
+          {displayEvent?.description ? (
+            <Text style={styles.descriptionText}>{displayEvent.description}</Text>
+          ) : null}
+          {displayEvent?.information ? (
+            <Text style={styles.descriptionText}>{displayEvent.information}</Text>
+          ) : null}
+          {!displayEvent?.description && !displayEvent?.information ? (
+            <Text style={styles.placeholderText}>Event details will be posted soon.</Text>
+          ) : null}
+        </CollapsibleSection>
+
+        {/* Entry Fee (collapsible) */}
+        <CollapsibleSection title="Entry Fee" icon="💲">
+          {eventDivisions.length > 0 ? (
+            eventDivisions.filter(d => d.price_cents && d.price_cents > 0).map((div) => (
+              <View key={div.id} style={styles.feeRow}>
+                <Text style={styles.feeDivision}>{div.age_group} {div.division_level || ''}</Text>
+                <Text style={styles.feeAmount}>${((div.price_cents || 0) / 100).toFixed(0)}</Text>
+              </View>
+            ))
+          ) : displayEvent?.price_min_cents ? (
+            <Text style={styles.feeAmount}>
+              {displayEvent.price_min_cents === displayEvent.price_max_cents
+                ? `$${(displayEvent.price_min_cents / 100).toFixed(0)}`
+                : `$${(displayEvent.price_min_cents / 100).toFixed(0)} - $${((displayEvent.price_max_cents || displayEvent.price_min_cents) / 100).toFixed(0)}`}
+            </Text>
+          ) : (
+            <Text style={styles.placeholderText}>Pricing will be announced soon.</Text>
+          )}
+        </CollapsibleSection>
+
+        {/* Locker Room */}
+        <View style={styles.infoRow}>
+          <View style={styles.infoIconBox}>
+            <Text style={styles.infoIconText}>{'🔒'}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.infoRowLabel}>Locker Room Assignments</Text>
+              <View style={styles.comingSoonBadge}>
+                <Text style={styles.comingSoonText}>Coming Soon</Text>
+              </View>
+            </View>
+            <Text style={styles.infoRowSub}>Posted before event day</Text>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // TAB: Merchandise (Champions Locker)
+  // ==================
+  function renderMerchandiseTab() {
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        <View style={styles.merchandiseContainer}>
+          <Image
+            source={require('../../assets/icon.png')}
+            style={styles.merchandiseLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.merchandiseTitle}>Champions Locker</Text>
+          <Text style={styles.merchandiseSubtitle}>
+            Official UHT merchandise and custom team gear for this event.
+          </Text>
+          <TouchableOpacity
+            style={styles.merchandiseBtn}
+            onPress={() => Linking.openURL('https://championslocker.com')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.merchandiseBtnText}>Shop Now</Text>
+          </TouchableOpacity>
+          <Text style={styles.merchandiseNote}>
+            Custom jerseys, hoodies, hats, and more available with your team logo.
+          </Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // TAB: My Schedule (filtered to followed teams)
+  // ==================
+  function renderMyScheduleTab() {
+    // For now show full schedule — later we filter by followed teams
+    return (
+      <FlatList
+        data={schedule}
+        keyExtractor={(item, index) => item.id || String(index)}
+        contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+        renderItem={({ item }) => (
+          <View style={styles.gameCard}>
+            <View style={styles.gameTimeRow}>
+              <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
+              {item.rink_name || item.rink ? (
+                <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+              ) : null}
+            </View>
+            {item.division_name ? <Text style={styles.gameDivision}>{item.division_name}</Text> : null}
+            <View style={styles.matchup}>
+              <View style={styles.teamRow}>
+                <Text style={styles.teamLabel}>HOME</Text>
+                <Text style={styles.teamName}>{item.home_team_name || item.home_team || 'TBD'}</Text>
+              </View>
+              <Text style={styles.vsText}>vs</Text>
+              <View style={styles.teamRow}>
+                <Text style={styles.teamLabel}>AWAY</Text>
+                <Text style={styles.teamName}>{item.away_team_name || item.away_team || 'TBD'}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Schedule Not Yet Published</Text>
+            <Text style={styles.emptyText}>
+              Your team's schedule will appear here once it's been published. Check back closer to event day.
+            </Text>
+          </View>
+        }
+      />
+    );
+  }
+
+  // ==================
+  // TAB: Game Center (full schedule + scores + standings)
+  // ==================
+  const [gameCenterSub, setGameCenterSub] = useState<'schedule' | 'scores' | 'standings'>('schedule');
+
+  function renderGameCenterTab() {
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Sub-tabs */}
+        <View style={styles.subTabBar}>
+          {(['schedule', 'scores', 'standings'] as const).map((sub) => {
+            const isActive = gameCenterSub === sub;
+            const label = sub === 'schedule' ? 'Full Schedule' : sub === 'scores' ? 'Scores' : 'Standings';
+            return (
+              <TouchableOpacity
+                key={sub}
+                style={[styles.subTab, isActive ? styles.subTabActive : null]}
+                onPress={() => {
+                  setGameCenterSub(sub);
+                  if (sub === 'scores' && !scoresLoaded) loadScores();
+                  if (sub === 'standings' && !standingsLoaded) loadStandings();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.subTabText, isActive ? styles.subTabTextActive : null]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {gameCenterSub === 'schedule' ? renderFullSchedule() : null}
+        {gameCenterSub === 'scores' ? renderScoresContent() : null}
+        {gameCenterSub === 'standings' ? renderStandingsContent() : null}
+      </View>
+    );
+  }
+
+  function renderFullSchedule() {
+    return (
+      <FlatList
+        data={schedule}
+        keyExtractor={(item, index) => item.id || String(index)}
+        contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+        renderItem={({ item }) => (
+          <View style={styles.gameCard}>
+            <View style={styles.gameTimeRow}>
+              <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
+              {item.rink_name || item.rink ? (
+                <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+              ) : null}
+            </View>
+            {item.division_name ? <Text style={styles.gameDivision}>{item.division_name}</Text> : null}
+            <View style={styles.matchup}>
+              <View style={styles.teamRow}>
+                <Text style={styles.teamLabel}>HOME</Text>
+                <Text style={styles.teamName}>{item.home_team_name || item.home_team || 'TBD'}</Text>
+              </View>
+              <Text style={styles.vsText}>vs</Text>
+              <View style={styles.teamRow}>
+                <Text style={styles.teamLabel}>AWAY</Text>
+                <Text style={styles.teamName}>{item.away_team_name || item.away_team || 'TBD'}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Schedule Not Yet Published</Text>
+            <Text style={styles.emptyText}>The schedule for this event hasn't been published yet.</Text>
+          </View>
+        }
+      />
+    );
+  }
+
+  function renderScoresContent() {
+    if (scoresLoading) {
+      return <View style={styles.centerContent}><ActivityIndicator size="large" color={colors.navy} /></View>;
+    }
     if (scores.length === 0) {
       return (
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.navy}
-              colors={[colors.navy]}
-            />
-          }
+        <ScrollView contentContainerStyle={styles.tabContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         >
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No Scores Yet</Text>
-            <Text style={styles.emptyText}>
-              Scores will appear here once games have started. Pull down to refresh.
-            </Text>
+            <Text style={styles.emptyText}>Scores will appear here once games have started.</Text>
           </View>
         </ScrollView>
       );
     }
-
     return (
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.navy}
-            colors={[colors.navy]}
-          />
-        }
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
         {sortedDateKeys.map((dateKey) => {
           const gamesForDate = scoresByDate[dateKey];
@@ -552,93 +837,48 @@ export default function EventDetailScreen({
                 const homeWins = isFinal && game.home_score > game.away_score;
                 const awayWins = isFinal && game.away_score > game.home_score;
                 const statusColor = getStatusColor(game.status);
-
                 return (
                   <View key={game.id} style={styles.scoreCard}>
-                    {/* Top row: time + rink + status */}
                     <View style={styles.scoreCardTopRow}>
                       <View style={styles.scoreCardMeta}>
                         <Text style={styles.scoreCardTime}>{formatScoreTime(game.start_time)}</Text>
-                        {game.rink_name ? (
-                          <Text style={styles.scoreCardRink}>{game.rink_name}</Text>
-                        ) : null}
+                        {game.rink_name ? <Text style={styles.scoreCardRink}>{game.rink_name}</Text> : null}
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                         <Text style={styles.statusBadgeText}>{getStatusLabel(game.status)}</Text>
                         {isLive ? <View style={styles.liveDot} /> : null}
                       </View>
                     </View>
-
-                    {/* Division label */}
                     {game.age_group || game.division_level ? (
-                      <Text style={styles.scoreCardDivision}>
-                        {[game.age_group, game.division_level].filter(Boolean).join(' ')}
-                      </Text>
+                      <Text style={styles.scoreCardDivision}>{[game.age_group, game.division_level].filter(Boolean).join(' ')}</Text>
                     ) : null}
-
-                    {/* Matchup row */}
                     <View style={styles.scoreMatchup}>
-                      {/* Away team */}
                       <View style={styles.scoreTeamCol}>
                         <Text style={styles.scoreTeamLabel}>AWAY</Text>
-                        <Text
-                          style={[
-                            styles.scoreTeamName,
-                            awayWins ? styles.scoreTeamWinner : null,
-                          ]}
-                          numberOfLines={2}
-                        >
+                        <Text style={[styles.scoreTeamName, awayWins ? styles.scoreTeamWinner : null]} numberOfLines={2}>
                           {game.away_team_name || 'TBD'}
                         </Text>
                       </View>
-
-                      {/* Score */}
                       <View style={styles.scoreCenter}>
                         {game.status === 'scheduled' ? (
                           <Text style={styles.scoreVs}>vs</Text>
                         ) : (
                           <View style={styles.scoreNumbers}>
-                            <Text
-                              style={[
-                                styles.scoreValue,
-                                awayWins ? styles.scoreValueWinner : null,
-                              ]}
-                            >
-                              {game.away_score}
-                            </Text>
+                            <Text style={[styles.scoreValue, awayWins ? styles.scoreValueWinner : null]}>{game.away_score}</Text>
                             <Text style={styles.scoreDash}>-</Text>
-                            <Text
-                              style={[
-                                styles.scoreValue,
-                                homeWins ? styles.scoreValueWinner : null,
-                              ]}
-                            >
-                              {game.home_score}
-                            </Text>
+                            <Text style={[styles.scoreValue, homeWins ? styles.scoreValueWinner : null]}>{game.home_score}</Text>
                           </View>
                         )}
                         {isFinal && (game.is_overtime || game.is_shootout) ? (
-                          <Text style={styles.otLabel}>
-                            {game.is_shootout ? 'SO' : 'OT'}
-                          </Text>
+                          <Text style={styles.otLabel}>{game.is_shootout ? 'SO' : 'OT'}</Text>
                         ) : null}
                         {isLive && game.period ? (
-                          <Text style={styles.periodLabel}>
-                            {game.status === 'intermission' ? `INT ${game.period}` : `P${game.period}`}
-                          </Text>
+                          <Text style={styles.periodLabel}>{game.status === 'intermission' ? `INT ${game.period}` : `P${game.period}`}</Text>
                         ) : null}
                       </View>
-
-                      {/* Home team */}
                       <View style={[styles.scoreTeamCol, styles.scoreTeamColRight]}>
                         <Text style={styles.scoreTeamLabel}>HOME</Text>
-                        <Text
-                          style={[
-                            styles.scoreTeamName,
-                            homeWins ? styles.scoreTeamWinner : null,
-                          ]}
-                          numberOfLines={2}
-                        >
+                        <Text style={[styles.scoreTeamName, homeWins ? styles.scoreTeamWinner : null]} numberOfLines={2}>
                           {game.home_team_name || 'TBD'}
                         </Text>
                       </View>
@@ -653,56 +893,30 @@ export default function EventDetailScreen({
     );
   }
 
-  // --- Render Standings Tab ---
-  function renderStandingsTab() {
+  function renderStandingsContent() {
     if (standingsLoading) {
-      return (
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={colors.navy} />
-        </View>
-      );
+      return <View style={styles.centerContent}><ActivityIndicator size="large" color={colors.navy} /></View>;
     }
-
     if (standings.length === 0) {
       return (
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.navy}
-              colors={[colors.navy]}
-            />
-          }
+        <ScrollView contentContainerStyle={styles.tabContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         >
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No Standings Available</Text>
-            <Text style={styles.emptyText}>
-              Standings will be updated as pool play games are completed. Pull down to refresh.
-            </Text>
+            <Text style={styles.emptyText}>Standings will be updated as pool play games are completed.</Text>
           </View>
         </ScrollView>
       );
     }
-
     return (
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.navy}
-            colors={[colors.navy]}
-          />
-        }
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
         {standingsGroups.map((group) => (
           <View key={group.key} style={styles.standingsSection}>
             <Text style={styles.standingsSectionHeader}>{group.label}</Text>
             <View style={styles.standingsTable}>
-              {/* Header row */}
               <View style={styles.standingsHeaderRow}>
                 <Text style={[styles.standingsHeaderCell, styles.standingsRankCol]}>#</Text>
                 <Text style={[styles.standingsHeaderCell, styles.standingsTeamCol]}>Team</Text>
@@ -715,32 +929,15 @@ export default function EventDetailScreen({
                 <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GA</Text>
                 <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>DIFF</Text>
               </View>
-
-              {/* Data rows */}
               {group.entries.map((entry, idx) => (
-                <View
-                  key={entry.team_id}
-                  style={[
-                    styles.standingsRow,
-                    idx % 2 === 1 ? styles.standingsRowAlt : null,
-                  ]}
-                >
-                  <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText]}>
-                    {idx + 1}
-                  </Text>
-                  <Text
-                    style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]}
-                    numberOfLines={1}
-                  >
-                    {entry.team_name}
-                  </Text>
+                <View key={entry.team_id} style={[styles.standingsRow, idx % 2 === 1 ? styles.standingsRowAlt : null]}>
+                  <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText]}>{idx + 1}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.games_played}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.wins}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.losses}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.ties}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>
-                    {entry.points}
-                  </Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>{entry.points}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_for}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_against}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsDiffText]}>
@@ -755,99 +952,294 @@ export default function EventDetailScreen({
     );
   }
 
-  // --- Render Info Tab ---
-  function renderInfoTab() {
+  // ==================
+  // TAB: Event Updates
+  // ==================
+  function renderUpdatesTab() {
     return (
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.navy}
-            colors={[colors.navy]}
-          />
-        }
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
-        {/* Event Description */}
-        {displayEvent?.description ? (
-          <View style={styles.infoSection}>
-            <Text style={styles.infoSectionTitle}>About This Event</Text>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoDescriptionText}>{displayEvent.description}</Text>
-            </View>
-          </View>
-        ) : null}
-
-        {/* Locker Room Assignments */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoSectionTitle}>Locker Room Assignments</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.lockerRoomContent}>
-              <View style={styles.lockerRoomIconContainer}>
-                <Text style={styles.lockerRoomIcon}>{'🔒'}</Text>
-              </View>
-              <View style={styles.lockerRoomTextContainer}>
-                <View style={styles.lockerRoomHeaderRow}>
-                  <Text style={styles.lockerRoomTitle}>Locker Room Info</Text>
-                  <View style={styles.comingSoonBadge}>
-                    <Text style={styles.comingSoonBadgeText}>Coming Soon</Text>
-                  </View>
-                </View>
-                <Text style={styles.lockerRoomDescription}>
-                  Locker room assignments will be posted before event day
-                </Text>
-              </View>
-            </View>
-          </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>{'💬'}</Text>
+          <Text style={styles.emptyTitle}>No Updates Yet</Text>
+          <Text style={styles.emptyText}>
+            Event updates, weather alerts, delays, and important announcements will appear here. Pull down to refresh.
+          </Text>
         </View>
-
-        {/* Venues / Rinks */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoSectionTitle}>Venues & Rinks</Text>
-          {eventVenues.length > 0 ? (
-            eventVenues.map((venue) => (
-              <View key={venue.venue_id} style={[styles.infoCard, { marginBottom: spacing.sm }]}>
-                <View style={styles.venueRow}>
-                  <Text style={styles.venueIcon}>{'🏟️'}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.venueName}>{venue.venue_name}</Text>
-                    {venue.city || venue.state ? (
-                      <Text style={styles.venueAddress}>
-                        {[venue.address, venue.city, venue.state].filter(Boolean).join(', ')}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                {venue.rinks && venue.rinks.length > 0 ? (
-                  <View style={styles.rinksContainer}>
-                    {venue.rinks.map((rink) => (
-                      <View key={rink.id} style={styles.rinkBadge}>
-                        <Text style={styles.rinkBadgeText}>{rink.name}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            ))
-          ) : (
-            <View style={styles.infoCard}>
-              <Text style={styles.infoPlaceholderText}>
-                Venue information will be available once the schedule is published.
-              </Text>
-            </View>
-          )}
-        </View>
-
       </ScrollView>
     );
   }
 
+  // ==================
+  // TAB: Promotions
+  // ==================
+  function renderPromotionsTab() {
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>{'⭐'}</Text>
+          <Text style={styles.emptyTitle}>Promotions & Sponsors</Text>
+          <Text style={styles.emptyText}>
+            Sponsor deals, coupons, and special offers for this event will be posted here.
+          </Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // TAB: Venues
+  // ==================
+  function renderVenuesTab() {
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        {eventVenues.length > 0 ? (
+          eventVenues.map((venue) => (
+            <View key={venue.venue_id} style={styles.venueCard}>
+              <View style={styles.venueHeader}>
+                <Text style={styles.venueIcon}>{'🏟️'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.venueName}>{venue.venue_name}</Text>
+                  {venue.address || venue.city || venue.state ? (
+                    <Text style={styles.venueAddress}>
+                      {[venue.address, venue.city, venue.state].filter(Boolean).join(', ')}
+                      {venue.zip ? ` ${venue.zip}` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              {venue.address ? (
+                <TouchableOpacity
+                  style={styles.directionsBtn}
+                  onPress={() => {
+                    const addr = encodeURIComponent([venue.address, venue.city, venue.state, venue.zip].filter(Boolean).join(', '));
+                    Linking.openURL(`https://maps.apple.com/?q=${addr}`);
+                  }}
+                >
+                  <Text style={styles.directionsBtnText}>Get Directions</Text>
+                </TouchableOpacity>
+              ) : null}
+              {venue.rinks && venue.rinks.length > 0 ? (
+                <View style={styles.rinksContainer}>
+                  <Text style={styles.rinksLabel}>Rinks</Text>
+                  {venue.rinks.map((rink) => (
+                    <View key={rink.id} style={styles.rinkBadge}>
+                      <Text style={styles.rinkBadgeText}>{rink.name}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>{'🏟️'}</Text>
+            <Text style={styles.emptyTitle}>Venues Coming Soon</Text>
+            <Text style={styles.emptyText}>Venue and rink information will be posted when the schedule is published.</Text>
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // TAB: Lodging
+  // ==================
+  function renderLodgingTab() {
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        {eventHotels.length > 0 ? (
+          eventHotels.map((hotel) => (
+            <View key={hotel.id} style={styles.hotelFullCard}>
+              {hotel.image_url ? (
+                <Image source={{ uri: hotel.image_url }} style={styles.hotelImage} resizeMode="cover" />
+              ) : null}
+              <View style={styles.hotelFullBody}>
+                <Text style={styles.hotelFullName}>{hotel.hotel_name}</Text>
+                {hotel.city || hotel.state ? (
+                  <Text style={styles.hotelFullLocation}>{[hotel.city, hotel.state].filter(Boolean).join(', ')}</Text>
+                ) : null}
+                {hotel.price_per_night ? (
+                  <Text style={styles.hotelFullPrice}>${(hotel.price_per_night / 100).toFixed(0)}/night</Text>
+                ) : null}
+                {hotel.rate_description ? (
+                  <Text style={styles.hotelFullRate}>{hotel.rate_description}</Text>
+                ) : null}
+                {hotel.booking_url ? (
+                  <TouchableOpacity
+                    style={styles.hotelFullBookBtn}
+                    onPress={() => Linking.openURL(hotel.booking_url!)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.hotelFullBookBtnText}>Book Now</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>{'🏨'}</Text>
+            <Text style={styles.emptyTitle}>Lodging Information</Text>
+            <Text style={styles.emptyText}>Hotel information and booking links will be available once lodging partners are confirmed.</Text>
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // TAB: Who's Coming
+  // ==================
+  function renderWhosComingTab() {
+    // Check if event is more than 1 month away
+    const eventStart = displayEvent?.start_date ? new Date(displayEvent.start_date) : null;
+    const now = new Date();
+    const oneMonthFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const isTooEarly = eventStart && eventStart > oneMonthFromNow;
+
+    if (isTooEarly) {
+      return (
+        <ScrollView contentContainerStyle={styles.tabContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+        >
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>{'👥'}</Text>
+            <Text style={styles.emptyTitle}>Coming Soon</Text>
+            <Text style={styles.emptyText}>
+              The team list for this event will be available 1 month prior to the event date. Check back closer to the event!
+            </Text>
+          </View>
+        </ScrollView>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        {registeredTeams.length > 0 ? (
+          <>
+            <Text style={styles.whosComingCount}>{registeredTeams.length} Teams Registered</Text>
+            {Object.entries(teamsByAge).map(([ageGroup, teams]) => (
+              <View key={ageGroup} style={styles.ageGroupSection}>
+                <Text style={styles.ageGroupHeader}>{ageGroup} ({teams.length})</Text>
+                {teams.map((team, idx) => (
+                  <View key={idx} style={styles.teamCard}>
+                    <Text style={styles.teamCardName}>{team.team_name}</Text>
+                    {team.org_name ? <Text style={styles.teamCardOrg}>{team.org_name}</Text> : null}
+                    {team.city || team.state ? (
+                      <Text style={styles.teamCardLocation}>{[team.city, team.state].filter(Boolean).join(', ')}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ))}
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>{'👥'}</Text>
+            <Text style={styles.emptyTitle}>No Teams Yet</Text>
+            <Text style={styles.emptyText}>Teams that have registered will appear here once approved.</Text>
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // TAB: Contact
+  // ==================
+  function renderContactTab() {
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        <View style={styles.contactContainer}>
+          <Text style={styles.contactTitle}>Contact Us</Text>
+          <Text style={styles.contactSubtitle}>Have questions about this event? Reach out to the UHT team.</Text>
+
+          <TouchableOpacity
+            style={styles.contactBtn}
+            onPress={() => Linking.openURL('mailto:info@ultimatetournaments.com?subject=' + encodeURIComponent(`Question about ${displayEvent?.name || 'event'}`))}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.contactBtnIcon}>{'✉️'}</Text>
+            <View>
+              <Text style={styles.contactBtnTitle}>Email Us</Text>
+              <Text style={styles.contactBtnSub}>info@ultimatetournaments.com</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.contactBtn}
+            onPress={() => Linking.openURL('https://ultimatetournaments.com')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.contactBtnIcon}>{'🌐'}</Text>
+            <View>
+              <Text style={styles.contactBtnTitle}>Visit Website</Text>
+              <Text style={styles.contactBtnSub}>ultimatetournaments.com</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ==================
+  // Tab Content Router
+  // ==================
+  function renderTabContent() {
+    switch (activeTab) {
+      case 'info': return renderInfoTab();
+      case 'merchandise': return renderMerchandiseTab();
+      case 'my_schedule': return renderMyScheduleTab();
+      case 'game_center': return renderGameCenterTab();
+      case 'updates': return renderUpdatesTab();
+      case 'promotions': return renderPromotionsTab();
+      case 'venues': return renderVenuesTab();
+      case 'lodging': return renderLodgingTab();
+      case 'whos_coming': return renderWhosComingTab();
+      case 'contact': return renderContactTab();
+      default: return renderInfoTab();
+    }
+  }
+
+  // ==================
+  // Loading State
+  // ==================
+  if (loading && !displayEvent) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backText}>{'‹ Back'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>{eventName || 'Event'}</Text>
+        </View>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.navy} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ==================
+  // Main Render
+  // ==================
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.backText}>{'‹ Back'}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {displayEvent?.name || eventName || 'Event'}
@@ -862,704 +1254,415 @@ export default function EventDetailScreen({
         </View>
       ) : null}
 
-      <View style={styles.tabBar}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[styles.tab, activeTab === tab.key ? styles.tabActive : null]}
-            onPress={() => setActiveTab(tab.key)}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.key ? styles.tabTextActive : null,
-              ]}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {renderTabBar()}
 
       {loading && !displayEvent ? (
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
-      ) : activeTab === 'schedule' ? (
-        <FlatList
-          data={schedule}
-          keyExtractor={(item, index) => item.id || String(index)}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.navy}
-              colors={[colors.navy]}
-            />
-          }
-          renderItem={({ item }) => (
-            <View style={styles.gameCard}>
-              <View style={styles.gameTimeRow}>
-                <Text style={styles.gameTime}>
-                  {formatGameTime(item.time, item.date)}
-                </Text>
-                {item.rink_name || item.rink ? (
-                  <Text style={styles.gameRink}>
-                    {item.rink_name || item.rink}
-                  </Text>
-                ) : null}
-              </View>
-
-              {item.division_name ? (
-                <Text style={styles.gameDivision}>{item.division_name}</Text>
-              ) : null}
-
-              <View style={styles.matchup}>
-                <View style={styles.teamRow}>
-                  <Text style={styles.teamLabel}>HOME</Text>
-                  <Text style={styles.teamName}>
-                    {item.home_team_name || item.home_team || 'TBD'}
-                  </Text>
-                </View>
-                <Text style={styles.vsText}>vs</Text>
-                <View style={styles.teamRow}>
-                  <Text style={styles.teamLabel}>AWAY</Text>
-                  <Text style={styles.teamName}>
-                    {item.away_team_name || item.away_team || 'TBD'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>Schedule Not Yet Published</Text>
-              <Text style={styles.emptyText}>
-                The schedule for this event hasn't been published yet. Check back
-                closer to the event date.
-              </Text>
-            </View>
-          }
-        />
-      ) : activeTab === 'scores' ? (
-        renderScoresTab()
-      ) : activeTab === 'standings' ? (
-        renderStandingsTab()
       ) : (
-        renderInfoTab()
+        renderTabContent()
       )}
     </SafeAreaView>
   );
 }
 
+// ==================
+// Collapsible Section Component
+// ==================
+function CollapsibleSection({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={styles.collapsibleContainer}>
+      <TouchableOpacity
+        style={styles.collapsibleHeader}
+        onPress={() => setExpanded(!expanded)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.collapsibleLeft}>
+          <View style={styles.infoIconBox}>
+            <Text style={styles.infoIconText}>{icon}</Text>
+          </View>
+          <Text style={styles.collapsibleTitle}>{title}</Text>
+        </View>
+        <Text style={styles.collapsibleChevron}>{expanded ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {expanded ? <View style={styles.collapsibleBody}>{children}</View> : null}
+    </View>
+  );
+}
+
+// ==================
+// Styles
+// ==================
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
+  container: { flex: 1, backgroundColor: colors.bg },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  backButton: {
-    paddingVertical: spacing.xs,
-    paddingRight: spacing.sm,
-  },
-  backText: {
-    color: colors.navy,
-    fontSize: 16,
-    ...fonts.semibold,
-  },
-  headerTitle: {
-    fontSize: 20,
-    color: colors.text,
-    ...fonts.bold,
-    flex: 1,
-  },
+  backButton: { paddingVertical: spacing.xs, paddingRight: spacing.sm },
+  backText: { color: colors.navy, fontSize: 16, ...fonts.semibold },
+  headerTitle: { fontSize: 18, color: colors.text, ...fonts.bold, flex: 1 },
 
-  // ===========================
-  // Hero Section
-  // ===========================
-  heroCard: {
-    backgroundColor: colors.navy,
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.lg,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  heroLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.md,
-    backgroundColor: colors.white,
-  },
+  // Hero
+  heroCard: { backgroundColor: colors.navy, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  heroLogo: { width: 64, height: 64, borderRadius: radii.md, backgroundColor: colors.white },
   heroLogoPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.md,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
+    width: 64, height: 64, borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center',
+  },
+  heroLogoPlaceholderText: { color: colors.cyan, fontSize: 18, ...fonts.extrabold, letterSpacing: 1 },
+  heroInfo: { flex: 1 },
+  heroEventName: { fontSize: 18, color: colors.white, ...fonts.bold, marginBottom: spacing.xs },
+  heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  heroMetaIcon: { fontSize: 14 },
+  heroDateText: { fontSize: 13, color: 'rgba(255,255,255,0.85)', ...fonts.medium },
+  heroLocationText: { fontSize: 13, color: 'rgba(255,255,255,0.85)', ...fonts.medium },
+  heroStatusRow: { marginTop: spacing.md, flexDirection: 'row' },
+  heroStatusBadge: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radii.full },
+  heroStatusText: { fontSize: 11, color: colors.white, ...fonts.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
+
+  // Tab Bar (USSSA-style)
+  tabBarContainer: {
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tabBarScroll: {
+    paddingHorizontal: spacing.sm,
+  },
+  tabItem: {
     alignItems: 'center',
-  },
-  heroLogoPlaceholderText: {
-    color: colors.cyan,
-    fontSize: 18,
-    ...fonts.extrabold,
-    letterSpacing: 1,
-  },
-  heroInfo: {
-    flex: 1,
-  },
-  heroEventName: {
-    fontSize: 20,
-    color: colors.white,
-    ...fonts.bold,
-    marginBottom: spacing.xs,
-  },
-  heroMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  heroMetaIcon: {
-    fontSize: 14,
-  },
-  heroDateText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    ...fonts.medium,
-  },
-  heroLocationText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.85)',
-    ...fonts.medium,
-  },
-  heroStatusRow: {
-    marginTop: spacing.md,
-    flexDirection: 'row',
-  },
-  heroStatusBadge: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.full,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    minWidth: 72,
+    position: 'relative',
   },
-  heroStatusText: {
-    fontSize: 12,
-    color: colors.white,
+  tabIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+    opacity: 0.5,
+  },
+  tabIconActive: {
+    opacity: 1,
+  },
+  tabLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    ...fonts.medium,
+    textAlign: 'center',
+  },
+  tabLabelActive: {
+    color: colors.navy,
     ...fonts.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: spacing.md,
+    right: spacing.md,
+    height: 3,
+    backgroundColor: colors.navy,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
   },
 
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorBanner: {
-    backgroundColor: colors.errorBg,
-    padding: spacing.md,
-    marginHorizontal: spacing.xxl,
-    marginTop: spacing.md,
-    borderRadius: radii.sm,
-  },
-  errorBannerText: {
-    color: colors.error,
-    fontSize: 14,
-    ...fonts.medium,
-  },
-  tabBar: {
+  // Sub-tabs (Game Center)
+  subTabBar: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.md,
-    gap: spacing.sm,
-  },
-  tab: {
-    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    backgroundColor: colors.bg,
+  },
+  subTab: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.full,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  tabActive: {
+  subTabActive: {
     backgroundColor: colors.navy,
     borderColor: colors.navy,
   },
-  tabText: {
-    fontSize: 14,
+  subTabText: {
+    fontSize: 13,
     color: colors.textSecondary,
     ...fonts.semibold,
   },
-  tabTextActive: {
+  subTabTextActive: {
     color: colors.white,
   },
-  listContent: {
-    padding: spacing.xxl,
-    paddingBottom: 40,
-  },
-  gameCard: {
+
+  // Common
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorBanner: { backgroundColor: colors.errorBg, padding: spacing.md, marginHorizontal: spacing.lg, marginTop: spacing.sm, borderRadius: radii.sm },
+  errorBannerText: { color: colors.error, fontSize: 14, ...fonts.medium },
+  tabContent: { padding: spacing.lg, paddingBottom: 40 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: spacing.lg },
+  emptyIcon: { fontSize: 40, marginBottom: spacing.md },
+  emptyTitle: { fontSize: 18, color: colors.text, ...fonts.bold, marginBottom: spacing.sm, textAlign: 'center' },
+  emptyText: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, textAlign: 'center', lineHeight: 22 },
+
+  // Info Tab rows
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: radii.md,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    gap: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
   },
-  gameTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  gameTime: {
-    fontSize: 13,
-    color: colors.textMuted,
-    ...fonts.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  gameRink: {
-    fontSize: 13,
-    color: colors.info,
-    ...fonts.medium,
-  },
-  gameDivision: {
-    fontSize: 12,
-    color: colors.navy,
-    ...fonts.semibold,
-    marginBottom: spacing.sm,
-  },
-  matchup: {
-    gap: spacing.xs,
-  },
-  teamRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  teamLabel: {
-    fontSize: 11,
-    color: colors.textMuted,
-    ...fonts.semibold,
-    letterSpacing: 0.5,
-    width: 40,
-  },
-  teamName: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.semibold,
-    flex: 1,
-  },
-  vsText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    ...fonts.regular,
-    textAlign: 'center',
-    marginLeft: 48,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: spacing.lg,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    color: colors.text,
-    ...fonts.bold,
-    marginBottom: spacing.md,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-
-  // ===========================
-  // Scores styles
-  // ===========================
-  dateSectionHeader: {
-    fontSize: 15,
-    color: colors.navy,
-    ...fonts.bold,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  scoreCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  scoreCardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  scoreCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flex: 1,
-  },
-  scoreCardTime: {
-    fontSize: 13,
-    color: colors.textMuted,
-    ...fonts.semibold,
-  },
-  scoreCardRink: {
-    fontSize: 12,
-    color: colors.info,
-    ...fonts.medium,
-  },
-  scoreCardDivision: {
-    fontSize: 12,
-    color: colors.navy,
-    ...fonts.semibold,
-    marginBottom: spacing.sm,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radii.full,
-    gap: 4,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    color: colors.white,
-    ...fonts.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.white,
-  },
-  scoreMatchup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: spacing.sm,
-  },
-  scoreTeamCol: {
-    flex: 1,
-  },
-  scoreTeamColRight: {
-    alignItems: 'flex-end',
-  },
-  scoreTeamLabel: {
-    fontSize: 10,
-    color: colors.textMuted,
-    ...fonts.semibold,
-    letterSpacing: 0.5,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-  },
-  scoreTeamName: {
-    fontSize: 14,
-    color: colors.text,
-    ...fonts.semibold,
-  },
-  scoreTeamWinner: {
-    ...fonts.bold,
-    color: colors.navy,
-  },
-  scoreCenter: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    minWidth: 70,
-  },
-  scoreNumbers: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  scoreValue: {
-    fontSize: 24,
-    color: colors.textSecondary,
-    ...fonts.semibold,
-  },
-  scoreValueWinner: {
-    color: colors.navy,
-    ...fonts.bold,
-  },
-  scoreDash: {
-    fontSize: 20,
-    color: colors.textMuted,
-    ...fonts.regular,
-    marginHorizontal: 2,
-  },
-  scoreVs: {
-    fontSize: 14,
-    color: colors.textMuted,
-    ...fonts.medium,
-  },
-  otLabel: {
-    fontSize: 10,
-    color: colors.textMuted,
-    ...fonts.bold,
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
-  periodLabel: {
-    fontSize: 10,
-    color: colors.success,
-    ...fonts.bold,
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
-
-  // ===========================
-  // Standings styles
-  // ===========================
-  standingsSection: {
-    marginBottom: spacing.xxl,
-  },
-  standingsSectionHeader: {
-    fontSize: 15,
-    color: colors.navy,
-    ...fonts.bold,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  standingsTable: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  standingsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.navy,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  standingsHeaderCell: {
-    fontSize: 10,
-    color: colors.white,
-    ...fonts.bold,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  standingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  standingsRowAlt: {
-    backgroundColor: '#f8f9fa',
-  },
-  standingsCell: {
-    fontSize: 12,
-    color: colors.text,
-    ...fonts.regular,
-    textAlign: 'center',
-  },
-  standingsRankCol: {
-    width: 22,
-  },
-  standingsTeamCol: {
-    flex: 1,
-    textAlign: 'left',
-    paddingLeft: spacing.xs,
-  },
-  standingsStatCol: {
-    width: 26,
-  },
-  standingsStatColWide: {
-    width: 32,
-  },
-  standingsRankText: {
-    ...fonts.bold,
-    color: colors.navy,
-  },
-  standingsTeamText: {
-    ...fonts.semibold,
-    textAlign: 'left',
-  },
-  standingsPointsText: {
-    ...fonts.bold,
-    color: colors.navy,
-  },
-  standingsDiffText: {
-    ...fonts.semibold,
-    fontSize: 11,
-  },
-
-  // ===========================
-  // Info Tab styles
-  // ===========================
-  infoSection: {
-    marginBottom: spacing.xxl,
-  },
-  infoSectionTitle: {
-    fontSize: 15,
-    color: colors.navy,
-    ...fonts.bold,
-    marginBottom: spacing.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  infoCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  infoDescriptionText: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.regular,
-    lineHeight: 23,
-  },
-  infoPlaceholderText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    ...fonts.regular,
-    lineHeight: 21,
-  },
-  lockerRoomContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  lockerRoomIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.md,
-    backgroundColor: colors.bg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  lockerRoomIcon: {
-    fontSize: 24,
-  },
-  lockerRoomTextContainer: {
-    flex: 1,
-  },
-  lockerRoomHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  lockerRoomTitle: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.semibold,
-  },
+  infoIconBox: {
+    width: 40, height: 40, borderRadius: radii.sm,
+    backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center',
+  },
+  infoIconText: { fontSize: 18 },
+  infoRowLabel: { fontSize: 14, color: colors.text, ...fonts.bold },
+  infoRowValue: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, marginTop: 2 },
+  infoRowSub: { fontSize: 12, color: colors.textMuted, ...fonts.regular, marginTop: 2 },
   comingSoonBadge: {
-    backgroundColor: colors.cyan,
+    backgroundColor: colors.infoBg,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.full,
   },
-  comingSoonBadgeText: {
-    fontSize: 10,
-    color: colors.white,
-    ...fonts.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+  comingSoonText: { fontSize: 10, color: colors.info, ...fonts.bold },
+
+  // Collapsible
+  collapsibleContainer: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
   },
-  lockerRoomDescription: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    lineHeight: 19,
-  },
-  venueRow: {
+  collapsibleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
+    justifyContent: 'space-between',
+    padding: spacing.lg,
   },
-  venueRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  collapsibleLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  collapsibleTitle: { fontSize: 14, color: colors.text, ...fonts.bold },
+  collapsibleChevron: { fontSize: 12, color: colors.textMuted },
+  collapsibleBody: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
   },
-  venueIcon: {
-    fontSize: 18,
+
+  // Hotels in Info tab (compact)
+  hotelCard: {
+    backgroundColor: colors.bg,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
-  venueName: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.semibold,
-    flex: 1,
-  },
-  venueAddress: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    marginTop: 2,
-  },
-  rinksContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
+  hotelName: { fontSize: 14, color: colors.text, ...fonts.semibold },
+  hotelLocation: { fontSize: 12, color: colors.textMuted, ...fonts.regular, marginTop: 2 },
+  hotelRate: { fontSize: 12, color: colors.textSecondary, ...fonts.regular, marginTop: 4 },
+  hotelPrice: { fontSize: 14, color: colors.navy, ...fonts.bold, marginTop: 4 },
+  hotelBookBtn: {
     marginTop: spacing.sm,
-    paddingLeft: 30,
+    backgroundColor: colors.navy,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.sm,
+    alignSelf: 'flex-start',
   },
+  hotelBookBtnText: { fontSize: 12, color: colors.white, ...fonts.bold },
+
+  // Description
+  descriptionText: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, lineHeight: 22 },
+  placeholderText: { fontSize: 14, color: colors.textMuted, ...fonts.regular, fontStyle: 'italic' },
+
+  // Fee rows
+  feeRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  feeDivision: { fontSize: 14, color: colors.text, ...fonts.medium },
+  feeAmount: { fontSize: 14, color: colors.navy, ...fonts.bold },
+
+  // Merchandise
+  merchandiseContainer: { alignItems: 'center', paddingVertical: spacing.xxl },
+  merchandiseLogo: { width: 80, height: 80, marginBottom: spacing.lg },
+  merchandiseTitle: { fontSize: 22, color: colors.navy, ...fonts.bold, marginBottom: spacing.sm },
+  merchandiseSubtitle: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, textAlign: 'center', marginBottom: spacing.xxl, paddingHorizontal: spacing.xl },
+  merchandiseBtn: {
+    backgroundColor: colors.navy,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxxl,
+    borderRadius: radii.full,
+    marginBottom: spacing.lg,
+  },
+  merchandiseBtnText: { fontSize: 16, color: colors.white, ...fonts.bold },
+  merchandiseNote: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', paddingHorizontal: spacing.xxl },
+
+  // Game cards
+  gameCard: {
+    backgroundColor: colors.card, borderRadius: radii.md, padding: spacing.lg,
+    marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  gameTimeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  gameTime: { fontSize: 13, color: colors.textMuted, ...fonts.semibold, textTransform: 'uppercase', letterSpacing: 0.3 },
+  gameRink: { fontSize: 13, color: colors.info, ...fonts.medium },
+  gameDivision: { fontSize: 12, color: colors.navy, ...fonts.semibold, marginBottom: spacing.sm },
+  matchup: { gap: spacing.xs },
+  teamRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  teamLabel: { fontSize: 11, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, width: 40 },
+  teamName: { fontSize: 15, color: colors.text, ...fonts.semibold, flex: 1 },
+  vsText: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', marginLeft: 48 },
+
+  // Scores
+  dateSectionHeader: { fontSize: 15, color: colors.navy, ...fonts.bold, marginTop: spacing.md, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
+  scoreCard: {
+    backgroundColor: colors.card, borderRadius: radii.md, padding: spacing.lg,
+    marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  scoreCardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  scoreCardMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  scoreCardTime: { fontSize: 13, color: colors.textMuted, ...fonts.semibold },
+  scoreCardRink: { fontSize: 12, color: colors.info, ...fonts.medium },
+  scoreCardDivision: { fontSize: 12, color: colors.navy, ...fonts.semibold, marginBottom: spacing.sm },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radii.full, gap: 4 },
+  statusBadgeText: { fontSize: 11, color: colors.white, ...fonts.bold, textTransform: 'uppercase', letterSpacing: 0.3 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.white },
+  scoreMatchup: { flexDirection: 'row', alignItems: 'center', paddingTop: spacing.sm },
+  scoreTeamCol: { flex: 1 },
+  scoreTeamColRight: { alignItems: 'flex-end' },
+  scoreTeamLabel: { fontSize: 10, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, marginBottom: 2, textTransform: 'uppercase' },
+  scoreTeamName: { fontSize: 14, color: colors.text, ...fonts.semibold },
+  scoreTeamWinner: { ...fonts.bold, color: colors.navy },
+  scoreCenter: { alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 70 },
+  scoreNumbers: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  scoreValue: { fontSize: 24, color: colors.textSecondary, ...fonts.semibold },
+  scoreValueWinner: { color: colors.navy, ...fonts.bold },
+  scoreDash: { fontSize: 20, color: colors.textMuted, ...fonts.regular, marginHorizontal: 2 },
+  scoreVs: { fontSize: 14, color: colors.textMuted, ...fonts.medium },
+  otLabel: { fontSize: 10, color: colors.textMuted, ...fonts.bold, marginTop: 2, textTransform: 'uppercase' },
+  periodLabel: { fontSize: 10, color: colors.success, ...fonts.bold, marginTop: 2, textTransform: 'uppercase' },
+
+  // Standings
+  standingsSection: { marginBottom: spacing.xxl },
+  standingsSectionHeader: { fontSize: 15, color: colors.navy, ...fonts.bold, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.3 },
+  standingsTable: {
+    backgroundColor: colors.card, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
+    overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  standingsHeaderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.navy, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+  standingsHeaderCell: { fontSize: 10, color: colors.white, ...fonts.bold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
+  standingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  standingsRowAlt: { backgroundColor: '#f8f9fa' },
+  standingsCell: { fontSize: 12, color: colors.text, ...fonts.regular, textAlign: 'center' },
+  standingsRankCol: { width: 24 },
+  standingsTeamCol: { flex: 1, textAlign: 'left', paddingRight: 4 },
+  standingsStatCol: { width: 24 },
+  standingsStatColWide: { width: 32 },
+  standingsRankText: { ...fonts.bold, color: colors.navy },
+  standingsTeamText: { ...fonts.semibold, textAlign: 'left' },
+  standingsPointsText: { ...fonts.bold, color: colors.navy },
+  standingsDiffText: { ...fonts.semibold },
+
+  // Venues Tab
+  venueCard: {
+    backgroundColor: colors.card, borderRadius: radii.md, padding: spacing.lg,
+    marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
+  },
+  venueHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  venueIcon: { fontSize: 24 },
+  venueName: { fontSize: 16, color: colors.text, ...fonts.bold },
+  venueAddress: { fontSize: 13, color: colors.textSecondary, ...fonts.regular, marginTop: 4 },
+  directionsBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.navy,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.sm,
+    alignSelf: 'flex-start',
+  },
+  directionsBtnText: { fontSize: 13, color: colors.white, ...fonts.bold },
+  rinksContainer: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
+  rinksLabel: { fontSize: 12, color: colors.textMuted, ...fonts.semibold, marginRight: spacing.xs },
   rinkBadge: {
     backgroundColor: colors.highlight,
-    borderRadius: radii.xs,
-    paddingHorizontal: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
+    borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.cyan,
   },
-  rinkBadgeText: {
-    fontSize: 12,
-    color: colors.cyanDark,
-    ...fonts.semibold,
+  rinkBadgeText: { fontSize: 12, color: colors.navy, ...fonts.semibold },
+
+  // Lodging Tab (full cards)
+  hotelFullCard: {
+    backgroundColor: colors.card, borderRadius: radii.md,
+    marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
+    overflow: 'hidden',
   },
+  hotelImage: { width: '100%', height: 160 },
+  hotelFullBody: { padding: spacing.lg },
+  hotelFullName: { fontSize: 18, color: colors.text, ...fonts.bold },
+  hotelFullLocation: { fontSize: 13, color: colors.textSecondary, ...fonts.regular, marginTop: 4 },
+  hotelFullPrice: { fontSize: 16, color: colors.navy, ...fonts.bold, marginTop: spacing.sm },
+  hotelFullRate: { fontSize: 13, color: colors.textMuted, ...fonts.regular, marginTop: 4 },
+  hotelFullBookBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.navy,
+    paddingVertical: spacing.md,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+  },
+  hotelFullBookBtnText: { fontSize: 14, color: colors.white, ...fonts.bold },
+
+  // Who's Coming
+  whosComingCount: { fontSize: 16, color: colors.navy, ...fonts.bold, marginBottom: spacing.lg },
+  ageGroupSection: { marginBottom: spacing.xl },
+  ageGroupHeader: { fontSize: 14, color: colors.navy, ...fonts.bold, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.3 },
+  teamCard: {
+    backgroundColor: colors.card, borderRadius: radii.sm, padding: spacing.md,
+    marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border,
+  },
+  teamCardName: { fontSize: 14, color: colors.text, ...fonts.semibold },
+  teamCardOrg: { fontSize: 12, color: colors.textSecondary, ...fonts.regular, marginTop: 2 },
+  teamCardLocation: { fontSize: 12, color: colors.textMuted, ...fonts.regular, marginTop: 2 },
+
+  // Contact
+  contactContainer: { paddingVertical: spacing.xxl },
+  contactTitle: { fontSize: 22, color: colors.navy, ...fonts.bold, marginBottom: spacing.sm, textAlign: 'center' },
+  contactSubtitle: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, textAlign: 'center', marginBottom: spacing.xxl },
+  contactBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.lg,
+    backgroundColor: colors.card, borderRadius: radii.md, padding: spacing.lg,
+    marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
+  },
+  contactBtnIcon: { fontSize: 28 },
+  contactBtnTitle: { fontSize: 16, color: colors.text, ...fonts.bold },
+  contactBtnSub: { fontSize: 13, color: colors.textSecondary, ...fonts.regular, marginTop: 2 },
 });
