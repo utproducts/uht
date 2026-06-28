@@ -105,7 +105,11 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {/* Content */}
         <View style={styles.heroContent}>
           <View style={styles.heroLeft}>
-            <Text style={styles.heroLogo}>UHT</Text>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={styles.heroLogoImage}
+              resizeMode="contain"
+            />
             <Text style={styles.heroGreeting}>
               {firstName ? `Welcome, ${firstName}!` : 'Welcome!'}
             </Text>
@@ -367,15 +371,10 @@ const styles = StyleSheet.create({
   heroLeft: {
     flex: 1,
   },
-  heroLogo: {
-    fontSize: 36,
-    color: colors.white,
-    ...fonts.extrabold,
-    letterSpacing: 3,
+  heroLogoImage: {
+    width: 120,
+    height: 48,
     marginBottom: 4,
-    textShadowColor: 'rgba(0, 204, 255, 0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 8,
   },
   heroGreeting: {
     fontSize: 16,

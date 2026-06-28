@@ -103,6 +103,19 @@ organizationRoutes.get('/mine', authMiddleware, async (c) => {
 // Public: Search organizations by name (with optional state filter)
 // Must be before /:id routes to avoid parameter matching
 // ==================
+// State code to full name mapping for flexible matching
+const STATE_MAP: Record<string, string> = {
+  AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',
+  CT:'Connecticut',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',
+  IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',
+  ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',
+  MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
+  NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',
+  OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
+  TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',
+  WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',
+};
+
 organizationRoutes.get('/search', async (c) => {
   const db = c.env.DB;
   const q = c.req.query('q') || '';
@@ -112,27 +125,39 @@ organizationRoutes.get('/search', async (c) => {
     return c.json({ success: true, data: [] });
   }
 
+  // Resolve state: if a 2-letter code is passed, also match full name (and vice-versa)
+  const stateUpper = state.toUpperCase();
+  const stateFull = STATE_MAP[stateUpper] || '';
+  // stateValues: all forms to match against (code, full name)
+  const stateValues = [state];
+  if (stateFull) stateValues.push(stateFull);
+  // Also handle if someone passes full name — reverse lookup
+  if (!stateFull && state.length > 2) {
+    const code = Object.entries(STATE_MAP).find(([, v]) => v.toLowerCase() === state.toLowerCase())?.[0];
+    if (code) stateValues.push(code);
+  }
+
   let sql = '';
   const params: string[] = [];
 
   if (q && state) {
-    // Search by name, include orgs matching the state AND orgs with no state
-    // State-matched orgs rank higher than no-state orgs
+    // Search by name + state (match any form of the state)
+    const statePlaceholders = stateValues.map(() => 'LOWER(state) = LOWER(?)').join(' OR ');
     sql = `
       SELECT id, name, city, state, logo_url
       FROM organizations
       WHERE is_active = 1
         AND LOWER(name) LIKE LOWER(?)
-        AND (LOWER(state) = LOWER(?) OR state IS NULL OR state = '')
+        AND (${statePlaceholders} OR state IS NULL OR state = '')
       ORDER BY
-        CASE WHEN LOWER(state) = LOWER(?) THEN 0 ELSE 1 END,
+        CASE WHEN (${statePlaceholders}) THEN 0 ELSE 1 END,
         CASE WHEN LOWER(name) = LOWER(?) THEN 0
              WHEN LOWER(name) LIKE LOWER(?) THEN 1
              ELSE 2 END,
         name ASC
       LIMIT 25
     `;
-    params.push(`%${q}%`, state, state, q, `${q}%`);
+    params.push(`%${q}%`, ...stateValues, ...stateValues, q, `${q}%`);
   } else if (q) {
     sql = `
       SELECT id, name, city, state, logo_url
@@ -147,14 +172,16 @@ organizationRoutes.get('/search', async (c) => {
     `;
     params.push(`%${q}%`, q, `${q}%`);
   } else if (state) {
+    // Match any form of the state value (code or full name)
+    const statePlaceholders = stateValues.map(() => 'LOWER(state) = LOWER(?)').join(' OR ');
     sql = `
       SELECT id, name, city, state, logo_url
       FROM organizations
-      WHERE is_active = 1 AND LOWER(state) = LOWER(?)
+      WHERE is_active = 1 AND (${statePlaceholders})
       ORDER BY name ASC
       LIMIT 50
     `;
-    params.push(state);
+    params.push(...stateValues);
   }
 
   const results = await db.prepare(sql).bind(...params).all();

@@ -137,10 +137,10 @@ eventRoutes.get('/my-registered', authMiddleware, async (c) => {
 });
 
 // ==================
-// PUBLIC: Get single event by slug
+// PUBLIC: Get single event by slug OR id
 // ==================
-eventRoutes.get('/:slug', optionalAuth, async (c) => {
-  const slug = c.req.param('slug');
+eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
+  const slugOrId = c.req.param('slugOrId');
   const db = c.env.DB;
 
   const event = await db.prepare(`
@@ -150,8 +150,8 @@ eventRoutes.get('/:slug', optionalAuth, async (c) => {
            (SELECT MAX(ed4.price_cents) FROM event_divisions ed4 WHERE ed4.event_id = e.id AND ed4.price_cents > 0) as price_max_cents
     FROM events e
     LEFT JOIN venues v ON v.id = e.venue_id
-    WHERE e.slug = ?
-  `).bind(slug).first();
+    WHERE e.slug = ? OR e.id = ?
+  `).bind(slugOrId, slugOrId).first();
 
   if (!event) {
     return c.json({ success: false, error: 'Event not found' }, 404);
@@ -166,11 +166,30 @@ eventRoutes.get('/:slug', optionalAuth, async (c) => {
     ORDER BY ed.age_group ASC
   `).bind((event as any).id).all();
 
+  // Get event venues with rinks
+  const eventVenues = await db.prepare(`
+    SELECT ev.venue_id, v.name as venue_name, v.address, v.city, v.state, v.zip
+    FROM event_venues ev
+    JOIN venues v ON v.id = ev.venue_id
+    WHERE ev.event_id = ?
+    ORDER BY v.name ASC
+  `).bind((event as any).id).all();
+
+  // Get rinks for each venue
+  const venuesWithRinks = [];
+  for (const venue of eventVenues.results as any[]) {
+    const rinks = await db.prepare(`
+      SELECT id, name, surface_type FROM rinks WHERE venue_id = ? AND is_active = 1 ORDER BY name ASC
+    `).bind(venue.venue_id).all();
+    venuesWithRinks.push({ ...venue, rinks: rinks.results });
+  }
+
   return c.json({
     success: true,
     data: {
       ...event,
       divisions: divisions.results,
+      venues: venuesWithRinks,
     },
   });
 });

@@ -67,6 +67,21 @@ interface StandingEntry {
   goal_differential: number;
 }
 
+interface VenueRink {
+  id: string;
+  name: string;
+  surface_type?: string;
+}
+
+interface EventVenue {
+  venue_id: string;
+  venue_name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  rinks?: VenueRink[];
+}
+
 interface EventInfo {
   id: string;
   name: string;
@@ -77,6 +92,7 @@ interface EventInfo {
   end_date?: string;
   description?: string;
   status?: string;
+  venues?: EventVenue[];
 }
 
 interface NavEventParam {
@@ -383,13 +399,8 @@ export default function EventDetailScreen({
     standingsGroups.push({ label, key, entries });
   });
 
-  // Extract unique venues/rinks from schedule data
-  const venueSet = new Set<string>();
-  schedule.forEach((game) => {
-    const rink = game.rink_name || game.rink;
-    if (rink) venueSet.add(rink);
-  });
-  const venues = Array.from(venueSet).sort();
+  // Get venues from event data (API now returns venues with rinks)
+  const eventVenues: EventVenue[] = (event as any)?.venues || [];
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'schedule', label: 'Schedule' },
@@ -794,21 +805,31 @@ export default function EventDetailScreen({
         {/* Venues / Rinks */}
         <View style={styles.infoSection}>
           <Text style={styles.infoSectionTitle}>Venues & Rinks</Text>
-          {venues.length > 0 ? (
-            <View style={styles.infoCard}>
-              {venues.map((venue, idx) => (
-                <View
-                  key={venue}
-                  style={[
-                    styles.venueRow,
-                    idx < venues.length - 1 ? styles.venueRowBorder : null,
-                  ]}
-                >
+          {eventVenues.length > 0 ? (
+            eventVenues.map((venue) => (
+              <View key={venue.venue_id} style={[styles.infoCard, { marginBottom: spacing.sm }]}>
+                <View style={styles.venueRow}>
                   <Text style={styles.venueIcon}>{'🏟️'}</Text>
-                  <Text style={styles.venueName}>{venue}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.venueName}>{venue.venue_name}</Text>
+                    {venue.city || venue.state ? (
+                      <Text style={styles.venueAddress}>
+                        {[venue.address, venue.city, venue.state].filter(Boolean).join(', ')}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              ))}
-            </View>
+                {venue.rinks && venue.rinks.length > 0 ? (
+                  <View style={styles.rinksContainer}>
+                    {venue.rinks.map((rink) => (
+                      <View key={rink.id} style={styles.rinkBadge}>
+                        <Text style={styles.rinkBadgeText}>{rink.name}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ))
           ) : (
             <View style={styles.infoCard}>
               <Text style={styles.infoPlaceholderText}>
@@ -818,23 +839,6 @@ export default function EventDetailScreen({
           )}
         </View>
 
-        {/* Hotels */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoSectionTitle}>Hotels</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.lockerRoomContent}>
-              <View style={styles.lockerRoomIconContainer}>
-                <Text style={styles.lockerRoomIcon}>{'🏨'}</Text>
-              </View>
-              <View style={styles.lockerRoomTextContainer}>
-                <Text style={styles.lockerRoomTitle}>Hotel Information</Text>
-                <Text style={styles.lockerRoomDescription}>
-                  Hotel partner details and booking links will be available soon.
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
       </ScrollView>
     );
   }
@@ -1529,7 +1533,33 @@ const styles = StyleSheet.create({
   venueName: {
     fontSize: 15,
     color: colors.text,
-    ...fonts.medium,
+    ...fonts.semibold,
     flex: 1,
+  },
+  venueAddress: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    marginTop: 2,
+  },
+  rinksContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingLeft: 30,
+  },
+  rinkBadge: {
+    backgroundColor: colors.highlight,
+    borderRadius: radii.xs,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.cyan,
+  },
+  rinkBadgeText: {
+    fontSize: 12,
+    color: colors.cyanDark,
+    ...fonts.semibold,
   },
 });
