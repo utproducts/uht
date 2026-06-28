@@ -20,6 +20,7 @@ import MyTeamsScreen from '../screens/MyTeamsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import MenuScreen from '../screens/MenuScreen';
 import CreateTeamScreen from '../screens/CreateTeamScreen';
+import CoachOnboardingScreen from '../screens/CoachOnboardingScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -98,6 +99,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="SignUp" component={SignUpScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="CoachOnboarding" component={CoachOnboardingScreen} />
         <Stack.Screen name="FollowTeams" component={FollowTeamsScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen

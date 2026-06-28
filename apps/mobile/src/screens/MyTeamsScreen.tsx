@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { authFetch } from '../services/auth';
+import { authFetch, getUser, User } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface Team {
@@ -28,6 +28,15 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const isCoach = currentUser?.roles?.some(r =>
+    ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
+  ) ?? false;
+
+  useEffect(() => {
+    getUser().then(u => setCurrentUser(u));
+  }, []);
 
   const fetchTeams = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -118,30 +127,75 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         <Ionicons name="people-outline" size={64} color={colors.textMuted} />
         <Text style={styles.emptyTitle}>No Teams Yet</Text>
         <Text style={styles.emptySubtitle}>
-          Follow teams to track their schedules and scores.
+          {isCoach
+            ? 'Create a team or follow one to get started.'
+            : 'Follow teams to track their schedules and scores.'}
         </Text>
+
+        {isCoach && (
+          <TouchableOpacity
+            style={styles.createTeamButton}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('CreateTeam' as never, {} as never)}
+          >
+            <Ionicons name="add-circle-outline" size={20} color={colors.white} />
+            <Text style={styles.createTeamButtonText}>Create a Team</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
-          style={styles.findTeamsButton}
+          style={[styles.findTeamsButton, isCoach && styles.findTeamsButtonOutline]}
           activeOpacity={0.7}
           onPress={() => navigation.navigate('FollowTeams')}
         >
-          <Ionicons name="search" size={18} color={colors.white} />
-          <Text style={styles.findTeamsButtonText}>Find Teams</Text>
+          <Ionicons name="search" size={18} color={isCoach ? colors.navy : colors.white} />
+          <Text style={[styles.findTeamsButtonText, isCoach && styles.findTeamsButtonTextOutline]}>
+            Follow a Team
+          </Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   function renderHeaderRight() {
+    if (isCoach) {
+      return (
+        <TouchableOpacity
+          style={styles.addButton}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('CreateTeam' as never, {} as never)}
+        >
+          <Ionicons name="add" size={18} color={colors.white} />
+          <Text style={styles.addButtonText}>Create Team</Text>
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  }
+
+  function renderListFooter() {
     return (
-      <TouchableOpacity
-        style={styles.addButton}
-        activeOpacity={0.7}
-        onPress={() => navigation.navigate('CreateTeam' as never, {} as never)}
-      >
-        <Ionicons name="add" size={18} color={colors.white} />
-        <Text style={styles.addButtonText}>Create Team</Text>
-      </TouchableOpacity>
+      <View style={styles.footerActions}>
+        <TouchableOpacity
+          style={styles.followAnotherBtn}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('FollowTeams')}
+        >
+          <Ionicons name="search-outline" size={18} color={colors.navy} />
+          <Text style={styles.followAnotherText}>Follow Another Team</Text>
+        </TouchableOpacity>
+
+        {isCoach && (
+          <TouchableOpacity
+            style={styles.createAnotherBtn}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('CreateTeam' as never, {} as never)}
+          >
+            <Ionicons name="add-circle-outline" size={18} color={colors.cyan} />
+            <Text style={styles.createAnotherText}>Create a New Team</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   }
 
@@ -181,6 +235,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         refreshing={refreshing}
         onRefresh={handleRefresh}
         ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={teams.length > 0 ? renderListFooter : undefined}
       />
     </View>
   );
@@ -322,6 +377,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  createTeamButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    marginTop: spacing.xl,
+    gap: spacing.sm,
+  },
+  createTeamButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    ...fonts.semibold,
+  },
   findTeamsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -329,12 +399,59 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.md,
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
     gap: spacing.sm,
+  },
+  findTeamsButtonOutline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.navy,
   },
   findTeamsButtonText: {
     color: colors.white,
     fontSize: 16,
+    ...fonts.semibold,
+  },
+  findTeamsButtonTextOutline: {
+    color: colors.navy,
+  },
+
+  // Footer actions (when teams exist)
+  footerActions: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  followAnotherBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+  },
+  followAnotherText: {
+    color: colors.navy,
+    fontSize: 15,
+    ...fonts.semibold,
+  },
+  createAnotherBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.cyan,
+    borderStyle: 'dashed' as any,
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+  },
+  createAnotherText: {
+    color: colors.cyan,
+    fontSize: 15,
     ...fonts.semibold,
   },
 });

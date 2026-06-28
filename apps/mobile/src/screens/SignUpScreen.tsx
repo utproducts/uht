@@ -70,7 +70,7 @@ export default function SignUpScreen({ navigation }: { navigation: any }) {
       });
 
       if (result.success) {
-        navigation.replace('FollowTeams');
+        navigation.replace(role === 'coach' ? 'CoachOnboarding' : 'FollowTeams');
       } else {
         setError(result.error || 'Registration failed. Please try again.');
       }
