@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
+import { authMiddleware, requireRole } from '../middleware/auth';
 
 export const hotelRoutes = new Hono<{ Bindings: Env }>();
 
@@ -73,7 +74,7 @@ const createMasterHotelSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-hotelRoutes.post('/master', zValidator('json', createMasterHotelSchema), async (c) => {
+hotelRoutes.post('/master', authMiddleware, requireRole('admin'), zValidator('json', createMasterHotelSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -116,7 +117,7 @@ const updateMasterHotelSchema = z.object({
   image_url: z.string().nullable().optional(),
 });
 
-hotelRoutes.patch('/master/:id', zValidator('json', updateMasterHotelSchema), async (c) => {
+hotelRoutes.patch('/master/:id', authMiddleware, requireRole('admin'), zValidator('json', updateMasterHotelSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -137,7 +138,7 @@ hotelRoutes.patch('/master/:id', zValidator('json', updateMasterHotelSchema), as
 // ==================
 // ADMIN: Delete master hotel (soft delete)
 // ==================
-hotelRoutes.delete('/master/:id', async (c) => {
+hotelRoutes.delete('/master/:id', authMiddleware, requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const db = c.env.DB;
   await db.prepare("UPDATE master_hotels SET is_active = 0, updated_at = datetime('now') WHERE id = ?").bind(id).run();
@@ -147,7 +148,7 @@ hotelRoutes.delete('/master/:id', async (c) => {
 // ==================
 // ADMIN: Upload image for master hotel
 // ==================
-hotelRoutes.post('/master/:id/image', async (c) => {
+hotelRoutes.post('/master/:id/image', authMiddleware, requireRole('admin'), async (c) => {
   const hotelId = c.req.param('id');
   const db = c.env.DB;
   const storage = c.env.STORAGE;
@@ -235,7 +236,7 @@ const linkHotelSchema = z.object({
   contact_title: z.string().nullable().optional(),
 });
 
-hotelRoutes.post('/link/:eventId', zValidator('json', linkHotelSchema), async (c) => {
+hotelRoutes.post('/link/:eventId', authMiddleware, requireRole('admin', 'director'), zValidator('json', linkHotelSchema), async (c) => {
   const eventId = c.req.param('eventId');
   const data = c.req.valid('json');
   const db = c.env.DB;

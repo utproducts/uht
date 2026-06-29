@@ -129,7 +129,7 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
 // ==================
 // POST /migrate — Create push_tokens table
 // ==================
-pushRoutes.post('/migrate', async (c) => {
+pushRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   await db.prepare(`

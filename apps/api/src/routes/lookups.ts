@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { authMiddleware, requireRole } from '../middleware/auth';
 
 const lookupRoutes = new Hono<{ Bindings: Env }>();
 
@@ -37,7 +38,7 @@ const createSchema = z.object({
   sortOrder: z.number().optional(),
 });
 
-lookupRoutes.post('/', zValidator('json', createSchema), async (c) => {
+lookupRoutes.post('/', authMiddleware, requireRole('admin'), zValidator('json', createSchema), async (c) => {
   const { category, value, sortOrder } = c.req.valid('json');
   const id = `${category.slice(0, 2)}-${Date.now().toString(36)}`;
 
@@ -64,7 +65,7 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-lookupRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
+lookupRoutes.put('/:id', authMiddleware, requireRole('admin'), zValidator('json', updateSchema), async (c) => {
   const id = c.req.param('id');
   const body = c.req.valid('json');
 
@@ -84,7 +85,7 @@ lookupRoutes.put('/:id', zValidator('json', updateSchema), async (c) => {
 });
 
 // DELETE /:id — hard delete (removes permanently)
-lookupRoutes.delete('/:id', async (c) => {
+lookupRoutes.delete('/:id', authMiddleware, requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   await c.env.DB.prepare('DELETE FROM lookup_values WHERE id = ?').bind(id).run();
   return c.json({ success: true });
@@ -133,7 +134,7 @@ lookupRoutes.get('/state-divisions/states', async (c) => {
 });
 
 // POST /state-divisions — add a level to a state
-lookupRoutes.post('/state-divisions', zValidator('json', z.object({
+lookupRoutes.post('/state-divisions', authMiddleware, requireRole('admin'), zValidator('json', z.object({
   state: z.string().min(1).max(3),
   levelName: z.string().min(1),
   sortOrder: z.number().optional(),
@@ -153,7 +154,7 @@ lookupRoutes.post('/state-divisions', zValidator('json', z.object({
 });
 
 // PUT /state-divisions/:id — update a level
-lookupRoutes.put('/state-divisions/:id', zValidator('json', z.object({
+lookupRoutes.put('/state-divisions/:id', authMiddleware, requireRole('admin'), zValidator('json', z.object({
   levelName: z.string().min(1).optional(),
   sortOrder: z.number().optional(),
   isActive: z.boolean().optional(),
@@ -173,7 +174,7 @@ lookupRoutes.put('/state-divisions/:id', zValidator('json', z.object({
 });
 
 // DELETE /state-divisions/:id — hard delete
-lookupRoutes.delete('/state-divisions/:id', async (c) => {
+lookupRoutes.delete('/state-divisions/:id', authMiddleware, requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   await c.env.DB.prepare('DELETE FROM state_division_levels WHERE id = ?').bind(id).run();
   return c.json({ success: true });

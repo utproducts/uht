@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env, UserRole } from '../types';
 import { hashPassword, verifyPassword, generateToken } from '../middleware/auth';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireRole } from '../middleware/auth';
 import { getResolvedFields } from '../lib/template-overrides';
+import { rateLimit } from '../middleware/rate-limit';
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
@@ -20,7 +21,7 @@ const registerSchema = z.object({
   role: z.enum(['organization', 'coach', 'manager', 'parent']).default('parent'),
 });
 
-authRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
+authRoutes.post('/register', rateLimit(5, 60_000), zValidator('json', registerSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -115,7 +116,7 @@ const signupSchema = z.object({
   role: z.enum(['organization', 'coach', 'manager', 'parent', 'referee']),
 });
 
-authRoutes.post('/signup', zValidator('json', signupSchema), async (c) => {
+authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -261,7 +262,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-authRoutes.post('/login', zValidator('json', loginSchema), async (c) => {
+authRoutes.post('/login', rateLimit(10, 60_000), zValidator('json', loginSchema), async (c) => {
   const { email, password } = c.req.valid('json');
   const db = c.env.DB;
 
@@ -343,7 +344,7 @@ const magicLinkSchema = z.object({
   redirect: z.string().optional(),
 });
 
-authRoutes.post('/magic-link', zValidator('json', magicLinkSchema), async (c) => {
+authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLinkSchema), async (c) => {
   const { email, redirect } = c.req.valid('json');
   const db = c.env.DB;
 
@@ -515,7 +516,7 @@ const pinLoginSchema = z.object({
   pin: z.string().length(4),
 });
 
-authRoutes.post('/scorekeeper-pin', zValidator('json', pinLoginSchema), async (c) => {
+authRoutes.post('/scorekeeper-pin', rateLimit(10, 60_000), zValidator('json', pinLoginSchema), async (c) => {
   const { pin } = c.req.valid('json');
   const db = c.env.DB;
 
@@ -554,7 +555,7 @@ const adminPinSchema = z.object({
   pin: z.string().length(4),
 });
 
-authRoutes.post('/admin-pin', zValidator('json', adminPinSchema), async (c) => {
+authRoutes.post('/admin-pin', rateLimit(10, 60_000), zValidator('json', adminPinSchema), async (c) => {
   const { email, pin } = c.req.valid('json');
   const db = c.env.DB;
 
@@ -645,7 +646,7 @@ authRoutes.put('/set-pin',
 // ==================
 // MIGRATION HELPER (run once to add pin_code column)
 // ==================
-authRoutes.post('/migrate-pin', async (c) => {
+authRoutes.post('/migrate-pin', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   try {
     await db.prepare('ALTER TABLE users ADD COLUMN pin_code TEXT DEFAULT NULL').run();

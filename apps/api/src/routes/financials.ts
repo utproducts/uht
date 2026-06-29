@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { Env } from '../types';
+import { authMiddleware, requireRole } from '../middleware/auth';
 
 export const financialRoutes = new Hono<{ Bindings: Env }>();
 
 // ==========================================
 // SETUP: Create expense tables if not exist
 // ==========================================
-financialRoutes.post('/setup-tables', async (c) => {
+financialRoutes.post('/setup-tables', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const results: string[] = [];
 
@@ -72,7 +73,7 @@ const expenseSchema = z.object({
 });
 
 // List expenses for an event
-financialRoutes.get('/expenses/:eventId', async (c) => {
+financialRoutes.get('/expenses/:eventId', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const eventId = c.req.param('eventId');
   try {
@@ -86,7 +87,7 @@ financialRoutes.get('/expenses/:eventId', async (c) => {
 });
 
 // Create expense
-financialRoutes.post('/expenses', zValidator('json', expenseSchema), async (c) => {
+financialRoutes.post('/expenses', authMiddleware, requireRole('admin'), zValidator('json', expenseSchema), async (c) => {
   const db = c.env.DB;
   const data = c.req.valid('json');
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -100,7 +101,7 @@ financialRoutes.post('/expenses', zValidator('json', expenseSchema), async (c) =
 });
 
 // Update expense
-financialRoutes.patch('/expenses/:id', async (c) => {
+financialRoutes.patch('/expenses/:id', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = await c.req.json() as Record<string, any>;
@@ -124,7 +125,7 @@ financialRoutes.patch('/expenses/:id', async (c) => {
 });
 
 // Delete expense
-financialRoutes.delete('/expenses/:id', async (c) => {
+financialRoutes.delete('/expenses/:id', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   await db.prepare('DELETE FROM event_expenses WHERE id = ?').bind(id).run();
@@ -148,7 +149,7 @@ const rebateSchema = z.object({
 });
 
 // List rebates for an event
-financialRoutes.get('/rebates/:eventId', async (c) => {
+financialRoutes.get('/rebates/:eventId', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const eventId = c.req.param('eventId');
   try {
@@ -162,7 +163,7 @@ financialRoutes.get('/rebates/:eventId', async (c) => {
 });
 
 // Create rebate
-financialRoutes.post('/rebates', zValidator('json', rebateSchema), async (c) => {
+financialRoutes.post('/rebates', authMiddleware, requireRole('admin'), zValidator('json', rebateSchema), async (c) => {
   const db = c.env.DB;
   const data = c.req.valid('json');
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -176,7 +177,7 @@ financialRoutes.post('/rebates', zValidator('json', rebateSchema), async (c) => 
 });
 
 // Update rebate
-financialRoutes.patch('/rebates/:id', async (c) => {
+financialRoutes.patch('/rebates/:id', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = await c.req.json() as Record<string, any>;
@@ -200,7 +201,7 @@ financialRoutes.patch('/rebates/:id', async (c) => {
 });
 
 // Delete rebate
-financialRoutes.delete('/rebates/:id', async (c) => {
+financialRoutes.delete('/rebates/:id', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   await db.prepare('DELETE FROM hotel_rebates WHERE id = ?').bind(id).run();
@@ -210,7 +211,7 @@ financialRoutes.delete('/rebates/:id', async (c) => {
 // ==========================================
 // REPORTS: Dashboard overview
 // ==========================================
-financialRoutes.get('/dashboard', async (c) => {
+financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { year, season } = c.req.query();
 
@@ -336,7 +337,7 @@ financialRoutes.get('/dashboard', async (c) => {
 // ==========================================
 // REPORTS: Single event P&L
 // ==========================================
-financialRoutes.get('/event-pnl/:eventId', async (c) => {
+financialRoutes.get('/event-pnl/:eventId', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const eventId = c.req.param('eventId');
 
@@ -421,7 +422,7 @@ financialRoutes.get('/event-pnl/:eventId', async (c) => {
 // ==========================================
 // REPORTS: Year-over-year comparison
 // ==========================================
-financialRoutes.get('/yoy', async (c) => {
+financialRoutes.get('/yoy', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   const data = await db.prepare(`
@@ -476,7 +477,7 @@ financialRoutes.get('/yoy', async (c) => {
 // ==========================================
 // REPORTS: City breakdown
 // ==========================================
-financialRoutes.get('/by-city', async (c) => {
+financialRoutes.get('/by-city', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { year } = c.req.query();
 

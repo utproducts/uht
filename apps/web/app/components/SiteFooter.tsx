@@ -44,7 +44,7 @@ export default function SiteFooter() {
             <div className="space-y-2">
               <a href="/login" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Sign In</a>
               <a href="/register" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Create Account</a>
-              <a href="/scorekeeper" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Scorekeeper Login</a>
+              <a href="/scoring" className="block text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Scorekeeper Login</a>
             </div>
           </div>
         </div>

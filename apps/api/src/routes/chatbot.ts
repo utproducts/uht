@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
+import { rateLimit } from '../middleware/rate-limit';
 
 export const chatbotRoutes = new Hono<{ Bindings: Env }>();
 
@@ -127,7 +128,7 @@ async function buildDynamicContext(db: D1Database): Promise<string> {
 }
 
 // Alias: /ask maps to same logic as /chat but returns { response } for backward compat (used by AI description generator)
-chatbotRoutes.post('/ask', zValidator('json', chatSchema), async (c) => {
+chatbotRoutes.post('/ask', rateLimit(20, 60_000), zValidator('json', chatSchema), async (c) => {
   const data = c.req.valid('json');
   const env = c.env;
 
@@ -171,7 +172,7 @@ chatbotRoutes.post('/ask', zValidator('json', chatSchema), async (c) => {
 });
 
 // Main chat endpoint — used by the live chat widget
-chatbotRoutes.post('/chat', zValidator('json', chatSchema), async (c) => {
+chatbotRoutes.post('/chat', rateLimit(20, 60_000), zValidator('json', chatSchema), async (c) => {
   const data = c.req.valid('json');
   const env = c.env;
 
@@ -235,7 +236,7 @@ const escalateSchema = z.object({
   chatHistory: z.string().optional(),
 });
 
-chatbotRoutes.post('/escalate', zValidator('json', escalateSchema), async (c) => {
+chatbotRoutes.post('/escalate', rateLimit(5, 60_000), zValidator('json', escalateSchema), async (c) => {
   const data = c.req.valid('json');
   const env = c.env;
 

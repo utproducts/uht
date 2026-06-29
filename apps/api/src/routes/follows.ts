@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireRole } from '../middleware/auth';
 
 export const followRoutes = new Hono<{ Bindings: Env }>();
 
@@ -88,7 +88,7 @@ followRoutes.delete('/:teamId', authMiddleware, async (c) => {
 // ==================
 // POST /migrate — Create user_follows table
 // ==================
-followRoutes.post('/migrate', async (c) => {
+followRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   await db.prepare(`

@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import * as jose from 'jose';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 
@@ -26,7 +25,7 @@ teamRoutes.get('/admin/events-list', async (c) => {
 // ADMIN: Merge teams into an organization
 // Takes an array of team IDs and assigns them to the same organization
 // ==================
-teamRoutes.post('/admin/merge-org', async (c) => {
+teamRoutes.post('/admin/merge-org', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{
     team_ids: string[];
@@ -204,7 +203,7 @@ teamRoutes.get('/admin/export-for-cleanup', async (c) => {
 // ==================
 // ADMIN: Bulk update teams (for data cleanup)
 // ==================
-teamRoutes.post('/admin/bulk-update', async (c) => {
+teamRoutes.post('/admin/bulk-update', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{ updates: Array<{ id: string; name?: string; head_coach_name?: string; head_coach_email?: string; head_coach_phone?: string; organization_id?: string | null }> }>();
 
@@ -406,7 +405,7 @@ teamRoutes.get('/admin/team-roster/:teamId', async (c) => {
 // ==================
 // ADMIN: Bulk import teams
 // ==================
-teamRoutes.post('/admin/bulk-import', async (c) => {
+teamRoutes.post('/admin/bulk-import', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
   const teams = body.teams; // Array of [team_name, coach_name, phone, event_count]
@@ -444,7 +443,7 @@ teamRoutes.post('/admin/bulk-import', async (c) => {
 // ==================
 // ADMIN: Update team
 // ==================
-teamRoutes.patch('/admin/:id', async (c) => {
+teamRoutes.patch('/admin/:id', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = await c.req.json();
@@ -539,7 +538,7 @@ teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
 // ==================
 // ADMIN: Delete team (soft)
 // ==================
-teamRoutes.delete('/admin/:id', async (c) => {
+teamRoutes.delete('/admin/:id', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   await db.prepare(`UPDATE teams SET is_active = 0, updated_at = datetime('now') WHERE id = ?`).bind(id).run();
@@ -599,7 +598,7 @@ teamRoutes.delete('/:teamId', authMiddleware, async (c) => {
 // ==================
 // ADMIN: Deduplicate teams (single SQL)
 // ==================
-teamRoutes.post('/admin/dedup', async (c) => {
+teamRoutes.post('/admin/dedup', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   // Single SQL: delete all rows where there's another row with the same name and a smaller rowid
@@ -617,7 +616,7 @@ teamRoutes.post('/admin/dedup', async (c) => {
 // ==================
 // ADMIN: Soft-delete teams with no email contact
 // ==================
-teamRoutes.post('/admin/purge-no-contact', async (c) => {
+teamRoutes.post('/admin/purge-no-contact', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   const result = await db.prepare(`
@@ -1415,7 +1414,7 @@ const createTeamSchema = z.object({
   skipDuplicateCheck: z.boolean().optional(),
 });
 
-teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
+teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -1462,23 +1461,12 @@ teamRoutes.post('/', zValidator('json', createTeamSchema), async (c) => {
   const tokenRandBytes = crypto.getRandomValues(new Uint8Array(12));
   for (let i = 0; i < 12; i++) rosterShareToken += tokenChars[tokenRandBytes[i] % tokenChars.length];
 
-  // Resolve user ID from auth token if available
-  let createdByUserId: string | null = null;
-  let creatorEmail: string | null = null;
-  let creatorRole: string | null = null;
-  try {
-    const authHeader = c.req.header('Authorization');
-    if (authHeader && c.env.JWT_SECRET) {
-      const token = authHeader.replace('Bearer ', '');
-      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-      const { payload } = await jose.jwtVerify(token, secret);
-      createdByUserId = (payload.sub || (payload as any).id) as string || null;
-      creatorEmail = (payload as any).email || null;
-      // Determine creator role from their token roles
-      const roles = (payload as any).roles || [];
-      creatorRole = roles.includes('coach') ? 'coach' : roles.includes('manager') ? 'manager' : 'coach';
-    }
-  } catch {}
+  // Resolve user from auth middleware
+  const authUser = c.get('user') as { id: string; email: string; roles: string[] } | undefined;
+  const createdByUserId = authUser?.id || null;
+  const creatorEmail = authUser?.email || null;
+  const roles = authUser?.roles || [];
+  const creatorRole = roles.includes('coach') ? 'coach' : roles.includes('manager') ? 'manager' : 'coach';
 
   await db.prepare(`
     INSERT INTO teams (id, organization_id, name, age_group, division_level,
@@ -2072,7 +2060,7 @@ teamRoutes.delete('/:teamId/players/:playerId', authMiddleware, requireRole('adm
 // Accepts a mapping of { org_id -> { name, city, state, variant_names[] } }
 // Creates org records and links all teams with matching names
 // ==================
-teamRoutes.post('/admin/consolidate-orgs', async (c) => {
+teamRoutes.post('/admin/consolidate-orgs', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{
     owner_id: string;
@@ -2308,7 +2296,7 @@ teamRoutes.get('/:id/invite-code', authMiddleware, async (c) => {
 // ==================
 // ADMIN: Backfill invite codes for existing teams
 // ==================
-teamRoutes.post('/admin/backfill-invite-codes', async (c) => {
+teamRoutes.post('/admin/backfill-invite-codes', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -2329,7 +2317,7 @@ teamRoutes.post('/admin/backfill-invite-codes', async (c) => {
 // ==================
 // MIGRATION: Add roster_share_token and claimed_by columns
 // ==================
-teamRoutes.post('/admin/migrate-roster-claim', async (c) => {
+teamRoutes.post('/admin/migrate-roster-claim', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const results: string[] = [];
 

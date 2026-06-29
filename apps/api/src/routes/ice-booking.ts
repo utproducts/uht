@@ -251,7 +251,7 @@ const templateGenerateSchema = z.object({
 });
 
 iceBookingRoutes.post('/slots/generate-template',
-  zValidator('json', templateGenerateSchema), async (c) => {
+  authMiddleware, requireRole('admin'), zValidator('json', templateGenerateSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -313,7 +313,7 @@ const createSlotsSchema = z.object({
 });
 
 iceBookingRoutes.post('/slots',
-  zValidator('json', createSlotsSchema), async (c) => {
+  authMiddleware, requireRole('admin'), zValidator('json', createSlotsSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -346,7 +346,7 @@ const generateSlotsSchema = z.object({
 });
 
 iceBookingRoutes.post('/slots/generate',
-  zValidator('json', generateSlotsSchema), async (c) => {
+  authMiddleware, requireRole('admin'), zValidator('json', generateSlotsSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -412,7 +412,7 @@ iceBookingRoutes.get('/admin/slots', async (c) => {
 });
 
 // Admin: Delete a slot (only if available)
-iceBookingRoutes.delete('/slots/:id', async (c) => {
+iceBookingRoutes.delete('/slots/:id', authMiddleware, requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -432,7 +432,7 @@ iceBookingRoutes.delete('/slots/:id', async (c) => {
 });
 
 // Admin: Block/unblock a slot
-iceBookingRoutes.patch('/slots/:id', async (c) => {
+iceBookingRoutes.patch('/slots/:id', authMiddleware, requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const { status } = await c.req.json();
   const db = c.env.DB;

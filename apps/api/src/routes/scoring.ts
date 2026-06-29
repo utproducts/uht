@@ -336,7 +336,7 @@ scoringRoutes.delete('/games/:gameId/events/:eventId', async (c) => {
 // ==========================================
 // SCOREKEEPER: Update shot count per period
 // ==========================================
-scoringRoutes.post('/games/:gameId/shots', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/shots', authMiddleware, zValidator('json', z.object({
   teamId: z.string(),
   period: z.number(),
   shotCount: z.number().min(0),
@@ -810,7 +810,7 @@ scoringRoutes.post('/games/:gameId/lineups/load', async (c) => {
 // ==========================================
 // SCOREKEEPER: Manage individual lineup entries
 // ==========================================
-scoringRoutes.put('/games/:gameId/lineups/:lineupId', zValidator('json', z.object({
+scoringRoutes.put('/games/:gameId/lineups/:lineupId', authMiddleware, zValidator('json', z.object({
   isScrached: z.boolean().optional(),
   position: z.string().optional(),
   jerseyNumber: z.string().optional(),
@@ -835,7 +835,7 @@ scoringRoutes.put('/games/:gameId/lineups/:lineupId', zValidator('json', z.objec
 // ==========================================
 // SCOREKEEPER: Three Stars
 // ==========================================
-scoringRoutes.post('/games/:gameId/three-stars', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/three-stars', authMiddleware, zValidator('json', z.object({
   stars: z.array(z.object({
     starNumber: z.number().min(1).max(3),
     teamId: z.string(),
@@ -872,7 +872,7 @@ scoringRoutes.get('/games/:gameId/three-stars', async (c) => {
 // ==========================================
 // SCOREKEEPER: Goalie Stats
 // ==========================================
-scoringRoutes.post('/games/:gameId/goalie-stats', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/goalie-stats', authMiddleware, zValidator('json', z.object({
   teamId: z.string(),
   jerseyNumber: z.string(),
   playerName: z.string().optional(),
@@ -908,7 +908,7 @@ scoringRoutes.post('/games/:gameId/goalie-stats', zValidator('json', z.object({
   return c.json({ success: true, data: { id } });
 });
 
-scoringRoutes.put('/games/:gameId/goalie-stats/:statId', zValidator('json', z.object({
+scoringRoutes.put('/games/:gameId/goalie-stats/:statId', authMiddleware, zValidator('json', z.object({
   toiMinutes: z.number().optional(),
   shotsAgainst: z.number().optional(),
   goalsAgainst: z.number().optional(),
@@ -931,7 +931,7 @@ scoringRoutes.put('/games/:gameId/goalie-stats/:statId', zValidator('json', z.ob
 // ==========================================
 // SCOREKEEPER: Shootout Rounds
 // ==========================================
-scoringRoutes.post('/games/:gameId/shootout', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/shootout', authMiddleware, zValidator('json', z.object({
   teamId: z.string(),
   jerseyNumber: z.string(),
   playerName: z.string().optional(),
@@ -957,7 +957,7 @@ scoringRoutes.post('/games/:gameId/shootout', zValidator('json', z.object({
   return c.json({ success: true, data: { id } });
 });
 
-scoringRoutes.delete('/games/:gameId/shootout/:roundId', async (c) => {
+scoringRoutes.delete('/games/:gameId/shootout/:roundId', authMiddleware, async (c) => {
   const { roundId } = c.req.param();
   const db = c.env.DB;
   await db.prepare('DELETE FROM shootout_rounds WHERE id = ?').bind(roundId).run();
@@ -967,7 +967,7 @@ scoringRoutes.delete('/games/:gameId/shootout/:roundId', async (c) => {
 // ==========================================
 // SCOREKEEPER: Game Notes
 // ==========================================
-scoringRoutes.post('/games/:gameId/notes', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/notes', authMiddleware, zValidator('json', z.object({
   noteType: z.string().optional(),
   content: z.string(),
   period: z.number().optional(),
@@ -989,7 +989,7 @@ scoringRoutes.post('/games/:gameId/notes', zValidator('json', z.object({
 // ==========================================
 // SCOREKEEPER: Game Officials
 // ==========================================
-scoringRoutes.post('/games/:gameId/officials', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/officials', authMiddleware, zValidator('json', z.object({
   officials: z.array(z.object({
     officialName: z.string(),
     role: z.string().optional(),
@@ -1018,7 +1018,7 @@ scoringRoutes.post('/games/:gameId/officials', zValidator('json', z.object({
 // ==========================================
 // SCOREKEEPER: Game Coaches
 // ==========================================
-scoringRoutes.post('/games/:gameId/coaches', zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/coaches', authMiddleware, zValidator('json', z.object({
   coaches: z.array(z.object({
     teamId: z.string(),
     coachName: z.string(),
@@ -1047,7 +1047,7 @@ scoringRoutes.post('/games/:gameId/coaches', zValidator('json', z.object({
 // ==========================================
 // SCOREKEEPER: Update scorekeeper info on game
 // ==========================================
-scoringRoutes.put('/games/:gameId/scorekeeper-info', zValidator('json', z.object({
+scoringRoutes.put('/games/:gameId/scorekeeper-info', authMiddleware, zValidator('json', z.object({
   scorekeeperName: z.string().optional(),
   scorekeeperPhone: z.string().optional(),
 })), async (c) => {

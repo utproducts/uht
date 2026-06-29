@@ -193,7 +193,7 @@ const updateSponsorSchema = z.object({
   is_active: z.number().optional(),
 });
 
-sponsorRoutes.patch('/admin/:id', zValidator('json', updateSponsorSchema), async (c) => {
+sponsorRoutes.patch('/admin/:id', authMiddleware, requireRole('admin'), zValidator('json', updateSponsorSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -226,7 +226,7 @@ const updateSponsorshipSchema = z.object({
   amount_cents: z.number().nullable().optional(),
 });
 
-sponsorRoutes.patch('/admin/sponsorship/:id', zValidator('json', updateSponsorshipSchema), async (c) => {
+sponsorRoutes.patch('/admin/sponsorship/:id', authMiddleware, requireRole('admin'), zValidator('json', updateSponsorshipSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;

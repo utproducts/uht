@@ -242,7 +242,7 @@ organizationRoutes.get('/admin/list', async (c) => {
 // ==================
 // Admin: Bulk-import organizations (skip duplicates)
 // ==================
-organizationRoutes.post('/admin/bulk-import', async (c) => {
+organizationRoutes.post('/admin/bulk-import', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   try {
     const body = await c.req.json<{ organizations: { name: string; state: string }[] }>();
@@ -294,7 +294,7 @@ organizationRoutes.post('/admin/bulk-import', async (c) => {
 // ==================
 // Admin: Run migration to create organization_requests table
 // ==================
-organizationRoutes.post('/admin/migrate-requests', async (c) => {
+organizationRoutes.post('/admin/migrate-requests', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   await db.prepare(`
@@ -371,7 +371,7 @@ organizationRoutes.get('/admin/requests', async (c) => {
 // ==================
 // Admin: Approve an organization request
 // ==================
-organizationRoutes.post('/admin/requests/:id/approve', async (c) => {
+organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRole('admin'), async (c) => {
   const requestId = c.req.param('id');
   const db = c.env.DB;
   const body = await c.req.json<{ adminNotes?: string }>().catch(() => ({} as { adminNotes?: string }));
@@ -432,7 +432,7 @@ organizationRoutes.post('/admin/requests/:id/approve', async (c) => {
 // ==================
 // Admin: Deny an organization request
 // ==================
-organizationRoutes.post('/admin/requests/:id/deny', async (c) => {
+organizationRoutes.post('/admin/requests/:id/deny', authMiddleware, requireRole('admin'), async (c) => {
   const requestId = c.req.param('id');
   const db = c.env.DB;
   const body = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));

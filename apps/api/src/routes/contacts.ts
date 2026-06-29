@@ -9,7 +9,7 @@ export const contactRoutes = new Hono<{ Bindings: Env }>();
 // ──────────────────────────────────────
 // STATS — counts per source
 // ──────────────────────────────────────
-contactRoutes.get('/stats', async (c) => {
+contactRoutes.get('/stats', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const [contactsRes, icontactsRes, usersRes, legacyRes] = await Promise.all([
     db.prepare('SELECT COUNT(*) as cnt FROM contacts').first<{ cnt: number }>(),
@@ -37,7 +37,7 @@ contactRoutes.get('/stats', async (c) => {
 // ──────────────────────────────────────
 // UNIFIED LIST — combines contacts, iContacts, users
 // ──────────────────────────────────────
-contactRoutes.get('/all', async (c) => {
+contactRoutes.get('/all', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { search, source, page = '1', per_page = '50', state } = c.req.query();
   const pageNum = parseInt(page);
@@ -131,7 +131,7 @@ contactRoutes.get('/all', async (c) => {
 // ──────────────────────────────────────
 // LIST — contacts table only (with filtering)
 // ──────────────────────────────────────
-contactRoutes.get('/', async (c) => {
+contactRoutes.get('/', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { search, tag, source, page = '1', per_page = '50' } = c.req.query();
 
@@ -238,7 +238,7 @@ contactRoutes.post('/import', authMiddleware, requireRole('admin'), async (c) =>
 // MIGRATE LEGACY TEAM CONTACTS
 // One-time migration: extracts unique contacts from old teams (created_by IS NULL)
 // ──────────────────────────────────────
-contactRoutes.post('/migrate-legacy', async (c) => {
+contactRoutes.post('/migrate-legacy', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   // Get all unique coach emails from legacy teams
@@ -294,7 +294,7 @@ contactRoutes.post('/migrate-legacy', async (c) => {
 // ──────────────────────────────────────
 // EXPORT CSV — all contacts across sources
 // ──────────────────────────────────────
-contactRoutes.get('/export/csv', async (c) => {
+contactRoutes.get('/export/csv', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { source } = c.req.query();
 

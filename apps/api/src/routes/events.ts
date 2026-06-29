@@ -513,7 +513,7 @@ const saveDivisionsSchema = z.object({
   })),
 });
 
-eventRoutes.put('/admin/:id/divisions', zValidator('json', saveDivisionsSchema), async (c) => {
+eventRoutes.put('/admin/:id/divisions', authMiddleware, requireRole('admin', 'director'), zValidator('json', saveDivisionsSchema), async (c) => {
   const eventId = c.req.param('id');
   const { divisions } = c.req.valid('json');
   const db = c.env.DB;
@@ -567,7 +567,7 @@ eventRoutes.put('/admin/:id/divisions', zValidator('json', saveDivisionsSchema),
   return c.json({ success: true, data: updated.results });
 });
 
-eventRoutes.patch('/admin/update/:id', zValidator('json', updateEventSchema), async (c) => {
+eventRoutes.patch('/admin/update/:id', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateEventSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -634,7 +634,7 @@ const createEventSimpleSchema = z.object({
   sanction_number: z.string().nullable().optional(),
 });
 
-eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), async (c) => {
+eventRoutes.post('/admin/create', authMiddleware, requireRole('admin', 'director'), zValidator('json', createEventSimpleSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -666,7 +666,7 @@ eventRoutes.post('/admin/create', zValidator('json', createEventSimpleSchema), a
 // ==================
 // ADMIN: Bulk import events (from Excel template JSON)
 // ==================
-eventRoutes.post('/admin/bulk-import', async (c) => {
+eventRoutes.post('/admin/bulk-import', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const body = await c.req.json() as { events: any[] };
   const db = c.env.DB;
 
@@ -733,7 +733,7 @@ eventRoutes.post('/admin/bulk-import', async (c) => {
 // ==================
 // ADMIN: Delete event
 // ==================
-eventRoutes.delete('/admin/delete/:id', async (c) => {
+eventRoutes.delete('/admin/delete/:id', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -761,7 +761,7 @@ eventRoutes.delete('/admin/delete/:id', async (c) => {
 // ==================
 // ADMIN: Duplicate event (simple copy)
 // ==================
-eventRoutes.post('/admin/duplicate/:id', async (c) => {
+eventRoutes.post('/admin/duplicate/:id', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const sourceId = c.req.param('id');
   const db = c.env.DB;
 
@@ -983,7 +983,7 @@ eventRoutes.get('/admin/event-venues/:eventId', async (c) => {
 // ==================
 // ADMIN: Set venues for an event (replace all)
 // ==================
-eventRoutes.put('/admin/event-venues/:eventId', async (c) => {
+eventRoutes.put('/admin/event-venues/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
   const body = await c.req.json() as { venue_ids: string[]; primary_venue_id?: string };
@@ -1039,7 +1039,7 @@ eventRoutes.put('/admin/event-venues/:eventId', async (c) => {
 // ==================
 // ADMIN: Update event description/information (WYSIWYG)
 // ==================
-eventRoutes.patch('/event-info/:eventId', async (c) => {
+eventRoutes.patch('/event-info/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
   const body = await c.req.json() as any;
@@ -1069,7 +1069,7 @@ eventRoutes.patch('/event-info/:eventId', async (c) => {
 // ==================
 // AI: Generate event description
 // ==================
-eventRoutes.post('/ai-generate-description/:eventId', async (c) => {
+eventRoutes.post('/ai-generate-description/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
@@ -1376,7 +1376,7 @@ const updateRegistrationSchema = z.object({
   team_name: z.string().optional(),
 });
 
-eventRoutes.patch('/admin/registration/:regId', zValidator('json', updateRegistrationSchema), async (c) => {
+eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateRegistrationSchema), async (c) => {
   const regId = c.req.param('regId');
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -1629,7 +1629,7 @@ eventRoutes.get('/admin/event-hotels/:eventId', async (c) => {
 // ==================
 // ADMIN: Upload hotel image to R2
 // ==================
-eventRoutes.post('/admin/hotel-image/:hotelId', async (c) => {
+eventRoutes.post('/admin/hotel-image/:hotelId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const hotelId = c.req.param('hotelId');
   const db = c.env.DB;
   const storage = c.env.STORAGE;
@@ -1691,7 +1691,7 @@ const addHotelSchema = z.object({
   sort_order: z.number().optional(),
 });
 
-eventRoutes.post('/admin/event-hotels', zValidator('json', addHotelSchema), async (c) => {
+eventRoutes.post('/admin/event-hotels', authMiddleware, requireRole('admin', 'director'), zValidator('json', addHotelSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -1725,7 +1725,7 @@ const updateHotelSchema = z.object({
   image_url: z.string().nullable().optional(),
 });
 
-eventRoutes.patch('/admin/event-hotels/:id', zValidator('json', updateHotelSchema), async (c) => {
+eventRoutes.patch('/admin/event-hotels/:id', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateHotelSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;
@@ -1746,7 +1746,7 @@ eventRoutes.patch('/admin/event-hotels/:id', zValidator('json', updateHotelSchem
 // ==================
 // ADMIN: Delete hotel from event
 // ==================
-eventRoutes.delete('/admin/event-hotels/:id', async (c) => {
+eventRoutes.delete('/admin/event-hotels/:id', authMiddleware, requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   const db = c.env.DB;
   const existing = await db.prepare('SELECT id, hotel_name FROM event_hotels WHERE id = ?').bind(id).first<any>();
@@ -1933,7 +1933,7 @@ eventRoutes.post('/:id/duplicate', authMiddleware, requireRole('admin'), async (
 // ==================
 // ADMIN: Bulk import registrations from source site
 // ==================
-eventRoutes.post('/admin/bulk-import-registrations', async (c) => {
+eventRoutes.post('/admin/bulk-import-registrations', authMiddleware, requireRole('admin'), async (c) => {
   try {
   const db = c.env.DB;
   const body = await c.req.json<{
@@ -2038,7 +2038,7 @@ eventRoutes.post('/:eventId/publish-schedule', authMiddleware, requireRole('admi
 // ==================
 // ADMIN: Seed registrations with hotel assignments (temporary migration helper)
 // ==================
-eventRoutes.post('/admin/seed-registrations', async (c) => {
+eventRoutes.post('/admin/seed-registrations', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
   const { event_id, teams } = body;
@@ -2160,7 +2160,7 @@ eventRoutes.post('/admin/seed-registrations', async (c) => {
 // ==================
 // ADMIN: Bulk create event_hotels from names (for importing hotel data)
 // ==================
-eventRoutes.post('/admin/seed-event-hotels', async (c) => {
+eventRoutes.post('/admin/seed-event-hotels', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
   const { event_id, hotels } = body;
@@ -2226,7 +2226,7 @@ eventRoutes.post('/admin/seed-event-hotels', async (c) => {
 // ==================
 // ADMIN: Fix registration age groups by matching team names
 // ==================
-eventRoutes.post('/admin/fix-age-groups', async (c) => {
+eventRoutes.post('/admin/fix-age-groups', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json();
   const { event_id, teams } = body;
