@@ -555,7 +555,7 @@ export default function EventDetailScreen({
         {/* 4-Game Guarantee badge */}
         <View style={styles.guaranteeBadge}>
           <Ionicons name="shield-checkmark" size={18} color={colors.navy} />
-          <Text style={styles.guaranteeText}>3-4 Game Guarantee</Text>
+          <Text style={styles.guaranteeText}>4 Game Guarantee</Text>
         </View>
 
         {/* Register / Share CTA */}
@@ -597,17 +597,6 @@ export default function EventDetailScreen({
           </View>
         )}
 
-        {/* Stature */}
-        <View style={styles.infoRow}>
-          <View style={styles.infoIconBox}>
-            <Ionicons name="ribbon-outline" size={20} color={colors.navy} />
-          </View>
-          <View>
-            <Text style={styles.infoRowLabel}>Stature</Text>
-            <Text style={styles.infoRowValue}>UHT Tournament</Text>
-          </View>
-        </View>
-
         {/* Age Groups */}
         {displayEvent?.age_groups ? (
           <View style={styles.infoRow}>
@@ -616,7 +605,13 @@ export default function EventDetailScreen({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoRowLabel}>Age Groups</Text>
-              <Text style={styles.infoRowValue}>{displayEvent.age_groups}</Text>
+              <View style={styles.ageGroupPills}>
+                {displayEvent.age_groups.split(',').map((ag: string, i: number) => (
+                  <View key={i} style={styles.ageGroupPill}>
+                    <Text style={styles.ageGroupPillText}>{ag.trim()}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         ) : eventDivisions.length > 0 ? (
@@ -626,9 +621,13 @@ export default function EventDetailScreen({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoRowLabel}>Age Groups</Text>
-              <Text style={styles.infoRowValue}>
-                {[...new Set(eventDivisions.map(d => d.age_group))].join(', ')}
-              </Text>
+              <View style={styles.ageGroupPills}>
+                {[...new Set(eventDivisions.map(d => d.age_group))].map((ag, i) => (
+                  <View key={i} style={styles.ageGroupPill}>
+                    <Text style={styles.ageGroupPillText}>{ag}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         ) : null}
@@ -1571,6 +1570,16 @@ const styles = StyleSheet.create({
   infoRowLabel: { fontSize: 14, color: colors.text, ...fonts.bold },
   infoRowValue: { fontSize: 14, color: colors.textSecondary, ...fonts.regular, marginTop: 2 },
   infoRowSub: { fontSize: 12, color: colors.textMuted, ...fonts.regular, marginTop: 2 },
+  ageGroupPills: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6,
+  },
+  ageGroupPill: {
+    backgroundColor: colors.navy, borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 4,
+  },
+  ageGroupPillText: {
+    color: colors.white, fontSize: 12, ...fonts.bold,
+  },
 
   // Info Tab — sections
   infoSection: {
