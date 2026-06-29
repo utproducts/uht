@@ -240,7 +240,12 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 </TouchableOpacity>
               ) : (
                 teams.slice(0, 4).map((team) => (
-                  <View key={team.id} style={styles.teamCard}>
+                  <TouchableOpacity
+                    key={team.id}
+                    style={styles.teamCard}
+                    activeOpacity={0.7}
+                    onPress={() => navigation.navigate('My Teams')}
+                  >
                     <View style={styles.teamAvatar}>
                       <Text style={styles.teamAvatarText}>
                         {(team.team_name || '?')[0].toUpperCase()}
@@ -258,7 +263,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                       ) : null}
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                  </View>
+                  </TouchableOpacity>
                 ))
               )}
             </View>
