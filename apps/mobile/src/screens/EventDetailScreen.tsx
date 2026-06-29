@@ -566,8 +566,11 @@ export default function EventDetailScreen({
                 style={styles.registerBtn}
                 activeOpacity={0.7}
                 onPress={() => {
-                  const slug = displayEvent?.slug || displayEvent?.id || eventId;
-                  Linking.openURL(`https://uht-web.pages.dev/events/${slug}`);
+                  navigation.navigate('RegisterEvent', {
+                    eventId: displayEvent?.id || eventId,
+                    eventName: displayEvent?.name || 'Tournament',
+                    eventSlug: displayEvent?.slug || displayEvent?.id || eventId,
+                  });
                 }}
               >
                 <Ionicons name="clipboard-outline" size={20} color={colors.white} />

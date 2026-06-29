@@ -143,11 +143,171 @@ export default function RegisterPage() {
   const [discountError, setDiscountError] = useState('');
   const [discountExpanded, setDiscountExpanded] = useState(false);
 
-  // Parse URL params
-  useEffect(() => {
+  // Inline login state (replaces redirect to /login)
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginStatus, setLoginStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [loginError, setLoginError] = useState('');
+  const [loginMode, setLoginMode] = useState<'magic' | 'pin'>('magic');
+  const [loginPin, setLoginPin] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+
+  // Load event data (works with or without auth)
+  const loadEventData = async () => {
     const params = new URLSearchParams(window.location.search);
     const eventSlug = params.get('event');
     const eventId = params.get('eventId');
+    try {
+      let ev: EventData | null = null;
+      if (eventId) {
+        const res = await fetch(`${API}/events?per_page=100`);
+        const json = await res.json() as any;
+        const found = (json.data || []).find((e: any) => e.id === eventId);
+        if (found?.slug) {
+          const detailRes = await fetch(`${API}/events/${found.slug}`);
+          const detailJson = await detailRes.json() as any;
+          if (detailJson.success) {
+            ev = detailJson.data;
+            if (Array.isArray(detailJson.data?.divisions)) {
+              setEventDivisions(detailJson.data.divisions);
+            }
+          } else {
+            ev = found;
+          }
+        } else {
+          ev = found || null;
+        }
+      } else if (eventSlug) {
+        const res = await fetch(`${API}/events/${eventSlug}`);
+        const json = await res.json() as any;
+        if (json.success) {
+          ev = json.data;
+          if (Array.isArray(json.data?.divisions)) {
+            setEventDivisions(json.data.divisions);
+          }
+        }
+      }
+      if (!ev) {
+        setError('Event not found. Please go back and try again.');
+      }
+      setEvent(ev);
+    } catch {
+      setError('Failed to load event details.');
+    }
+    setLoading(false);
+  };
+
+  // Load teams for an authenticated user
+  const loadTeams = async (token: string) => {
+    setLoadingTeams(true);
+    let allTeams: Team[] = [];
+    try {
+      const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+      if (Array.isArray(local) && local.length > 0) {
+        allTeams = local.map((t: any) => ({
+          id: t.id, name: t.name, age_group: t.age_group || t.ageGroup,
+          division_level: t.division_level || t.divisionLevel,
+          head_coach_name: t.head_coach_name || t.headCoachName,
+        }));
+      }
+    } catch {}
+    try {
+      const res = await fetch(`${API}/teams/my-teams`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json() as any;
+        const apiTeams = (json.data || []).map((t: any) => ({
+          id: t.id, name: t.name, age_group: t.age_group,
+          division_level: t.division_level, head_coach_name: t.head_coach_name,
+        }));
+        const existing = new Set(allTeams.map(t => t.id));
+        for (const t of apiTeams) {
+          if (!existing.has(t.id)) allTeams.push(t);
+        }
+      }
+    } catch {}
+    try {
+      const localTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+      const ids = localTeams.map((t: any) => t.id).filter(Boolean);
+      if (ids.length > 0) {
+        const res = await fetch(`${API}/teams/by-ids?ids=${ids.join(',')}`);
+        if (res.ok) {
+          const json = await res.json() as any;
+          const byIdTeams = (json.data || []).map((t: any) => ({
+            id: t.id, name: t.name, age_group: t.age_group,
+            division_level: t.division_level, head_coach_name: t.head_coach_name,
+          }));
+          const existing = new Set(allTeams.map(t => t.id));
+          for (const t of byIdTeams) {
+            if (!existing.has(t.id)) allTeams.push(t);
+          }
+        }
+      }
+    } catch {}
+    setTeams(allTeams);
+    if (allTeams.length === 1) setSelectedTeam(allTeams[0]);
+    setLoadingTeams(false);
+  };
+
+  // Inline login handlers
+  const handleInlineLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail) return;
+    setLoginStatus('sending');
+    setLoginError('');
+    try {
+      const resp = await fetch(`${API}/auth/magic-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail.trim().toLowerCase(), redirect: window.location.href }),
+      });
+      const data = await resp.json() as any;
+      if (data.success) {
+        setLoginStatus('sent');
+      } else if (data.error === 'no_account') {
+        setLoginStatus('error');
+        setLoginError("No account found with that email. Sign up first or check your email address.");
+      } else {
+        setLoginStatus('error');
+        setLoginError(data.message || 'Something went wrong.');
+      }
+    } catch {
+      setLoginStatus('error');
+      setLoginError('Unable to connect. Please try again.');
+    }
+  };
+
+  const handleInlinePinLogin = async (pinCode?: string) => {
+    const code = pinCode || loginPin.join('');
+    if (code.length !== 4 || !loginEmail) return;
+    setPinLoading(true);
+    setPinError('');
+    try {
+      const resp = await fetch(`${API}/auth/admin-pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail.trim().toLowerCase(), pin: code }),
+      });
+      const data = await resp.json() as any;
+      if (data.success && data.token) {
+        localStorage.setItem('uht_token', data.token);
+        localStorage.setItem('uht_user', JSON.stringify(data.user));
+        const newAuth = { token: data.token, user: data.user };
+        setAuth(newAuth);
+        loadTeams(data.token);
+      } else {
+        setPinError(data.message || 'Invalid PIN. Please try again.');
+      }
+    } catch {
+      setPinError('Unable to connect. Please try again.');
+    }
+    setPinLoading(false);
+  };
+
+  // Parse URL params and load event (always), load teams (if logged in)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     const codeParam = params.get('code');
     const authData = getAuthUser();
     setAuth(authData);
@@ -158,106 +318,15 @@ export default function RegisterPage() {
       setDiscountExpanded(true);
     }
 
-    if (!authData) {
-      window.location.href = `/login?redirect=/register${window.location.search}`;
-      return;
-    }
+    // Always load event data (no auth needed)
+    loadEventData();
 
-    // Load event
-    (async () => {
-      try {
-        let ev: EventData | null = null;
-        if (eventId) {
-          // Direct ID load — find slug from listing, then fetch full detail with divisions
-          const res = await fetch(`${API}/events?per_page=100`);
-          const json = await res.json() as any;
-          const found = (json.data || []).find((e: any) => e.id === eventId);
-          if (found?.slug) {
-            const detailRes = await fetch(`${API}/events/${found.slug}`);
-            const detailJson = await detailRes.json() as any;
-            if (detailJson.success) {
-              ev = detailJson.data;
-              if (Array.isArray(detailJson.data?.divisions)) {
-                setEventDivisions(detailJson.data.divisions);
-              }
-            } else {
-              ev = found;
-            }
-          } else {
-            ev = found || null;
-          }
-        } else if (eventSlug) {
-          const res = await fetch(`${API}/events/${eventSlug}`);
-          const json = await res.json() as any;
-          if (json.success) {
-            ev = json.data;
-            if (Array.isArray(json.data?.divisions)) {
-              setEventDivisions(json.data.divisions);
-            }
-          }
-        }
-        if (!ev) {
-          setError('Event not found. Please go back and try again.');
-        }
-        setEvent(ev);
-      } catch {
-        setError('Failed to load event details.');
-      }
-      setLoading(false);
-    })();
-
-    // Load teams
-    (async () => {
-      let allTeams: Team[] = [];
-      try {
-        const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-        if (Array.isArray(local) && local.length > 0) {
-          allTeams = local.map((t: any) => ({
-            id: t.id, name: t.name, age_group: t.age_group || t.ageGroup,
-            division_level: t.division_level || t.divisionLevel,
-            head_coach_name: t.head_coach_name || t.headCoachName,
-          }));
-        }
-      } catch {}
-      try {
-        const res = await fetch(`${API}/teams/my-teams`, {
-          headers: { Authorization: `Bearer ${authData!.token}` },
-        });
-        if (res.ok) {
-          const json = await res.json() as any;
-          const apiTeams = (json.data || []).map((t: any) => ({
-            id: t.id, name: t.name, age_group: t.age_group,
-            division_level: t.division_level, head_coach_name: t.head_coach_name,
-          }));
-          const existing = new Set(allTeams.map(t => t.id));
-          for (const t of apiTeams) {
-            if (!existing.has(t.id)) allTeams.push(t);
-          }
-        }
-      } catch {}
-      // Also try by-ids from localStorage
-      try {
-        const localTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-        const ids = localTeams.map((t: any) => t.id).filter(Boolean);
-        if (ids.length > 0) {
-          const res = await fetch(`${API}/teams/by-ids?ids=${ids.join(',')}`);
-          if (res.ok) {
-            const json = await res.json() as any;
-            const byIdTeams = (json.data || []).map((t: any) => ({
-              id: t.id, name: t.name, age_group: t.age_group,
-              division_level: t.division_level, head_coach_name: t.head_coach_name,
-            }));
-            const existing = new Set(allTeams.map(t => t.id));
-            for (const t of byIdTeams) {
-              if (!existing.has(t.id)) allTeams.push(t);
-            }
-          }
-        }
-      } catch {}
-      setTeams(allTeams);
-      if (allTeams.length === 1) setSelectedTeam(allTeams[0]);
+    // Load teams only if logged in
+    if (authData) {
+      loadTeams(authData.token);
+    } else {
       setLoadingTeams(false);
-    })();
+    }
   }, []);
 
   // Load Stripe.js
@@ -724,6 +793,112 @@ export default function RegisterPage() {
 
       {/* Registration flow */}
       <div className="max-w-3xl mx-auto px-6 py-8">
+        {/* Inline login — shown when not authenticated */}
+        {!auth && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 rounded-full bg-[#f0f7ff] flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-[#003e79]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-[#1d1d1f]">Sign in to Register</h2>
+              <p className="text-sm text-[#6e6e73] mt-1">Enter your email to continue with registration</p>
+            </div>
+
+            {loginStatus === 'sent' ? (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-7 h-7 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                </div>
+                <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Check Your Email</h3>
+                <p className="text-sm text-[#6e6e73]">We sent a sign-in link to <strong>{loginEmail}</strong></p>
+                <p className="text-xs text-[#86868b] mt-3">Click the link in your email to continue your registration.</p>
+              </div>
+            ) : (
+              <>
+                {/* Tab selector */}
+                <div className="flex gap-1 bg-[#f5f5f7] rounded-lg p-0.5 mb-5">
+                  <button
+                    onClick={() => setLoginMode('magic')}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${loginMode === 'magic' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#6e6e73]'}`}
+                  >Email Link</button>
+                  <button
+                    onClick={() => setLoginMode('pin')}
+                    className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${loginMode === 'pin' ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#6e6e73]'}`}
+                  >PIN Code</button>
+                </div>
+
+                <form onSubmit={loginMode === 'magic' ? handleInlineLogin : (e) => { e.preventDefault(); handleInlinePinLogin(); }}>
+                  <div className="mb-4">
+                    <label className="block text-sm font-semibold text-[#1d1d1f] mb-1.5">Email Address</label>
+                    <input
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] text-[#1d1d1f] text-sm focus:outline-none focus:border-[#00ccff] focus:ring-2 focus:ring-[#00ccff]/20"
+                      required
+                    />
+                  </div>
+
+                  {loginMode === 'pin' && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-semibold text-[#1d1d1f] mb-1.5">4-Digit PIN</label>
+                      <div className="flex gap-3 justify-center">
+                        {loginPin.map((digit, i) => (
+                          <input
+                            key={i}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!/^\d*$/.test(val)) return;
+                              const newPin = [...loginPin];
+                              newPin[i] = val.slice(-1);
+                              setLoginPin(newPin);
+                              setPinError('');
+                              if (val && i < 3) {
+                                (e.target.nextElementSibling as HTMLInputElement)?.focus();
+                              }
+                              if (val && i === 3 && newPin.every(d => d)) {
+                                handleInlinePinLogin(newPin.join(''));
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Backspace' && !loginPin[i] && i > 0) {
+                                (e.target as HTMLInputElement).previousElementSibling && ((e.target as HTMLInputElement).previousElementSibling as HTMLInputElement)?.focus();
+                              }
+                            }}
+                            className="w-14 h-14 text-center text-2xl font-bold rounded-xl border-2 border-[#d2d2d7] text-[#1d1d1f] focus:outline-none focus:border-[#00ccff] focus:ring-2 focus:ring-[#00ccff]/20"
+                          />
+                        ))}
+                      </div>
+                      {pinError && <p className="text-red-500 text-sm text-center mt-2">{pinError}</p>}
+                    </div>
+                  )}
+
+                  {loginError && <p className="text-red-500 text-sm mb-3">{loginError}</p>}
+
+                  <button
+                    type="submit"
+                    disabled={loginStatus === 'sending' || pinLoading}
+                    className="w-full py-3.5 rounded-xl font-semibold text-white bg-[#003e79] hover:bg-[#00264d] disabled:opacity-50 transition-colors text-sm"
+                  >
+                    {loginStatus === 'sending' || pinLoading ? 'Signing in...' : loginMode === 'magic' ? 'Send Sign-In Link' : 'Sign In with PIN'}
+                  </button>
+                </form>
+
+                <div className="mt-4 text-center">
+                  <p className="text-xs text-[#86868b]">
+                    Don't have an account? <a href={`/login?redirect=/register${typeof window !== 'undefined' ? window.location.search : ''}`} className="text-[#00ccff] font-medium hover:underline">Create one here</a>
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Registrant info */}
         {auth && step !== 'confirmed' && step !== 'submitting' && (
           <div className="flex items-center justify-between bg-white/80 backdrop-blur-sm rounded-xl px-4 py-2.5 mb-4 border border-[#e8e8ed]">
@@ -736,12 +911,12 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {step !== 'confirmed' && step !== 'submitting' && (
+        {auth && step !== 'confirmed' && step !== 'submitting' && (
           <StepIndicator steps={stepNames} current={stepIndex} />
         )}
 
         {/* ═══════════════════════════════════ STEP 1: SELECT TEAM ═══════════════════════════════════ */}
-        {step === 'team' && (
+        {auth && step === 'team' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-xl font-bold text-[#1d1d1f]">Select Your Team{multiTeamMode ? 's' : ''}</h2>

@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam } from '../services/api';
+import { getUser, User } from '../services/auth';
+import { Ionicons } from '@expo/vector-icons';
 
 const US_STATES = [
   { code: 'AL', name: 'Alabama' },
@@ -95,6 +97,15 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const isCoach = currentUser?.roles?.some(r =>
+    ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
+  ) ?? false;
+
+  useEffect(() => {
+    getUser().then(u => setCurrentUser(u));
+  }, []);
 
   // Filter state list as user types
   const filteredStates = stateFilter
@@ -282,37 +293,58 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
             ListEmptyComponent={
               !loadingTeams ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No Teams Found</Text>
-                  <Text style={styles.emptyText}>
-                    This organization doesn't have any teams yet.
-                  </Text>
+                  {isCoach ? (
+                    <>
+                      <Text style={styles.emptyTitle}>No Teams Found</Text>
+                      <Text style={styles.emptyText}>
+                        This organization doesn't have any teams yet. Create one to get started!
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="time-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
+                      <Text style={styles.emptyTitle}>Your Coach Hasn't Created This Team Yet</Text>
+                      <Text style={styles.emptyText}>
+                        In the meantime, check out our upcoming events! Once your coach creates the team, you can follow it right away.
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.primaryButton, { backgroundColor: colors.cyan, marginTop: 20, alignSelf: 'center', paddingHorizontal: 32 }]}
+                        activeOpacity={0.7}
+                        onPress={() => navigation.replace('Main')}
+                      >
+                        <Text style={styles.primaryButtonText}>Browse Events</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               ) : null
             }
             ListFooterComponent={
-              <TouchableOpacity
-                style={styles.createTeamCard}
-                activeOpacity={0.7}
-                onPress={() =>
-                  (navigation as any).navigate('CreateTeam', {
-                    organizationId: selectedOrg?.id,
-                    organizationName: selectedOrg?.name,
-                    fromOnboarding: true,
-                  })
-                }
-              >
-                <View style={styles.createTeamIcon}>
-                  <Text style={{ fontSize: 24, color: colors.cyan }}>+</Text>
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={[styles.cardTitle, { color: colors.navy }]}>
-                    Create a New Team
-                  </Text>
-                  <Text style={styles.cardSubtitle}>
-                    Coach? Set up your team here
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              isCoach ? (
+                <TouchableOpacity
+                  style={styles.createTeamCard}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    (navigation as any).navigate('CreateTeam', {
+                      organizationId: selectedOrg?.id,
+                      organizationName: selectedOrg?.name,
+                      fromOnboarding: true,
+                    })
+                  }
+                >
+                  <View style={styles.createTeamIcon}>
+                    <Text style={{ fontSize: 24, color: colors.cyan }}>+</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={[styles.cardTitle, { color: colors.navy }]}>
+                      Create a New Team
+                    </Text>
+                    <Text style={styles.cardSubtitle}>
+                      Coach? Set up your team here
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null
             }
           />
         )}
@@ -333,7 +365,7 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                 </Text>
               )}
             </TouchableOpacity>
-          ) : (
+          ) : isCoach ? (
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: colors.cyan }]}
               onPress={() =>
@@ -346,6 +378,14 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
               activeOpacity={0.85}
             >
               <Text style={styles.primaryButtonText}>Create My Team</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: colors.cyan }]}
+              onPress={() => navigation.replace('Main')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.primaryButtonText}>Skip & Browse Events</Text>
             </TouchableOpacity>
           )}
         </View>
