@@ -3298,11 +3298,245 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   );
 }
 
+// --- Scorekeepers Tab Component ---
+function ScorekeepersTab({ eventId }: { eventId: string }) {
+  const [games, setGames] = useState<any[]>([]);
+  const [scorekeepers, setScorekeepers] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(false);
+  const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
+  const [selectedScorekeeper, setSelectedScorekeeper] = useState('');
+  const [searchUser, setSearchUser] = useState('');
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([
+      apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()),
+      apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
+      apiFetch(`${API_BASE.replace('/api/events', '/api')}/users?role=scorekeeper`).then(r => r.json()),
+    ]).then(([gamesJson, skJson, usersJson]) => {
+      if (gamesJson.success) setGames(gamesJson.data || []);
+      if (skJson.success) setScorekeepers(skJson.data || []);
+      if (usersJson.success) setAllUsers((usersJson.data || []).filter((u: any) => u.roles?.includes('scorekeeper') || u.role === 'scorekeeper'));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadData(); }, [eventId]);
+
+  const assignScorekeeper = async () => {
+    if (!selectedScorekeeper || selectedGames.size === 0) return;
+    setAssigning(true);
+    try {
+      const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/assign-scorekeeper`, {
+        method: 'POST',
+        body: JSON.stringify({ gameIds: Array.from(selectedGames), scorekeeperId: selectedScorekeeper }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSelectedGames(new Set());
+        setSelectedScorekeeper('');
+        loadData();
+      }
+    } catch {}
+    setAssigning(false);
+  };
+
+  const unassignGames = async (gameIds: string[]) => {
+    try {
+      await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/unassign-scorekeeper`, {
+        method: 'POST',
+        body: JSON.stringify({ gameIds, eventId }),
+      });
+      loadData();
+    } catch {}
+  };
+
+  const toggleGame = (id: string) => {
+    setSelectedGames(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedGames.size === games.length) setSelectedGames(new Set());
+    else setSelectedGames(new Set(games.map(g => g.id)));
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  const assignedGames = games.filter(g => g.scorekeeper_id);
+  const unassignedGames = games.filter(g => !g.scorekeeper_id);
+
+  const formatTime = (t: string | null) => {
+    if (!t) return '—';
+    try {
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } catch { return t; }
+  };
+
+  const filteredUsers = allUsers.filter(u =>
+    !searchUser || `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(searchUser.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Currently Assigned Scorekeepers */}
+      {scorekeepers.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <h3 className="text-lg font-bold text-[#1d1d1f] mb-4">Assigned Scorekeepers</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {scorekeepers.map((sk: any) => (
+              <div key={sk.user_id} className="flex items-center gap-3 p-3 bg-[#f5f5f7] rounded-xl">
+                <div className="w-10 h-10 bg-[#003e79] rounded-full flex items-center justify-center text-white font-bold text-sm">
+                  {(sk.first_name?.[0] || '?').toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-[#1d1d1f] truncate">{sk.first_name} {sk.last_name}</p>
+                  <p className="text-xs text-[#86868b]">{sk.game_count} game{sk.game_count !== 1 ? 's' : ''} assigned</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Assign Scorekeeper to Games */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-lg font-bold text-[#1d1d1f] mb-4">Assign Scorekeeper to Games</h3>
+
+        {games.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-[#86868b]">No games scheduled for this event yet.</p>
+            <p className="text-sm text-[#86868b] mt-1">Use the Schedule Builder to create games first.</p>
+          </div>
+        ) : (
+          <>
+            {/* Scorekeeper selector + assign button */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search scorekeepers..."
+                  value={searchUser}
+                  onChange={e => setSearchUser(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none"
+                />
+                {searchUser && filteredUsers.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl mt-1 shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {filteredUsers.map(u => (
+                      <button key={u.id} onClick={() => { setSelectedScorekeeper(u.id); setSearchUser(`${u.first_name} ${u.last_name}`); }}
+                        className={"w-full text-left px-4 py-2.5 text-sm hover:bg-[#f5f5f7] transition " + (selectedScorekeeper === u.id ? 'bg-blue-50 text-[#003e79] font-medium' : 'text-[#1d1d1f]')}>
+                        {u.first_name} {u.last_name} <span className="text-[#86868b]">({u.email})</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={assignScorekeeper}
+                disabled={assigning || !selectedScorekeeper || selectedGames.size === 0}
+                className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
+                  (assigning || !selectedScorekeeper || selectedGames.size === 0
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-[#003e79] text-white hover:bg-[#002d5a]')}
+              >
+                {assigning ? 'Assigning...' : `Assign to ${selectedGames.size} Game${selectedGames.size !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+
+            {/* Unassigned Games */}
+            {unassignedGames.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <p className="text-sm font-semibold text-[#1d1d1f]">Unassigned Games ({unassignedGames.length})</p>
+                  <button onClick={selectAll} className="text-xs text-[#003e79] font-medium hover:underline">
+                    {selectedGames.size === games.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                      <th className="px-3 py-2 text-left w-8"></th>
+                      <th className="px-3 py-2 text-left">Game</th>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Time</th>
+                      <th className="px-3 py-2 text-left">Rink</th>
+                      <th className="px-3 py-2 text-left">Division</th>
+                    </tr></thead>
+                    <tbody>
+                      {unassignedGames.map(g => (
+                        <tr key={g.id} onClick={() => toggleGame(g.id)}
+                          className={"border-t border-[#e8e8ed] cursor-pointer transition " + (selectedGames.has(g.id) ? 'bg-blue-50' : 'hover:bg-[#fafafa]')}>
+                          <td className="px-3 py-2.5">
+                            <input type="checkbox" checked={selectedGames.has(g.id)} onChange={() => toggleGame(g.id)}
+                              className="rounded border-gray-300 text-[#003e79] focus:ring-[#003e79]" />
+                          </td>
+                          <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
+                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
+                          <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
+                          <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-xs font-medium">{g.division_name || g.age_group || '—'}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Assigned Games */}
+            {assignedGames.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-[#1d1d1f] mb-3">Assigned Games ({assignedGames.length})</p>
+                <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                      <th className="px-3 py-2 text-left">Game</th>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Time</th>
+                      <th className="px-3 py-2 text-left">Rink</th>
+                      <th className="px-3 py-2 text-left">Scorekeeper</th>
+                      <th className="px-3 py-2 text-left w-20"></th>
+                    </tr></thead>
+                    <tbody>
+                      {assignedGames.map(g => (
+                        <tr key={g.id} className="border-t border-[#e8e8ed]">
+                          <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
+                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
+                          <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
+                          <td className="px-3 py-2.5 text-[#003e79] font-medium">{g.scorekeeper_name || '—'}</td>
+                          <td className="px-3 py-2.5">
+                            <button onClick={() => unassignGames([g.id])} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- Event Detail Overlay ---
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'scorekeepers' | 'schedules'>('overview');
   const [editingReg, setEditingReg] = useState<any>(null);
   const [hotels, setHotels] = useState<string[]>([]);
   const [hotelReport, setHotelReport] = useState<any>(null);
@@ -3438,7 +3672,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit mb-6">
-        {(['overview', 'participants', 'venues', 'hotels', 'schedules'] as const).map((t) => (
+        {(['overview', 'participants', 'venues', 'hotels', 'scorekeepers', 'schedules'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -3446,7 +3680,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
-            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : 'Schedules'}
+            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'scorekeepers' ? 'Scorekeepers' : 'Schedules'}
           </button>
         ))}
       </div>
@@ -3813,6 +4047,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
             </>
           )}
         </div>
+      )}
+
+      {tab === 'scorekeepers' && (
+        <ScorekeepersTab eventId={eventId} />
       )}
 
       {tab === 'schedules' && (
