@@ -75,47 +75,52 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <TouchableOpacity
         style={styles.teamCard}
         activeOpacity={0.7}
-        onPress={() => console.log(`Tapped team: ${item.name}`)}
+        onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
       >
-        {/* Age Group Badge */}
-        <View style={styles.badgeRow}>
-          <View style={styles.ageGroupBadge}>
-            <Text style={styles.ageGroupText}>{item.age_group}</Text>
-          </View>
-        </View>
-
-        {/* Team Name */}
-        <Text style={styles.teamName}>{item.name}</Text>
-
-        {/* Location */}
-        <View style={styles.locationRow}>
-          {item.state ? (
-            <View style={styles.stateBadge}>
-              <Text style={styles.stateBadgeText}>{item.state}</Text>
+        <View style={styles.teamCardRow}>
+          <View style={{ flex: 1 }}>
+            {/* Age Group Badge */}
+            <View style={styles.badgeRow}>
+              <View style={styles.ageGroupBadge}>
+                <Text style={styles.ageGroupText}>{item.age_group}</Text>
+              </View>
             </View>
-          ) : null}
-          {item.city ? (
-            <Text style={styles.cityText}>{item.city}</Text>
-          ) : null}
-        </View>
 
-        {/* Divider */}
-        <View style={styles.divider} />
+            {/* Team Name */}
+            <Text style={styles.teamName}>{item.name}</Text>
 
-        {/* Details */}
-        <View style={styles.detailsRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Coach</Text>
-            <Text style={styles.detailValue} numberOfLines={1}>
-              {item.head_coach_name || '--'}
-            </Text>
+            {/* Location */}
+            <View style={styles.locationRow}>
+              {item.state ? (
+                <View style={styles.stateBadge}>
+                  <Text style={styles.stateBadgeText}>{item.state}</Text>
+                </View>
+              ) : null}
+              {item.city ? (
+                <Text style={styles.cityText}>{item.city}</Text>
+              ) : null}
+            </View>
+
+            {/* Divider */}
+            <View style={styles.divider} />
+
+            {/* Details */}
+            <View style={styles.detailsRow}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Coach</Text>
+                <Text style={styles.detailValue} numberOfLines={1}>
+                  {item.head_coach_name || '--'}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Division</Text>
+                <Text style={styles.detailValue} numberOfLines={1}>
+                  {item.division_level || '--'}
+                </Text>
+              </View>
+            </View>
           </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Division</Text>
-            <Text style={styles.detailValue} numberOfLines={1}>
-              {item.division_level || '--'}
-            </Text>
-          </View>
+          <Ionicons name="chevron-forward" size={22} color={colors.textMuted} style={{ marginLeft: spacing.sm }} />
         </View>
       </TouchableOpacity>
     );
@@ -285,6 +290,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.md,
+  },
+  teamCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   badgeRow: {
     flexDirection: 'row',

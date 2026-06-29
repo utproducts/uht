@@ -189,18 +189,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickAction}
-                onPress={() => {
-                  try {
-                    const parent = navigation.getParent?.();
-                    if (parent) {
-                      parent.navigate('My Teams');
-                    } else {
-                      navigation.navigate('My Teams');
-                    }
-                  } catch {
-                    navigation.navigate('My Teams');
-                  }
-                }}
+                onPress={() => navigation.navigate('My Teams')}
                 activeOpacity={0.7}
               >
                 <View style={[styles.quickIconWrap, { backgroundColor: '#e6f9ff' }]}>
@@ -227,12 +216,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   <View style={styles.sectionAccent} />
                   <Text style={styles.sectionTitle}>Your Teams</Text>
                 </View>
-                <TouchableOpacity onPress={() => {
-                  try {
-                    const parent = navigation.getParent?.();
-                    if (parent) { parent.navigate('My Teams'); } else { navigation.navigate('My Teams'); }
-                  } catch { navigation.navigate('My Teams'); }
-                }}>
+                <TouchableOpacity onPress={() => navigation.navigate('My Teams')}>
                   <Text style={styles.seeAll}>See All</Text>
                 </TouchableOpacity>
               </View>
