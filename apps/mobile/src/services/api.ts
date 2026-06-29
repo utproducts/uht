@@ -98,6 +98,21 @@ export async function getEventStandings(eventId: string) {
 }
 
 // ==================
+// Scorekeeper Dashboard
+// ==================
+export async function getScorekeeperEvents() {
+  const res = await authFetch('/api/scoring/my-events');
+  const json = await res.json() as { success: boolean; data?: unknown[] };
+  return json.success ? json.data : [];
+}
+
+export async function getScorekeeperGames(eventId: string) {
+  const res = await authFetch(`/api/scoring/my-events/${eventId}/games`);
+  const json = await res.json() as { success: boolean; data?: unknown[] };
+  return json.success ? json.data : [];
+}
+
+// ==================
 // Event Hotels
 // ==================
 export async function getEventHotels(eventId: string) {

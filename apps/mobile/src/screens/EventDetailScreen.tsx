@@ -606,9 +606,9 @@ export default function EventDetailScreen({
             <View style={{ flex: 1 }}>
               <Text style={styles.infoRowLabel}>Age Groups</Text>
               <View style={styles.ageGroupPills}>
-                {displayEvent.age_groups.split(',').map((ag: string, i: number) => (
+                {displayEvent.age_groups.replace(/[\[\]"]/g, '').split(',').map((ag: string) => ag.trim()).filter((ag: string) => ag.length > 0).map((ag: string, i: number) => (
                   <View key={i} style={styles.ageGroupPill}>
-                    <Text style={styles.ageGroupPillText}>{ag.trim()}</Text>
+                    <Text style={styles.ageGroupPillText}>{ag}</Text>
                   </View>
                 ))}
               </View>

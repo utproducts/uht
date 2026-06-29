@@ -13,8 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getFollowedTeams, getEvents } from '../services/api';
-import { getUser, authFetch } from '../services/auth';
+import { getFollowedTeams, getEvents, getScorekeeperEvents } from '../services/api';
+import { getUser, authFetch, User } from '../services/auth';
 
 interface FollowedTeam {
   id: string;
@@ -50,8 +50,10 @@ function formatDateRange(startDate: string, endDate: string): string {
 export default function HomeScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const [userName, setUserName] = useState('');
+  const [userRoles, setUserRoles] = useState<string[]>([]);
   const [teams, setTeams] = useState<FollowedTeam[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [scoringEvents, setScoringEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -64,6 +66,15 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         getUser(),
       ]);
       if (user?.name) setUserName(user.name);
+      if (user?.roles) setUserRoles(user.roles);
+
+      // If user is a scorekeeper, fetch their assignments
+      if (user?.roles?.includes('scorekeeper')) {
+        try {
+          const skEvents = await getScorekeeperEvents();
+          setScoringEvents(skEvents as any[]);
+        } catch {}
+      }
 
       // Also fetch "my teams" (teams where user is coach/manager/creator)
       let myTeamsData: FollowedTeam[] = [];
@@ -267,6 +278,43 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 ))
               )}
             </View>
+
+            {/* Scorekeeper Assignments (only for scorekeeper role) */}
+            {userRoles.includes('scorekeeper') && scoringEvents.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleRow}>
+                    <View style={[styles.sectionAccent, { backgroundColor: '#34c759' }]} />
+                    <Text style={styles.sectionTitle}>My Scoring</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => navigation.navigate('Scorekeeper')}>
+                    <Text style={styles.seeAll}>View All</Text>
+                  </TouchableOpacity>
+                </View>
+                {scoringEvents.slice(0, 2).map((event: any) => (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={styles.teamCard}
+                    activeOpacity={0.7}
+                    onPress={() => navigation.navigate('Scorekeeper')}
+                  >
+                    <View style={[styles.teamAvatar, { backgroundColor: '#34c759' }]}>
+                      <Ionicons name="clipboard" size={18} color={colors.white} />
+                    </View>
+                    <View style={styles.teamInfo}>
+                      <Text style={styles.teamName} numberOfLines={1}>{event.name}</Text>
+                      <Text style={styles.teamOrg}>{event.game_count} games assigned</Text>
+                      {event.active_games > 0 && (
+                        <View style={[styles.ageBadge, { backgroundColor: '#e8f5e9' }]}>
+                          <Text style={[styles.ageBadgeText, { color: '#2e7d32' }]}>{event.active_games} active</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             {/* Upcoming Events */}
             <View style={styles.section}>

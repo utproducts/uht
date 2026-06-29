@@ -23,6 +23,7 @@ import CreateTeamScreen from '../screens/CreateTeamScreen';
 import CoachOnboardingScreen from '../screens/CoachOnboardingScreen';
 import TeamDetailScreen from '../screens/TeamDetailScreen';
 import RegisterEventScreen from '../screens/RegisterEventScreen';
+import ScorekeeperScreen from '../screens/ScorekeeperScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -122,6 +123,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="CreateTeam"
           component={CreateTeamScreen}
+          options={{ headerShown: false, animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="Scorekeeper"
+          component={ScorekeeperScreen}
           options={{ headerShown: false, animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

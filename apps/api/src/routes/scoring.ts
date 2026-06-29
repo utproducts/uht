@@ -1154,3 +1154,155 @@ async function sendTelnyxSms(env: Env, to: string, body: string): Promise<string
   }
   return result?.data?.id || null;
 }
+
+// ==========================================
+// SCOREKEEPER DASHBOARD: My assigned events
+// ==========================================
+scoringRoutes.get('/my-events', authMiddleware, async (c) => {
+  const user = (c as any).user;
+  const db = c.env.DB;
+
+  try {
+    // Find events where this user has games assigned as scorekeeper
+    const events = await db.prepare(`
+      SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.city, e.state,
+        e.venue_id, v.name as venue_name,
+        (SELECT COUNT(*) FROM games g2 WHERE g2.event_id = e.id AND g2.scorekeeper_id = ?) as game_count,
+        (SELECT COUNT(*) FROM games g3 WHERE g3.event_id = e.id AND g3.scorekeeper_id = ? AND g3.status IN ('scheduled', 'warmup', 'in_progress', 'intermission')) as active_games
+      FROM events e
+      JOIN games g ON g.event_id = e.id AND g.scorekeeper_id = ?
+      LEFT JOIN venues v ON v.id = e.venue_id
+      GROUP BY e.id
+      ORDER BY e.start_date DESC
+    `).bind(user.id, user.id, user.id).all();
+
+    return c.json({ success: true, data: events.results });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to fetch events' }, 500);
+  }
+});
+
+// ==========================================
+// SCOREKEEPER DASHBOARD: My games for an event
+// ==========================================
+scoringRoutes.get('/my-events/:eventId/games', authMiddleware, async (c) => {
+  const user = (c as any).user;
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  try {
+    const games = await db.prepare(`
+      SELECT g.*,
+        ht.name as home_team_name, ht.logo_url as home_team_logo,
+        at2.name as away_team_name, at2.logo_url as away_team_logo,
+        vr.name as rink_name, v.name as venue_name,
+        ed.age_group, ed.division_level
+      FROM games g
+      LEFT JOIN teams ht ON ht.id = g.home_team_id
+      LEFT JOIN teams at2 ON at2.id = g.away_team_id
+      LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+      LEFT JOIN venues v ON v.id = g.venue_id
+      LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+      WHERE g.event_id = ? AND g.scorekeeper_id = ?
+      ORDER BY g.start_time ASC, g.game_number ASC
+    `).bind(eventId, user.id).all();
+
+    return c.json({ success: true, data: games.results });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to fetch games' }, 500);
+  }
+});
+
+// ==========================================
+// ADMIN: Bulk assign scorekeeper to games
+// ==========================================
+scoringRoutes.put('/events/:eventId/bulk-assign', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  gameIds: z.array(z.string()).min(1),
+  scorekeeperId: z.string(),
+})), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { gameIds, scorekeeperId } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    // Verify the user exists and has scorekeeper role
+    const skUser = await db.prepare(`
+      SELECT u.id, u.first_name, u.last_name, u.phone
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      WHERE u.id = ? AND ur.role = 'scorekeeper'
+    `).bind(scorekeeperId).first<any>();
+
+    if (!skUser) {
+      return c.json({ success: false, error: 'User not found or not a scorekeeper' }, 404);
+    }
+
+    let updated = 0;
+    const skName = `${skUser.first_name} ${skUser.last_name}`.trim();
+
+    for (const gameId of gameIds) {
+      const res = await db.prepare(`
+        UPDATE games SET scorekeeper_id = ?, scorekeeper_name = ?, scorekeeper_phone = ?, updated_at = datetime('now')
+        WHERE id = ? AND event_id = ?
+      `).bind(scorekeeperId, skName, skUser.phone || null, gameId, eventId).run();
+      updated += res.meta.changes || 0;
+    }
+
+    return c.json({ success: true, message: `${updated} games assigned to ${skName}` });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Bulk assign failed' }, 500);
+  }
+});
+
+// ==========================================
+// ADMIN: Unassign scorekeeper from games
+// ==========================================
+scoringRoutes.put('/events/:eventId/bulk-unassign', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  gameIds: z.array(z.string()).min(1),
+})), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { gameIds } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    let updated = 0;
+    for (const gameId of gameIds) {
+      const res = await db.prepare(`
+        UPDATE games SET scorekeeper_id = NULL, scorekeeper_name = NULL, scorekeeper_phone = NULL, updated_at = datetime('now')
+        WHERE id = ? AND event_id = ?
+      `).bind(gameId, eventId).run();
+      updated += res.meta.changes || 0;
+    }
+
+    return c.json({ success: true, message: `${updated} games unassigned` });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Bulk unassign failed' }, 500);
+  }
+});
+
+// ==========================================
+// ADMIN: Get scorekeepers for an event (users assigned to any game)
+// ==========================================
+scoringRoutes.get('/events/:eventId/scorekeepers', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  try {
+    // Get all unique scorekeepers assigned to games in this event
+    const assigned = await db.prepare(`
+      SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, u.phone,
+        COUNT(g.id) as assigned_games,
+        SUM(CASE WHEN g.status = 'final' THEN 1 ELSE 0 END) as completed_games,
+        SUM(CASE WHEN g.status IN ('in_progress', 'warmup', 'intermission') THEN 1 ELSE 0 END) as active_games
+      FROM games g
+      JOIN users u ON u.id = g.scorekeeper_id
+      WHERE g.event_id = ? AND g.scorekeeper_id IS NOT NULL
+      GROUP BY u.id
+      ORDER BY u.last_name, u.first_name
+    `).bind(eventId).all();
+
+    return c.json({ success: true, data: assigned.results });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to fetch scorekeepers' }, 500);
+  }
+});

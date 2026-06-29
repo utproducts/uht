@@ -74,6 +74,8 @@ interface Game {
   director_name: string | null;
   ref1_name: string | null;
   ref2_name: string | null;
+  age_group?: string;
+  division_level?: string;
 }
 
 interface StaffMember {
@@ -1187,6 +1189,272 @@ function ReplaceTeamModal({
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// SCOREKEEPER ASSIGNMENT PANEL
+// ==========================================
+interface ScorekeeperAssignmentProps {
+  eventId: string;
+  games: Game[];
+  staffList: StaffMember[];
+  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
+  onGamesRefresh: () => Promise<void>;
+}
+
+function ScorekeeperAssignment({ eventId, games, staffList, authFetch, onGamesRefresh }: ScorekeeperAssignmentProps) {
+  const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
+  const [selectedScorekeeper, setSelectedScorekeeper] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [filterDay, setFilterDay] = useState<string>('all');
+  const [filterRink, setFilterRink] = useState<string>('all');
+  const [filterAssignment, setFilterAssignment] = useState<string>('all');
+  const [flash, setFlash] = useState('');
+
+  // Get scorekeepers from staff list
+  const scorekeepers = staffList.filter(s => s.roles?.includes('scorekeeper'));
+
+  // Unique days and rinks for filters
+  const days = Array.from(new Set(games.map(g => g.start_time?.split('T')[0]).filter((d): d is string => !!d))).sort();
+  const rinks = Array.from(new Set(games.map(g => g.rink_name).filter((r): r is string => !!r))).sort();
+
+  // Filter games
+  const filteredGames = games.filter(g => {
+    if (filterDay !== 'all' && !g.start_time?.startsWith(filterDay)) return false;
+    if (filterRink !== 'all' && g.rink_name !== filterRink) return false;
+    if (filterAssignment === 'unassigned' && g.scorekeeper_id) return false;
+    if (filterAssignment === 'assigned' && !g.scorekeeper_id) return false;
+    return true;
+  });
+
+  const toggleGame = (id: string) => {
+    setSelectedGames(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedGames.size === filteredGames.length) {
+      setSelectedGames(new Set());
+    } else {
+      setSelectedGames(new Set(filteredGames.map(g => g.id)));
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (!selectedScorekeeper || selectedGames.size === 0) return;
+    setAssigning(true);
+    try {
+      const res = await authFetch(`${API_BASE}/scoring/events/${eventId}/bulk-assign`, {
+        method: 'PUT',
+        body: JSON.stringify({ gameIds: Array.from(selectedGames), scorekeeperId: selectedScorekeeper }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setFlash(json.message || 'Assigned!');
+        setSelectedGames(new Set());
+        setSelectedScorekeeper('');
+        await onGamesRefresh();
+        setTimeout(() => setFlash(''), 3000);
+      }
+    } catch { setFlash('Assignment failed'); setTimeout(() => setFlash(''), 3000); }
+    setAssigning(false);
+  };
+
+  const handleBulkUnassign = async () => {
+    if (selectedGames.size === 0) return;
+    setAssigning(true);
+    try {
+      const res = await authFetch(`${API_BASE}/scoring/events/${eventId}/bulk-unassign`, {
+        method: 'PUT',
+        body: JSON.stringify({ gameIds: Array.from(selectedGames) }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setFlash(json.message || 'Unassigned!');
+        setSelectedGames(new Set());
+        await onGamesRefresh();
+        setTimeout(() => setFlash(''), 3000);
+      }
+    } catch { setFlash('Unassign failed'); setTimeout(() => setFlash(''), 3000); }
+    setAssigning(false);
+  };
+
+  const formatTime = (iso: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  // Stats
+  const totalGames = games.length;
+  const assignedCount = games.filter(g => g.scorekeeper_id).length;
+  const unassignedCount = totalGames - assignedCount;
+
+  return (
+    <div className="space-y-4">
+      {/* Stats row */}
+      <div className="flex items-center gap-4">
+        <h2 className="text-lg font-bold text-[#1d1d1f]">Scorekeeper Assignments</h2>
+        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">{assignedCount} assigned</span>
+        <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">{unassignedCount} unassigned</span>
+        <span className="px-2.5 py-1 bg-[#f5f5f7] text-[#3d3d3d] rounded-full text-[10px] font-bold">{totalGames} total</span>
+      </div>
+
+      {flash && (
+        <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium">
+          {flash}
+        </div>
+      )}
+
+      {/* Action bar */}
+      <div className="bg-white border border-[#e8e8ed] rounded-xl p-4 space-y-3">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-[#86868b] uppercase">Filter:</span>
+          <select value={filterDay} onChange={e => setFilterDay(e.target.value)}
+            className="px-3 py-1.5 border border-[#d2d2d7] rounded-lg text-sm bg-white">
+            <option value="all">All Days</option>
+            {days.map(d => <option key={d} value={d}>{formatDate(d)}</option>)}
+          </select>
+          <select value={filterRink} onChange={e => setFilterRink(e.target.value)}
+            className="px-3 py-1.5 border border-[#d2d2d7] rounded-lg text-sm bg-white">
+            <option value="all">All Rinks</option>
+            {rinks.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select value={filterAssignment} onChange={e => setFilterAssignment(e.target.value)}
+            className="px-3 py-1.5 border border-[#d2d2d7] rounded-lg text-sm bg-white">
+            <option value="all">All Games</option>
+            <option value="unassigned">Unassigned Only</option>
+            <option value="assigned">Assigned Only</option>
+          </select>
+        </div>
+
+        {/* Bulk assign bar */}
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[#f0f0f5]">
+          <span className="text-xs font-semibold text-[#86868b]">{selectedGames.size} selected</span>
+          <select value={selectedScorekeeper} onChange={e => setSelectedScorekeeper(e.target.value)}
+            className="px-3 py-1.5 border border-[#d2d2d7] rounded-lg text-sm bg-white min-w-[200px]">
+            <option value="">Select Scorekeeper...</option>
+            {scorekeepers.map(sk => (
+              <option key={sk.id} value={sk.id}>{sk.first_name} {sk.last_name}</option>
+            ))}
+          </select>
+          <button onClick={handleBulkAssign} disabled={assigning || !selectedScorekeeper || selectedGames.size === 0}
+            className="px-4 py-1.5 bg-[#003e79] text-white rounded-lg text-sm font-semibold disabled:bg-[#86868b] hover:bg-[#002d5a] transition">
+            {assigning ? 'Assigning...' : 'Assign Selected'}
+          </button>
+          <button onClick={handleBulkUnassign} disabled={assigning || selectedGames.size === 0}
+            className="px-4 py-1.5 border border-red-400 text-red-500 rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-red-50 transition">
+            Unassign
+          </button>
+        </div>
+      </div>
+
+      {/* Games table */}
+      {games.length === 0 ? (
+        <div className="text-center py-12 text-[#86868b]">No games scheduled yet. Generate a schedule first.</div>
+      ) : (
+        <div className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[#fafafa] border-b border-[#e8e8ed]">
+              <tr>
+                <th className="px-3 py-2.5 text-left w-10">
+                  <input type="checkbox" checked={selectedGames.size === filteredGames.length && filteredGames.length > 0}
+                    onChange={selectAll} className="rounded" />
+                </th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">#</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">Time</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">Rink</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">Division</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">Matchup</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">Status</th>
+                <th className="px-3 py-2.5 text-left text-[10px] font-bold text-[#86868b] uppercase">Scorekeeper</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredGames.map(g => {
+                const dayStr = g.start_time?.split('T')[0] || '';
+                return (
+                  <tr key={g.id} className={`border-b border-[#f5f5f7] hover:bg-[#fafafa] transition ${selectedGames.has(g.id) ? 'bg-blue-50' : ''}`}>
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={selectedGames.has(g.id)} onChange={() => toggleGame(g.id)} className="rounded" />
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-[#86868b]">{g.game_number}</td>
+                    <td className="px-3 py-2 text-xs">
+                      <div>{formatDate(dayStr)}</div>
+                      <div className="text-[#86868b]">{g.start_time ? formatTime(g.start_time) : '—'}</div>
+                    </td>
+                    <td className="px-3 py-2 text-xs">{g.rink_name || '—'}</td>
+                    <td className="px-3 py-2 text-xs">
+                      <span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-[10px] font-semibold">
+                        {g.age_group} {g.division_level}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs font-medium">
+                      {g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        g.status === 'final' ? 'bg-emerald-100 text-emerald-700' :
+                        g.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        g.status === 'scheduled' ? 'bg-[#f5f5f7] text-[#86868b]' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {g.status === 'in_progress' ? 'LIVE' : g.status?.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {g.scorekeeper_name ? (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-semibold">
+                          {g.scorekeeper_name}
+                        </span>
+                      ) : (
+                        <span className="text-[#c7c7cc] italic">Unassigned</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Available scorekeepers list */}
+      <div className="bg-white border border-[#e8e8ed] rounded-xl p-4">
+        <h3 className="font-bold text-sm text-[#1d1d1f] mb-3">Available Scorekeepers</h3>
+        {scorekeepers.length === 0 ? (
+          <p className="text-sm text-[#86868b]">No users with the scorekeeper role found. Add the scorekeeper role to users in the Users page.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {scorekeepers.map(sk => {
+              const assignedHere = games.filter(g => g.scorekeeper_id === sk.id).length;
+              return (
+                <div key={sk.id} className="flex items-center justify-between px-3 py-2 bg-[#fafafa] rounded-lg">
+                  <div>
+                    <span className="font-medium text-sm text-[#1d1d1f]">{sk.first_name} {sk.last_name}</span>
+                    <span className="ml-2 text-xs text-[#86868b]">{sk.email}</span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-[10px] font-bold">
+                    {assignedHere} games
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2470,7 +2738,7 @@ export default function AdminSchedulePage() {
   const [venuesLoaded, setVenuesLoaded] = useState(false);
 
   const [view, setView] = useState<'full' | 'division' | 'matrix' | 'venue' | 'staff' | 'bracket'>('full');
-  const [workspaceTab, setWorkspaceTab] = useState<'schedule' | 'divisions' | 'config' | 'rules' | 'assignment'>('schedule');
+  const [workspaceTab, setWorkspaceTab] = useState<'schedule' | 'divisions' | 'config' | 'rules' | 'assignment' | 'scorekeepers'>('schedule');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null); // null = show all
@@ -2882,6 +3150,7 @@ export default function AdminSchedulePage() {
               { key: 'config' as const, label: 'Config' },
               { key: 'rules' as const, label: 'Rules' },
               { key: 'assignment' as const, label: 'Division Assignment' },
+              { key: 'scorekeepers' as const, label: 'Scorekeepers' },
             ]).map(tab => (
               <button key={tab.key} onClick={() => {
                 setWorkspaceTab(tab.key);
@@ -3184,6 +3453,20 @@ export default function AdminSchedulePage() {
                 }}
               />
             </div>
+          )}
+
+          {/* ── SCOREKEEPERS TAB ── */}
+          {workspaceTab === 'scorekeepers' && selectedEvent && (
+            <ScorekeeperAssignment
+              eventId={selectedEvent.id}
+              games={games}
+              staffList={staffList}
+              authFetch={authFetch}
+              onGamesRefresh={async () => {
+                const gamesJson = await authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/games`).then(r => r.json());
+                if (gamesJson.success) setGames(gamesJson.data);
+              }}
+            />
           )}
 
           {/* ── SCHEDULE TAB ── */}
