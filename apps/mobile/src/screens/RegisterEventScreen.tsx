@@ -362,7 +362,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       <View style={{ flex: 1 }}>
         <Text style={styles.stepTitle}>Hotel Preference</Text>
         <Text style={styles.stepSubtitle}>
-          Select your top hotel choices in order of preference, or choose Local Team
+          Select your top 3 choices in order of preference, or choose Local Team
         </Text>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
