@@ -48,12 +48,12 @@ function MainTabs() {
             <Ionicons
               name={iconName}
               size={22}
-              color={focused ? colors.navy : colors.tabInactive}
+              color={focused ? colors.navy : 'rgba(0, 62, 121, 0.45)'}
             />
           );
         },
         tabBarActiveTintColor: colors.navy,
-        tabBarInactiveTintColor: colors.tabInactive,
+        tabBarInactiveTintColor: 'rgba(0, 62, 121, 0.45)',
         tabBarLabelStyle: styles.tabLabel,
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
@@ -143,16 +143,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   tabBar: {
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    backgroundColor: colors.cyan,
+    borderTopWidth: 0,
     height: Platform.OS === 'ios' ? 88 : 64,
     paddingTop: 6,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
   },
   tabItem: {
     paddingTop: 0,

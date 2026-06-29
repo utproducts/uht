@@ -6,9 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { clearAuth } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
@@ -16,6 +18,7 @@ import ScreenHeader from '../components/ScreenHeader';
 interface MenuGridItem {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
 }
 
 interface MenuListItem {
@@ -27,22 +30,11 @@ interface MenuListItem {
   destructive?: boolean;
 }
 
-const MANAGE_ITEMS: MenuGridItem[] = [
-  { label: 'Team Management', icon: 'people-outline' },
-  { label: 'Player Management', icon: 'person-outline' },
-  { label: 'Assign Scorekeepers', icon: 'clipboard-outline' },
-];
-
-const BROWSE_ITEMS: MenuGridItem[] = [
-  { label: 'Events', icon: 'calendar-outline' },
-  { label: 'Teams', icon: 'search-outline' },
-];
-
-const SHOP_ITEMS: MenuGridItem[] = [
-  { label: 'Champions Locker', icon: 'trophy-outline' },
-];
+const SITE_URL = 'https://ultimatetournaments.com';
 
 export default function MenuScreen({ navigation }: { navigation: any }) {
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
+
   function handleLogOut() {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -66,6 +58,27 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     ]);
   }
 
+  function openURL(url: string) {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open link.');
+    });
+  }
+
+  const MANAGE_ITEMS: MenuGridItem[] = [
+    { label: 'Team Management', icon: 'people-outline' },
+    { label: 'Player Management', icon: 'person-outline' },
+    { label: 'Assign Scorekeepers', icon: 'clipboard-outline' },
+  ];
+
+  const BROWSE_ITEMS: MenuGridItem[] = [
+    { label: 'Events', icon: 'calendar-outline', onPress: () => navigation.navigate('Events') },
+    { label: 'Teams', icon: 'search-outline' },
+  ];
+
+  const SHOP_ITEMS: MenuGridItem[] = [
+    { label: 'Champions Locker', icon: 'trophy-outline', onPress: () => navigation.navigate('Shop') },
+  ];
+
   const ACCOUNT_ITEMS: MenuListItem[] = [
     { label: 'Account Settings', icon: 'person-circle-outline' },
     { label: 'Notifications', icon: 'notifications-outline' },
@@ -77,8 +90,39 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     },
   ];
 
-  const HELP_ITEMS: MenuListItem[] = [
-    { label: 'App Support', icon: 'information-circle-outline' },
+  const SUPPORT_ITEMS: MenuListItem[] = [
+    {
+      label: 'Contact Support',
+      icon: 'mail-outline',
+      subtitle: 'info@ultimatetournaments.com',
+      onPress: () => openURL('mailto:info@ultimatetournaments.com'),
+    },
+    {
+      label: 'FAQ',
+      icon: 'help-circle-outline',
+      onPress: () => openURL(`${SITE_URL}/faq`),
+    },
+    {
+      label: 'Visit Website',
+      icon: 'globe-outline',
+      onPress: () => openURL(SITE_URL),
+    },
+  ];
+
+  const LEGAL_ITEMS: MenuListItem[] = [
+    {
+      label: 'Privacy Policy',
+      icon: 'shield-checkmark-outline',
+      onPress: () => openURL(`${SITE_URL}/privacy`),
+    },
+    {
+      label: 'Terms of Service',
+      icon: 'document-text-outline',
+      onPress: () => openURL(`${SITE_URL}/terms`),
+    },
+  ];
+
+  const LOGOUT_ITEMS: MenuListItem[] = [
     {
       label: 'Log Out',
       icon: 'log-out-outline',
@@ -97,14 +141,13 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
               <TouchableOpacity
                 style={styles.gridCard}
                 activeOpacity={0.7}
-                onPress={() => console.log(`Tapped: ${item.label}`)}
+                onPress={item.onPress || (() => console.log(`Tapped: ${item.label}`))}
               >
                 <Ionicons name={item.icon} size={28} color={colors.navy} />
                 <Text style={styles.gridLabel}>{item.label}</Text>
               </TouchableOpacity>
             </View>
           ))}
-          {/* Add spacer if odd number of items so last card stays left-aligned */}
           {items.length % 2 !== 0 && <View style={styles.gridSpacer} />}
         </View>
       </View>
@@ -171,7 +214,14 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
         {renderGridSection('BROWSE', BROWSE_ITEMS)}
         {renderGridSection('SHOP', SHOP_ITEMS)}
         {renderListSection('YOUR ACCOUNT', ACCOUNT_ITEMS)}
-        {renderListSection('HELP', HELP_ITEMS)}
+        {renderListSection('SUPPORT', SUPPORT_ITEMS)}
+        {renderListSection('LEGAL', LEGAL_ITEMS)}
+        {renderListSection('', LOGOUT_ITEMS)}
+
+        {/* App version */}
+        <Text style={styles.versionText}>
+          Ultimate Tournaments v{appVersion}
+        </Text>
       </ScrollView>
     </View>
   );
@@ -283,5 +333,15 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...fonts.regular,
     marginTop: 2,
+  },
+
+  // Version footer
+  versionText: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: colors.textMuted,
+    ...fonts.regular,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xxxl,
   },
 });

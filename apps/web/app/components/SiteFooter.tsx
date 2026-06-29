@@ -48,9 +48,13 @@ export default function SiteFooter() {
             </div>
           </div>
         </div>
-        <div className="mt-10 pt-6 border-t border-[#d2d2d7] flex items-center justify-between">
+        <div className="mt-10 pt-6 border-t border-[#d2d2d7] flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-[#86868b]">&copy; {new Date().getFullYear()} Ultimate Hockey Tournaments. All rights reserved.</p>
-          <p className="text-xs text-[#86868b]">USA Hockey Sanctioned Events</p>
+          <div className="flex items-center gap-4">
+            <a href="/privacy" className="text-xs text-[#86868b] hover:text-[#1d1d1f]">Privacy Policy</a>
+            <a href="/terms" className="text-xs text-[#86868b] hover:text-[#1d1d1f]">Terms of Service</a>
+            <span className="text-xs text-[#86868b]">USA Hockey Sanctioned Events</span>
+          </div>
         </div>
       </div>
     </footer>
