@@ -6,7 +6,6 @@ export interface Env {
 
   // API keys (set via wrangler secret)
   STRIPE_SECRET_KEY: string;
-  SENDGRID_API_KEY: string;
   RESEND_API: string;
   TEXTMAGIC_USERNAME: string;
   TEXTMAGIC_API_KEY: string;

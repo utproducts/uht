@@ -209,13 +209,13 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
 }
 
 /**
- * Send registration confirmation email via SendGrid
+ * Send registration confirmation email via Resend
  * Fired immediately when someone registers (before admin approval)
  */
 export async function sendRegistrationConfirmationEmail(env: Env, params: RegistrationConfirmationParams): Promise<{ success: boolean; error?: string }> {
-  if (!env.SENDGRID_API_KEY) {
-    console.warn('SENDGRID_API_KEY not configured — skipping registration confirmation email');
-    return { success: false, error: 'SendGrid API key not configured' };
+  if (!env.RESEND_API) {
+    console.warn('RESEND_API not configured — skipping registration confirmation email');
+    return { success: false, error: 'Resend API key not configured' };
   }
 
   const o = params._overrides as Record<string, string> | undefined;
@@ -227,36 +227,32 @@ export async function sendRegistrationConfirmationEmail(env: Env, params: Regist
   const plainText = `You have successfully registered for the ${params.eventName}!\n\nTeam: ${params.teamName}\nAge Group: ${params.ageGroup}${params.division ? `\nDivision: ${params.division}` : ''}\nEvent: ${params.eventName}\nDate: ${params.eventDate}\nLocation: ${params.eventCity}${params.discountCode ? `\n\nYOUR MULTI-EVENT DISCOUNT CODE: ${params.discountCode}\nUse this code when registering for your next UHT event:\n- $200 OFF with hotel booking\n- $100 OFF for local team\nOne-time use. Valid for ${params.teamName} only.\n` : ''}\n\nWhat happens next?\nOur team reviews all registrations and approves them within 24-48 hours. You'll receive a confirmation email once your spot is secured.\n\nIn the meantime, please have the following ready:\n- Your approved USA Hockey roster\n- Hotel preferences for your team\n- Payment method\n\nQuestions? Contact registration@ultimatetournaments.com\n\nUltimate Hockey Tournaments\n477 Dunlay Street, Wood Dale, IL 60191`;
 
   try {
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.SENDGRID_API_KEY}`,
+        'Authorization': `Bearer ${env.RESEND_API}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [{
-          to: [{ email: params.recipientEmail, name: params.recipientName }],
-          bcc: [{ email: 'registration@ultimatetournaments.com' }],
-        }],
-        from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
-        reply_to: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+        from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+        to: [params.recipientEmail],
+        bcc: ['registration@ultimatetournaments.com'],
+        reply_to: 'registration@ultimatetournaments.com',
         subject,
-        content: [
-          { type: 'text/plain', value: plainText },
-          { type: 'text/html', value: html },
-        ],
+        html,
+        text: plainText,
       }),
     });
 
-    if (response.ok || response.status === 202) {
+    if (response.ok) {
       return { success: true };
     } else {
       const errText = await response.text();
-      console.error('SendGrid registration email error:', response.status, errText);
-      return { success: false, error: `SendGrid ${response.status}: ${errText}` };
+      console.error('Resend registration email error:', response.status, errText);
+      return { success: false, error: `Resend ${response.status}: ${errText}` };
     }
   } catch (err: any) {
-    console.error('SendGrid registration email fetch error:', err);
+    console.error('Resend registration email fetch error:', err);
     return { success: false, error: err.message };
   }
 }

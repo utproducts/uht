@@ -241,8 +241,8 @@ chatbotRoutes.post('/escalate', rateLimit(5, 60_000), zValidator('json', escalat
   const env = c.env;
 
   try {
-    if (!env.SENDGRID_API_KEY) {
-      console.error('SendGrid API key not configured for chat escalation');
+    if (!env.RESEND_API) {
+      console.error('Resend API key not configured for chat escalation');
       return c.json({ success: true, data: { sent: false, fallback: true } });
     }
 
@@ -250,32 +250,27 @@ chatbotRoutes.post('/escalate', rateLimit(5, 60_000), zValidator('json', escalat
       ? `\n\n--- Chat History ---\n${data.chatHistory}`
       : '';
 
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.SENDGRID_API_KEY}`,
+        'Authorization': `Bearer ${env.RESEND_API}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [{
-          to: [{ email: 'info@ultimatetournaments.com', name: 'UHT Team' }],
-        }],
-        from: { email: 'noreply@ultimatetournaments.com', name: 'UHT Chat Widget' },
-        reply_to: { email: data.email, name: data.name },
+        from: 'UHT Chat Widget <noreply@ultimatetournaments.com>',
+        to: ['info@ultimatetournaments.com'],
+        reply_to: data.email,
         subject: `Chat Support Request from ${data.name}`,
-        content: [{
-          type: 'text/html',
-          value: `<div style="font-family:Arial,sans-serif;max-width:600px"><h2 style="color:#003e79">New Chat Support Request</h2><table style="width:100%;border-collapse:collapse;margin:16px 0"><tr><td style="padding:8px;font-weight:bold;color:#666;width:100px">Name:</td><td style="padding:8px">${data.name}</td></tr><tr><td style="padding:8px;font-weight:bold;color:#666">Email:</td><td style="padding:8px"><a href="mailto:${data.email}">${data.email}</a></td></tr></table><div style="background:#f5f5f7;border-radius:8px;padding:16px;margin:16px 0"><p style="margin:0;white-space:pre-wrap">${data.message}</p></div>${chatSummary ? `<details style="margin-top:16px"><summary style="cursor:pointer;color:#003e79;font-weight:bold">Chat History</summary><pre style="background:#f9f9f9;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto;white-space:pre-wrap">${chatSummary}</pre></details>` : ''}<p style="color:#999;font-size:12px;margin-top:20px">Sent from the UHT website chat widget.</p></div>`,
-        }],
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px"><h2 style="color:#003e79">New Chat Support Request</h2><table style="width:100%;border-collapse:collapse;margin:16px 0"><tr><td style="padding:8px;font-weight:bold;color:#666;width:100px">Name:</td><td style="padding:8px">${data.name}</td></tr><tr><td style="padding:8px;font-weight:bold;color:#666">Email:</td><td style="padding:8px"><a href="mailto:${data.email}">${data.email}</a></td></tr></table><div style="background:#f5f5f7;border-radius:8px;padding:16px;margin:16px 0"><p style="margin:0;white-space:pre-wrap">${data.message}</p></div>${chatSummary ? `<details style="margin-top:16px"><summary style="cursor:pointer;color:#003e79;font-weight:bold">Chat History</summary><pre style="background:#f9f9f9;padding:12px;border-radius:6px;font-size:13px;overflow-x:auto;white-space:pre-wrap">${chatSummary}</pre></details>` : ''}<p style="color:#999;font-size:12px;margin-top:20px">Sent from the UHT website chat widget.</p></div>`,
       }),
     });
 
-    if (response.ok || response.status === 202) {
+    if (response.ok) {
       return c.json({ success: true, data: { sent: true } });
     }
 
     const errText = await response.text();
-    console.error('SendGrid escalation error:', response.status, errText);
+    console.error('Resend escalation error:', response.status, errText);
     return c.json({ success: true, data: { sent: false, fallback: true } });
   } catch (err) {
     console.error('Email escalation error:', err);

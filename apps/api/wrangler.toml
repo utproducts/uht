@@ -21,7 +21,7 @@ bucket_name = "uht-assets"
 
 # Environment variables (set via wrangler secret)
 # STRIPE_SECRET_KEY
-# SENDGRID_API_KEY
+# RESEND_API
 # TEXTMAGIC_USERNAME
 # TEXTMAGIC_API_KEY
 # CLAUDE_API_KEY

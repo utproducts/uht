@@ -1531,18 +1531,18 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
         `).bind(invId, teamId, coachEmail, data.headCoachPhone || null, inviteCode, createdByUserId).run();
 
         // Send invite email
-        if (c.env.SENDGRID_API_KEY) {
+        if (c.env.RESEND_API) {
           const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
           const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(coachEmail)}&role=coach`;
           try {
-            await fetch('https://api.sendgrid.com/v3/mail/send', {
+            await fetch('https://api.resend.com/emails', {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+              headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                personalizations: [{ to: [{ email: coachEmail, name: data.headCoachName || '' }] }],
-                from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+                from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+                to: [coachEmail],
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
-                content: [{ type: 'text/html', value: `
+                html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
                     <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
@@ -1559,11 +1559,11 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                       Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
                     </p>
                   </div>
-                ` }],
+                `,
               }),
             });
           } catch (err: any) {
-            console.error('SendGrid invite (coach) error:', err?.message || String(err));
+            console.error('Resend invite (coach) error:', err?.message || String(err));
           }
         }
       }
@@ -1593,18 +1593,18 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
           VALUES (?, ?, ?, ?, 'manager', ?, 'pending', ?)
         `).bind(invId, teamId, mgrEmail, data.managerPhone || null, inviteCode, createdByUserId).run();
 
-        if (c.env.SENDGRID_API_KEY) {
+        if (c.env.RESEND_API) {
           const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
           const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(mgrEmail)}&role=manager`;
           try {
-            await fetch('https://api.sendgrid.com/v3/mail/send', {
+            await fetch('https://api.resend.com/emails', {
               method: 'POST',
-              headers: { 'Authorization': `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+              headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                personalizations: [{ to: [{ email: mgrEmail, name: data.managerName || '' }] }],
-                from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+                from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+                to: [mgrEmail],
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
-                content: [{ type: 'text/html', value: `
+                html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
                     <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
@@ -1621,11 +1621,11 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                       Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
                     </p>
                   </div>
-                ` }],
+                `,
               }),
             });
           } catch (err: any) {
-            console.error('SendGrid invite (manager) error:', err?.message || String(err));
+            console.error('Resend invite (manager) error:', err?.message || String(err));
           }
         }
       }

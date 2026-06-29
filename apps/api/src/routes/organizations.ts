@@ -402,26 +402,23 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
     WHERE id = ?
   `).bind(orgId, body.adminNotes || null, requestId).run();
 
-  // Send approval email via SendGrid
+  // Send approval email via Resend
   const siteUrl = (c.env as any).SITE_URL || 'https://ultimatetournaments.com';
   try {
-    await fetch('https://api.sendgrid.com/v3/mail/send', {
+    await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`,
+        'Authorization': `Bearer ${c.env.RESEND_API}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: request.requested_by_email }] }],
-        from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+        from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+        to: [request.requested_by_email],
         subject: 'Your organization has been approved — create your team now!',
-        content: [{
-          type: 'text/html',
-          value: `<p>Great news! Your organization <strong>${request.name}</strong> has been approved on Ultimate Tournaments.</p>
+        html: `<p>Great news! Your organization <strong>${request.name}</strong> has been approved on Ultimate Tournaments.</p>
             <p>You can now create your team and register for events.</p>
             <p><a href="${siteUrl}/create-team" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Create Your Team</a></p>
             <p>If you have any questions, reply to this email or contact us at support@ultimatetournaments.com.</p>`,
-        }],
       }),
     });
   } catch {}
@@ -683,22 +680,19 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
         VALUES (?, ?, ?, 'coach', ?, 'pending')
       `).bind(invId, teamId, data.headCoachEmail.toLowerCase(), user.id).run();
 
-      // Send invite email via SendGrid
+      // Send invite email via Resend
       try {
         const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.headCoachEmail)}&role=coach`;
-        await fetch('https://api.sendgrid.com/v3/mail/send', {
+        await fetch('https://api.resend.com/emails', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            personalizations: [{ to: [{ email: data.headCoachEmail }] }],
-            from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+            from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+            to: [data.headCoachEmail],
             subject: `You've been invited to coach ${data.name}`,
-            content: [{
-              type: 'text/html',
-              value: `<p>You've been invited to coach <strong>${data.name}</strong> on Ultimate Tournaments.</p>
+            html: `<p>You've been invited to coach <strong>${data.name}</strong> on Ultimate Tournaments.</p>
                 <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
                 <p>Or use invite code: <strong>${inviteCode}</strong></p>`,
-            }],
           }),
         });
       } catch {}
@@ -722,19 +716,16 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
 
       try {
         const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.managerEmail)}&role=manager`;
-        await fetch('https://api.sendgrid.com/v3/mail/send', {
+        await fetch('https://api.resend.com/emails', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            personalizations: [{ to: [{ email: data.managerEmail }] }],
-            from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+            from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+            to: [data.managerEmail],
             subject: `You've been invited to manage ${data.name}`,
-            content: [{
-              type: 'text/html',
-              value: `<p>You've been invited to manage <strong>${data.name}</strong> on Ultimate Tournaments.</p>
+            html: `<p>You've been invited to manage <strong>${data.name}</strong> on Ultimate Tournaments.</p>
                 <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
                 <p>Or use invite code: <strong>${inviteCode}</strong></p>`,
-            }],
           }),
         });
       } catch {}
@@ -794,22 +785,19 @@ organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zVali
     VALUES (?, ?, ?, ?, ?, 'pending')
   `).bind(invId, teamId, email, data.role, user.id).run();
 
-  // Send invite email
+  // Send invite email via Resend
   try {
     const signupUrl = `https://uht-web.pages.dev/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
-    await fetch('https://api.sendgrid.com/v3/mail/send', {
+    await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${c.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email }] }],
-        from: { email: 'noreply@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+        from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+        to: [email],
         subject: `You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} ${team.name}`,
-        content: [{
-          type: 'text/html',
-          value: `<p>You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} <strong>${team.name}</strong> on Ultimate Tournaments.</p>
+        html: `<p>You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} <strong>${team.name}</strong> on Ultimate Tournaments.</p>
             <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
             <p>Or use invite code: <strong>${team.invite_code}</strong></p>`,
-        }],
       }),
     });
   } catch {}

@@ -8,7 +8,7 @@ export default function ContactPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: wire to API / SendGrid
+    // TODO: wire to API / Resend
     setSubmitted(true);
   };
 

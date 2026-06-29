@@ -200,12 +200,12 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
 }
 
 /**
- * Send the acceptance/approval email via SendGrid
+ * Send the acceptance/approval email via Resend
  */
 export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): Promise<{ success: boolean; error?: string }> {
-  if (!env.SENDGRID_API_KEY) {
-    console.warn('SENDGRID_API_KEY not configured — skipping approval email');
-    return { success: false, error: 'SendGrid API key not configured' };
+  if (!env.RESEND_API) {
+    console.warn('RESEND_API not configured — skipping approval email');
+    return { success: false, error: 'Resend API key not configured' };
   }
 
   const { recipientEmail, recipientName, ccEmails, teamName, ageGroup, division, eventName, eventDate, eventCity } = params;
@@ -232,45 +232,36 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
   }
   const plainText = `Congratulations! Your registration for ${eventName} has been accepted.\n\nTeam: ${teamName}\nAge Group: ${ageGroup}${divisionText}\nEvent: ${eventName}\nDate: ${eventDate}\nCity: ${eventCity}${hotelPlain}\n\nPlease send us your approved hockey roster as soon as it's ready.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;
 
-  const personalizations: any = {
-    to: [{ email: recipientEmail, name: recipientName }],
-  };
-
-  // Add CC emails (coach, assistant coaches, etc.)
-  if (ccEmails && ccEmails.length > 0) {
-    personalizations.cc = ccEmails.filter(e => e && e !== recipientEmail).map(e => ({ email: e }));
-  }
-
-  // BCC registration inbox
-  personalizations.bcc = [{ email: 'registration@ultimatetournaments.com' }];
+  // Build CC list (coach, assistant coaches, etc.)
+  const cc = ccEmails?.filter(e => e && e !== recipientEmail) || [];
 
   try {
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.SENDGRID_API_KEY}`,
+        'Authorization': `Bearer ${env.RESEND_API}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        personalizations: [personalizations],
-        from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+        from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+        to: [recipientEmail],
+        ...(cc.length > 0 ? { cc } : {}),
+        bcc: ['registration@ultimatetournaments.com'],
         subject,
-        content: [
-          { type: 'text/plain', value: plainText },
-          { type: 'text/html', value: html },
-        ],
+        html,
+        text: plainText,
       }),
     });
 
-    if (response.ok || response.status === 202) {
+    if (response.ok) {
       return { success: true };
     } else {
       const errText = await response.text();
-      console.error('SendGrid API error:', response.status, errText);
-      return { success: false, error: `SendGrid ${response.status}: ${errText}` };
+      console.error('Resend API error:', response.status, errText);
+      return { success: false, error: `Resend ${response.status}: ${errText}` };
     }
   } catch (err: any) {
-    console.error('SendGrid fetch error:', err);
+    console.error('Resend fetch error:', err);
     return { success: false, error: err.message };
   }
 }

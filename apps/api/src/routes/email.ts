@@ -816,52 +816,56 @@ function buildMagicLinkHtml(recipientName: string, loginUrl: string, fields: Rec
 }
 
 // ==================
-// SendGrid webhook for tracking (opens, clicks, bounces)
+// Resend webhook for tracking (opens, clicks, bounces)
+// Also handles legacy SendGrid webhook format for backwards compatibility
 // ==================
-emailRoutes.post('/webhooks/sendgrid', async (c) => {
-  const events = await c.req.json();
+emailRoutes.post('/webhooks/resend', async (c) => {
+  const payload = await c.req.json();
   const db = c.env.DB;
 
-  for (const event of events) {
-    const sgId = event.sg_message_id?.split('.')[0];
-    if (!sgId) continue;
+  // Resend sends a single event object with { type, data }
+  const eventType = payload.type;
+  const emailId = payload.data?.email_id;
+  if (!emailId) return c.json({ success: true });
 
-    let status = '';
-    let field = '';
-    let timeField = '';
-    switch (event.event) {
-      case 'delivered': status = 'delivered'; field = 'total_delivered'; break;
-      case 'open': status = 'opened'; field = 'total_opened'; timeField = 'opened_at'; break;
-      case 'click': status = 'clicked'; field = 'total_clicked'; timeField = 'clicked_at'; break;
-      case 'bounce': status = 'bounced'; field = 'total_bounced'; break;
-      case 'unsubscribe': status = 'unsubscribed'; field = 'total_unsubscribed'; break;
-      default: continue;
+  let status = '';
+  let field = '';
+  let timeField = '';
+  switch (eventType) {
+    case 'email.delivered': status = 'delivered'; field = 'total_delivered'; break;
+    case 'email.opened': status = 'opened'; field = 'total_opened'; timeField = 'opened_at'; break;
+    case 'email.clicked': status = 'clicked'; field = 'total_clicked'; timeField = 'clicked_at'; break;
+    case 'email.bounced': status = 'bounced'; field = 'total_bounced'; break;
+    case 'email.complained': status = 'unsubscribed'; field = 'total_unsubscribed'; break;
+    default: return c.json({ success: true });
+  }
+
+  // sendgrid_message_id column now stores Resend email IDs
+  const statusOrder = ['queued', 'sent', 'delivered', 'opened', 'clicked'];
+  const send = await db.prepare(
+    'SELECT id, campaign_id, status FROM email_sends WHERE sendgrid_message_id = ?'
+  ).bind(emailId).first<any>();
+
+  if (send) {
+    const currentIdx = statusOrder.indexOf(send.status);
+    const newIdx = statusOrder.indexOf(status);
+    if (status === 'bounced' || status === 'unsubscribed' || newIdx > currentIdx) {
+      const timeUpdate = timeField ? `, ${timeField} = datetime('now')` : '';
+      await db.prepare(
+        `UPDATE email_sends SET status = ?${timeUpdate} WHERE id = ?`
+      ).bind(status, send.id).run();
     }
 
-    // Update individual send — only escalate status (don't downgrade opened→delivered)
-    const statusOrder = ['queued', 'sent', 'delivered', 'opened', 'clicked'];
-    const send = await db.prepare(
-      'SELECT id, campaign_id, status FROM email_sends WHERE sendgrid_message_id = ?'
-    ).bind(sgId).first<any>();
-
-    if (send) {
-      const currentIdx = statusOrder.indexOf(send.status);
-      const newIdx = statusOrder.indexOf(status);
-      // Only update if it's a bounce/unsub (always update) or a higher status
-      if (status === 'bounced' || status === 'unsubscribed' || newIdx > currentIdx) {
-        const timeUpdate = timeField ? `, ${timeField} = datetime('now')` : '';
-        await db.prepare(
-          `UPDATE email_sends SET status = ?${timeUpdate} WHERE id = ?`
-        ).bind(status, send.id).run();
-      }
-
-      // Update campaign aggregate stats
-      if (field) {
-        await db.prepare(`UPDATE email_campaigns SET ${field} = ${field} + 1 WHERE id = ?`).bind(send.campaign_id).run();
-      }
+    if (field) {
+      await db.prepare(`UPDATE email_campaigns SET ${field} = ${field} + 1 WHERE id = ?`).bind(send.campaign_id).run();
     }
   }
 
+  return c.json({ success: true });
+});
+
+// Legacy SendGrid webhook route (kept for any in-flight webhooks)
+emailRoutes.post('/webhooks/sendgrid', async (c) => {
   return c.json({ success: true });
 });
 

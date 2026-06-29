@@ -25,7 +25,7 @@ merchRoutes.post('/champions', authMiddleware, requireRole('admin', 'director'),
   `).bind(id, data.eventId, data.eventDivisionId, data.teamId, data.placement).run();
 
   // TODO: Auto-generate merch previews from team logo + event name
-  // TODO: Send champion email via SendGrid
+  // TODO: Send champion email via Resend
   // TODO: Send champion SMS via TextMagic
 
   return c.json({ success: true, data: { id } }, 201);

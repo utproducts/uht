@@ -194,25 +194,23 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
       VALUES (?, ?, ?, ?)
     `).bind(linkId, userId, token, expiresAt).run();
 
-    // Send welcome + magic link email via SendGrid
+    // Send welcome + magic link email via Resend
     const baseUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
     const loginUrl = `${baseUrl}/login/verify?token=${token}`;
 
-    if (c.env.SENDGRID_API_KEY) {
+    if (c.env.RESEND_API) {
       try {
-        await fetch('https://api.sendgrid.com/v3/mail/send', {
+        await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${c.env.SENDGRID_API_KEY}`,
+            'Authorization': `Bearer ${c.env.RESEND_API}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            personalizations: [{ to: [{ email: data.email.toLowerCase(), name: `${data.firstName} ${data.lastName}` }] }],
-            from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+            from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+            to: [data.email.toLowerCase()],
             subject: 'Welcome to Ultimate Tournaments!',
-            content: [{
-              type: 'text/html',
-              value: `
+            html: `
                 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
                   <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                   <h2 style="color: #1d1d1f; margin-bottom: 8px;">Welcome, ${data.firstName}!</h2>
@@ -227,11 +225,10 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
                   </p>
                 </div>
               `,
-            }],
           }),
         });
       } catch (err: any) {
-        console.error('SendGrid signup email error:', err?.message || String(err));
+        console.error('Resend signup email error:', err?.message || String(err));
         // Account is created, just email failed — don't block signup
       }
     }
@@ -383,8 +380,8 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
   const redirectParam = redirect ? `&redirect=${encodeURIComponent(redirect)}` : '';
   const loginUrl = `${baseUrl}/login/verify?token=${token}${redirectParam}`;
 
-  // Send email via SendGrid (with admin-customizable template)
-  if (c.env.SENDGRID_API_KEY) {
+  // Send email via Resend (with admin-customizable template)
+  if (c.env.RESEND_API) {
     try {
       const mlFields = await getResolvedFields(db, 'magic_link');
       const mlSubject = mlFields.subject || 'Your Login Link - Ultimate Tournaments';
@@ -392,19 +389,17 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
       const mlCta = mlFields.cta_text || 'Sign In';
       const mlFooter = mlFields.footer_text || "If you didn't request this link, you can safely ignore this email.";
 
-      await fetch('https://api.sendgrid.com/v3/mail/send', {
+      await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${c.env.SENDGRID_API_KEY}`,
+          'Authorization': `Bearer ${c.env.RESEND_API}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          personalizations: [{ to: [{ email: user.email, name: `${user.first_name} ${user.last_name}` }] }],
-          from: { email: 'registration@ultimatetournaments.com', name: 'Ultimate Tournaments' },
+          from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+          to: [user.email],
           subject: mlSubject,
-          content: [{
-            type: 'text/html',
-            value: `
+          html: `
               <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
                 <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                 <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${user.first_name},</h2>
@@ -419,11 +414,10 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
                 </p>
               </div>
             `,
-          }],
         }),
       });
     } catch (err: any) {
-      console.error('SendGrid error:', err?.message || String(err));
+      console.error('Resend error:', err?.message || String(err));
       return c.json({ success: false, error: 'Failed to send login email. Please try again.' }, 500);
     }
   }
