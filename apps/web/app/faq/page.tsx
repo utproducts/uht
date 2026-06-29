@@ -1,20 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht-api.ultimatetournaments.com';
 
 interface FAQItem {
+  id?: string;
   question: string;
   answer: string;
+  sort_order?: number;
 }
 
 interface FAQCategory {
+  id?: string;
   name: string;
   icon: string;
   description: string;
   items: FAQItem[];
 }
 
-const faqData: FAQCategory[] = [
+const ICON_MAP: Record<string, string> = {
+  'rocket': '🏒',
+  'calendar': '📋',
+  'trophy': '🏆',
+  'credit-card': '💳',
+  'building': '🏨',
+  'shopping-bag': '👕',
+  'message-circle': '💬',
+  'help-circle': '❓',
+};
+
+const fallbackData: FAQCategory[] = [
   {
     name: 'Getting Started',
     icon: '🏒',
@@ -245,6 +261,35 @@ export default function FAQPage() {
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [faqData, setFaqData] = useState<FAQCategory[]>(fallbackData);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch FAQ data from API on mount
+  useEffect(() => {
+    fetch(`${API}/api/faqs`)
+      .then(res => res.json())
+      .then((json: { success: boolean; data?: any[] }) => {
+        if (json.success && json.data && json.data.length > 0) {
+          const mapped: FAQCategory[] = json.data.map((cat: any) => ({
+            id: cat.id,
+            name: cat.name,
+            icon: ICON_MAP[cat.icon] || cat.icon || '❓',
+            description: cat.description || '',
+            items: (cat.items || []).map((item: any) => ({
+              id: item.id,
+              question: item.question,
+              answer: item.answer,
+              sort_order: item.sort_order,
+            })),
+          }));
+          setFaqData(mapped);
+        }
+      })
+      .catch(() => {
+        // Keep fallback data on error
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const toggleItem = (key: string) => {
     setOpenItems(prev => {
