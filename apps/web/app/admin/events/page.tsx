@@ -208,7 +208,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   onSaved: () => void;
 }) {
   const isEdit = !!event;
-  const [activeTab, setActiveTab] = useState<'details' | 'hotels' | 'directors' | 'venues' | 'rules'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'hotels' | 'directors' | 'venues' | 'rules' | 'scorekeepers'>('details');
   const [step, setStep] = useState(1); // For create stepper: 1=Info, 2=Dates/Pricing, 3=Age/Divisions, 4=Venues, 5=Review
   const TOTAL_STEPS = 5;
   const [selectedVenueIds, setSelectedVenueIds] = useState<Set<string>>(new Set());
@@ -897,6 +897,10 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
               <button onClick={() => setActiveTab('rules')}
                 className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'rules' ? 'bg-[#003e79] text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
                 Rules ({scheduleRules.length})
+              </button>
+              <button onClick={() => setActiveTab('scorekeepers')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${activeTab === 'scorekeepers' ? 'bg-[#003e79] text-white' : 'text-[#86868b] hover:bg-[#fafafa]'}`}>
+                Scorekeepers
               </button>
             </div>
           ) : (
@@ -2199,6 +2203,10 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                 )}
               </div>
             </>
+          )}
+
+          {activeTab === 'scorekeepers' && isEdit && event?.id && (
+            <ScorekeepersTab eventId={event.id} />
           )}
 
           {/* ===== CREATE MODE STEPPER VIEWS ===== */}
@@ -3536,7 +3544,7 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'scorekeepers' | 'schedules'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules'>('overview');
   const [editingReg, setEditingReg] = useState<any>(null);
   const [hotels, setHotels] = useState<string[]>([]);
   const [hotelReport, setHotelReport] = useState<any>(null);
@@ -3672,7 +3680,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit mb-6">
-        {(['overview', 'participants', 'venues', 'hotels', 'scorekeepers', 'schedules'] as const).map((t) => (
+        {(['overview', 'participants', 'venues', 'hotels', 'schedules'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -3680,7 +3688,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
-            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'scorekeepers' ? 'Scorekeepers' : 'Schedules'}
+            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : 'Schedules'}
           </button>
         ))}
       </div>
@@ -4047,10 +4055,6 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
             </>
           )}
         </div>
-      )}
-
-      {tab === 'scorekeepers' && (
-        <ScorekeepersTab eventId={eventId} />
       )}
 
       {tab === 'schedules' && (
