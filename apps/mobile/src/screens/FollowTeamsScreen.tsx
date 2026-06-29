@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam } from '../services/api';
+import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam, searchTeams } from '../services/api';
 import { getUser, User } from '../services/auth';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -98,6 +98,10 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
+  const [teamSearchResults, setTeamSearchResults] = useState<any[]>([]);
+  const [searchingTeams, setSearchingTeams] = useState(false);
+  const [teamSearchFollowed, setTeamSearchFollowed] = useState<Set<string>>(new Set());
 
   const isCoach = currentUser?.roles?.some(r =>
     ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
@@ -106,6 +110,33 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
   useEffect(() => {
     getUser().then(u => setCurrentUser(u));
   }, []);
+
+  // Direct team search with debounce
+  useEffect(() => {
+    if (teamSearchQuery.length < 2) {
+      setTeamSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchingTeams(true);
+      try {
+        const results = await searchTeams(teamSearchQuery);
+        setTeamSearchResults(results);
+      } catch {
+        setTeamSearchResults([]);
+      } finally {
+        setSearchingTeams(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [teamSearchQuery]);
+
+  async function handleFollowFromSearch(teamId: string) {
+    try {
+      await followTeam(teamId);
+      setTeamSearchFollowed(prev => new Set([...prev, teamId]));
+    } catch {}
+  }
 
   // Filter state list as user types
   const filteredStates = stateFilter
@@ -502,48 +533,107 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
   }
 
   // ==================
-  // STEP 1: Select Your State
+  // STEP 1: Select Your State (with direct team search)
   // ==================
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Select Your State</Text>
+        <Text style={styles.title}>Find Your Team</Text>
         <Text style={styles.subtitle}>
-          Choose your state to find local organizations and teams to follow.
+          Search for a team by name, or browse by state.
         </Text>
 
-        <TextInput
-          style={styles.stateSearchInput}
-          value={stateFilter}
-          onChangeText={setStateFilter}
-          placeholder="Search states..."
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <FlatList
-          data={filteredStates}
-          keyExtractor={(item) => item.code}
-          contentContainerStyle={styles.stateListContent}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.stateCard}
-              onPress={() => handleSelectState(item)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.stateCode}>{item.code}</Text>
-              <Text style={styles.stateName}>{item.name}</Text>
-              <Text style={styles.chevron}>{'>'}</Text>
+        {/* Direct Team Search */}
+        <View style={styles.teamSearchWrap}>
+          <Ionicons name="search-outline" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.teamSearchInput}
+            value={teamSearchQuery}
+            onChangeText={setTeamSearchQuery}
+            placeholder="Search teams by name..."
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {teamSearchQuery.length > 0 ? (
+            <TouchableOpacity onPress={() => { setTeamSearchQuery(''); setTeamSearchResults([]); }}>
+              <Ionicons name="close-circle" size={20} color={colors.textMuted} />
             </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No Match</Text>
-              <Text style={styles.emptyText}>No states match your search.</Text>
+          ) : null}
+        </View>
+
+        {/* Team Search Results */}
+        {teamSearchQuery.length >= 2 ? (
+          searchingTeams ? (
+            <View style={styles.centerContent}>
+              <ActivityIndicator size="large" color={colors.navy} />
             </View>
-          }
-        />
+          ) : (
+            <FlatList
+              data={teamSearchResults}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.stateListContent}
+              renderItem={({ item }) => {
+                const alreadyFollowed = teamSearchFollowed.has(item.id);
+                return (
+                  <View style={styles.teamSearchCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitle}>{item.name}</Text>
+                      <Text style={styles.cardSubtitle}>
+                        {[item.organization_name, item.age_group, item.city, item.state].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.followButton, alreadyFollowed ? styles.followedButton : null]}
+                      onPress={() => !alreadyFollowed && handleFollowFromSearch(item.id)}
+                      activeOpacity={0.7}
+                      disabled={alreadyFollowed}
+                    >
+                      <Text style={[styles.followButtonText, alreadyFollowed ? styles.followedButtonText : null]}>
+                        {alreadyFollowed ? 'Following' : 'Follow'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No Teams Found</Text>
+                  <Text style={styles.emptyText}>Try a different search, or browse by state below.</Text>
+                </View>
+              }
+            />
+          )
+        ) : (
+          <>
+            {/* State Browse */}
+            <Text style={[styles.subtitle, { marginTop: 16, marginBottom: 8, fontWeight: '600', color: colors.navy }]}>
+              Browse by State
+            </Text>
+            <FlatList
+              data={filteredStates}
+              keyExtractor={(item) => item.code}
+              contentContainerStyle={styles.stateListContent}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.stateCard}
+                  onPress={() => handleSelectState(item)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.stateCode}>{item.code}</Text>
+                  <Text style={styles.stateName}>{item.name}</Text>
+                  <Text style={styles.chevron}>{'>'}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No Match</Text>
+                  <Text style={styles.emptyText}>No states match your search.</Text>
+                </View>
+              }
+            />
+          </>
+        )}
       </View>
 
       <View style={styles.bottomSection}>
@@ -614,6 +704,55 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     paddingHorizontal: spacing.xxl,
     marginTop: spacing.md,
+  },
+  // Team search
+  teamSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+    marginBottom: spacing.md,
+  },
+  teamSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.regular,
+    paddingVertical: spacing.md,
+  },
+  teamSearchCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  followButton: {
+    backgroundColor: colors.navy,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    marginLeft: 12,
+  },
+  followButtonText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  followedButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.navy,
+  },
+  followedButtonText: {
+    color: colors.navy,
   },
   // State search
   stateSearchInput: {
