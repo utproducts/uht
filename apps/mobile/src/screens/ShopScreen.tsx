@@ -73,8 +73,19 @@ export default function ShopScreen() {
   const [orders, setOrders] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
+  // Team discount: $1 off per item when buying 10+ of same product
+  const TEAM_DISCOUNT_THRESHOLD = 10;
+  const TEAM_DISCOUNT_AMOUNT = 1.00;
+
+  const getItemPrice = (product: Product, quantity: number) => {
+    if (quantity >= TEAM_DISCOUNT_THRESHOLD) {
+      return Math.max(0, product.price - TEAM_DISCOUNT_AMOUNT);
+    }
+    return product.price;
+  };
+
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const cartTotal = cart.reduce((sum, item) => sum + getItemPrice(item.product, item.quantity) * item.quantity, 0);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -208,12 +219,24 @@ export default function ShopScreen() {
     >
       {/* Hero banner */}
       <View style={styles.heroBanner}>
+        {/* Background hockey-themed accents */}
         <View style={styles.heroAccent} />
+        <View style={styles.heroAccent2} />
+        <View style={styles.heroIceOverlay} />
+        {/* Locker room inspired border */}
+        <View style={styles.heroTopStripe} />
         <View style={styles.heroContent}>
-          <Ionicons name="trophy" size={36} color={colors.cyan} />
-          <Text style={styles.heroTitle}>Champions Locker</Text>
-          <Text style={styles.heroSubtitle}>Official UHT merchandise</Text>
+          <View style={styles.heroIconRow}>
+            <Ionicons name="shirt-outline" size={22} color={colors.cyan} />
+            <Ionicons name="snow-outline" size={28} color={colors.white} style={{ opacity: 0.5 }} />
+            <Ionicons name="shirt-outline" size={22} color={colors.cyan} />
+          </View>
+          <Text style={styles.heroTitle}>UHT Locker Room</Text>
+          <Text style={styles.heroSubtitle}>Official gear & merchandise</Text>
+          <View style={styles.heroDivider} />
+          <Text style={styles.heroTagline}>Rep your team. Own the ice.</Text>
         </View>
+        <View style={styles.heroBottomStripe} />
       </View>
 
       {/* Category pills */}
@@ -346,6 +369,14 @@ export default function ShopScreen() {
             <Text style={styles.detailDescription}>{selectedProduct.description}</Text>
           ) : null}
 
+          {/* Team discount banner */}
+          <View style={styles.discountBanner}>
+            <Ionicons name="people" size={18} color={colors.success} />
+            <Text style={styles.discountBannerText}>
+              Team Deal: Buy 10+ and save ${TEAM_DISCOUNT_AMOUNT.toFixed(2)} each!
+            </Text>
+          </View>
+
           {/* Quantity selector */}
           <View style={styles.qtySection}>
             <Text style={styles.qtySectionLabel}>Quantity</Text>
@@ -367,6 +398,37 @@ export default function ShopScreen() {
             </View>
           </View>
 
+          {/* Quick team presets */}
+          <View style={styles.presetRow}>
+            {[1, 5, 10, 15, 20, 25].map(n => (
+              <TouchableOpacity
+                key={n}
+                style={[styles.presetBtn, detailQty === n && styles.presetBtnActive]}
+                onPress={() => setDetailQty(n)}
+              >
+                <Text style={[styles.presetBtnText, detailQty === n && styles.presetBtnTextActive]}>{n}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Price breakdown */}
+          {detailQty >= TEAM_DISCOUNT_THRESHOLD && (
+            <View style={styles.priceBreakdown}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceRowLabel}>Regular price</Text>
+                <Text style={styles.priceRowStrike}>${(selectedProduct.price * detailQty).toFixed(2)}</Text>
+              </View>
+              <View style={styles.priceRow}>
+                <Text style={[styles.priceRowLabel, { color: colors.success }]}>Team discount (-${TEAM_DISCOUNT_AMOUNT.toFixed(2)}/ea)</Text>
+                <Text style={[styles.priceRowValue, { color: colors.success }]}>-${(TEAM_DISCOUNT_AMOUNT * detailQty).toFixed(2)}</Text>
+              </View>
+              <View style={[styles.priceRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, marginTop: spacing.xs }]}>
+                <Text style={styles.priceRowBold}>Total</Text>
+                <Text style={styles.priceRowBold}>${(getItemPrice(selectedProduct, detailQty) * detailQty).toFixed(2)}</Text>
+              </View>
+            </View>
+          )}
+
           {/* Add to Cart button */}
           <TouchableOpacity
             style={styles.addToCartBtn}
@@ -378,7 +440,7 @@ export default function ShopScreen() {
           >
             <Ionicons name="cart-outline" size={20} color={colors.white} />
             <Text style={styles.addToCartText}>
-              Add to Cart — ${(selectedProduct.price * detailQty).toFixed(2)}
+              Add to Cart — ${(getItemPrice(selectedProduct, detailQty) * detailQty).toFixed(2)}
             </Text>
           </TouchableOpacity>
 
@@ -424,7 +486,10 @@ export default function ShopScreen() {
               )}
               <View style={styles.cartItemInfo}>
                 <Text style={styles.cartItemName} numberOfLines={2}>{item.product.name}</Text>
-                <Text style={styles.cartItemPrice}>${(item.product.price * item.quantity).toFixed(2)}</Text>
+                <Text style={styles.cartItemPrice}>${(getItemPrice(item.product, item.quantity) * item.quantity).toFixed(2)}</Text>
+                {item.quantity >= TEAM_DISCOUNT_THRESHOLD && (
+                  <Text style={styles.cartItemDiscount}>Team discount applied!</Text>
+                )}
                 <View style={styles.qtyRowSmall}>
                   <TouchableOpacity style={styles.qtyBtnSmall} onPress={() => updateQuantity(item.product.id, item.quantity - 1)}>
                     <Ionicons name="remove" size={16} color={colors.navy} />
@@ -477,6 +542,8 @@ export default function ShopScreen() {
           placeholderTextColor={colors.textMuted}
           value={shipping.name}
           onChangeText={v => setShipping(s => ({ ...s, name: v }))}
+          textContentType="name"
+          autoComplete="name"
         />
         <TextInput
           style={styles.input}
@@ -484,6 +551,8 @@ export default function ShopScreen() {
           placeholderTextColor={colors.textMuted}
           value={shipping.address}
           onChangeText={v => setShipping(s => ({ ...s, address: v }))}
+          textContentType="streetAddressLine1"
+          autoComplete="street-address"
         />
         <View style={styles.inputRow}>
           <TextInput
@@ -492,6 +561,8 @@ export default function ShopScreen() {
             placeholderTextColor={colors.textMuted}
             value={shipping.city}
             onChangeText={v => setShipping(s => ({ ...s, city: v }))}
+            textContentType="addressCity"
+            autoComplete="postal-address-locality"
           />
           <TextInput
             style={[styles.input, { flex: 1 }]}
@@ -501,6 +572,8 @@ export default function ShopScreen() {
             onChangeText={v => setShipping(s => ({ ...s, state: v.toUpperCase() }))}
             maxLength={2}
             autoCapitalize="characters"
+            textContentType="addressState"
+            autoComplete="postal-address-region"
           />
           <TextInput
             style={[styles.input, { flex: 1 }]}
@@ -510,6 +583,8 @@ export default function ShopScreen() {
             onChangeText={v => setShipping(s => ({ ...s, zip: v }))}
             keyboardType="number-pad"
             maxLength={5}
+            textContentType="postalCode"
+            autoComplete="postal-code"
           />
         </View>
       </View>
@@ -521,7 +596,7 @@ export default function ShopScreen() {
           <View key={item.product.id} style={styles.checkoutItem}>
             <Text style={styles.checkoutItemName} numberOfLines={1}>{item.product.name}</Text>
             <Text style={styles.checkoutItemQty}>x{item.quantity}</Text>
-            <Text style={styles.checkoutItemPrice}>${(item.product.price * item.quantity).toFixed(2)}</Text>
+            <Text style={styles.checkoutItemPrice}>${(getItemPrice(item.product, item.quantity) * item.quantity).toFixed(2)}</Text>
           </View>
         ))}
         <View style={[styles.summaryRow, styles.summaryTotal, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md, marginTop: spacing.md }]}>
@@ -651,24 +726,75 @@ const styles = StyleSheet.create({
   heroBanner: {
     backgroundColor: colors.navy,
     borderRadius: radii.lg,
-    padding: spacing.xxl,
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xxl,
     alignItems: 'center',
     overflow: 'hidden',
     marginBottom: spacing.lg,
+    position: 'relative',
   },
   heroAccent: {
     position: 'absolute',
-    top: -30,
-    right: -50,
-    width: 160,
-    height: '160%',
+    top: -40,
+    right: -60,
+    width: 180,
+    height: '200%',
     backgroundColor: colors.cyan,
-    opacity: 0.12,
+    opacity: 0.08,
     transform: [{ rotate: '-15deg' }],
   },
-  heroContent: { alignItems: 'center' },
-  heroTitle: { fontSize: 24, color: colors.white, ...fonts.bold, marginTop: spacing.md },
-  heroSubtitle: { fontSize: 15, color: colors.cyanLight, ...fonts.medium, marginTop: spacing.xs },
+  heroAccent2: {
+    position: 'absolute',
+    bottom: -20,
+    left: -40,
+    width: 140,
+    height: '150%',
+    backgroundColor: colors.cyan,
+    opacity: 0.06,
+    transform: [{ rotate: '25deg' }],
+  },
+  heroIceOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#ffffff',
+    opacity: 0.03,
+  },
+  heroTopStripe: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: colors.cyan,
+  },
+  heroBottomStripe: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: colors.cyan,
+  },
+  heroContent: { alignItems: 'center', zIndex: 1 },
+  heroIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  heroTitle: { fontSize: 26, color: colors.white, ...fonts.extrabold, letterSpacing: 1, textTransform: 'uppercase' },
+  heroSubtitle: { fontSize: 14, color: colors.cyanLight, ...fonts.medium, marginTop: spacing.xs },
+  heroDivider: {
+    width: 50,
+    height: 2,
+    backgroundColor: colors.cyan,
+    borderRadius: 1,
+    marginVertical: spacing.sm,
+  },
+  heroTagline: { fontSize: 13, color: colors.cyan, ...fonts.bold, letterSpacing: 0.5, opacity: 0.9 },
 
   // ── Categories ──
   categoryScroll: { marginBottom: spacing.lg },
@@ -847,6 +973,60 @@ const styles = StyleSheet.create({
   },
   viewCartBtnText: { fontSize: 15, color: colors.navy, ...fonts.bold, flex: 1 },
 
+  // ── Discount / Preset / Price Breakdown ──
+  discountBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e6f9ed',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#b8e6cc',
+  },
+  discountBannerText: { fontSize: 14, color: colors.success, ...fonts.semibold, flex: 1 },
+  presetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  presetBtn: {
+    width: 48,
+    height: 40,
+    borderRadius: radii.sm,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  presetBtnActive: {
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
+  },
+  presetBtnText: { fontSize: 15, color: colors.textSecondary, ...fonts.bold },
+  presetBtnTextActive: { color: colors.white },
+  priceBreakdown: {
+    backgroundColor: '#f0f7ff',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#d0e4f7',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  priceRowLabel: { fontSize: 14, color: colors.textSecondary, ...fonts.regular },
+  priceRowStrike: { fontSize: 14, color: colors.textMuted, ...fonts.regular, textDecorationLine: 'line-through' as const },
+  priceRowValue: { fontSize: 14, color: colors.text, ...fonts.semibold },
+  priceRowBold: { fontSize: 16, color: colors.navy, ...fonts.extrabold },
+
   // ── Cart ──
   cartItem: {
     flexDirection: 'row',
@@ -861,6 +1041,7 @@ const styles = StyleSheet.create({
   cartItemInfo: { flex: 1, marginLeft: spacing.md, justifyContent: 'center' },
   cartItemName: { fontSize: 15, color: colors.text, ...fonts.semibold },
   cartItemPrice: { fontSize: 16, color: colors.navy, ...fonts.bold, marginTop: 4 },
+  cartItemDiscount: { fontSize: 12, color: colors.success, ...fonts.semibold, marginTop: 2 },
   qtyRowSmall: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm, gap: spacing.md },
   qtyBtnSmall: {
     width: 28,
