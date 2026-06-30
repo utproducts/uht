@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
@@ -4094,7 +4094,7 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState<string>('all');
-  const [seasonFilter, setSeasonFilter] = useState<string>('2025-2026');
+  const [seasonFilter, setSeasonFilter] = useState<string>('2026-27');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
@@ -4237,8 +4237,40 @@ export default function AdminEventsPage() {
     } catch (e) { console.error(e); }
   };
 
+  // Map DB season values to hockey-year display buckets
+  const seasonBucket = (dbSeason: string | null): string => {
+    const s = (dbSeason || '').toLowerCase();
+    if (s.includes('fall-2026') || s.includes('winter-2026') || s.includes('winter-2027')) return '2026-27';
+    if (s === '2025/2026' || s.includes('fall-2025') || s.includes('winter-2025')) return '2025-26';
+    if (s === '2024/2025' || s.includes('fall-2024') || s.includes('winter-2024')) return '2024-25';
+    // Future-proof: try to extract year from season string
+    const yearMatch = s.match(/(\d{4})/);
+    if (yearMatch) {
+      const y = parseInt(yearMatch[1]);
+      const month = s.includes('fall') ? 10 : s.includes('winter') ? 1 : 10;
+      // If the season starts in fall of year Y, it's the Y-(Y+1) season
+      if (s.includes('fall')) return `${y}-${String(y + 1).slice(2)}`;
+      if (s.includes('winter') || s.includes('spring')) return `${y - 1}-${String(y).slice(2)}`;
+      // Format like "2025/2026" → "2025-26"
+      if (s.includes('/')) return `${y}-${String(y + 1).slice(2)}`;
+    }
+    return 'other';
+  };
+
+  // Build dynamic season options from actual data
+  const seasonOptions = useMemo(() => {
+    const bucketCounts = new Map<string, number>();
+    for (const e of events) {
+      const bucket = seasonBucket(e.season);
+      bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
+    }
+    return Array.from(bucketCounts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0])) // newest first
+      .map(([bucket, count]) => ({ bucket, count }));
+  }, [events]);
+
   // Get unique months from events for month filter
-  const seasonEvents = seasonFilter === 'all' ? events : events.filter(e => (e.season || '') === seasonFilter);
+  const seasonEvents = seasonFilter === 'all' ? events : events.filter(e => seasonBucket(e.season) === seasonFilter);
   const months = Array.from(new Set(seasonEvents.map(e => getMonthKey(e.start_date)))).sort();
 
   // Reset month filter when switching tabs/seasons if that month doesn't exist
@@ -4250,7 +4282,7 @@ export default function AdminEventsPage() {
       (e.tournament_name && e.tournament_name.toLowerCase().includes(search.toLowerCase())) ||
       e.city.toLowerCase().includes(search.toLowerCase());
     const matchesMonth = activeMonth === 'all' || getMonthKey(e.start_date) === activeMonth;
-    const matchesSeason = seasonFilter === 'all' || (e.season || '') === seasonFilter;
+    const matchesSeason = seasonFilter === 'all' || seasonBucket(e.season) === seasonFilter;
     return matchesSearch && matchesMonth && matchesSeason;
   }).sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
 
@@ -4533,21 +4565,25 @@ export default function AdminEventsPage() {
         {/* Season Filter */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mr-1">Season:</span>
-          {(['2025-2026', '2024-2025', 'all'] as const).map((s) => {
-            const label = s === 'all' ? 'All Seasons' : s;
-            const count = s === 'all' ? events.length : events.filter(e => (e.season || '') === s).length;
-            return (
-              <button
-                key={s}
-                onClick={() => { setSeasonFilter(s); setMonthFilter('all'); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                  seasonFilter === s ? 'bg-[#003e79] text-white shadow' : 'bg-white text-[#6e6e73] hover:bg-[#fafafa] shadow-sm'
-                }`}
-              >
-                {label} <span className="opacity-60">({count})</span>
-              </button>
-            );
-          })}
+          {seasonOptions.map(({ bucket, count }) => (
+            <button
+              key={bucket}
+              onClick={() => { setSeasonFilter(bucket); setMonthFilter('all'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                seasonFilter === bucket ? 'bg-[#003e79] text-white shadow' : 'bg-white text-[#6e6e73] hover:bg-[#fafafa] shadow-sm'
+              }`}
+            >
+              {bucket} <span className="opacity-60">({count})</span>
+            </button>
+          ))}
+          <button
+            onClick={() => { setSeasonFilter('all'); setMonthFilter('all'); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              seasonFilter === 'all' ? 'bg-[#003e79] text-white shadow' : 'bg-white text-[#6e6e73] hover:bg-[#fafafa] shadow-sm'
+            }`}
+          >
+            All Seasons <span className="opacity-60">({events.length})</span>
+          </button>
         </div>
 
         {/* Month Filter */}

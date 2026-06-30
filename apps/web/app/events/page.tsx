@@ -24,6 +24,7 @@ interface Event {
   slots_count: number | null;
   is_sold_out: number;
   schedule_published: number | null;
+  season: string | null;
 }
 
 /* ── helpers ── */
@@ -111,6 +112,22 @@ function isEventPast(ev: Event): boolean {
 /** Month name from 0-indexed month number */
 function monthName(m: number): string {
   return new Date(2026, m, 1).toLocaleString('en-US', { month: 'short' });
+}
+
+/** Map DB season values to hockey-year display buckets */
+function seasonBucket(dbSeason: string | null): string {
+  const s = (dbSeason || '').toLowerCase();
+  if (s.includes('fall-2026') || s.includes('winter-2026') || s.includes('winter-2027')) return '2026-27';
+  if (s === '2025/2026' || s.includes('fall-2025') || s.includes('winter-2025')) return '2025-26';
+  if (s === '2024/2025' || s.includes('fall-2024') || s.includes('winter-2024')) return '2024-25';
+  const yearMatch = s.match(/(\d{4})/);
+  if (yearMatch) {
+    const y = parseInt(yearMatch[1]);
+    if (s.includes('fall')) return `${y}-${String(y + 1).slice(2)}`;
+    if (s.includes('winter') || s.includes('spring')) return `${y - 1}-${String(y).slice(2)}`;
+    if (s.includes('/')) return `${y}-${String(y + 1).slice(2)}`;
+  }
+  return 'other';
 }
 
 /* ── Event Card (grid view) ── */
@@ -231,6 +248,7 @@ export default function EventsPage() {
   const [monthFilter, setMonthFilter] = useState('');
   const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [seasonFilterVal, setSeasonFilterVal] = useState<string>('2026-27');
 
   // Read ?city= from URL on mount
   useEffect(() => {
@@ -255,15 +273,31 @@ export default function EventsPage() {
       .catch(() => setLoading(false));
   }, []);
 
+  // Build dynamic season options from actual data
+  const availableSeasons = useMemo(() => {
+    const bucketCounts = new Map<string, number>();
+    for (const ev of allEvents) {
+      const bucket = seasonBucket(ev.season);
+      bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
+    }
+    return Array.from(bucketCounts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([bucket, count]) => ({ bucket, count }));
+  }, [allEvents]);
+
+  // Filter by season first
+  const seasonFiltered = useMemo(() => {
+    if (seasonFilterVal === 'all') return allEvents;
+    return allEvents.filter(ev => seasonBucket(ev.season) === seasonFilterVal);
+  }, [allEvents, seasonFilterVal]);
+
   // Split into upcoming / past by end_date
-  // Only show past events from Oct 2026 onward (current season)
-  const PAST_CUTOFF = '2026-10-01';
   const { upcoming, past } = useMemo(() => {
     const u: Event[] = [];
     const p: Event[] = [];
-    for (const ev of allEvents) {
+    for (const ev of seasonFiltered) {
       if (isEventPast(ev)) {
-        if (ev.start_date >= PAST_CUTOFF) p.push(ev);
+        p.push(ev);
       } else {
         u.push(ev);
       }
@@ -271,7 +305,7 @@ export default function EventsPage() {
     u.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
     p.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
     return { upcoming: u, past: p };
-  }, [allEvents]);
+  }, [seasonFiltered]);
 
   const baseEvents = tab === 'upcoming' ? upcoming : past;
 
@@ -367,7 +401,7 @@ export default function EventsPage() {
     setSearch('');
   };
 
-  // Active filter count (for clear button)
+  // Active filter count (for clear button) — don't count default season as active
   const activeFilters = [cityFilter, monthFilter, ageFilter, search].filter(Boolean).length;
 
   return (
@@ -379,7 +413,7 @@ export default function EventsPage() {
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-16 pb-20">
           <div className="max-w-2xl">
-            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">2026–27 Season</p>
+            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">{seasonFilterVal === 'all' ? 'All Seasons' : `${seasonFilterVal} Season`}</p>
             <h1 className="text-5xl sm:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
               Find Your Next Tournament
             </h1>
@@ -408,6 +442,31 @@ export default function EventsPage() {
               <span className="ml-1.5 text-xs opacity-70">({past.length})</span>
             </button>
           </div>
+
+          {/* Season pills */}
+          {availableSeasons.length > 1 && (
+            <div className="mt-4 flex gap-1.5 flex-wrap">
+              {availableSeasons.map(({ bucket, count }) => (
+                <button
+                  key={bucket}
+                  onClick={() => { setSeasonFilterVal(bucket); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    seasonFilterVal === bucket ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
+                  }`}
+                >
+                  {bucket} <span className="opacity-60">({count})</span>
+                </button>
+              ))}
+              <button
+                onClick={() => { setSeasonFilterVal('all'); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  seasonFilterVal === 'all' ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
+                }`}
+              >
+                All Seasons <span className="opacity-60">({allEvents.length})</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="absolute bottom-0 left-0 right-0">

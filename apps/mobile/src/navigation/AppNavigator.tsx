@@ -48,12 +48,12 @@ function MainTabs() {
             <Ionicons
               name={iconName}
               size={22}
-              color={focused ? colors.navy : 'rgba(0, 62, 121, 0.45)'}
+              color={focused ? colors.cyan : 'rgba(0, 204, 255, 0.5)'}
             />
           );
         },
-        tabBarActiveTintColor: colors.navy,
-        tabBarInactiveTintColor: 'rgba(0, 62, 121, 0.45)',
+        tabBarActiveTintColor: colors.cyan,
+        tabBarInactiveTintColor: 'rgba(0, 204, 255, 0.5)',
         tabBarLabelStyle: styles.tabLabel,
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
@@ -63,7 +63,19 @@ function MainTabs() {
       <Tab.Screen name="Events" component={EventsScreen} />
       <Tab.Screen name="My Teams" component={MyTeamsScreen} />
       <Tab.Screen name="Shop" component={ShopScreen} />
-      <Tab.Screen name="Menu" component={MenuScreen} />
+      <Tab.Screen
+        name="Menu"
+        component={MenuScreen}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // If Menu is already focused, navigate to Home instead
+            if (navigation.isFocused()) {
+              e.preventDefault();
+              navigation.navigate('Home');
+            }
+          },
+        })}
+      />
     </Tab.Navigator>
   );
 }
@@ -143,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   tabBar: {
-    backgroundColor: colors.cyan,
+    backgroundColor: colors.navy,
     borderTopWidth: 0,
     height: Platform.OS === 'ios' ? 88 : 64,
     paddingTop: 6,
