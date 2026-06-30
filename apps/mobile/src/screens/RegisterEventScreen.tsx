@@ -12,8 +12,10 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useStripe } from '@stripe/stripe-react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, User } from '../services/auth';
+import { API_URL } from '../constants/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface Team {
@@ -36,10 +38,11 @@ interface Hotel {
   image_url?: string;
 }
 
-type Step = 'team' | 'hotels' | 'confirm' | 'submitting' | 'done';
+type Step = 'team' | 'hotels' | 'payment' | 'confirm' | 'submitting' | 'processing_payment' | 'done';
 
 export default function RegisterEventScreen({ route, navigation }: { route: any; navigation: any }) {
   const { eventId, eventName, eventSlug } = route.params || {};
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [step, setStep] = useState<Step>('team');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -58,11 +61,15 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
   const [isLocal, setIsLocal] = useState(false);
   const [needsHotel, setNeedsHotel] = useState(false);
 
+  // Payment
+  const [paymentChoice, setPaymentChoice] = useState<'pay_now' | 'pay_deposit' | 'pay_later'>('pay_now');
+
   // Discount
   const [discountCode, setDiscountCode] = useState('');
 
   // Result
   const [registrationResult, setRegistrationResult] = useState<any>(null);
+  const [registrationIds, setRegistrationIds] = useState<string[]>([]);
 
   useEffect(() => {
     getUser().then(u => setCurrentUser(u));
@@ -106,6 +113,10 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     loadHotels();
   }
 
+  function goToPayment() {
+    setStep('payment');
+  }
+
   function goToConfirm() {
     setStep('confirm');
   }
@@ -123,7 +134,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
         division: selectedTeam.division_level || '',
         email: currentUser.email,
         headCoachName: selectedTeam.head_coach_name || currentUser.name,
-        paymentChoice: 'pay_later',
+        paymentChoice: paymentChoice === 'pay_later' ? 'pay_later' : 'pay_later', // Register first, pay after
       };
 
       if (hotels.length > 0) {
@@ -145,8 +156,18 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       const json = await res.json() as any;
 
       if (json.success) {
+        const regId = json.data?.registrationId || json.data?.id;
+        if (regId) {
+          setRegistrationIds([regId]);
+        }
         setRegistrationResult(json.data);
-        setStep('done');
+
+        // If user chose to pay now or deposit, proceed to Stripe payment
+        if (paymentChoice !== 'pay_later' && regId) {
+          await processPayment(regId);
+        } else {
+          setStep('done');
+        }
       } else {
         Alert.alert('Registration Failed', json.error || 'Something went wrong. Please try again.');
         setStep('confirm');
@@ -157,16 +178,103 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     }
   }
 
+  async function processPayment(regId: string) {
+    if (!selectedTeam || !currentUser) return;
+    setStep('processing_payment');
+
+    try {
+      // 1. Create PaymentIntent on server
+      const piRes = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          registrationIds: [regId],
+          paymentChoice: paymentChoice === 'pay_deposit' ? 'pay_deposit' : 'pay_now',
+          email: currentUser.email,
+          eventName: eventName || 'Tournament',
+          teamNames: [selectedTeam.name],
+        }),
+      });
+      const piJson = await piRes.json() as any;
+
+      if (!piJson.success) {
+        Alert.alert('Payment Error', piJson.error || 'Could not set up payment. Your registration has been saved — you can pay later.');
+        setStep('done');
+        return;
+      }
+
+      const { clientSecret, totalCents } = piJson.data;
+
+      // 2. Initialize Payment Sheet
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: 'Ultimate Hockey Tournaments',
+        applePay: {
+          merchantCountryCode: 'US',
+        },
+        defaultBillingDetails: {
+          email: currentUser.email,
+        },
+        style: 'automatic',
+      });
+
+      if (initError) {
+        console.error('Payment sheet init error:', initError);
+        Alert.alert('Payment Error', 'Could not set up payment. Your registration has been saved — you can pay later.');
+        setStep('done');
+        return;
+      }
+
+      // 3. Present Payment Sheet (Apple Pay will show at top if configured)
+      const { error: presentError } = await presentPaymentSheet();
+
+      if (presentError) {
+        if (presentError.code === 'Canceled') {
+          // User cancelled — go back to confirm step
+          Alert.alert('Payment Cancelled', 'Your registration has been saved. You can pay later or try again.', [
+            { text: 'Pay Later', onPress: () => setStep('done') },
+            { text: 'Try Again', onPress: () => processPayment(regId) },
+          ]);
+          return;
+        }
+        Alert.alert('Payment Failed', presentError.message || 'Payment could not be processed. Your registration has been saved — you can pay later.');
+        setStep('done');
+        return;
+      }
+
+      // 4. Confirm payment on backend
+      const confirmRes = await fetch(`${API_URL}/api/stripe/confirm-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentIntentId: piJson.data.paymentIntentId }),
+      });
+      const confirmJson = await confirmRes.json() as any;
+
+      if (confirmJson.success && confirmJson.data?.paid) {
+        setRegistrationResult((prev: any) => ({ ...prev, paid: true, amountCents: totalCents }));
+      }
+
+      setStep('done');
+    } catch (err: any) {
+      console.error('Payment processing error:', err);
+      Alert.alert('Payment Error', 'Something went wrong. Your registration has been saved — you can pay later.');
+      setStep('done');
+    }
+  }
+
   // ------ STEP RENDERS ------
 
   function renderStepIndicator() {
-    const steps = hotels.length > 0 || step === 'hotels'
-      ? ['Select Team', 'Hotel Pref', 'Confirm']
-      : ['Select Team', 'Confirm'];
-    const currentIndex = step === 'team' ? 0
-      : step === 'hotels' ? 1
-      : step === 'confirm' || step === 'submitting' ? (hotels.length > 0 ? 2 : 1)
-      : steps.length - 1;
+    const steps = ['Team', 'Hotels', 'Payment', 'Confirm'];
+    const stepMap: Record<string, number> = {
+      team: 0,
+      hotels: 1,
+      payment: 2,
+      confirm: 3,
+      submitting: 3,
+      processing_payment: 3,
+    };
+    const currentIndex = stepMap[step] ?? 3;
 
     return (
       <View style={styles.stepIndicator}>
@@ -344,7 +452,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             <TouchableOpacity
               style={[styles.primaryBtn, { flex: 1 }, !(needsHotel || isLocal) && styles.primaryBtnDisabled]}
               activeOpacity={0.7}
-              onPress={goToConfirm}
+              onPress={goToPayment}
               disabled={!(needsHotel || isLocal)}
             >
               <Text style={styles.primaryBtnText}>Continue</Text>
@@ -456,10 +564,110 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
           <TouchableOpacity
             style={[styles.primaryBtn, { flex: 1 }, !(isLocal || hotelChoice1) && styles.primaryBtnDisabled]}
             activeOpacity={0.7}
-            onPress={goToConfirm}
+            onPress={goToPayment}
             disabled={!(isLocal || hotelChoice1)}
           >
             <Text style={styles.primaryBtnText}>Continue</Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  function renderPaymentStep() {
+    const paymentOptions: { value: 'pay_now' | 'pay_deposit' | 'pay_later'; title: string; subtitle: string; icon: string }[] = [
+      {
+        value: 'pay_now',
+        title: 'Pay in Full',
+        subtitle: 'Pay the full registration fee now with Apple Pay or card',
+        icon: 'card-outline',
+      },
+      {
+        value: 'pay_deposit',
+        title: 'Pay Deposit',
+        subtitle: 'Pay 25% deposit now, remaining balance due later',
+        icon: 'wallet-outline',
+      },
+      {
+        value: 'pay_later',
+        title: 'Pay Later',
+        subtitle: 'Register now and receive an invoice after approval',
+        icon: 'time-outline',
+      },
+    ];
+
+    return (
+      <View style={{ flex: 1 }}>
+        <Text style={styles.stepTitle}>Payment Option</Text>
+        <Text style={styles.stepSubtitle}>Choose how you'd like to pay for registration</Text>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          {paymentOptions.map(opt => {
+            const isSelected = paymentChoice === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.paymentOption, isSelected && styles.paymentOptionSelected]}
+                activeOpacity={0.7}
+                onPress={() => setPaymentChoice(opt.value)}
+              >
+                <View style={styles.paymentOptionLeft}>
+                  <View style={[styles.paymentIconWrap, isSelected && styles.paymentIconWrapActive]}>
+                    <Ionicons
+                      name={opt.icon as any}
+                      size={24}
+                      color={isSelected ? colors.white : colors.navy}
+                    />
+                  </View>
+                </View>
+                <View style={styles.paymentOptionContent}>
+                  <Text style={[styles.paymentOptionTitle, isSelected && styles.paymentOptionTitleActive]}>
+                    {opt.title}
+                  </Text>
+                  <Text style={styles.paymentOptionSubtitle}>{opt.subtitle}</Text>
+                </View>
+                <View style={styles.radioOuter}>
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {paymentChoice !== 'pay_later' && (
+            <View style={styles.applePayNote}>
+              <Ionicons name="logo-apple" size={20} color={colors.text} />
+              <Text style={styles.applePayNoteText}>
+                Apple Pay, credit card, and debit card accepted
+              </Text>
+            </View>
+          )}
+
+          {/* Discount Code */}
+          <View style={styles.discountSection}>
+            <Text style={styles.discountLabel}>Have a Discount Code?</Text>
+            <TextInput
+              style={styles.discountInput}
+              placeholder="Enter code (optional)"
+              placeholderTextColor={colors.textMuted}
+              value={discountCode}
+              onChangeText={setDiscountCode}
+              autoCapitalize="characters"
+            />
+          </View>
+        </ScrollView>
+
+        <View style={styles.bottomBar}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('hotels')}>
+            <Ionicons name="arrow-back" size={18} color={colors.navy} />
+            <Text style={styles.secondaryBtnText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { flex: 1 }]}
+            activeOpacity={0.7}
+            onPress={goToConfirm}
+          >
+            <Text style={styles.primaryBtnText}>Review & Submit</Text>
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </TouchableOpacity>
         </View>
@@ -472,6 +680,10 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       if (!id) return null;
       return hotels.find(h => h.id === id)?.hotel_name || id;
     };
+
+    const paymentLabel = paymentChoice === 'pay_now' ? 'Pay in Full'
+      : paymentChoice === 'pay_deposit' ? 'Pay Deposit (25%)'
+      : 'Pay Later';
 
     return (
       <View style={{ flex: 1 }}>
@@ -534,28 +746,36 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
           {/* Payment */}
           <View style={styles.confirmCard}>
             <Text style={styles.confirmLabel}>Payment</Text>
-            <Text style={styles.confirmValue}>Pay Later</Text>
-            <Text style={styles.confirmNote}>
-              You'll receive an invoice and payment instructions after your registration is approved.
-            </Text>
+            <View style={styles.paymentConfirmRow}>
+              <Ionicons
+                name={paymentChoice === 'pay_now' ? 'card-outline' : paymentChoice === 'pay_deposit' ? 'wallet-outline' : 'time-outline'}
+                size={18}
+                color={colors.navy}
+              />
+              <Text style={[styles.confirmValue, { marginLeft: spacing.sm }]}>{paymentLabel}</Text>
+            </View>
+            {paymentChoice !== 'pay_later' && (
+              <Text style={styles.confirmNote}>
+                You'll be prompted to pay with Apple Pay or card after submitting.
+              </Text>
+            )}
+            {paymentChoice === 'pay_later' && (
+              <Text style={styles.confirmNote}>
+                You'll receive an invoice and payment instructions after your registration is approved.
+              </Text>
+            )}
           </View>
 
-          {/* Discount Code */}
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmLabel}>Have a Discount Code?</Text>
-            <TextInput
-              style={styles.discountInput}
-              placeholder="Enter code (optional)"
-              placeholderTextColor={colors.textMuted}
-              value={discountCode}
-              onChangeText={setDiscountCode}
-              autoCapitalize="characters"
-            />
-          </View>
+          {discountCode ? (
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmLabel}>Discount Code</Text>
+              <Text style={styles.confirmValue}>{discountCode}</Text>
+            </View>
+          ) : null}
         </ScrollView>
 
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(hotels.length > 0 ? 'hotels' : 'team')}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('payment')}>
             <Ionicons name="arrow-back" size={18} color={colors.navy} />
             <Text style={styles.secondaryBtnText}>Back</Text>
           </TouchableOpacity>
@@ -565,7 +785,9 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             onPress={submitRegistration}
           >
             <Ionicons name="checkmark-circle" size={20} color={colors.white} />
-            <Text style={styles.primaryBtnText}>Register Now</Text>
+            <Text style={styles.primaryBtnText}>
+              {paymentChoice !== 'pay_later' ? 'Register & Pay' : 'Register Now'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -581,7 +803,21 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     );
   }
 
+  function renderProcessingPayment() {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.cyan} />
+        <Text style={styles.loadingText}>Setting up payment...</Text>
+        <Text style={[styles.loadingText, { fontSize: 13, marginTop: spacing.sm }]}>
+          The payment sheet will appear shortly
+        </Text>
+      </View>
+    );
+  }
+
   function renderDone() {
+    const didPay = registrationResult?.paid;
+
     return (
       <View style={styles.doneContainer}>
         <View style={styles.doneIconWrap}>
@@ -606,12 +842,21 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
               You'll receive a confirmation email at {currentUser?.email}
             </Text>
           </View>
-          <View style={styles.doneStep}>
-            <View style={styles.doneStepDot} />
-            <Text style={styles.doneStepText}>
-              Payment instructions will be sent once approved
-            </Text>
-          </View>
+          {didPay ? (
+            <View style={styles.doneStep}>
+              <View style={[styles.doneStepDot, { backgroundColor: '#22c55e' }]} />
+              <Text style={[styles.doneStepText, { color: '#22c55e', fontWeight: '600' }]}>
+                Payment received — ${((registrationResult.amountCents || 0) / 100).toFixed(2)}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.doneStep}>
+              <View style={styles.doneStepDot} />
+              <Text style={styles.doneStepText}>
+                Payment instructions will be sent once approved
+              </Text>
+            </View>
+          )}
         </View>
 
         {registrationResult?.discountCode ? (
@@ -661,7 +906,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
         }}
       />
 
-      {step !== 'done' && step !== 'submitting' && (
+      {!['done', 'submitting', 'processing_payment'].includes(step) && (
         <View style={styles.stepIndicatorWrap}>
           {renderStepIndicator()}
         </View>
@@ -670,8 +915,10 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       <View style={styles.content}>
         {step === 'team' && renderTeamStep()}
         {step === 'hotels' && renderHotelsStep()}
+        {step === 'payment' && renderPaymentStep()}
         {step === 'confirm' && renderConfirmStep()}
         {step === 'submitting' && renderSubmitting()}
+        {step === 'processing_payment' && renderProcessingPayment()}
         {step === 'done' && renderDone()}
       </View>
     </KeyboardAvoidingView>
@@ -735,7 +982,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   stepLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
     ...fonts.medium,
     marginLeft: spacing.xs,
@@ -746,10 +993,10 @@ const styles = StyleSheet.create({
     ...fonts.semibold,
   },
   stepLine: {
-    width: 24,
+    width: 20,
     height: 2,
     backgroundColor: colors.border,
-    marginHorizontal: spacing.xs,
+    marginHorizontal: 2,
   },
   stepLineActive: {
     backgroundColor: colors.navy,
@@ -891,6 +1138,79 @@ const styles = StyleSheet.create({
     ...fonts.bold,
   },
 
+  // Payment options
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  paymentOptionSelected: {
+    borderColor: colors.navy,
+    backgroundColor: '#f0f4ff',
+  },
+  paymentOptionLeft: {
+    marginRight: spacing.md,
+  },
+  paymentIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#e8eef7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentIconWrapActive: {
+    backgroundColor: colors.navy,
+  },
+  paymentOptionContent: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  paymentOptionTitle: {
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.semibold,
+    marginBottom: 2,
+  },
+  paymentOptionTitleActive: {
+    color: colors.navy,
+  },
+  paymentOptionSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    lineHeight: 18,
+  },
+  applePayNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#f0f4ff',
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  applePayNoteText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...fonts.medium,
+    flex: 1,
+  },
+  discountSection: {
+    marginTop: spacing.lg,
+  },
+  discountLabel: {
+    fontSize: 14,
+    color: colors.text,
+    ...fonts.semibold,
+    marginBottom: spacing.sm,
+  },
+
   // Confirm
   confirmCard: {
     backgroundColor: colors.card,
@@ -925,6 +1245,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     lineHeight: 18,
   },
+  paymentConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   discountInput: {
     backgroundColor: colors.bg,
     borderRadius: radii.sm,
@@ -935,7 +1259,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
     ...fonts.medium,
-    marginTop: spacing.sm,
   },
 
   // Buttons

@@ -59,6 +59,13 @@
         {
           "calendarPermission": "UHT needs calendar access to sync your tournament schedule"
         }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.ultimatetournaments.uht",
+          "enableApplePay": true
+        }
       ]
     ],
     "extra": {
