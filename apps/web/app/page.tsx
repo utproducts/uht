@@ -325,13 +325,32 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Marketing banner with real app screenshots */}
-              <div className="rounded-t-2xl overflow-x-auto overflow-y-hidden -mx-8 sm:mx-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+              {/* Desktop: full marketing banner */}
+              <div className="hidden sm:block rounded-t-2xl overflow-hidden">
                 <img
                   src="/app-promo.jpg"
                   alt="UHT Mobile App — Browse events, live scores, venue details, hotel rates, and more"
-                  className="h-[280px] sm:h-auto sm:w-full w-auto max-w-none"
+                  className="w-full h-auto"
                 />
+              </div>
+
+              {/* Mobile: individual app screenshots in a swipeable row */}
+              <div className="sm:hidden flex gap-3 overflow-x-auto pb-0 -mx-4 px-4 snap-x snap-mandatory" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                {[
+                  { src: '/app-screen-1.png', alt: 'Home' },
+                  { src: '/app-screen-2.png', alt: 'Events' },
+                  { src: '/app-screen-3.png', alt: 'Scores' },
+                  { src: '/app-screen-4.png', alt: 'Teams' },
+                  { src: '/app-screen-5.png', alt: 'Scorekeeper' },
+                ].map((screen, i) => (
+                  <div key={i} className="flex-shrink-0 w-[200px] snap-center">
+                    <img
+                      src={screen.src}
+                      alt={screen.alt}
+                      className="w-full h-auto rounded-t-xl"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
