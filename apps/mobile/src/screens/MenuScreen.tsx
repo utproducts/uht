@@ -86,8 +86,8 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       onPress: () => navigation.navigate('My Teams'),
     },
     {
-      label: 'Player Management',
-      icon: 'person-outline',
+      label: 'Team Stats',
+      icon: 'stats-chart-outline',
       onPress: () => navigation.navigate('My Teams'),
     },
     {

@@ -69,6 +69,8 @@ interface GameSlot {
   home_score?: number | null;
   away_score?: number | null;
   division_name?: string;
+  home_locker_room?: string;
+  away_locker_room?: string;
 }
 
 interface ScoreGame {
@@ -722,19 +724,14 @@ export default function EventDetailScreen({
           </View>
         ) : null}
 
-        {/* Locker Room */}
+        {/* Locker Room Assignments */}
         <View style={styles.infoRow}>
           <View style={styles.infoIconBox}>
             <Ionicons name="lock-closed-outline" size={20} color={colors.navy} />
           </View>
           <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.infoRowLabel}>Locker Room Assignments</Text>
-              <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
-              </View>
-            </View>
-            <Text style={styles.infoRowSub}>Posted before event day</Text>
+            <Text style={styles.infoRowLabel}>Locker Room Assignments</Text>
+            <Text style={styles.infoRowSub}>Check your game in the Schedule tab for locker room info</Text>
           </View>
         </View>
       </ScrollView>
@@ -798,11 +795,13 @@ export default function EventDetailScreen({
               <View style={styles.teamRow}>
                 <Text style={styles.teamLabel}>HOME</Text>
                 <Text style={styles.teamName}>{item.home_team_name || item.home_team || 'TBD'}</Text>
+                {item.home_locker_room ? <Text style={styles.lockerText}>Locker: {item.home_locker_room}</Text> : null}
               </View>
               <Text style={styles.vsText}>vs</Text>
               <View style={styles.teamRow}>
                 <Text style={styles.teamLabel}>AWAY</Text>
                 <Text style={styles.teamName}>{item.away_team_name || item.away_team || 'TBD'}</Text>
+                {item.away_locker_room ? <Text style={styles.lockerText}>Locker: {item.away_locker_room}</Text> : null}
               </View>
             </View>
           </View>
@@ -876,11 +875,13 @@ export default function EventDetailScreen({
               <View style={styles.teamRow}>
                 <Text style={styles.teamLabel}>HOME</Text>
                 <Text style={styles.teamName}>{item.home_team_name || item.home_team || 'TBD'}</Text>
+                {item.home_locker_room ? <Text style={styles.lockerText}>Locker: {item.home_locker_room}</Text> : null}
               </View>
               <Text style={styles.vsText}>vs</Text>
               <View style={styles.teamRow}>
                 <Text style={styles.teamLabel}>AWAY</Text>
                 <Text style={styles.teamName}>{item.away_team_name || item.away_team || 'TBD'}</Text>
+                {item.away_locker_room ? <Text style={styles.lockerText}>Locker: {item.away_locker_room}</Text> : null}
               </View>
             </View>
           </View>
@@ -1707,6 +1708,7 @@ const styles = StyleSheet.create({
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   teamLabel: { fontSize: 11, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, width: 40 },
   teamName: { fontSize: 15, color: colors.text, ...fonts.semibold, flex: 1 },
+  lockerText: { fontSize: 11, color: colors.cyan, ...fonts.semibold, marginTop: 2 },
   vsText: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', marginLeft: 48 },
 
   // Scores

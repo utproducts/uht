@@ -210,7 +210,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         <ScreenHeader
           title="My Teams"
           showBack
-          onBack={() => navigation.goBack()}
+          onBack={() => navigation.navigate('Menu')}
           rightAction={renderHeaderRight()}
         />
         <View style={styles.loadingContainer}>
@@ -225,7 +225,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <ScreenHeader
         title="My Teams"
         showBack
-        onBack={() => navigation.goBack()}
+        onBack={() => navigation.navigate('Menu')}
         rightAction={renderHeaderRight()}
       />
       <FlatList

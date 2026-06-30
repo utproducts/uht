@@ -3306,6 +3306,240 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   );
 }
 
+// --- Locker Rooms Tab Component ---
+function LockerRoomsTab({ eventId }: { eventId: string }) {
+  const [games, setGames] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, { home: string; away: string }>>({});
+  const [sendingPush, setSendingPush] = useState<string | null>(null);
+  const [pushResult, setPushResult] = useState<{ gameId: string; sent: number } | null>(null);
+  const [filterDivision, setFilterDivision] = useState('all');
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+
+  const loadGames = () => {
+    setLoading(true);
+    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) {
+          setGames(json.data || []);
+          // Pre-populate edits with existing locker room values
+          const initialEdits: Record<string, { home: string; away: string }> = {};
+          (json.data || []).forEach((g: any) => {
+            initialEdits[g.id] = {
+              home: g.home_locker_room || '',
+              away: g.away_locker_room || '',
+            };
+          });
+          setEdits(initialEdits);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadGames(); }, [eventId]);
+
+  const saveLockerRoom = async (gameId: string) => {
+    const edit = edits[gameId];
+    if (!edit) return;
+    setSaving(gameId);
+    try {
+      await apiFetch(`${API_BASE.replace('/api/events', '/api/push')}/games/${gameId}/locker-rooms`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          home_locker_room: edit.home || null,
+          away_locker_room: edit.away || null,
+        }),
+      });
+      loadGames();
+    } catch {}
+    setSaving(null);
+  };
+
+  const sendLockerRoomPush = async (gameId: string) => {
+    setSendingPush(gameId);
+    setPushResult(null);
+    try {
+      const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/push')}/send-locker-room`, {
+        method: 'POST',
+        body: JSON.stringify({ game_id: gameId }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPushResult({ gameId, sent: json.data.sent });
+      }
+    } catch {}
+    setSendingPush(null);
+  };
+
+  const updateEdit = (gameId: string, field: 'home' | 'away', value: string) => {
+    setEdits(prev => ({
+      ...prev,
+      [gameId]: { ...prev[gameId], [field]: value },
+    }));
+  };
+
+  const hasChanges = (game: any) => {
+    const edit = edits[game.id];
+    if (!edit) return false;
+    return (edit.home || '') !== (game.home_locker_room || '') || (edit.away || '') !== (game.away_locker_room || '');
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  if (games.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+        <p className="font-semibold text-[#1d1d1f] text-lg">No games scheduled</p>
+        <p className="text-sm text-[#6e6e73] mt-1">Build the game schedule first before assigning locker rooms.</p>
+      </div>
+    );
+  }
+
+  const divisions = Array.from(new Set(games.map(g => g.division_name || g.age_group || 'Unknown'))).sort();
+  const filteredGames = filterDivision === 'all' ? games : games.filter(g => (g.division_name || g.age_group || 'Unknown') === filterDivision);
+
+  const formatTime = (t: string | null) => {
+    if (!t) return '—';
+    try {
+      const d = new Date(t);
+      if (isNaN(d.getTime())) {
+        const [h, m] = t.split(':').map(Number);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+      }
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch { return t; }
+  };
+
+  const assignedCount = games.filter(g => g.home_locker_room || g.away_locker_room).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg p-5">
+          <p className="text-sm text-[#86868b] mb-1">Total Games</p>
+          <p className="text-2xl font-bold text-[#1d1d1f]">{games.length}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-lg p-5">
+          <p className="text-sm text-[#86868b] mb-1">Locker Rooms Assigned</p>
+          <p className="text-2xl font-bold text-green-600">{assignedCount}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-lg p-5">
+          <p className="text-sm text-[#86868b] mb-1">Unassigned</p>
+          <p className="text-2xl font-bold text-orange-500">{games.length - assignedCount}</p>
+        </div>
+      </div>
+
+      {/* Push result toast */}
+      {pushResult && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+          <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <p className="text-sm text-green-800 font-medium">Push notification sent to {pushResult.sent} device(s)</p>
+          <button onClick={() => setPushResult(null)} className="ml-auto text-green-600 hover:text-green-800 text-xs font-medium">Dismiss</button>
+        </div>
+      )}
+
+      {/* Games table */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Locker Room Assignments</h3>
+          {divisions.length > 1 && (
+            <select
+              value={filterDivision}
+              onChange={e => setFilterDivision(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] outline-none"
+            >
+              <option value="all">All Divisions</option>
+              {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+        </div>
+
+        <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                <th className="px-3 py-2 text-left">Game #</th>
+                <th className="px-3 py-2 text-left">Matchup</th>
+                <th className="px-3 py-2 text-left">Time</th>
+                <th className="px-3 py-2 text-left">Rink</th>
+                <th className="px-3 py-2 text-left">Home Locker</th>
+                <th className="px-3 py-2 text-left">Away Locker</th>
+                <th className="px-3 py-2 text-center w-32">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredGames.map(g => {
+                const edit = edits[g.id] || { home: '', away: '' };
+                const changed = hasChanges(g);
+                const hasLocker = g.home_locker_room || g.away_locker_room;
+                return (
+                  <tr key={g.id} className="border-t border-[#e8e8ed] hover:bg-[#fafafa] transition">
+                    <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">#{g.game_number}</td>
+                    <td className="px-3 py-2.5 text-[#1d1d1f]">{g.home_team_name || g.notes?.split(' vs ')?.[0] || 'TBD'} vs {g.away_team_name || g.notes?.split(' vs ')?.[1] || 'TBD'}</td>
+                    <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                    <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || '—'}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={edit.home}
+                        onChange={e => updateEdit(g.id, 'home', e.target.value)}
+                        placeholder="e.g. Room A"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={edit.away}
+                        onChange={e => updateEdit(g.id, 'away', e.target.value)}
+                        placeholder="e.g. Room B"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {changed && (
+                          <button
+                            onClick={() => saveLockerRoom(g.id)}
+                            disabled={saving === g.id}
+                            className="px-3 py-1 rounded-lg bg-[#003e79] text-white text-xs font-semibold hover:bg-[#002d5a] transition disabled:opacity-50"
+                          >
+                            {saving === g.id ? '...' : 'Save'}
+                          </button>
+                        )}
+                        {hasLocker && !changed && (
+                          <button
+                            onClick={() => sendLockerRoomPush(g.id)}
+                            disabled={sendingPush === g.id}
+                            className="px-3 py-1 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition disabled:opacity-50"
+                            title="Send push notification to team followers"
+                          >
+                            {sendingPush === g.id ? '...' : '📲 Push'}
+                          </button>
+                        )}
+                        {hasLocker && !changed && (
+                          <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" title="Assigned" />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Scorekeepers Tab Component ---
 function ScorekeepersTab({ eventId }: { eventId: string }) {
   const [games, setGames] = useState<any[]>([]);
@@ -3544,7 +3778,7 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers'>('overview');
   const [editingReg, setEditingReg] = useState<any>(null);
   const [hotels, setHotels] = useState<string[]>([]);
   const [hotelReport, setHotelReport] = useState<any>(null);
@@ -3680,7 +3914,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit mb-6">
-        {(['overview', 'participants', 'venues', 'hotels', 'schedules'] as const).map((t) => (
+        {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'locker_rooms', 'scorekeepers'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -3688,7 +3922,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
-            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : 'Schedules'}
+            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'locker_rooms' ? 'Locker Rooms' : 'Scorekeepers'}
           </button>
         ))}
       </div>
@@ -4070,6 +4304,14 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
             Open Schedule Builder
           </a>
         </div>
+      )}
+
+      {tab === 'locker_rooms' && (
+        <LockerRoomsTab eventId={eventId} />
+      )}
+
+      {tab === 'scorekeepers' && (
+        <ScorekeepersTab eventId={eventId} />
       )}
     </div>
   );

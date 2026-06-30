@@ -32,6 +32,7 @@ const ADMIN_NAV = [
   { name: 'Hotels', href: '/admin/hotels' },
   { name: 'Venues', href: '/admin/venues' },
   { name: 'Sponsors', href: '/admin/sponsors' },
+  { name: 'Notifications', href: '/admin/notifications' },
   { name: 'FAQs', href: '/admin/faqs' },
   { name: 'Book Ice', href: '/admin/ice' },
   { name: 'Settings', href: '/admin/settings' },
