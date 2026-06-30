@@ -107,7 +107,11 @@ function VenuesPage() {
   const [editCityState, setEditCityState] = useState('');
 
   // Delete confirm
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'city' | 'venue'; id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'city' | 'venue' | 'rink'; id: string; name: string; venueId?: string } | null>(null);
+
+  // Edit rink
+  const [editingRinkId, setEditingRinkId] = useState<string | null>(null);
+  const [editRinkName, setEditRinkName] = useState('');
 
   // Venues in selected city
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -421,6 +425,45 @@ function VenuesPage() {
     setDeletingLockerRoom(null);
   };
 
+  // ── Rink CRUD ──
+
+  const handleRenameRink = async (rinkId: string, venueId: string) => {
+    if (!editRinkName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        body: JSON.stringify({ name: editRinkName.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setEditingRinkId(null);
+        if (selectedCityId) await loadVenuesForCity(selectedCityId);
+      }
+    } catch (e) {
+      console.error('Failed to rename rink', e);
+    }
+  };
+
+  const handleDeleteRink = async (rinkId: string, venueId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
+        method: 'DELETE',
+        headers: { 'X-Dev-Bypass': 'true' }
+      });
+      const json = await res.json();
+      if (json.success) {
+        setConfirmDelete(null);
+        if (selectedCityId) {
+          await loadVenuesForCity(selectedCityId);
+          await loadCities();
+        }
+      }
+    } catch (e) {
+      console.error('Failed to delete rink', e);
+    }
+  };
+
   const startEditCity = (city: City) => {
     setEditingCityId(city.id);
     setEditCityName(city.name);
@@ -450,6 +493,7 @@ function VenuesPage() {
           message={`Delete "${confirmDelete.name}"? This cannot be undone.`}
           onConfirm={() => {
             if (confirmDelete.type === 'city') handleDeleteCity(confirmDelete.id);
+            else if (confirmDelete.type === 'rink') handleDeleteRink(confirmDelete.id, confirmDelete.venueId!);
             else handleDeleteVenue(confirmDelete.id);
           }}
           onCancel={() => setConfirmDelete(null)}
@@ -826,20 +870,62 @@ function VenuesPage() {
                             venue.rinks.map(rink => (
                               <div key={rink.id}>
                                 {/* Rink Card */}
+                                {editingRinkId === rink.id ? (
+                                  <div className="bg-white border-2 border-cyan-500 rounded-lg p-3">
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        value={editRinkName}
+                                        onChange={e => setEditRinkName(e.target.value)}
+                                        className="flex-1 px-2 py-1 border border-[#e8e8ed] rounded text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 outline-none"
+                                        autoFocus
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter') handleRenameRink(rink.id, venue.id);
+                                          if (e.key === 'Escape') setEditingRinkId(null);
+                                        }}
+                                      />
+                                      <button
+                                        onClick={() => handleRenameRink(rink.id, venue.id)}
+                                        className="px-3 py-1 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a]"
+                                      >Save</button>
+                                      <button
+                                        onClick={() => setEditingRinkId(null)}
+                                        className="px-3 py-1 bg-[#e8e8ed] text-[#3d3d3d] text-xs font-semibold rounded-lg hover:bg-[#d8d8dd]"
+                                      >Cancel</button>
+                                    </div>
+                                  </div>
+                                ) : (
                                 <div
-                                  onClick={() => handleExpandRink(rink.id)}
-                                  className="bg-white border border-[#e8e8ed] rounded-lg p-3 cursor-pointer hover:bg-[#f5f5f7] transition"
+                                  className="bg-white border border-[#e8e8ed] rounded-lg p-3 cursor-pointer hover:bg-[#f5f5f7] transition group/rink"
                                 >
                                   <div className="flex items-center justify-between">
-                                    <div className="flex-1">
+                                    <div className="flex-1" onClick={() => handleExpandRink(rink.id)}>
                                       <p className="font-medium text-[#3d3d3d] text-sm">{rink.name}</p>
                                       {rink.address && (
                                         <p className="text-xs text-[#86868b] mt-1">{rink.address}</p>
                                       )}
                                     </div>
-                                    <ChevronIcon expanded={expandedRink === rink.id} className="w-4 h-4" />
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setEditingRinkId(rink.id); setEditRinkName(rink.name); }}
+                                        className="p-1 rounded transition opacity-0 group-hover/rink:opacity-100 hover:bg-[#f0f0f2] text-[#86868b] hover:text-[#3d3d3d]"
+                                        title="Rename rink"
+                                      >
+                                        <PencilIcon />
+                                      </button>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setConfirmDelete({ type: 'rink', id: rink.id, name: rink.name, venueId: venue.id }); }}
+                                        className="p-1 rounded transition opacity-0 group-hover/rink:opacity-100 hover:bg-red-50 text-[#86868b] hover:text-red-500"
+                                        title="Delete rink"
+                                      >
+                                        <TrashIcon />
+                                      </button>
+                                      <div onClick={() => handleExpandRink(rink.id)}>
+                                        <ChevronIcon expanded={expandedRink === rink.id} className="w-4 h-4" />
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
+                                )}
 
                                 {/* Expanded Rink Content - Locker Rooms */}
                                 {expandedRink === rink.id && (

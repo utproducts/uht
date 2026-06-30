@@ -76,6 +76,10 @@ interface Game {
   ref2_name: string | null;
   age_group?: string;
   division_level?: string;
+  home_locker_room?: string | null;
+  away_locker_room?: string | null;
+  delay_minutes?: number | null;
+  delay_note?: string | null;
 }
 
 interface StaffMember {
@@ -177,6 +181,11 @@ function EditGameModal({
   const [directorId, setDirectorId] = useState(game.director_id || '');
   const [ref1Id, setRef1Id] = useState(game.ref1_id || '');
   const [ref2Id, setRef2Id] = useState(game.ref2_id || '');
+  const [homeLockerRoom, setHomeLockerRoom] = useState(game.home_locker_room || '');
+  const [awayLockerRoom, setAwayLockerRoom] = useState(game.away_locker_room || '');
+  const [gameStatus, setGameStatus] = useState(game.status || 'scheduled');
+  const [delayMinutes, setDelayMinutes] = useState(game.delay_minutes?.toString() || '');
+  const [delayNote, setDelayNote] = useState(game.delay_note || '');
   const [saving, setSaving] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
   const [swapTargetId, setSwapTargetId] = useState('');
@@ -205,6 +214,11 @@ function EditGameModal({
       end_time: startDate && endH && endM ? `${startDate}T${endH}:${endM}:00` : null,
       game_type: gameType,
       notes: notes || null,
+      home_locker_room: homeLockerRoom || null,
+      away_locker_room: awayLockerRoom || null,
+      status: gameStatus,
+      delay_minutes: gameStatus === 'delayed' && delayMinutes ? parseInt(delayMinutes) : null,
+      delay_note: gameStatus === 'delayed' && delayNote ? delayNote : null,
       scorekeeper_id: scorekeeperId || null,
       director_id: directorId || null,
       ref1_id: ref1Id || null,
@@ -332,6 +346,76 @@ function EditGameModal({
               placeholder="e.g., 1G vs 2B — Semifinal"
               className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
             />
+          </div>
+
+          {/* Locker Rooms */}
+          <div className="pt-3 border-t border-[#e8e8ed]">
+            <h4 className="text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-3">Locker Rooms</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-[#86868b] font-semibold mb-1">Home</label>
+                <input
+                  type="text"
+                  value={homeLockerRoom}
+                  onChange={e => setHomeLockerRoom(e.target.value)}
+                  placeholder="e.g., Room A"
+                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[#86868b] font-semibold mb-1">Away</label>
+                <input
+                  type="text"
+                  value={awayLockerRoom}
+                  onChange={e => setAwayLockerRoom(e.target.value)}
+                  placeholder="e.g., Room B"
+                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Game Status */}
+          <div className="pt-3 border-t border-[#e8e8ed]">
+            <h4 className="text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-3">Game Status</h4>
+            <select
+              value={gameStatus}
+              onChange={e => setGameStatus(e.target.value)}
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm mb-3"
+            >
+              <option value="scheduled">Scheduled</option>
+              <option value="warmup">Warm Up</option>
+              <option value="in_progress">In Progress</option>
+              <option value="intermission">Intermission</option>
+              <option value="delayed">Delayed</option>
+              <option value="final">Final</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="forfeit">Forfeit</option>
+            </select>
+            {gameStatus === 'delayed' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-[#86868b] font-semibold mb-1">Delay (minutes)</label>
+                  <input
+                    type="number"
+                    value={delayMinutes}
+                    onChange={e => setDelayMinutes(e.target.value)}
+                    placeholder="e.g., 30"
+                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#86868b] font-semibold mb-1">Delay Note</label>
+                  <input
+                    type="text"
+                    value={delayNote}
+                    onChange={e => setDelayNote(e.target.value)}
+                    placeholder="e.g., Ice maintenance"
+                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Staff Assignments */}

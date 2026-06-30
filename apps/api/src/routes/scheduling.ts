@@ -774,7 +774,11 @@ const updateGameSchema = z.object({
   game_type: z.enum(['pool', 'quarterfinal', 'semifinal', 'consolation', 'championship', 'placement']).optional(),
   pool_name: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
-  status: z.enum(['scheduled', 'warmup', 'in_progress', 'intermission', 'final', 'cancelled', 'forfeit']).optional(),
+  status: z.enum(['scheduled', 'warmup', 'in_progress', 'intermission', 'final', 'cancelled', 'forfeit', 'delayed']).optional(),
+  home_locker_room: z.string().nullable().optional(),
+  away_locker_room: z.string().nullable().optional(),
+  delay_minutes: z.number().nullable().optional(),
+  delay_note: z.string().nullable().optional(),
   scorekeeper_id: z.string().nullable().optional(),
   director_id: z.string().nullable().optional(),
   ref1_id: z.string().nullable().optional(),
@@ -803,6 +807,10 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
   if (data.pool_name !== undefined) { updates.push('pool_name = ?'); values.push(data.pool_name); }
   if (data.notes !== undefined) { updates.push('notes = ?'); values.push(data.notes); }
   if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
+  if (data.home_locker_room !== undefined) { updates.push('home_locker_room = ?'); values.push(data.home_locker_room); }
+  if (data.away_locker_room !== undefined) { updates.push('away_locker_room = ?'); values.push(data.away_locker_room); }
+  if (data.delay_minutes !== undefined) { updates.push('delay_minutes = ?'); values.push(data.delay_minutes); }
+  if (data.delay_note !== undefined) { updates.push('delay_note = ?'); values.push(data.delay_note); }
   if (data.scorekeeper_id !== undefined) { updates.push('scorekeeper_id = ?'); values.push(data.scorekeeper_id); }
   if (data.director_id !== undefined) { updates.push('director_id = ?'); values.push(data.director_id); }
   if (data.ref1_id !== undefined) { updates.push('ref1_id = ?'); values.push(data.ref1_id); }

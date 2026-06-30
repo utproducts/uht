@@ -146,6 +146,62 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
 });
 
 // ==================
+// POST /send-division — Send push notification to all followers of teams in a specific division
+// ==================
+const sendDivisionSchema = z.object({
+  event_id: z.string().min(1),
+  event_division_id: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().min(1),
+  data: z.record(z.unknown()).optional(),
+});
+
+pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director'), zValidator('json', sendDivisionSchema), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const { event_id, event_division_id, title, body, data } = c.req.valid('json');
+
+  // Get all push tokens for users following teams in this division
+  const result = await db.prepare(`
+    SELECT DISTINCT pt.token
+    FROM push_tokens pt
+    JOIN user_follows uf ON uf.user_id = pt.user_id
+    JOIN event_registrations er ON er.team_id = uf.team_id
+    WHERE er.event_id = ? AND er.event_division_id = ?
+  `).bind(event_id, event_division_id).all();
+
+  const tokens = (result.results || []).map((r: any) => r.token as string);
+
+  if (tokens.length === 0) {
+    return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for division followers' });
+  }
+
+  const sent = await sendExpoPushNotifications(tokens, title, body, data);
+
+  // Get division info for logging
+  const divInfo = await db.prepare(`
+    SELECT ed.id, ag.name as age_group, dl.name as division_level
+    FROM event_divisions ed
+    LEFT JOIN age_groups ag ON ag.id = ed.age_group_id
+    LEFT JOIN division_levels dl ON dl.id = ed.division_level_id
+    WHERE ed.id = ?
+  `).bind(event_division_id).first() as any;
+
+  await logNotification(db, {
+    type: 'division_update',
+    title,
+    body,
+    audience: 'division_followers',
+    target_id: event_id,
+    sent_count: sent,
+    sent_by: user.id,
+    metadata: JSON.stringify({ event_division_id, division_name: divInfo ? `${divInfo.age_group || ''} ${divInfo.division_level || ''}`.trim() : '' }),
+  });
+
+  return c.json({ success: true, data: { sent } });
+});
+
+// ==================
 // POST /send-all — Broadcast to ALL app users (admin only)
 // ==================
 const sendAllSchema = z.object({
@@ -484,6 +540,15 @@ pushRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {
 
   try {
     await db.prepare(`ALTER TABLE games ADD COLUMN locker_room_notified INTEGER DEFAULT 0`).run();
+  } catch (e) { /* column may already exist */ }
+
+  // Add delay columns to games table
+  try {
+    await db.prepare(`ALTER TABLE games ADD COLUMN delay_minutes INTEGER`).run();
+  } catch (e) { /* column may already exist */ }
+
+  try {
+    await db.prepare(`ALTER TABLE games ADD COLUMN delay_note TEXT`).run();
   } catch (e) { /* column may already exist */ }
 
   return c.json({ success: true, message: 'Push tables and locker room columns created/updated' });
