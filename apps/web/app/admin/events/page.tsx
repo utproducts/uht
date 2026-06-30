@@ -4336,7 +4336,12 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState<string>('all');
-  const [seasonFilter, setSeasonFilter] = useState<string>('2026-27');
+  // Hockey season runs Sep-Aug: if month >= Sep, season is thisYear-nextYear; else lastYear-thisYear
+  const [seasonFilter, setSeasonFilter] = useState<string>(() => {
+    const now = new Date();
+    const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return `${y}-${String(y + 1).slice(2)}`;
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
@@ -4481,20 +4486,20 @@ export default function AdminEventsPage() {
 
   // Map DB season values to hockey-year display buckets
   const seasonBucket = (dbSeason: string | null): string => {
-    const s = (dbSeason || '').toLowerCase();
-    if (s.includes('fall-2026') || s.includes('winter-2026') || s.includes('winter-2027')) return '2026-27';
-    if (s === '2025/2026' || s.includes('fall-2025') || s.includes('winter-2025')) return '2025-26';
-    if (s === '2024/2025' || s.includes('fall-2024') || s.includes('winter-2024')) return '2024-25';
-    // Future-proof: try to extract year from season string
-    const yearMatch = s.match(/(\d{4})/);
+    const s = (dbSeason || '').trim();
+    // Direct match: "2026-27" format already stored in DB
+    const directMatch = s.match(/^(\d{4})-(\d{2})$/);
+    if (directMatch) return s;
+    const sl = s.toLowerCase();
+    if (sl.includes('fall-2026') || sl.includes('winter-2026') || sl.includes('winter-2027')) return '2026-27';
+    if (sl === '2025/2026' || sl.includes('fall-2025') || sl.includes('winter-2025')) return '2025-26';
+    if (sl === '2024/2025' || sl.includes('fall-2024') || sl.includes('winter-2024')) return '2024-25';
+    const yearMatch = sl.match(/(\d{4})/);
     if (yearMatch) {
       const y = parseInt(yearMatch[1]);
-      const month = s.includes('fall') ? 10 : s.includes('winter') ? 1 : 10;
-      // If the season starts in fall of year Y, it's the Y-(Y+1) season
-      if (s.includes('fall')) return `${y}-${String(y + 1).slice(2)}`;
-      if (s.includes('winter') || s.includes('spring')) return `${y - 1}-${String(y).slice(2)}`;
-      // Format like "2025/2026" → "2025-26"
-      if (s.includes('/')) return `${y}-${String(y + 1).slice(2)}`;
+      if (sl.includes('fall')) return `${y}-${String(y + 1).slice(2)}`;
+      if (sl.includes('winter') || sl.includes('spring')) return `${y - 1}-${String(y).slice(2)}`;
+      if (sl.includes('/')) return `${y}-${String(y + 1).slice(2)}`;
     }
     return 'other';
   };
