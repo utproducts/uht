@@ -4336,12 +4336,8 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState<string>('all');
-  // Hockey season runs Sep-Aug: if month >= Sep, season is thisYear-nextYear; else lastYear-thisYear
-  const [seasonFilter, setSeasonFilter] = useState<string>(() => {
-    const now = new Date();
-    const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
-    return `${y}-${String(y + 1).slice(2)}`;
-  });
+  // Auto-select newest season once data loads
+  const [seasonFilter, setSeasonFilter] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
@@ -4516,8 +4512,15 @@ export default function AdminEventsPage() {
       .map(([bucket, count]) => ({ bucket, count }));
   }, [events]);
 
+  // Auto-select newest season on first data load
+  useEffect(() => {
+    if (seasonOptions.length > 0 && !seasonFilter) {
+      setSeasonFilter(seasonOptions[0].bucket);
+    }
+  }, [seasonOptions]);
+
   // Get unique months from events for month filter
-  const seasonEvents = seasonFilter === 'all' ? events : events.filter(e => seasonBucket(e.season) === seasonFilter);
+  const seasonEvents = (!seasonFilter || seasonFilter === 'all') ? events : events.filter(e => seasonBucket(e.season) === seasonFilter);
   const months = Array.from(new Set(seasonEvents.map(e => getMonthKey(e.start_date)))).sort();
 
   // Reset month filter when switching tabs/seasons if that month doesn't exist
@@ -4529,7 +4532,7 @@ export default function AdminEventsPage() {
       (e.tournament_name && e.tournament_name.toLowerCase().includes(search.toLowerCase())) ||
       e.city.toLowerCase().includes(search.toLowerCase());
     const matchesMonth = activeMonth === 'all' || getMonthKey(e.start_date) === activeMonth;
-    const matchesSeason = seasonFilter === 'all' || seasonBucket(e.season) === seasonFilter;
+    const matchesSeason = !seasonFilter || seasonFilter === 'all' || seasonBucket(e.season) === seasonFilter;
     return matchesSearch && matchesMonth && matchesSeason;
   }).sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
 

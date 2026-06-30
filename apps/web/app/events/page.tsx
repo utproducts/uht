@@ -252,12 +252,8 @@ export default function EventsPage() {
   const [monthFilter, setMonthFilter] = useState('');
   const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
-  // Hockey season runs Sep-Aug: if month >= Sep, season is thisYear-nextYear; else lastYear-thisYear
-  const [seasonFilterVal, setSeasonFilterVal] = useState<string>(() => {
-    const now = new Date();
-    const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
-    return `${y}-${String(y + 1).slice(2)}`;
-  });
+  // Auto-select newest season once data loads
+  const [seasonFilterVal, setSeasonFilterVal] = useState<string>('');
 
   // Read ?city= from URL on mount
   useEffect(() => {
@@ -290,13 +286,20 @@ export default function EventsPage() {
       bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
     }
     return Array.from(bucketCounts.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
+      .sort((a, b) => b[0].localeCompare(a[0])) // newest first
       .map(([bucket, count]) => ({ bucket, count }));
   }, [allEvents]);
 
+  // Auto-select newest season on first data load
+  useEffect(() => {
+    if (availableSeasons.length > 0 && !seasonFilterVal) {
+      setSeasonFilterVal(availableSeasons[0].bucket);
+    }
+  }, [availableSeasons]);
+
   // Filter by season first
   const seasonFiltered = useMemo(() => {
-    if (seasonFilterVal === 'all') return allEvents;
+    if (!seasonFilterVal || seasonFilterVal === 'all') return allEvents;
     return allEvents.filter(ev => seasonBucket(ev.season) === seasonFilterVal);
   }, [allEvents, seasonFilterVal]);
 
