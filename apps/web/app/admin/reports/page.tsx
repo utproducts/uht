@@ -117,7 +117,7 @@ function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => v
                         <div>
                           <span className="font-semibold text-[#1d1d1f]">{r.team_name}</span>
                           <span className="text-[#86868b] ml-2">{r.event_name}</span>
-                          <span className="text-[#86868b] ml-2">{r.age_group} {r.division_level}</span>
+                          <span className="text-[#86868b] ml-2">{[r.age_group, r.division_level].filter(Boolean).join(' ')}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${

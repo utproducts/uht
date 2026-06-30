@@ -108,7 +108,7 @@ function ContestPageInner() {
           Contest Score — Game #{game.game_number}
         </div>
         <div className="text-white text-lg font-bold mb-1">
-          {game.age_group} — {game.division_level}
+          {[game.age_group, game.division_level].filter(Boolean).join(' — ')}
         </div>
         <div className="flex items-center justify-center gap-4 mt-4">
           <div className="text-right flex-1">

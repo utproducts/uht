@@ -131,7 +131,7 @@ function PendingRegistrations() {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs font-medium text-[#003e79]">{r.event_name}</span>
                       <span className="text-[10px] text-[#86868b]">|</span>
-                      <span className="text-xs text-[#6e6e73]">{r.division_age_group} {r.division_level}</span>
+                      <span className="text-xs text-[#6e6e73]">{[r.division_age_group, r.division_level].filter(Boolean).join(' ')}</span>
                       {eventDate && <>
                         <span className="text-[10px] text-[#86868b]">|</span>
                         <span className="text-xs text-[#86868b]">{eventDate}</span>

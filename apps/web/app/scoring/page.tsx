@@ -212,7 +212,7 @@ export default function ScorekeeperPage() {
 
                     {/* Division & Time */}
                     <div className="flex items-center justify-between text-xs text-[#6e6e73]">
-                      <span>{game.age_group} {game.division_level}</span>
+                      <span>{[game.age_group, game.division_level].filter(Boolean).join(' ')}</span>
                       <span>{formatTime(game.start_time)} {game.rink_name ? `• ${game.rink_name}` : ''}</span>
                     </div>
                   </button>

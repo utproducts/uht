@@ -11,8 +11,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { CommonActions } from '@react-navigation/native';
 import Constants from 'expo-constants';
+import * as Calendar from 'expo-calendar';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { clearAuth, getUser, User } from '../services/auth';
+import { clearAuth, getUser, authFetch, User } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface MenuGridItem {
@@ -108,14 +109,97 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     { label: 'Merch', icon: 'shirt-outline', onPress: () => navigation.navigate('Shop') },
   ];
 
+  async function handleCalendarSync() {
+    try {
+      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Calendar access is needed to sync events.');
+        return;
+      }
+
+      // Get or create UHT calendar
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      let uhtCalendar = calendars.find(cal => cal.title === 'UHT Tournaments');
+      let calendarId = uhtCalendar?.id;
+
+      if (!calendarId) {
+        const defaultSource = calendars.find(cal => cal.source?.name === 'Default')?.source
+          || calendars.find(cal => cal.allowsModifications)?.source
+          || calendars[0]?.source;
+
+        if (!defaultSource) {
+          Alert.alert('Error', 'No calendar source available.');
+          return;
+        }
+
+        calendarId = await Calendar.createCalendarAsync({
+          title: 'UHT Tournaments',
+          color: '#003e79',
+          entityType: Calendar.EntityTypes.EVENT,
+          sourceId: defaultSource.id,
+          source: defaultSource,
+          name: 'uht-tournaments',
+          ownerAccount: 'UHT',
+          accessLevel: Calendar.CalendarAccessLevel.OWNER,
+        });
+      }
+
+      // Fetch user's followed team schedules
+      const res = await authFetch('/api/teams/my-teams');
+      const json = await res.json();
+      if (!json.success || !json.data?.length) {
+        Alert.alert('No Teams', 'Follow some teams first to sync their schedules.');
+        return;
+      }
+
+      // Fetch games for followed teams
+      let totalAdded = 0;
+      for (const team of json.data) {
+        try {
+          const gamesRes = await authFetch(`/api/teams/${team.id}/games`);
+          const gamesJson = await gamesRes.json();
+          const games = gamesJson.data || gamesJson.games || [];
+          for (const game of games) {
+            if (!game.start_time) continue;
+            const start = new Date(game.start_time);
+            const end = new Date(start.getTime() + 90 * 60 * 1000); // 90 min default
+            try {
+              await Calendar.createEventAsync(calendarId!, {
+                title: `${game.home_team_name || 'Home'} vs ${game.away_team_name || 'Away'}`,
+                startDate: start,
+                endDate: end,
+                location: game.rink_name || game.venue_name || '',
+                notes: `Game #${game.game_number || ''} — ${[game.age_group, game.division_level].filter(Boolean).join(' ')}`,
+              });
+              totalAdded++;
+            } catch {}
+          }
+        } catch {}
+      }
+
+      Alert.alert('Calendar Synced', `Added ${totalAdded} game${totalAdded !== 1 ? 's' : ''} to your UHT Tournaments calendar.`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Calendar sync failed.');
+    }
+  }
+
   const ACCOUNT_ITEMS: MenuListItem[] = [
-    { label: 'Account Settings', icon: 'person-circle-outline' },
-    { label: 'Notifications', icon: 'notifications-outline' },
+    {
+      label: 'Account Settings',
+      icon: 'person-circle-outline',
+      onPress: () => navigation.navigate('AccountSettings'),
+    },
+    {
+      label: 'Notifications',
+      icon: 'notifications-outline',
+      onPress: () => navigation.navigate('NotificationSettings'),
+    },
     {
       label: 'Add to Calendar',
       icon: 'calendar-outline',
       subtitle: 'Sync all upcoming events to Calendar',
       rightIcon: 'sync-outline',
+      onPress: handleCalendarSync,
     },
   ];
 

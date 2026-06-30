@@ -713,7 +713,7 @@ eventRoutes.post('/admin/bulk-import', authMiddleware, requireRole('admin', 'dir
           const divId = crypto.randomUUID().replace(/-/g, '');
           await db.prepare(`
             INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at)
-            VALUES (?, ?, ?, 'Open', ?, 'open', datetime('now'))
+            VALUES (?, ?, ?, NULL, ?, 'open', datetime('now'))
           `).bind(divId, id, ag, priceCents || 0).run();
         }
       }
@@ -2078,7 +2078,7 @@ eventRoutes.post('/admin/seed-registrations', authMiddleware, requireRole('admin
       const ageGroup = ageMap[ageSlug] || ageSlug;
       try {
         await db.prepare(
-          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, NULL, 0, 'open', datetime('now'))"
         ).bind(divId, event_id, ageGroup).run();
         console.log(`Created division: ${divId} => ${ageGroup}`);
       } catch (e: any) {
@@ -2249,13 +2249,13 @@ eventRoutes.post('/admin/fix-age-groups', authMiddleware, requireRole('admin'), 
     if (!existing) {
       try {
         await db.prepare(
-          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, NULL, 0, 'open', datetime('now'))"
         ).bind(divId, event_id, ag).run();
       } catch (e: any) {
         // Try without specific ID
         const altId = crypto.randomUUID().replace(/-/g, '');
         await db.prepare(
-          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, NULL, 0, 'open', datetime('now'))"
         ).bind(altId, event_id, ag).run();
         divMap[ag] = altId;
         continue;

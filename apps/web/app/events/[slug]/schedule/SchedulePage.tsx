@@ -500,7 +500,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
 
                                 {/* Meta line */}
                                 <div className="flex items-center justify-center gap-2 mt-1">
-                                  <span className="text-[11px] text-[#86868b] font-medium">{game.age_group} {game.division_level}</span>
+                                  <span className="text-[11px] text-[#86868b] font-medium">{[game.age_group, game.division_level].filter(Boolean).join(' ')}</span>
                                   <span className="text-[11px] text-[#d1d1d6]">·</span>
                                   <span className="text-[11px] text-[#86868b] capitalize">{game.game_type.replace('_', ' ')}</span>
                                   {game.game_number > 0 && (

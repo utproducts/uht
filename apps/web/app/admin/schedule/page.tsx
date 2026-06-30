@@ -1729,7 +1729,7 @@ function DivisionAssignment({
                       <option value="" className="text-[#1d1d1f]">Move to...</option>
                       {divisions.filter(d => d.age_group === selectedAgeGroup).map(d => (
                         <option key={d.id} value={d.id} className="text-[#1d1d1f]">
-                          {d.division_level || 'Open'}
+                          {d.division_level || d.age_group}
                         </option>
                       ))}
                     </select>
@@ -1865,10 +1865,10 @@ function DivisionAssignment({
                                 checked={divTeams.length > 0 && divTeams.every(r => selectedTeams.has(r.id))}
                                 onChange={() => selectAllInDiv(div.id)}
                                 className="w-3.5 h-3.5 rounded border-[#c8c8cd] text-[#003e79] cursor-pointer accent-[#003e79]"
-                                title={`Select all teams in ${div.division_level || 'Open'}`}
+                                title={`Select all teams in ${div.division_level || div.age_group}`}
                               />
                             )}
-                            <span className="font-semibold text-sm text-[#1d1d1f]">{div.division_level || 'Open'}</span>
+                            <span className="font-semibold text-sm text-[#1d1d1f]">{div.division_level || div.age_group}</span>
                             <span className={`text-xs ${isFull ? 'text-emerald-600 font-bold' : 'text-[#86868b]'}`}>
                               {divTeams.length}/6 teams
                             </span>
@@ -1931,7 +1931,7 @@ function DivisionAssignment({
                                     <option value="">Move...</option>
                                     {agDivs.filter(d => d.id !== div.id).map(d => (
                                       <option key={d.id} value={d.id}>
-                                        → {d.division_level || 'Open'}
+                                        → {d.division_level || d.age_group}
                                       </option>
                                     ))}
                                   </select>

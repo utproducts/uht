@@ -254,7 +254,7 @@ export default function ScorekeeperScreen({ navigation }: { navigation: any }) {
                               </View>
                               <View style={styles.divisionPill}>
                                 <Text style={styles.divisionPillText}>
-                                  {game.age_group} {game.division_level}
+                                  {[game.age_group, game.division_level].filter(Boolean).join(' ')}
                                 </Text>
                               </View>
                             </View>

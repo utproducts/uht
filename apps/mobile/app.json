@@ -46,7 +46,13 @@
         }
       ],
       "expo-notifications",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "UHT needs calendar access to sync your tournament schedule"
+        }
+      ]
     ],
     "extra": {
       "eas": {

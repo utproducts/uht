@@ -638,6 +638,32 @@ authRoutes.put('/set-pin',
 );
 
 // ==================
+// UPDATE PROFILE
+// ==================
+authRoutes.put('/update-profile', authMiddleware, async (c) => {
+  const authUser = (c as any).get('user');
+  const db = c.env.DB;
+  const body = await c.req.json();
+  const { firstName, lastName, email, phone } = body;
+
+  try {
+    await db.prepare(
+      'UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ?, updated_at = datetime(\'now\') WHERE id = ?'
+    ).bind(
+      firstName || '',
+      lastName || '',
+      email || authUser.email,
+      phone || null,
+      authUser.id
+    ).run();
+
+    return c.json({ success: true, data: { message: 'Profile updated' } });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Update failed' }, 500);
+  }
+});
+
+// ==================
 // MIGRATION HELPER (run once to add pin_code column)
 // ==================
 authRoutes.post('/migrate-pin', authMiddleware, requireRole('admin'), async (c) => {
