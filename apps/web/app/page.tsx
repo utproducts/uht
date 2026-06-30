@@ -326,11 +326,11 @@ export default function HomePage() {
               </div>
 
               {/* Marketing banner with real app screenshots */}
-              <div className="rounded-t-2xl overflow-hidden">
+              <div className="rounded-t-2xl overflow-x-auto overflow-y-hidden -mx-8 sm:mx-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
                 <img
                   src="/app-promo.jpg"
                   alt="UHT Mobile App — Browse events, live scores, venue details, hotel rates, and more"
-                  className="w-full h-auto"
+                  className="h-[280px] sm:h-auto sm:w-full w-auto max-w-none"
                 />
               </div>
             </div>
