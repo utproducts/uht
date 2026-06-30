@@ -71,15 +71,40 @@ export async function getEventDetail(eventId: string) {
 }
 
 export async function getTeamSchedule(eventId: string, teamId: string) {
-  const res = await fetch(`https://uht.chad-157.workers.dev/api/schedules/event/${eventId}?team_id=${teamId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}/schedule?team_id=${teamId}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
 
 export async function getEventSchedule(eventId: string) {
-  const res = await fetch(`https://uht.chad-157.workers.dev/api/schedules/event/${eventId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}/schedule`);
   const json = await res.json();
   return json.success ? json.data : [];
+}
+
+export async function getMyTeamIds(): Promise<string[]> {
+  try {
+    const [followsRes, myTeamsRes] = await Promise.all([
+      authFetch('/api/follows').catch(() => null),
+      authFetch('/api/teams/my-teams').catch(() => null),
+    ]);
+    const teamIds = new Set<string>();
+    if (followsRes) {
+      const fj = await followsRes.json() as any;
+      if (fj.success && Array.isArray(fj.data)) {
+        fj.data.forEach((f: any) => teamIds.add(f.team_id));
+      }
+    }
+    if (myTeamsRes) {
+      const tj = await myTeamsRes.json() as any;
+      if (tj.success && Array.isArray(tj.data)) {
+        tj.data.forEach((t: any) => teamIds.add(t.id));
+      }
+    }
+    return [...teamIds];
+  } catch {
+    return [];
+  }
 }
 
 // ==================
