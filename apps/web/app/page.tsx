@@ -325,23 +325,13 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* App screenshots — 5 across on desktop, scrollable on mobile */}
-              <div className="flex gap-4 overflow-x-auto pb-0 -mx-2 px-2 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {[
-                  { src: '/app-screen-1.png', alt: 'Home — Follow teams and upcoming events' },
-                  { src: '/app-screen-2.png', alt: 'Events — Browse and register for tournaments' },
-                  { src: '/app-screen-3.png', alt: 'Scores — Live game scores and standings' },
-                  { src: '/app-screen-4.png', alt: 'Teams — Manage your teams and rosters' },
-                  { src: '/app-screen-5.png', alt: 'Scorekeeper — Real-time score entry' },
-                ].map((screen, i) => (
-                  <div key={i} className="flex-shrink-0 w-[160px] sm:w-[180px] lg:w-[19%] snap-center">
-                    <img
-                      src={screen.src}
-                      alt={screen.alt}
-                      className="w-full h-auto rounded-t-xl shadow-[0_-5px_30px_-10px_rgba(0,204,255,0.15)]"
-                    />
-                  </div>
-                ))}
+              {/* Marketing banner with real app screenshots */}
+              <div className="rounded-t-2xl overflow-hidden">
+                <img
+                  src="/app-promo.jpg"
+                  alt="UHT Mobile App — Browse events, live scores, venue details, hotel rates, and more"
+                  className="w-full h-auto"
+                />
               </div>
             </div>
           </div>
