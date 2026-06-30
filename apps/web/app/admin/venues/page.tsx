@@ -133,6 +133,10 @@ function VenuesPage() {
   // Rinks expansion
   const [expandedRink, setExpandedRink] = useState<string | null>(null);
 
+  // Add rink to existing venue
+  const [addingRinkToVenue, setAddingRinkToVenue] = useState<string | null>(null);
+  const [newRinkName, setNewRinkName] = useState('');
+
   // Locker rooms
   const [addingLockerRoom, setAddingLockerRoom] = useState<string | null>(null);
   const [newLockerRoomName, setNewLockerRoomName] = useState('');
@@ -438,10 +442,34 @@ function VenuesPage() {
       const json = await res.json();
       if (json.success) {
         setEditingRinkId(null);
-        if (selectedCityId) await loadVenuesForCity(selectedCityId);
+        // Reload rinks inline without collapsing venue
+        await loadRinks(venueId);
       }
     } catch (e) {
       console.error('Failed to rename rink', e);
+    }
+  };
+
+  const handleAddRink = async (venueId: string) => {
+    if (!newRinkName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        body: JSON.stringify({ name: newRinkName.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAddingRinkToVenue(null);
+        setNewRinkName('');
+        // Reload rinks inline and update venue count
+        await loadRinks(venueId);
+        setVenues(prev => prev.map(v =>
+          v.id === venueId ? { ...v, num_rinks: (v.rinks?.length || 0) + 1 } : v
+        ));
+      }
+    } catch (e) {
+      console.error('Failed to add rink', e);
     }
   };
 
@@ -454,10 +482,12 @@ function VenuesPage() {
       const json = await res.json();
       if (json.success) {
         setConfirmDelete(null);
-        if (selectedCityId) {
-          await loadVenuesForCity(selectedCityId);
-          await loadCities();
-        }
+        // Reload rinks inline without collapsing
+        await loadRinks(venueId);
+        // Update the venue's rink count locally
+        setVenues(prev => prev.map(v =>
+          v.id === venueId ? { ...v, num_rinks: Math.max(0, (v.num_rinks || 1) - 1) } : v
+        ));
       }
     } catch (e) {
       console.error('Failed to delete rink', e);
@@ -997,6 +1027,41 @@ function VenuesPage() {
                             <div className="bg-[#f5f5f7] border border-dashed border-[#e8e8ed] rounded-lg p-4 text-center text-sm text-[#86868b]">
                               No rinks found for this venue
                             </div>
+                          )}
+
+                          {/* Add Rink */}
+                          {addingRinkToVenue === venue.id ? (
+                            <div className="bg-white border-2 border-cyan-500 rounded-lg p-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={newRinkName}
+                                  onChange={e => setNewRinkName(e.target.value)}
+                                  className="flex-1 px-2 py-1 border border-[#e8e8ed] rounded text-sm focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 outline-none"
+                                  placeholder="New rink name (e.g., Rink C)"
+                                  autoFocus
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleAddRink(venue.id);
+                                    if (e.key === 'Escape') { setAddingRinkToVenue(null); setNewRinkName(''); }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleAddRink(venue.id)}
+                                  className="px-3 py-1 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a]"
+                                >Add</button>
+                                <button
+                                  onClick={() => { setAddingRinkToVenue(null); setNewRinkName(''); }}
+                                  className="px-3 py-1 bg-[#e8e8ed] text-[#3d3d3d] text-xs font-semibold rounded-lg hover:bg-[#d8d8dd]"
+                                >Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setAddingRinkToVenue(venue.id); setNewRinkName(''); }}
+                              className="w-full flex items-center justify-center gap-1 text-[#003e79] text-xs font-semibold py-2 border border-dashed border-[#003e79]/30 rounded-lg hover:bg-[#003e79]/5 transition"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                              Add Rink
+                            </button>
                           )}
                         </div>
                       )}
