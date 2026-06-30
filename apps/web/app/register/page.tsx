@@ -732,8 +732,9 @@ export default function RegisterPage() {
     return anyLocal ? discountValidation.discount_local_cents : discountValidation.discount_hotel_cents;
   })() : 0;
   const basePriceCents = Math.max(0, totalPriceCents - discountAmountCents);
-  const perTeamDeposit = event?.deposit_cents || 0;
-  const depositCents = perTeamDeposit * Math.max(teamsToPrice.length, 1);
+  // Flat $350 deposit per team
+  const DEPOSIT_PER_TEAM_CENTS = 35000;
+  const depositCents = DEPOSIT_PER_TEAM_CENTS * Math.max(teamsToPrice.length, 1);
   // Step names
   const stepNames = ['Team', 'Hotels', 'Payment', 'Checkout'];
   const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'card_form' || step === 'confirmed' || step === 'submitting' ? 3 : 0;

@@ -170,7 +170,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         <Image
           source={{ uri: event.logo_url }}
           style={styles.eventLogo}
-          resizeMode="cover"
+          resizeMode="contain"
         />
       );
     }
