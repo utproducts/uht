@@ -94,6 +94,20 @@ export default function CreateTeamScreen({
   const [showStatePicker, setShowStatePicker] = useState(false);
   const [createdTeam, setCreatedTeam] = useState<{ name: string; inviteCode?: string; rosterShareToken?: string } | null>(null);
 
+  // Roster import step state
+  const [showRosterStep, setShowRosterStep] = useState(false);
+  const [createdTeamId, setCreatedTeamId] = useState('');
+  const [rosterTab, setRosterTab] = useState<'url' | 'paste' | 'manual'>('url');
+  const [importUrl, setImportUrl] = useState('');
+  const [pastedText, setPastedText] = useState('');
+  const [newPlayer, setNewPlayer] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
+  const [addedPlayers, setAddedPlayers] = useState<Array<{ id?: string; firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }>>([]);
+  const [importing, setImporting] = useState(false);
+  const [rosterMessage, setRosterMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [previewPlayers, setPreviewPlayers] = useState<Array<{ firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }>>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [pendingTeamData, setPendingTeamData] = useState<{ name: string; inviteCode?: string; rosterShareToken?: string } | null>(null);
+
   // Auto-fill coach info from logged-in user
   useEffect(() => {
     (async () => {
@@ -145,11 +159,14 @@ export default function CreateTeamScreen({
       const json = await res.json() as any;
 
       if (json.success) {
-        setCreatedTeam({
+        // Save team data and go to roster import step
+        setPendingTeamData({
           name: teamName.trim(),
           inviteCode: json.data?.inviteCode,
-          rosterShareToken: json.data?.roster_share_token,
+          rosterShareToken: json.data?.rosterShareToken || json.data?.roster_share_token,
         });
+        setCreatedTeamId(json.data?.id || json.data?.teamId || '');
+        setShowRosterStep(true);
       } else if (json.error === 'duplicate_team') {
         Alert.alert(
           'Team Already Exists',
@@ -179,11 +196,13 @@ export default function CreateTeamScreen({
                   });
                   const json2 = await res2.json() as any;
                   if (json2.success) {
-                    if (fromOnboarding) {
-                      navigation.replace('Main');
-                    } else {
-                      navigation.goBack();
-                    }
+                    setPendingTeamData({
+                      name: teamName.trim(),
+                      inviteCode: json2.data?.inviteCode,
+                      rosterShareToken: json2.data?.roster_share_token,
+                    });
+                    setCreatedTeamId(json2.data?.id || json2.data?.teamId || '');
+                    setShowRosterStep(true);
                   } else {
                     setError(json2.error || 'Failed to create team');
                   }
@@ -203,6 +222,191 @@ export default function CreateTeamScreen({
       setError('Network error. Please try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  // ==================
+  // Roster Import Helpers
+  // ==================
+  function normalizePosition(raw: string): string {
+    if (!raw) return '';
+    const lp = raw.toLowerCase().trim();
+    if (lp.startsWith('f') || lp === 'c' || lp === 'lw' || lp === 'rw' || lp === 'center' || lp === 'wing') return 'forward';
+    if (lp.startsWith('d') || lp === 'ld' || lp === 'rd') return 'defense';
+    if (lp.startsWith('g')) return 'goalie';
+    return '';
+  }
+
+  function normalizeShoots(raw: string): string {
+    if (!raw) return '';
+    const ls = raw.toLowerCase().trim();
+    if (ls.startsWith('l')) return 'left';
+    if (ls.startsWith('r')) return 'right';
+    return '';
+  }
+
+  function parseRows(rows: string[][]): Array<{ firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }> {
+    if (rows.length === 0) return [];
+    const firstRow = rows[0].map(c => c.toLowerCase().trim());
+    let colMap: Record<string, number> = {};
+    let startRow = 0;
+    const headerKeywords = ['jersey', '#', 'first', 'last', 'name', 'pos', 'shoot', 'usa', 'number'];
+    const isHeader = firstRow.some(c => headerKeywords.some(kw => c.includes(kw)));
+    if (isHeader) {
+      startRow = 1;
+      for (let i = 0; i < firstRow.length; i++) {
+        const h = firstRow[i];
+        if (h.includes('jersey') || h === '#' || h === 'no' || (h === 'number' && i === 0)) colMap.jersey = i;
+        else if (h.includes('first')) colMap.firstName = i;
+        else if (h.includes('last')) colMap.lastName = i;
+        else if (h === 'name' || h === 'player') colMap.fullName = i;
+        else if (h.includes('pos')) colMap.position = i;
+        else if (h.includes('shoot')) colMap.shoots = i;
+      }
+    }
+    if (Object.keys(colMap).length === 0) {
+      const sample = rows[startRow] || [];
+      if (sample.length >= 3) {
+        if (/^\d{1,3}$/.test(sample[0]?.trim())) {
+          colMap = { jersey: 0, firstName: 1, lastName: 2, position: 3, shoots: 4 };
+        } else if (sample[0]?.includes(',')) {
+          colMap = { fullName: 0, jersey: 1, position: 2, shoots: 3 };
+        } else {
+          colMap = { firstName: 0, lastName: 1, jersey: 2, position: 3, shoots: 4 };
+        }
+      }
+    }
+    const players: Array<{ firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }> = [];
+    for (let i = startRow; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.every(c => !c.trim())) continue;
+      let firstName = '', lastName = '';
+      if (colMap.fullName !== undefined && row[colMap.fullName]) {
+        const name = row[colMap.fullName].trim();
+        if (name.includes(',')) {
+          const parts = name.split(',').map(s => s.trim());
+          lastName = parts[0]; firstName = parts[1] || '';
+        } else {
+          const parts = name.split(/\s+/);
+          firstName = parts[0] || ''; lastName = parts.slice(1).join(' ') || '';
+        }
+      } else {
+        firstName = (colMap.firstName !== undefined ? row[colMap.firstName] : '')?.trim() || '';
+        lastName = (colMap.lastName !== undefined ? row[colMap.lastName] : '')?.trim() || '';
+      }
+      if (!firstName && !lastName) continue;
+      players.push({
+        firstName, lastName,
+        jerseyNumber: (colMap.jersey !== undefined ? row[colMap.jersey] : '')?.trim() || '',
+        position: normalizePosition(colMap.position !== undefined ? row[colMap.position] || '' : ''),
+        shoots: normalizeShoots(colMap.shoots !== undefined ? row[colMap.shoots] || '' : ''),
+      });
+    }
+    return players;
+  }
+
+  async function handleUrlImport() {
+    if (!importUrl.trim() || !createdTeamId) return;
+    setImporting(true);
+    setRosterMessage(null);
+    try {
+      const res = await authFetch(`/api/teams/${createdTeamId}/import-roster`, {
+        method: 'POST',
+        body: JSON.stringify({ url: importUrl.trim() }),
+      });
+      const data = await res.json() as any;
+      if (data.success && data.data?.players?.length > 0) {
+        const imported = data.data.players.map((p: any) => ({
+          id: p.id, firstName: p.firstName || p.first_name || '', lastName: p.lastName || p.last_name || '',
+          jerseyNumber: p.jerseyNumber || p.jersey_number || '', position: p.position || '', shoots: p.shoots || '',
+        }));
+        setAddedPlayers(prev => [...prev, ...imported]);
+        setRosterMessage({ type: 'success', text: `Imported ${data.data.added || imported.length} players!` });
+        setImportUrl('');
+      } else {
+        setRosterMessage({ type: 'error', text: data.error || 'No players found at that URL. Try pasting your roster instead.' });
+      }
+    } catch {
+      setRosterMessage({ type: 'error', text: 'Failed to import. Check the URL and try again.' });
+    }
+    setImporting(false);
+  }
+
+  function handleParsePaste() {
+    if (!pastedText.trim()) return;
+    setRosterMessage(null);
+    // Parse pasted text: split by newlines, then by tabs or commas
+    const lines = pastedText.trim().split('\n').filter(l => l.trim());
+    const rows = lines.map(line => {
+      // Try tab-separated first, then comma-separated
+      if (line.includes('\t')) return line.split('\t');
+      return line.split(',');
+    });
+    const players = parseRows(rows);
+    if (players.length > 0) {
+      setPreviewPlayers(players);
+      setShowPreview(true);
+    } else {
+      setRosterMessage({ type: 'error', text: 'Could not parse player data. Try tab-separated or comma-separated format.' });
+    }
+  }
+
+  async function confirmPreviewPlayers() {
+    if (previewPlayers.length === 0 || !createdTeamId) return;
+    setImporting(true);
+    setRosterMessage(null);
+    try {
+      const res = await authFetch(`/api/teams/${createdTeamId}/players/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ players: previewPlayers }),
+      });
+      const data = await res.json() as any;
+      if (data.success) {
+        const saved = (data.data.players || []).map((p: any) => ({
+          id: p.id, firstName: p.firstName || '', lastName: p.lastName || '',
+          jerseyNumber: p.jerseyNumber || '', position: p.position || '', shoots: p.shoots || '',
+        }));
+        setAddedPlayers(prev => [...prev, ...saved]);
+        setRosterMessage({ type: 'success', text: `Added ${data.data.added} players to roster!` });
+        setPreviewPlayers([]);
+        setShowPreview(false);
+        setPastedText('');
+      } else {
+        setRosterMessage({ type: 'error', text: data.error || 'Failed to save players' });
+      }
+    } catch {
+      setRosterMessage({ type: 'error', text: 'Network error. Please try again.' });
+    }
+    setImporting(false);
+  }
+
+  async function handleManualAdd() {
+    if (!newPlayer.firstName.trim() || !newPlayer.lastName.trim() || !createdTeamId) return;
+    setImporting(true);
+    setRosterMessage(null);
+    try {
+      const res = await authFetch(`/api/teams/${createdTeamId}/players`, {
+        method: 'POST',
+        body: JSON.stringify(newPlayer),
+      });
+      const data = await res.json() as any;
+      if (data.success) {
+        setAddedPlayers(prev => [...prev, { id: data.data?.id, ...newPlayer }]);
+        setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
+        setRosterMessage({ type: 'success', text: `Added ${newPlayer.firstName} ${newPlayer.lastName}` });
+      } else {
+        setRosterMessage({ type: 'error', text: data.error || 'Failed to add player' });
+      }
+    } catch {
+      setRosterMessage({ type: 'error', text: 'Network error' });
+    }
+    setImporting(false);
+  }
+
+  function finishRosterStep() {
+    setShowRosterStep(false);
+    if (pendingTeamData) {
+      setCreatedTeam(pendingTeamData);
     }
   }
 
@@ -269,6 +473,279 @@ export default function CreateTeamScreen({
       const message = `You've been invited to coach ${createdTeam.name} on UHT!\n\nJoin code: ${code}\n\nDownload the UHT app and use this code to join the team as a coach.`;
       try { await Share.share({ message }); } catch {}
     }
+  }
+
+  // Show roster import step after team creation
+  if (showRosterStep && createdTeamId) {
+    // Preview mode: show parsed players for confirmation
+    if (showPreview && previewPlayers.length > 0) {
+      return (
+        <View style={styles.container}>
+          <ScreenHeader title="Review Players" showBack onBack={() => { setShowPreview(false); setPreviewPlayers([]); }} />
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={styles.sectionTitle}>Found {previewPlayers.length} Players</Text>
+            <Text style={styles.sectionSubtitle}>Review the roster below, then tap Import All.</Text>
+
+            {previewPlayers.map((p, i) => (
+              <View key={i} style={rosterStyles.previewRow}>
+                <View style={rosterStyles.previewNum}>
+                  <Text style={rosterStyles.previewNumText}>{p.jerseyNumber || '-'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={rosterStyles.previewName}>{p.firstName} {p.lastName}</Text>
+                  <Text style={rosterStyles.previewDetail}>
+                    {p.position ? p.position.charAt(0).toUpperCase() + p.position.slice(1) : 'No pos.'}{p.shoots ? ` · ${p.shoots.charAt(0).toUpperCase() + p.shoots.slice(1)}` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setPreviewPlayers(prev => prev.filter((_, j) => j !== i))} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={22} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <TouchableOpacity
+              style={[styles.createButton, importing && styles.createButtonDisabled]}
+              onPress={confirmPreviewPlayers}
+              disabled={importing || previewPlayers.length === 0}
+              activeOpacity={0.8}
+            >
+              {importing ? <ActivityIndicator color={colors.white} /> : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.white} />
+                  <Text style={styles.createButtonText}>Import {previewPlayers.length} Players</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      );
+    }
+
+    // Main roster import step
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Add Roster" showBack={false} />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            <Text style={styles.sectionTitle}>Import Your Roster</Text>
+            <Text style={styles.sectionSubtitle}>
+              Add your players now or skip and do it later from the coach dashboard.
+            </Text>
+
+            {/* Players added so far */}
+            {addedPlayers.length > 0 && (
+              <View style={rosterStyles.addedBanner}>
+                <Ionicons name="people" size={18} color={colors.success} />
+                <Text style={rosterStyles.addedBannerText}>{addedPlayers.length} player{addedPlayers.length !== 1 ? 's' : ''} added</Text>
+              </View>
+            )}
+
+            {/* Message */}
+            {rosterMessage && (
+              <View style={[rosterStyles.msgBanner, rosterMessage.type === 'error' ? styles.errorBanner : rosterStyles.successBanner]}>
+                <Ionicons name={rosterMessage.type === 'success' ? 'checkmark-circle' : 'alert-circle'} size={18} color={rosterMessage.type === 'success' ? colors.success : colors.error} />
+                <Text style={[rosterMessage.type === 'error' ? styles.errorText : rosterStyles.successText]}>{rosterMessage.text}</Text>
+              </View>
+            )}
+
+            {/* Tab Selector */}
+            <View style={rosterStyles.tabRow}>
+              {([
+                { key: 'url' as const, label: 'USA Hockey URL', icon: 'link-outline' as const },
+                { key: 'paste' as const, label: 'Paste', icon: 'clipboard-outline' as const },
+                { key: 'manual' as const, label: 'Manual', icon: 'person-add-outline' as const },
+              ]).map(tab => (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[rosterStyles.tab, rosterTab === tab.key && rosterStyles.tabActive]}
+                  onPress={() => { setRosterTab(tab.key); setRosterMessage(null); }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={tab.icon} size={18} color={rosterTab === tab.key ? colors.navy : colors.textMuted} />
+                  <Text style={[rosterStyles.tabText, rosterTab === tab.key && rosterStyles.tabTextActive]}>{tab.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* URL Import Tab */}
+            {rosterTab === 'url' && (
+              <View style={rosterStyles.tabContent}>
+                <Text style={rosterStyles.tabDesc}>Paste your USA Hockey roster page URL to auto-import players.</Text>
+                <TextInput
+                  style={styles.input}
+                  value={importUrl}
+                  onChangeText={setImportUrl}
+                  placeholder="https://..."
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={[rosterStyles.actionBtn, (!importUrl.trim() || importing) && rosterStyles.actionBtnDisabled]}
+                  onPress={handleUrlImport}
+                  disabled={!importUrl.trim() || importing}
+                  activeOpacity={0.8}
+                >
+                  {importing ? <ActivityIndicator color={colors.white} size="small" /> : (
+                    <>
+                      <Ionicons name="cloud-download-outline" size={18} color={colors.white} />
+                      <Text style={rosterStyles.actionBtnText}>Import from URL</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Paste Tab */}
+            {rosterTab === 'paste' && (
+              <View style={rosterStyles.tabContent}>
+                <Text style={rosterStyles.tabDesc}>Copy rows from a spreadsheet or type player data. Use tab or comma to separate columns.</Text>
+                <TextInput
+                  style={[styles.input, { height: 140, textAlignVertical: 'top' }]}
+                  value={pastedText}
+                  onChangeText={setPastedText}
+                  placeholder={"Jersey #, First Name, Last Name, Position, Shoots\n12, John, Smith, Forward, Left\n7, Jane, Doe, Defense, Right"}
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  numberOfLines={6}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={[rosterStyles.actionBtn, !pastedText.trim() && rosterStyles.actionBtnDisabled]}
+                  onPress={handleParsePaste}
+                  disabled={!pastedText.trim()}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="search-outline" size={18} color={colors.white} />
+                  <Text style={rosterStyles.actionBtnText}>Parse & Preview</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Manual Entry Tab */}
+            {rosterTab === 'manual' && (
+              <View style={rosterStyles.tabContent}>
+                <Text style={rosterStyles.tabDesc}>Add players one at a time.</Text>
+
+                <Text style={styles.label}>First Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newPlayer.firstName}
+                  onChangeText={v => setNewPlayer(p => ({ ...p, firstName: v }))}
+                  placeholder="First name"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="words"
+                />
+
+                <Text style={styles.label}>Last Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newPlayer.lastName}
+                  onChangeText={v => setNewPlayer(p => ({ ...p, lastName: v }))}
+                  placeholder="Last name"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="words"
+                />
+
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.label}>Jersey #</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={newPlayer.jerseyNumber}
+                      onChangeText={v => setNewPlayer(p => ({ ...p, jerseyNumber: v }))}
+                      placeholder="#"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                  <View style={{ flex: 2 }}>
+                    <Text style={styles.label}>Position</Text>
+                    <View style={rosterStyles.posRow}>
+                      {['forward', 'defense', 'goalie'].map(pos => (
+                        <TouchableOpacity
+                          key={pos}
+                          style={[rosterStyles.posChip, newPlayer.position === pos && rosterStyles.posChipActive]}
+                          onPress={() => setNewPlayer(p => ({ ...p, position: p.position === pos ? '' : pos }))}
+                        >
+                          <Text style={[rosterStyles.posChipText, newPlayer.position === pos && rosterStyles.posChipTextActive]}>
+                            {pos.charAt(0).toUpperCase() + pos.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <Text style={styles.label}>Shoots</Text>
+                <View style={rosterStyles.posRow}>
+                  {['left', 'right'].map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[rosterStyles.posChip, newPlayer.shoots === s && rosterStyles.posChipActive]}
+                      onPress={() => setNewPlayer(p => ({ ...p, shoots: p.shoots === s ? '' : s }))}
+                    >
+                      <Text style={[rosterStyles.posChipText, newPlayer.shoots === s && rosterStyles.posChipTextActive]}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={[rosterStyles.actionBtn, (!newPlayer.firstName.trim() || !newPlayer.lastName.trim() || importing) && rosterStyles.actionBtnDisabled]}
+                  onPress={handleManualAdd}
+                  disabled={!newPlayer.firstName.trim() || !newPlayer.lastName.trim() || importing}
+                  activeOpacity={0.8}
+                >
+                  {importing ? <ActivityIndicator color={colors.white} size="small" /> : (
+                    <>
+                      <Ionicons name="person-add" size={18} color={colors.white} />
+                      <Text style={rosterStyles.actionBtnText}>Add Player</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Players list */}
+            {addedPlayers.length > 0 && (
+              <View style={rosterStyles.playersList}>
+                <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 8 }]}>Roster ({addedPlayers.length})</Text>
+                {addedPlayers.map((p, i) => (
+                  <View key={p.id || i} style={rosterStyles.playerRow}>
+                    <View style={rosterStyles.jerseyBadge}>
+                      <Text style={rosterStyles.jerseyBadgeText}>{p.jerseyNumber || '-'}</Text>
+                    </View>
+                    <Text style={rosterStyles.playerName}>{p.firstName} {p.lastName}</Text>
+                    <Text style={rosterStyles.playerPos}>
+                      {p.position ? p.position.charAt(0).toUpperCase() : ''}
+                      {p.shoots ? ` · ${p.shoots.charAt(0).toUpperCase()}` : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Bottom buttons */}
+            <View style={rosterStyles.bottomBtns}>
+              <TouchableOpacity
+                style={[styles.createButton, { flex: 1 }]}
+                onPress={finishRosterStep}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={20} color={colors.white} />
+                <Text style={styles.createButtonText}>{addedPlayers.length > 0 ? 'Done' : 'Skip for Now'}</Text>
+              </TouchableOpacity>
+            </View>
+
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
   }
 
   // Show success/invite screen after team creation
@@ -801,5 +1278,204 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.navy,
     ...fonts.bold,
+  },
+});
+
+const rosterStyles = StyleSheet.create({
+  tabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  tabActive: {
+    borderColor: colors.navy,
+    backgroundColor: colors.infoBg || '#f0f7ff',
+  },
+  tabText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    ...fonts.semibold,
+    textAlign: 'center',
+  },
+  tabTextActive: {
+    color: colors.navy,
+  },
+  tabContent: {
+    marginBottom: spacing.lg,
+  },
+  tabDesc: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: radii.sm,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  actionBtnDisabled: {
+    opacity: 0.4,
+  },
+  actionBtnText: {
+    fontSize: 15,
+    color: colors.white,
+    ...fonts.bold,
+  },
+  addedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  addedBannerText: {
+    fontSize: 14,
+    color: '#166534',
+    ...fonts.semibold,
+  },
+  msgBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  successBanner: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  successText: {
+    fontSize: 14,
+    color: '#166534',
+    ...fonts.medium,
+    flex: 1,
+  },
+  posRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  posChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radii.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  posChipActive: {
+    borderColor: colors.navy,
+    backgroundColor: colors.infoBg || '#f0f7ff',
+  },
+  posChipText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    ...fonts.semibold,
+  },
+  posChipTextActive: {
+    color: colors.navy,
+  },
+  playersList: {
+    marginTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.sm,
+  },
+  jerseyBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jerseyBadgeText: {
+    fontSize: 13,
+    color: colors.white,
+    ...fonts.bold,
+  },
+  playerName: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    ...fonts.medium,
+  },
+  playerPos: {
+    fontSize: 13,
+    color: colors.textMuted,
+    ...fonts.regular,
+  },
+  bottomBtns: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xxl,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.sm,
+  },
+  previewNum: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewNumText: {
+    fontSize: 14,
+    color: colors.white,
+    ...fonts.bold,
+  },
+  previewName: {
+    fontSize: 15,
+    color: colors.text,
+    ...fonts.semibold,
+  },
+  previewDetail: {
+    fontSize: 13,
+    color: colors.textMuted,
+    ...fonts.regular,
+    marginTop: 2,
   },
 });
