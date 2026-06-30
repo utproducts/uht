@@ -515,6 +515,7 @@ teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
     managerPhone: 'manager_phone',
     seasonRecord: 'season_record',
     name: 'name',
+    logoUrl: 'logo_url',
   };
 
   for (const [jsKey, dbCol] of Object.entries(allowedFields)) {
@@ -533,6 +534,57 @@ teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
 
   await db.prepare(`UPDATE teams SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run();
   return c.json({ success: true });
+});
+
+// ==================
+// Upload team logo
+// ==================
+teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const storage = c.env.STORAGE;
+  const teamId = c.req.param('teamId');
+
+  // Verify ownership or admin
+  const isAdmin = user.roles?.includes('admin') || user.roles?.includes('director');
+  let team: any;
+  if (isAdmin) {
+    team = await db.prepare(`SELECT id FROM teams WHERE id = ?`).bind(teamId).first();
+  } else {
+    team = await db.prepare(`
+      SELECT t.id FROM teams t
+      LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
+      LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
+      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
+    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+  }
+
+  if (!team) return c.json({ success: false, error: 'Not authorized' }, 403);
+
+  const formData = await c.req.formData();
+  const file = formData.get('logo') as File | null;
+  if (!file) return c.json({ success: false, error: 'No image provided' }, 400);
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type)) {
+    return c.json({ success: false, error: 'Invalid image type. Use JPEG, PNG, or WebP.' }, 400);
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return c.json({ success: false, error: 'Image too large. Max 5MB.' }, 400);
+  }
+
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const key = `team-logos/${teamId}.${ext}`;
+
+  const arrayBuffer = await file.arrayBuffer();
+  await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
+
+  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+
+  await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(logoUrl, teamId).run();
+
+  return c.json({ success: true, data: { logo_url: logoUrl } });
 });
 
 // ==================

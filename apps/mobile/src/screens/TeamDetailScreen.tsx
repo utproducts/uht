@@ -7,9 +7,12 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Share,
+  Image,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
@@ -27,6 +30,7 @@ interface TeamDetail {
   head_coach_phone?: string;
   invite_code?: string;
   roster_share_token?: string;
+  logo_url?: string;
 }
 
 interface RosterPlayer {
@@ -50,6 +54,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
   const loadTeam = useCallback(async () => {
     setLoading(true);
@@ -102,6 +107,49 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
     } catch {}
   }
 
+  async function handleLogoUpload() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      setUploading(true);
+
+      const formData = new FormData();
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      formData.append('logo', {
+        uri: asset.uri,
+        name: `team-logo.${ext}`,
+        type: mimeType,
+      } as any);
+
+      const res = await authFetch(`/api/teams/${teamId}/logo`, {
+        method: 'POST',
+        body: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const json = await res.json() as any;
+      if (json.success) {
+        setTeam((prev) => prev ? { ...prev, logo_url: json.data.logo_url } : prev);
+        Alert.alert('Logo Updated', 'Your team logo has been uploaded.');
+      } else {
+        Alert.alert('Error', json.error || 'Failed to upload logo');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -120,8 +168,32 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
       <ScreenHeader title={displayTeam.name || 'Team'} showBack onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Team Info Card */}
+        {/* Team Logo + Info Card */}
         <View style={styles.infoCard}>
+          <TouchableOpacity
+            style={styles.logoContainer}
+            activeOpacity={0.7}
+            onPress={handleLogoUpload}
+            disabled={uploading}
+          >
+            {team?.logo_url ? (
+              <Image source={{ uri: team.logo_url }} style={styles.teamLogo} resizeMode="cover" />
+            ) : (
+              <View style={styles.logoPlaceholder}>
+                <Ionicons name="camera-outline" size={28} color={colors.textMuted} />
+              </View>
+            )}
+            {uploading ? (
+              <View style={styles.logoOverlay}>
+                <ActivityIndicator color={colors.white} />
+              </View>
+            ) : (
+              <View style={styles.logoEditBadge}>
+                <Ionicons name="pencil" size={12} color={colors.white} />
+              </View>
+            )}
+          </TouchableOpacity>
+
           {displayTeam.age_group ? (
             <View style={styles.badgeRow}>
               <View style={styles.ageGroupBadge}>
@@ -266,11 +338,58 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    alignItems: 'center',
+  },
+  logoContainer: {
+    position: 'relative',
+    marginBottom: spacing.md,
+  },
+  teamLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.bg,
+  },
+  logoPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.bg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.navy,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.card,
   },
   badgeRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginBottom: spacing.md,
+    alignSelf: 'flex-start',
   },
   ageGroupBadge: {
     backgroundColor: colors.cyan,
@@ -290,6 +409,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.sm,
+    alignSelf: 'flex-start',
   },
   locationText: {
     fontSize: 15,
@@ -301,6 +421,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.sm,
+    alignSelf: 'flex-start',
   },
   detailText: {
     fontSize: 15,

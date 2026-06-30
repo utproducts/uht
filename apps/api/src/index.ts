@@ -151,6 +151,18 @@ app.get('/api/assets/hotels/:filename', async (c) => {
   return new Response(object.body, { headers });
 });
 
+// Serve team logos from R2
+app.get('/api/assets/team-logos/:filename', async (c) => {
+  const filename = c.req.param('filename');
+  const object = await c.env.STORAGE.get(`team-logos/${filename}`);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/png');
+  headers.set('Cache-Control', 'public, max-age=31536000');
+  return new Response(object.body, { headers });
+});
+
 // Bulk import endpoint (admin only, for data migration)
 app.post('/api/import/bulk', async (c) => {
   const db = c.env.DB;

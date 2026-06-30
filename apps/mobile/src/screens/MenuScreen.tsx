@@ -111,33 +111,21 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 
   async function handleCalendarSync() {
     try {
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      const { status } = await Calendar.requestCalendarPermissions();
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Calendar access is needed to sync events.');
         return;
       }
 
       // Get or create UHT calendar
-      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      const calendars = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
       let uhtCalendar = calendars.find(cal => cal.title === 'UHT Tournaments');
-      let calendarId = uhtCalendar?.id;
 
-      if (!calendarId) {
-        const defaultSource = calendars.find(cal => cal.source?.name === 'Default')?.source
-          || calendars.find(cal => cal.allowsModifications)?.source
-          || calendars[0]?.source;
-
-        if (!defaultSource) {
-          Alert.alert('Error', 'No calendar source available.');
-          return;
-        }
-
-        calendarId = await Calendar.createCalendarAsync({
+      if (!uhtCalendar) {
+        uhtCalendar = await Calendar.createCalendar({
           title: 'UHT Tournaments',
           color: '#003e79',
           entityType: Calendar.EntityTypes.EVENT,
-          sourceId: defaultSource.id,
-          source: defaultSource,
           name: 'uht-tournaments',
           ownerAccount: 'UHT',
           accessLevel: Calendar.CalendarAccessLevel.OWNER,
@@ -164,7 +152,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
             const start = new Date(game.start_time);
             const end = new Date(start.getTime() + 90 * 60 * 1000); // 90 min default
             try {
-              await Calendar.createEventAsync(calendarId!, {
+              await uhtCalendar.createEvent({
                 title: `${game.home_team_name || 'Home'} vs ${game.away_team_name || 'Away'}`,
                 startDate: start,
                 endDate: end,
