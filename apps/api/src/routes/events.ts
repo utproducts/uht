@@ -1254,10 +1254,10 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   const matchedDivisionId = await findMatchingDivision(data.eventId, data.ageGroup);
 
   await db.prepare(`
-    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
+    regId, data.eventId, data.teamId || null, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
     initialStatus, initialPaymentStatus,
@@ -1274,10 +1274,10 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     const addMatchedDivId = await findMatchingDivision(addEvent.id, data.ageGroup);
 
     await db.prepare(`
-      INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      addRegId, addEvent.id, data.teamName, data.ageGroup, data.division || null,
+      addRegId, addEvent.id, data.teamId || null, data.teamName, data.ageGroup, data.division || null,
       data.managerFirstName || null, data.managerLastName || null,
       data.email, data.phone || null,
       initialStatus, initialPaymentStatus,

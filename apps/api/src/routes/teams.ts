@@ -1397,6 +1397,60 @@ teamRoutes.get('/:id', authMiddleware, async (c) => {
 });
 
 // ==================
+// Get team's registered events (for mobile TeamDetailScreen)
+// ==================
+teamRoutes.get('/:id/events', authMiddleware, async (c) => {
+  const teamId = c.req.param('id');
+  const db = c.env.DB;
+
+  const teamEvents: any[] = [];
+
+  // From normalized registrations table (by team_id)
+  try {
+    const normRegs = await db.prepare(`
+      SELECT r.id as reg_id, r.status, r.payment_status, e.id as event_id, e.name as event_name,
+        e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
+      FROM registrations r
+      JOIN events e ON e.id = r.event_id
+      WHERE r.team_id = ? AND r.status NOT IN ('withdrawn','denied','rejected')
+      ORDER BY e.start_date ASC
+    `).bind(teamId).all();
+    for (const r of (normRegs.results || [])) {
+      teamEvents.push(r);
+    }
+  } catch {}
+
+  // From event_registrations table (by team_id OR team_name fallback)
+  try {
+    // Get team name for fallback matching
+    const team = await db.prepare('SELECT name FROM teams WHERE id = ?').bind(teamId).first<any>();
+    const teamName = team?.name;
+
+    let erQuery = `
+      SELECT er.id as reg_id, er.status, er.payment_status, e.id as event_id, e.name as event_name,
+        e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
+      FROM event_registrations er
+      JOIN events e ON e.id = er.event_id
+      WHERE (er.team_id = ?${teamName ? ' OR er.team_name = ?' : ''}) AND er.status NOT IN ('withdrawn','denied','rejected')
+      ORDER BY e.start_date ASC
+    `;
+
+    const bindings = teamName ? [teamId, teamName] : [teamId];
+    const legacyRegs = await db.prepare(erQuery).bind(...bindings).all();
+
+    // Deduplicate by event_id
+    const existingEventIds = new Set(teamEvents.map((te: any) => te.event_id));
+    for (const r of (legacyRegs.results || [])) {
+      if (!existingEventIds.has((r as any).event_id)) {
+        teamEvents.push(r);
+      }
+    }
+  } catch {}
+
+  return c.json({ success: true, data: teamEvents });
+});
+
+// ==================
 // Check for duplicate teams before creation
 // ==================
 teamRoutes.get('/check-duplicate', async (c) => {

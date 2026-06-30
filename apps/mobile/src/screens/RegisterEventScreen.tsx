@@ -165,6 +165,17 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
 
   async function submitRegistration() {
     if (!selectedTeam || !currentUser) return;
+
+    // If registration already exists (user cancelled payment and came back), skip re-registration
+    if (registrationIds.length > 0) {
+      if (paymentChoice !== 'pay_later') {
+        await processPayment(registrationIds[0]);
+      } else {
+        setStep('done');
+      }
+      return;
+    }
+
     setStep('submitting');
 
     try {
@@ -272,15 +283,13 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
 
       if (presentError) {
         if (presentError.code === 'Canceled') {
-          // User cancelled — go back to confirm step
-          Alert.alert('Payment Cancelled', 'Your registration has been saved. You can pay later or try again.', [
-            { text: 'Pay Later', onPress: () => setStep('done') },
-            { text: 'Try Again', onPress: () => processPayment(regId) },
-          ]);
+          // User cancelled — go back to payment options so they can reconsider
+          setStep('payment');
           return;
         }
-        Alert.alert('Payment Failed', presentError.message || 'Payment could not be processed. Your registration has been saved — you can pay later.');
-        setStep('done');
+        Alert.alert('Payment Failed', presentError.message || 'Payment could not be processed. You can try a different payment option.', [
+          { text: 'Back to Options', onPress: () => setStep('payment') },
+        ]);
         return;
       }
 
