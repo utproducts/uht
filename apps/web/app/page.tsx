@@ -334,7 +334,7 @@ export default function HomePage() {
                   { src: '/app-screen-4.png', alt: 'Venues — rink details and directions' },
                   { src: '/app-screen-5.png', alt: 'My Teams — manage your teams and rosters' },
                 ].map((screen, i) => (
-                  <div key={i} className="flex-shrink-0 w-[200px] sm:w-auto snap-center">
+                  <div key={i} className="flex-shrink-0 w-[200px] sm:w-auto snap-center" style={{ filter: 'drop-shadow(0 0 12px rgba(0, 204, 255, 0.4)) drop-shadow(0 0 30px rgba(0, 204, 255, 0.15))' }}>
                     <img
                       src={screen.src}
                       alt={screen.alt}
