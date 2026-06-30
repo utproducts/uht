@@ -189,7 +189,7 @@ export default function HomePage() {
             <div className="mt-10 flex items-center gap-4 flex-wrap">
               <a
                 href="/events"
-                className="group px-8 py-4 rounded-full bg-[#00ccff] text-[#001d3d] font-bold text-base hover:bg-[#33d6ff] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(0,204,255,0.3)]"
+                className="group px-8 py-4 rounded-full bg-[#00ccff] text-[#001d3d] font-bold text-base hover:bg-[#33d6ff] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)]"
               >
                 Browse Events
                 <svg className="inline-block w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -334,7 +334,7 @@ export default function HomePage() {
                   { src: '/app-screen-4.png', alt: 'Venues — rink details and directions' },
                   { src: '/app-screen-5.png', alt: 'My Teams — manage your teams and rosters' },
                 ].map((screen, i) => (
-                  <div key={i} className="flex-shrink-0 w-[200px] sm:w-auto snap-center" style={{ filter: 'drop-shadow(0 0 12px rgba(0, 204, 255, 0.4)) drop-shadow(0 0 30px rgba(0, 204, 255, 0.15))' }}>
+                  <div key={i} className="flex-shrink-0 w-[200px] sm:w-auto snap-center" style={{ filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.5)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.2))' }}>
                     <img
                       src={screen.src}
                       alt={screen.alt}
