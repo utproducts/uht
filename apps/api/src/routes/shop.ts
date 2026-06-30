@@ -124,12 +124,12 @@ shopRoutes.get('/products/:id', async (c) => {
 // ==================
 const createProductSchema = z.object({
   name: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   price: z.number().positive().default(34.99),
   category: z.enum(['beanies', 'hats', 'blankets', 'pins']),
-  image_url: z.string().optional(),
+  image_url: z.string().nullish(),
   image_urls: z.array(z.string()).optional(),
-  event_id: z.string().optional(),
+  event_id: z.string().nullish(),
   active: z.number().min(0).max(1).default(1),
   sort_order: z.number().int().default(0),
 });
@@ -163,12 +163,12 @@ shopRoutes.post('/products', authMiddleware, requireRole('admin'), zValidator('j
 // ==================
 const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   price: z.number().positive().optional(),
   category: z.enum(['beanies', 'hats', 'blankets', 'pins']).optional(),
-  image_url: z.string().optional(),
+  image_url: z.string().nullish(),
   image_urls: z.array(z.string()).optional(),
-  event_id: z.string().nullable().optional(),
+  event_id: z.string().nullish(),
   active: z.number().min(0).max(1).optional(),
   sort_order: z.number().int().optional(),
 });

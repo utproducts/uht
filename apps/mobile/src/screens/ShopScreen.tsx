@@ -59,6 +59,10 @@ export default function ShopScreen() {
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  // Detail view
+  const [detailMainImage, setDetailMainImage] = useState<string | null>(null);
+  const [detailQty, setDetailQty] = useState(1);
+
   // Checkout
   const [shipping, setShipping] = useState({
     name: '', address: '', city: '', state: '', zip: '',
@@ -91,17 +95,17 @@ export default function ShopScreen() {
     ? products
     : products.filter(p => p.category.toLowerCase() === selectedCategory.toLowerCase());
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, qty: number = 1) => {
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
         return prev.map(item =>
           item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: item.quantity + qty }
             : item
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { product, quantity: qty }];
     });
   };
 
@@ -247,7 +251,7 @@ export default function ShopScreen() {
             <TouchableOpacity
               key={product.id}
               style={styles.productCard}
-              onPress={() => { setSelectedProduct(product); setScreen('detail'); }}
+              onPress={() => { setSelectedProduct(product); setDetailMainImage(null); setDetailQty(1); setScreen('detail'); }}
               activeOpacity={0.7}
             >
               {product.image_url ? (
@@ -280,24 +284,42 @@ export default function ShopScreen() {
   const renderDetail = () => {
     if (!selectedProduct) return null;
     const inCart = cart.find(item => item.product.id === selectedProduct.id);
-    const additionalImages: string[] = selectedProduct.image_urls ? JSON.parse(selectedProduct.image_urls) : [];
+    const allImages: string[] = [];
+    if (selectedProduct.image_url) allImages.push(selectedProduct.image_url);
+    try {
+      if (selectedProduct.image_urls) allImages.push(...JSON.parse(selectedProduct.image_urls));
+    } catch {}
+    const mainImage = detailMainImage || allImages[0] || null;
 
     return (
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Main image */}
-        {selectedProduct.image_url ? (
-          <Image source={{ uri: selectedProduct.image_url }} style={styles.detailImage} resizeMode="cover" />
+        {mainImage ? (
+          <Image source={{ uri: mainImage }} style={styles.detailImage} resizeMode="cover" />
         ) : (
           <View style={[styles.detailImage, styles.productImagePlaceholder]}>
             <Ionicons name="shirt-outline" size={60} color={colors.textMuted} />
           </View>
         )}
 
-        {/* Additional images */}
-        {additionalImages.length > 0 && (
+        {/* Thumbnail strip — all images, tappable */}
+        {allImages.length > 1 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScroll} contentContainerStyle={{ gap: spacing.sm }}>
-            {additionalImages.map((url, i) => (
-              <Image key={i} source={{ uri: url }} style={styles.thumbImage} resizeMode="cover" />
+            {allImages.map((url, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={() => setDetailMainImage(url)}
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={{ uri: url }}
+                  style={[
+                    styles.thumbImage,
+                    mainImage === url && styles.thumbImageActive,
+                  ]}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )}
@@ -324,24 +346,53 @@ export default function ShopScreen() {
             <Text style={styles.detailDescription}>{selectedProduct.description}</Text>
           ) : null}
 
-          {/* Add to Cart */}
-          {inCart ? (
-            <View style={styles.qtyRow}>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(selectedProduct.id, inCart.quantity - 1)}>
-                <Ionicons name="remove" size={20} color={colors.white} />
+          {/* Quantity selector */}
+          <View style={styles.qtySection}>
+            <Text style={styles.qtySectionLabel}>Quantity</Text>
+            <View style={styles.qtySelector}>
+              <TouchableOpacity
+                style={[styles.qtySelectorBtn, detailQty <= 1 && { opacity: 0.4 }]}
+                onPress={() => setDetailQty(q => Math.max(1, q - 1))}
+                disabled={detailQty <= 1}
+              >
+                <Ionicons name="remove" size={20} color={colors.navy} />
               </TouchableOpacity>
-              <Text style={styles.qtyText}>{inCart.quantity} in cart</Text>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(selectedProduct.id, inCart.quantity + 1)}>
-                <Ionicons name="add" size={20} color={colors.white} />
+              <Text style={styles.qtySelectorText}>{detailQty}</Text>
+              <TouchableOpacity
+                style={styles.qtySelectorBtn}
+                onPress={() => setDetailQty(q => q + 1)}
+              >
+                <Ionicons name="add" size={20} color={colors.navy} />
               </TouchableOpacity>
             </View>
-          ) : (
+          </View>
+
+          {/* Add to Cart button */}
+          <TouchableOpacity
+            style={styles.addToCartBtn}
+            onPress={() => {
+              addToCart(selectedProduct, detailQty);
+              Alert.alert('Added!', `${detailQty}x ${selectedProduct.name} added to cart.`);
+              setDetailQty(1);
+            }}
+          >
+            <Ionicons name="cart-outline" size={20} color={colors.white} />
+            <Text style={styles.addToCartText}>
+              Add to Cart — ${(selectedProduct.price * detailQty).toFixed(2)}
+            </Text>
+          </TouchableOpacity>
+
+          {/* View Cart shortcut if items in cart */}
+          {cartCount > 0 && (
             <TouchableOpacity
-              style={styles.addToCartBtn}
-              onPress={() => { addToCart(selectedProduct); Alert.alert('Added!', `${selectedProduct.name} added to cart.`); }}
+              style={styles.viewCartBtn}
+              onPress={() => setScreen('cart')}
             >
-              <Ionicons name="cart-outline" size={20} color={colors.white} />
-              <Text style={styles.addToCartText}>Add to Cart — ${selectedProduct.price.toFixed(2)}</Text>
+              <Ionicons name="bag-outline" size={18} color={colors.navy} />
+              <Text style={styles.viewCartBtnText}>
+                View Cart ({cartCount} {cartCount === 1 ? 'item' : 'items'}) — ${cartTotal.toFixed(2)}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.navy} />
             </TouchableOpacity>
           )}
         </View>
@@ -564,7 +615,7 @@ export default function ShopScreen() {
           else if (screen === 'detail' || screen === 'cart' || screen === 'orders') setScreen('browse');
           else setScreen('browse');
         }}
-        rightAction={screen === 'browse' ? (
+        rightAction={(screen === 'browse' || screen === 'detail') ? (
           <TouchableOpacity style={styles.cartIconWrap} onPress={() => setScreen('cart')}>
             <Ionicons name="cart-outline" size={24} color={colors.white} />
             {cartCount > 0 && (
@@ -716,7 +767,8 @@ const styles = StyleSheet.create({
   // ── Detail ──
   detailImage: { width: '100%', height: SCREEN_WIDTH - spacing.lg * 2, borderRadius: radii.lg, backgroundColor: '#f0f0f0' },
   thumbScroll: { marginTop: spacing.md },
-  thumbImage: { width: 64, height: 64, borderRadius: radii.sm, backgroundColor: '#f0f0f0' },
+  thumbImage: { width: 72, height: 72, borderRadius: radii.sm, backgroundColor: '#f0f0f0', borderWidth: 2, borderColor: 'transparent' },
+  thumbImageActive: { borderColor: colors.cyan, borderWidth: 2 },
   detailInfo: { marginTop: spacing.lg },
   detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   detailName: { fontSize: 22, color: colors.text, ...fonts.bold, flex: 1, marginRight: spacing.md },
@@ -753,22 +805,47 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   addToCartText: { fontSize: 17, color: colors.white, ...fonts.bold },
-  qtyRow: {
+  qtySection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xxl,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  qtySectionLabel: { fontSize: 16, color: colors.text, ...fonts.semibold },
+  qtySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  qtySelectorBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.highlight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  qtySelectorText: { fontSize: 20, color: colors.navy, ...fonts.extrabold, minWidth: 28, textAlign: 'center' },
+  viewCartBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.xxl,
-    gap: spacing.lg,
+    backgroundColor: colors.highlight,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    marginTop: spacing.md,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.cyan,
   },
-  qtyBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qtyText: { fontSize: 17, color: colors.text, ...fonts.bold },
+  viewCartBtnText: { fontSize: 15, color: colors.navy, ...fonts.bold, flex: 1 },
 
   // ── Cart ──
   cartItem: {

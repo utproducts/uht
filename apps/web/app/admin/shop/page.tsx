@@ -122,6 +122,9 @@ export default function AdminShopPage() {
   const [formImageUrls, setFormImageUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  /* Image lightbox */
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
   /* Delete confirmation */
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -278,7 +281,10 @@ export default function AdminShopPage() {
         setShowModal(false);
         fetchProducts();
       } else {
-        alert('Failed to save product: ' + (json.error || 'Unknown error'));
+        const errMsg = json.error
+          ? (typeof json.error === 'string' ? json.error : JSON.stringify(json.error, null, 2))
+          : 'Unknown error';
+        alert('Failed to save product: ' + errMsg);
       }
     } catch (err) {
       console.error('Save product failed:', err);
@@ -758,7 +764,8 @@ export default function AdminShopPage() {
                         <img
                           src={url}
                           alt={`Preview ${idx + 1}`}
-                          className="w-24 h-24 rounded-lg object-cover border border-[#e8e8ed]"
+                          className="w-24 h-24 rounded-lg object-cover border border-[#e8e8ed] cursor-pointer hover:ring-2 hover:ring-[#003e79] transition"
+                          onClick={() => setLightboxImage(url)}
                         />
                         <button
                           onClick={() => removeImage(idx)}
@@ -884,6 +891,54 @@ export default function AdminShopPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* ═══════════ Image Lightbox ═══════════ */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 cursor-pointer"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-xl transition"
+          >
+            &times;
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Full size preview"
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          {/* Navigation arrows if in edit modal */}
+          {formImageUrls.length > 1 && (() => {
+            const currentIdx = formImageUrls.indexOf(lightboxImage);
+            if (currentIdx < 0) return null;
+            return (
+              <>
+                {currentIdx > 0 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setLightboxImage(formImageUrls[currentIdx - 1]); }}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-2xl transition"
+                  >
+                    &#8249;
+                  </button>
+                )}
+                {currentIdx < formImageUrls.length - 1 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setLightboxImage(formImageUrls[currentIdx + 1]); }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/20 hover:bg-white/40 rounded-full flex items-center justify-center text-white text-2xl transition"
+                  >
+                    &#8250;
+                  </button>
+                )}
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/70 text-sm">
+                  {currentIdx + 1} of {formImageUrls.length}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
