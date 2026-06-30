@@ -35,7 +35,6 @@ export default function NotificationsPage() {
   const [audience, setAudience] = useState<'event_followers' | 'division' | 'all_users'>('event_followers');
   const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedDivisionId, setSelectedDivisionId] = useState('');
-  const [eventSearch, setEventSearch] = useState('');
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
   const apiFetch = (url: string, opts?: any) => fetch(url, {
@@ -43,9 +42,9 @@ export default function NotificationsPage() {
     headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   });
 
-  // Load ALL events across all seasons
+  // Load current season events
   useEffect(() => {
-    apiFetch(`${API_BASE}/events?per_page=200`)
+    apiFetch(`${API_BASE}/events?season=2026-27&per_page=100`)
       .then(r => r.json())
       .then(json => {
         if (json.success) setEvents(json.data || []);
@@ -72,32 +71,10 @@ export default function NotificationsPage() {
       .catch(() => setDivisions([]));
   }, [selectedEventId]);
 
-  // Group events by season
-  const eventsBySeasonArr = useMemo(() => {
-    const map = new Map<string, EventItem[]>();
-    events.forEach(ev => {
-      const season = ev.season || 'Other';
-      if (!map.has(season)) map.set(season, []);
-      map.get(season)!.push(ev);
-    });
-    // Sort seasons descending (newest first)
-    const sorted = Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-    return sorted;
+  // Sort events by date
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
   }, [events]);
-
-  // Filter events by search
-  const filteredEvents = useMemo(() => {
-    if (!eventSearch.trim()) return eventsBySeasonArr;
-    const q = eventSearch.toLowerCase();
-    return eventsBySeasonArr.map(([season, evts]) => {
-      const filtered = evts.filter(ev =>
-        ev.name.toLowerCase().includes(q) ||
-        ev.city?.toLowerCase().includes(q) ||
-        ev.state?.toLowerCase().includes(q)
-      );
-      return [season, filtered] as [string, EventItem[]];
-    }).filter(([, evts]) => evts.length > 0);
-  }, [eventsBySeasonArr, eventSearch]);
 
   // Load notification history
   useEffect(() => {
@@ -181,8 +158,6 @@ export default function NotificationsPage() {
     }
     setSending(false);
   };
-
-  const selectedEventName = events.find(e => e.id === selectedEventId)?.name || '';
 
   const canSend = title.trim() && body.trim() && (
     audience === 'all_users' ||
@@ -286,45 +261,16 @@ export default function NotificationsPage() {
           {(audience === 'event_followers' || audience === 'division') && (
             <div className="mb-5">
               <label className="text-sm font-semibold text-[#1d1d1f] mb-2 block">Select Event</label>
-              <input
-                type="text"
-                value={eventSearch}
-                onChange={e => setEventSearch(e.target.value)}
-                placeholder="Search events..."
-                className="w-full px-4 py-2 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none mb-2"
-              />
-              <div className="border border-gray-200 rounded-xl max-h-52 overflow-y-auto">
-                {filteredEvents.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-[#86868b]">No events found</div>
-                ) : (
-                  filteredEvents.map(([season, evts]) => (
-                    <div key={season}>
-                      <div className="px-4 py-2 bg-[#fafafa] text-xs font-bold text-[#86868b] uppercase tracking-wide sticky top-0">
-                        {season}
-                      </div>
-                      {evts.map(ev => (
-                        <button
-                          key={ev.id}
-                          onClick={() => { setSelectedEventId(ev.id); setSelectedDivisionId(''); }}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition flex items-center justify-between ${
-                            selectedEventId === ev.id
-                              ? 'bg-[#f0f7ff] text-[#003e79] font-semibold'
-                              : 'hover:bg-[#fafafa] text-[#1d1d1f]'
-                          }`}
-                        >
-                          <span>{ev.name}</span>
-                          <span className="text-xs text-[#86868b] ml-2">{ev.city}, {ev.state}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ))
-                )}
-              </div>
-              {selectedEventId && (
-                <p className="mt-2 text-xs text-[#003e79] font-medium">
-                  Selected: {selectedEventName}
-                </p>
-              )}
+              <select
+                value={selectedEventId}
+                onChange={e => { setSelectedEventId(e.target.value); setSelectedDivisionId(''); }}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none"
+              >
+                <option value="">Choose an event...</option>
+                {sortedEvents.map(ev => (
+                  <option key={ev.id} value={ev.id}>{ev.name} — {ev.city}, {ev.state}</option>
+                ))}
+              </select>
             </div>
           )}
 

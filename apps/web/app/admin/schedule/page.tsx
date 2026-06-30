@@ -2887,7 +2887,7 @@ export default function AdminSchedulePage() {
   // Load events + schedule summaries
   useEffect(() => {
     Promise.all([
-      authFetch(`${API_BASE}/events?per_page=100`).then(r => r.json()),
+      authFetch(`${API_BASE}/events?per_page=200`).then(r => r.json()),
       authFetch(`${API_BASE}/scheduling/events/schedule-summary`).then(r => r.json()),
     ]).then(([evJson, sumJson]) => {
       if (evJson.success && Array.isArray(evJson.data)) {
