@@ -63,6 +63,9 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
 
   // Payment
   const [paymentChoice, setPaymentChoice] = useState<'pay_now' | 'pay_deposit' | 'pay_later'>('pay_now');
+  const [eventPriceCents, setEventPriceCents] = useState<number>(0);
+  const [eventDepositCents, setEventDepositCents] = useState<number>(0);
+  const [loadingPrice, setLoadingPrice] = useState(false);
 
   // Discount
   const [discountCode, setDiscountCode] = useState('');
@@ -103,6 +106,44 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     setLoadingHotels(false);
   }, [eventId]);
 
+  // Load event pricing (divisions + event-level price)
+  const loadEventPricing = useCallback(async () => {
+    if (eventPriceCents > 0) return; // already loaded
+    setLoadingPrice(true);
+    try {
+      // Fetch divisions with pricing
+      const divRes = await authFetch(`/api/events/event-divisions/${eventId}`);
+      const divJson = await divRes.json() as any;
+      if (divJson.success && Array.isArray(divJson.data)) {
+        // Find matching division price for selected team's age group
+        const teamAg = selectedTeam?.age_group?.toLowerCase().trim() || '';
+        let matchedPrice = 0;
+        let bestLen = 0;
+        for (const div of divJson.data) {
+          const divAg = (div.age_group || '').toLowerCase().trim();
+          if (teamAg === divAg && div.price_cents > 0) {
+            matchedPrice = div.price_cents;
+            break;
+          }
+          if (teamAg.startsWith(divAg) && divAg.length > bestLen && div.price_cents > 0) {
+            matchedPrice = div.price_cents;
+            bestLen = divAg.length;
+          }
+        }
+        // Fallback to any division price or event-level price
+        if (matchedPrice === 0) {
+          const anyPrice = divJson.data.find((d: any) => d.price_cents > 0);
+          if (anyPrice) matchedPrice = anyPrice.price_cents;
+        }
+        if (matchedPrice > 0) {
+          setEventPriceCents(matchedPrice);
+          setEventDepositCents(Math.round(matchedPrice * 0.25));
+        }
+      }
+    } catch {}
+    setLoadingPrice(false);
+  }, [eventId, selectedTeam, eventPriceCents]);
+
   function selectTeam(team: Team) {
     setSelectedTeam(team);
   }
@@ -115,6 +156,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
 
   function goToPayment() {
     setStep('payment');
+    loadEventPricing();
   }
 
   function goToConfirm() {
@@ -156,7 +198,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       const json = await res.json() as any;
 
       if (json.success) {
-        const regId = json.data?.registrationId || json.data?.id;
+        const regId = json.data?.primaryRegistrationId || json.data?.registrationId || json.data?.id;
         if (regId) {
           setRegistrationIds([regId]);
         }
@@ -576,23 +618,35 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
   }
 
   function renderPaymentStep() {
-    const paymentOptions: { value: 'pay_now' | 'pay_deposit' | 'pay_later'; title: string; subtitle: string; icon: string }[] = [
+    const formatPrice = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    const fullPrice = eventPriceCents > 0 ? formatPrice(eventPriceCents) : '';
+    const depositPrice = eventDepositCents > 0 ? formatPrice(eventDepositCents) : '';
+
+    const paymentOptions: { value: 'pay_now' | 'pay_deposit' | 'pay_later'; title: string; subtitle: string; icon: string; priceLabel?: string }[] = [
       {
         value: 'pay_now',
         title: 'Pay in Full',
-        subtitle: 'Pay the full registration fee now with Apple Pay or card',
+        subtitle: fullPrice
+          ? `Pay ${fullPrice} now with Apple Pay or card`
+          : 'Pay the full registration fee now with Apple Pay or card',
         icon: 'card-outline',
+        priceLabel: fullPrice || undefined,
       },
       {
         value: 'pay_deposit',
-        title: 'Pay Deposit',
-        subtitle: 'Pay 25% deposit now, remaining balance due later',
+        title: 'Pay Deposit (25%)',
+        subtitle: depositPrice
+          ? `Pay ${depositPrice} now, remaining ${fullPrice ? formatPrice(eventPriceCents - eventDepositCents) : 'balance'} due later`
+          : 'Pay 25% deposit now, remaining balance due later',
         icon: 'wallet-outline',
+        priceLabel: depositPrice || undefined,
       },
       {
         value: 'pay_later',
         title: 'Pay Later',
-        subtitle: 'Register now and receive an invoice after approval',
+        subtitle: fullPrice
+          ? `Register now, pay ${fullPrice} after approval`
+          : 'Register now and receive an invoice after approval',
         icon: 'time-outline',
       },
     ];
@@ -622,9 +676,16 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
                   </View>
                 </View>
                 <View style={styles.paymentOptionContent}>
-                  <Text style={[styles.paymentOptionTitle, isSelected && styles.paymentOptionTitleActive]}>
-                    {opt.title}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[styles.paymentOptionTitle, isSelected && styles.paymentOptionTitleActive]}>
+                      {opt.title}
+                    </Text>
+                    {opt.priceLabel ? (
+                      <Text style={[styles.paymentPriceLabel, isSelected && styles.paymentPriceLabelActive]}>
+                        {opt.priceLabel}
+                      </Text>
+                    ) : null}
+                  </View>
                   <Text style={styles.paymentOptionSubtitle}>{opt.subtitle}</Text>
                 </View>
                 <View style={styles.radioOuter}>
@@ -681,8 +742,11 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       return hotels.find(h => h.id === id)?.hotel_name || id;
     };
 
-    const paymentLabel = paymentChoice === 'pay_now' ? 'Pay in Full'
-      : paymentChoice === 'pay_deposit' ? 'Pay Deposit (25%)'
+    const fmtCents = (c: number) => `$${(c / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    const paymentLabel = paymentChoice === 'pay_now'
+      ? `Pay in Full${eventPriceCents > 0 ? ` — ${fmtCents(eventPriceCents)}` : ''}`
+      : paymentChoice === 'pay_deposit'
+      ? `Pay Deposit — ${eventDepositCents > 0 ? fmtCents(eventDepositCents) : '25%'}`
       : 'Pay Later';
 
     return (
@@ -1185,6 +1249,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...fonts.regular,
     lineHeight: 18,
+  },
+  paymentPriceLabel: {
+    fontSize: 18,
+    color: colors.text,
+    ...fonts.bold,
+  },
+  paymentPriceLabelActive: {
+    color: colors.navy,
   },
   applePayNote: {
     flexDirection: 'row',
