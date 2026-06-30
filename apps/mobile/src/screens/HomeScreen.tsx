@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getFollowedTeams, getEvents, getScorekeeperEvents } from '../services/api';
+import { getFollowedTeams, getScorekeeperEvents } from '../services/api';
 import { getUser, authFetch, User } from '../services/auth';
 
 interface FollowedTeam {
@@ -60,9 +60,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const loadData = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [teamData, eventData, user] = await Promise.all([
+      const [teamData, user] = await Promise.all([
         getFollowedTeams().catch(() => []),
-        getEvents(),
         getUser(),
       ]);
       if (user?.name) setUserName(user.name);
@@ -76,8 +75,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         } catch {}
       }
 
-      // Also fetch "my teams" (teams where user is coach/manager/creator)
+      // Fetch "my teams" (teams where user is coach/manager/creator) — includes registered_events
       let myTeamsData: FollowedTeam[] = [];
+      let myRegisteredEvents: Event[] = [];
       try {
         const res = await authFetch('/api/teams/my-teams');
         const json = await res.json() as { success: boolean; data?: any[] };
@@ -89,6 +89,27 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             org_name: t.organization_name,
             age_group: t.age_group,
           }));
+
+          // Extract registered events from all teams
+          const seenEvents = new Set<string>();
+          for (const team of json.data) {
+            const regEvents = (team as any).registered_events || [];
+            for (const re of regEvents) {
+              if (re.event_id && !seenEvents.has(re.event_id)) {
+                seenEvents.add(re.event_id);
+                myRegisteredEvents.push({
+                  id: re.event_id,
+                  name: re.event_name || '',
+                  slug: re.slug || '',
+                  city: re.city,
+                  state: re.state,
+                  start_date: re.start_date || '',
+                  end_date: re.end_date || '',
+                  logo_url: re.logo_url,
+                });
+              }
+            }
+          }
         }
       } catch {}
 
@@ -102,9 +123,10 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         return true;
       });
       setTeams(uniqueTeams);
-      // Show only upcoming events (next 3)
+
+      // Show only upcoming registered events (next 3)
       const today = new Date().toISOString().split('T')[0];
-      const upcoming = (eventData as Event[])
+      const upcoming = myRegisteredEvents
         .filter((e: Event) => e.end_date >= today)
         .sort((a: Event, b: Event) => a.start_date.localeCompare(b.start_date))
         .slice(0, 3);
@@ -324,7 +346,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.sectionTitle}>My Upcoming Events</Text>
                 </View>
                 <TouchableOpacity onPress={() => navigation.navigate('Events' as never)}>
-                  <Text style={styles.seeAll}>See All</Text>
+                  <Text style={styles.seeAll}>Browse Events</Text>
                 </TouchableOpacity>
               </View>
               {upcomingEvents.length === 0 ? (
@@ -334,7 +356,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   </View>
                   <Text style={styles.emptyTitle}>No Upcoming Events</Text>
                   <Text style={styles.emptyText}>
-                    Check back soon for upcoming UHT events
+                    Register for a tournament to see it here
                   </Text>
                 </View>
               ) : (
