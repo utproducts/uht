@@ -288,6 +288,66 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ═══════════════════════ MOBILE APP ═══════════════════════ */}
+      <section className="bg-[#fafafa] pt-14 pb-2">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+          <div className="relative bg-gradient-to-br from-[#001d3d] via-[#002d5a] to-[#003e79] rounded-3xl overflow-hidden">
+            {/* Background accents */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[#00ccff]/10 rounded-full -translate-y-1/3 translate-x-1/4 blur-[80px]" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#00ccff]/8 rounded-full translate-y-1/3 -translate-x-1/4 blur-[60px]" />
+
+            <div className="relative z-10 px-8 sm:px-12 lg:px-16 pt-10 sm:pt-12 pb-0">
+              {/* Header row — text left, badge right on desktop */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#00ccff]/15 border border-[#00ccff]/20 mb-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#00ccff] animate-pulse" />
+                    <span className="text-xs text-[#00ccff] font-semibold">Coming Soon</span>
+                  </div>
+                  <h2 className={oswald.className + " text-2xl sm:text-3xl lg:text-4xl font-bold uppercase tracking-tight text-white leading-[0.95]"}>
+                    UHT IN YOUR{' '}
+                    <span className="bg-gradient-to-r from-[#00ccff] to-[#a0e8ff] bg-clip-text text-transparent">POCKET</span>
+                  </h2>
+                  <p className="text-white/50 text-sm sm:text-base mt-2 max-w-lg">
+                    Register, track schedules, get live scores, and manage your team — all from the UHT app.
+                  </p>
+                </div>
+
+                {/* App Store badge */}
+                <div className="inline-flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white text-[#001d3d] hover:bg-white/90 transition-all cursor-default shadow-lg flex-shrink-0">
+                  <svg className="w-7 h-7 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+                  </svg>
+                  <div>
+                    <p className="text-[9px] text-[#6e6e73] uppercase tracking-wider leading-none">Coming Soon on the</p>
+                    <p className="text-[#1d1d1f] font-bold text-base leading-tight">App Store</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* App screenshots — 5 across on desktop, scrollable on mobile */}
+              <div className="flex gap-4 overflow-x-auto pb-0 -mx-2 px-2 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {[
+                  { src: '/app-screen-1.png', alt: 'Home — Follow teams and upcoming events' },
+                  { src: '/app-screen-2.png', alt: 'Events — Browse and register for tournaments' },
+                  { src: '/app-screen-3.png', alt: 'Scores — Live game scores and standings' },
+                  { src: '/app-screen-4.png', alt: 'Teams — Manage your teams and rosters' },
+                  { src: '/app-screen-5.png', alt: 'Scorekeeper — Real-time score entry' },
+                ].map((screen, i) => (
+                  <div key={i} className="flex-shrink-0 w-[160px] sm:w-[180px] lg:w-[19%] snap-center">
+                    <img
+                      src={screen.src}
+                      alt={screen.alt}
+                      className="w-full h-auto rounded-t-xl shadow-[0_-5px_30px_-10px_rgba(0,204,255,0.15)]"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ═══════════════════════ UPCOMING EVENTS ═══════════════════════ */}
       <section className="bg-[#fafafa] pt-16 pb-20">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
@@ -553,163 +613,6 @@ export default function HomePage() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══════════════════════ MOBILE APP ═══════════════════════ */}
-      <section className="bg-[#fafafa] py-20 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <div className="relative bg-gradient-to-br from-[#001d3d] via-[#002d5a] to-[#003e79] rounded-3xl overflow-hidden">
-            {/* Background accents */}
-            <div className="absolute top-0 right-0 w-80 h-80 bg-[#00ccff]/10 rounded-full -translate-y-1/3 translate-x-1/4 blur-[80px]" />
-            <div className="absolute bottom-0 left-0 w-60 h-60 bg-[#00ccff]/8 rounded-full translate-y-1/3 -translate-x-1/4 blur-[60px]" />
-            <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-[#003e79]/30 rounded-full -translate-x-1/2 -translate-y-1/2 blur-[100px]" />
-
-            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center p-8 sm:p-12 lg:p-16">
-              {/* Left — content */}
-              <div>
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#00ccff]/15 border border-[#00ccff]/20 mb-6">
-                  <span className="w-2 h-2 rounded-full bg-[#00ccff] animate-pulse" />
-                  <span className="text-sm text-[#00ccff] font-semibold">Coming Soon</span>
-                </div>
-
-                <h2 className={oswald.className + " text-3xl sm:text-4xl lg:text-5xl font-bold uppercase tracking-tight text-white leading-[0.95] mb-6"}>
-                  UHT IN YOUR
-                  <br />
-                  <span className="bg-gradient-to-r from-[#00ccff] to-[#a0e8ff] bg-clip-text text-transparent">POCKET</span>
-                </h2>
-
-                <p className="text-white/60 text-base sm:text-lg leading-relaxed mb-8 max-w-md">
-                  Register for tournaments, track schedules, get live scores, and manage your team — all from the UHT mobile app.
-                </p>
-
-                {/* Feature list */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-                  {[
-                    { icon: '🏒', text: 'Browse & register for events' },
-                    { icon: '📅', text: 'Live schedules & scores' },
-                    { icon: '👥', text: 'Manage your teams' },
-                    { icon: '🏆', text: 'Champions Locker merch' },
-                  ].map((feat, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm">{feat.icon}</span>
-                      </div>
-                      <span className="text-white/80 text-sm font-medium">{feat.text}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* App Store badge */}
-                <div className="inline-flex items-center gap-3 px-6 py-3.5 rounded-2xl bg-white text-[#001d3d] hover:bg-white/90 transition-all cursor-default shadow-lg">
-                  <svg className="w-8 h-8 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-                  </svg>
-                  <div>
-                    <p className="text-[10px] text-[#6e6e73] uppercase tracking-wider leading-none">Coming Soon on the</p>
-                    <p className="text-[#1d1d1f] font-bold text-lg leading-tight">App Store</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right — phone mockup */}
-              <div className="flex justify-center lg:justify-end">
-                <div className="relative">
-                  {/* Phone frame */}
-                  <div className="relative w-[280px] sm:w-[300px] h-[560px] sm:h-[600px] bg-[#0a0a0a] rounded-[3rem] border-[6px] border-[#2a2a2e] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.5)] overflow-hidden">
-                    {/* Notch */}
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120px] h-[28px] bg-[#0a0a0a] rounded-b-2xl z-20" />
-
-                    {/* Screen content */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-[#001d3d] to-[#002d5a] flex flex-col">
-                      {/* Status bar area */}
-                      <div className="h-12" />
-
-                      {/* App header */}
-                      <div className="px-5 py-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-white/50 text-[10px] font-medium">Welcome back</p>
-                            <p className="text-white font-bold text-sm">My Dashboard</p>
-                          </div>
-                          <div className="w-8 h-8 rounded-full bg-[#00ccff]/20 flex items-center justify-center">
-                            <span className="text-[10px]">👤</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Upcoming event card */}
-                      <div className="px-5 mb-3">
-                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
-                          <p className="text-[#00ccff] text-[9px] font-bold uppercase tracking-wider mb-1">Next Event</p>
-                          <p className="text-white font-bold text-xs mb-0.5">Chicago Fall Classic</p>
-                          <p className="text-white/50 text-[10px]">Oct 18–20 · Chicago, IL</p>
-                          <div className="mt-2 flex gap-2">
-                            <span className="px-2 py-1 rounded-full bg-[#00ccff]/15 text-[#00ccff] text-[8px] font-bold">Mite</span>
-                            <span className="px-2 py-1 rounded-full bg-green-500/15 text-green-400 text-[8px] font-bold">Registered</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Quick actions */}
-                      <div className="px-5 mb-3">
-                        <p className="text-white/40 text-[9px] font-semibold uppercase tracking-wider mb-2">Quick Actions</p>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            { icon: '📅', label: 'Events' },
-                            { icon: '🏒', label: 'Teams' },
-                            { icon: '📊', label: 'Scores' },
-                            { icon: '🛍️', label: 'Shop' },
-                          ].map((a, i) => (
-                            <div key={i} className="bg-white/8 rounded-xl p-2.5 text-center">
-                              <span className="text-base block mb-0.5">{a.icon}</span>
-                              <p className="text-white/60 text-[8px] font-medium">{a.label}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Team list */}
-                      <div className="px-5">
-                        <p className="text-white/40 text-[9px] font-semibold uppercase tracking-wider mb-2">My Teams</p>
-                        {[
-                          { name: 'Chicago Wolves', age: '10U AA' },
-                          { name: 'Midwest Thunder', age: '12U A' },
-                        ].map((team, i) => (
-                          <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl p-3 mb-2">
-                            <div className="w-8 h-8 rounded-lg bg-[#003e79] flex items-center justify-center">
-                              <span className="text-[10px]">🏒</span>
-                            </div>
-                            <div>
-                              <p className="text-white text-[11px] font-semibold">{team.name}</p>
-                              <p className="text-white/40 text-[9px]">{team.age}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Bottom tab bar */}
-                      <div className="mt-auto bg-[#0a1628]/80 backdrop-blur-md border-t border-white/10 px-4 py-2.5 flex justify-around items-center">
-                        {['Home', 'Events', 'Teams', 'Shop', 'More'].map((tab, i) => (
-                          <div key={tab} className="text-center">
-                            <div className={`w-5 h-5 mx-auto mb-0.5 rounded-md ${i === 0 ? 'bg-[#00ccff]' : 'bg-white/10'}`} />
-                            <p className={`text-[8px] font-medium ${i === 0 ? 'text-[#00ccff]' : 'text-white/40'}`}>{tab}</p>
-                          </div>
-                        ))}
-                      </div>
-                      {/* Home indicator */}
-                      <div className="flex justify-center py-2">
-                        <div className="w-[100px] h-[4px] rounded-full bg-white/30" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Glow behind phone */}
-                  <div className="absolute -inset-8 bg-[#00ccff]/10 rounded-full blur-[60px] -z-10" />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
