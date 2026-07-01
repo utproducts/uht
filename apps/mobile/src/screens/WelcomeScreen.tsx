@@ -2,6 +2,7 @@ import React from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
@@ -15,9 +16,11 @@ export default function WelcomeScreen({ navigation }: { navigation: any }) {
       <StatusBar barStyle="light-content" />
       <View style={styles.content}>
         <View style={styles.brandSection}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>UHT</Text>
-          </View>
+          <Image
+            source={require('../../assets/uht-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>Ultimate Hockey{'\n'}Tournaments</Text>
           <Text style={styles.subtitle}>
             Follow your teams, track schedules, and never miss a game.
@@ -62,20 +65,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 40,
   },
-  logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: radii.xl,
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logo: {
+    width: 200,
+    height: 150,
     marginBottom: spacing.xxl,
-  },
-  logoText: {
-    fontSize: 36,
-    color: colors.navy,
-    ...fonts.bold,
-    letterSpacing: 2,
   },
   title: {
     fontSize: 32,
