@@ -1318,32 +1318,35 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     }
   }
 
-  // Send confirmation email
-  const startDate = new Date(event.start_date + 'T12:00:00');
-  const endDate = new Date(event.end_date + 'T12:00:00');
-  const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-
+  // Send confirmation email — only for pay_later (already registered).
+  // For pay_now/pay_deposit, the email is sent after payment succeeds in the confirm-payment endpoint.
   let emailResult = { success: false, error: 'not sent' };
-  try {
-    emailResult = await sendRegistrationConfirmationEmail(c.env, {
-      recipientEmail: data.email,
-      recipientName: data.managerFirstName
-        ? `${data.managerFirstName} ${data.managerLastName || ''}`.trim()
-        : data.teamName,
-      teamName: data.teamName,
-      ageGroup: data.ageGroup,
-      division: data.division || undefined,
-      eventName: event.name,
-      eventDate: eventDateStr,
-      eventCity: `${event.city}, ${event.state}`,
-      headCoachName: data.headCoachName || undefined,
-      priceCents: event.price_cents || undefined,
-      depositCents: event.deposit_cents || undefined,
-      eventLogoUrl: event.logo_url || undefined,
-      discountCode: discountCode || undefined,
-    });
-  } catch (err: any) {
-    console.error('Registration confirmation email error:', err);
+  if (data.paymentChoice === 'pay_later') {
+    const startDate = new Date(event.start_date + 'T12:00:00');
+    const endDate = new Date(event.end_date + 'T12:00:00');
+    const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+    try {
+      emailResult = await sendRegistrationConfirmationEmail(c.env, {
+        recipientEmail: data.email,
+        recipientName: data.managerFirstName
+          ? `${data.managerFirstName} ${data.managerLastName || ''}`.trim()
+          : data.teamName,
+        teamName: data.teamName,
+        ageGroup: data.ageGroup,
+        division: data.division || undefined,
+        eventName: event.name,
+        eventDate: eventDateStr,
+        eventCity: `${event.city}, ${event.state}`,
+        headCoachName: data.headCoachName || undefined,
+        priceCents: event.price_cents || undefined,
+        depositCents: event.deposit_cents || undefined,
+        eventLogoUrl: event.logo_url || undefined,
+        discountCode: discountCode || undefined,
+      });
+    } catch (err: any) {
+      console.error('Registration confirmation email error:', err);
+    }
   }
 
   return c.json({

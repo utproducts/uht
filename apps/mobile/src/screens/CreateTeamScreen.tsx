@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,33 +15,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser } from '../services/auth';
+import { getOrganizationsByState, searchOrganizations, getLookupValues, getStateDivisionLevels } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
-
-const AGE_GROUPS = [
-  'Mite (8U)',
-  'Squirt (10U)',
-  'Pee Wee (12U)',
-  'Bantam (14U)',
-  '16u/JV',
-  '18u/Var.',
-  'Girls 10u',
-  'Girls 12u',
-  'Girls 14u',
-  'Midget',
-  'Adult',
-];
-
-const DIVISION_LEVELS = [
-  'A',
-  'AA',
-  'AAA',
-  'B',
-  'BB',
-  'House',
-  'Rec',
-  'Select',
-  'Travel',
-];
 
 const US_STATES = [
   { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' },
@@ -78,7 +53,7 @@ export default function CreateTeamScreen({
   route: any;
   navigation: any;
 }) {
-  const { organizationId, organizationName, fromOnboarding } = route.params || {};
+  const { organizationId: routeOrgId, organizationName: routeOrgName, fromOnboarding } = route.params || {};
 
   const [teamName, setTeamName] = useState('');
   const [ageGroup, setAgeGroup] = useState('');
@@ -93,6 +68,19 @@ export default function CreateTeamScreen({
   const [showDivisionPicker, setShowDivisionPicker] = useState(false);
   const [showStatePicker, setShowStatePicker] = useState(false);
   const [createdTeam, setCreatedTeam] = useState<{ name: string; inviteCode?: string; rosterShareToken?: string } | null>(null);
+
+  // Organization selection (now inline instead of from route params)
+  const [selectedOrgId, setSelectedOrgId] = useState(routeOrgId || '');
+  const [selectedOrgName, setSelectedOrgName] = useState(routeOrgName || '');
+  const [organizations, setOrganizations] = useState<any[]>([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [showOrgPicker, setShowOrgPicker] = useState(false);
+  const [orgSearchQuery, setOrgSearchQuery] = useState('');
+
+  // DB-loaded age groups and division levels
+  const [dbAgeGroups, setDbAgeGroups] = useState<string[]>([]);
+  const [dbDivisionLevels, setDbDivisionLevels] = useState<string[]>([]);
+  const [loadingLookups, setLoadingLookups] = useState(false);
 
   // Roster import step state
   const [showRosterStep, setShowRosterStep] = useState(false);
@@ -119,6 +107,103 @@ export default function CreateTeamScreen({
       }
     })();
   }, []);
+
+  // Load age groups from DB on mount
+  useEffect(() => {
+    (async () => {
+      setLoadingLookups(true);
+      try {
+        const ageData = await getLookupValues('age_group');
+        if (Array.isArray(ageData) && ageData.length > 0) {
+          setDbAgeGroups(ageData.map((item: any) => item.value));
+        }
+      } catch (e) {
+        console.warn('Failed to load age groups from DB');
+      } finally {
+        setLoadingLookups(false);
+      }
+    })();
+  }, []);
+
+  // Load organizations when state changes
+  useEffect(() => {
+    if (!state) {
+      setOrganizations([]);
+      setSelectedOrgId('');
+      setSelectedOrgName('');
+      return;
+    }
+    (async () => {
+      setLoadingOrgs(true);
+      setSelectedOrgId('');
+      setSelectedOrgName('');
+      setAgeGroup('');
+      setDivisionLevel('');
+      try {
+        const stateEntry = US_STATES.find((s) => s.code === state);
+        const orgs = await getOrganizationsByState(stateEntry?.name || state);
+        setOrganizations(orgs || []);
+      } catch {
+        setOrganizations([]);
+      } finally {
+        setLoadingOrgs(false);
+      }
+    })();
+  }, [state]);
+
+  // Load division levels when state changes (state-specific levels from DB)
+  useEffect(() => {
+    if (!state) {
+      setDbDivisionLevels([]);
+      return;
+    }
+    (async () => {
+      try {
+        const levels = await getStateDivisionLevels(state);
+        if (Array.isArray(levels) && levels.length > 0) {
+          setDbDivisionLevels(levels.map((item: any) => item.level_name));
+        } else {
+          // Fallback to global divisions if no state-specific ones
+          const divData = await getLookupValues('division');
+          if (Array.isArray(divData) && divData.length > 0) {
+            setDbDivisionLevels(divData.map((item: any) => item.value));
+          }
+        }
+      } catch {
+        setDbDivisionLevels([]);
+      }
+    })();
+  }, [state]);
+
+  // Org search handler
+  const handleOrgSearch = useCallback(async () => {
+    if (!orgSearchQuery.trim() || !state) return;
+    setLoadingOrgs(true);
+    try {
+      const stateEntry = US_STATES.find((s) => s.code === state);
+      const results = await searchOrganizations(orgSearchQuery.trim(), stateEntry?.name || state);
+      setOrganizations(results || []);
+    } catch {
+      setOrganizations([]);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }, [orgSearchQuery, state]);
+
+  const handleClearOrgSearch = useCallback(async () => {
+    setOrgSearchQuery('');
+    if (!state) return;
+    setLoadingOrgs(true);
+    try {
+      const stateEntry = US_STATES.find((s) => s.code === state);
+      const orgs = await getOrganizationsByState(stateEntry?.name || state);
+      setOrganizations(orgs || []);
+    } catch {
+      setOrganizations([]);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }, [state]);
 
   async function handleCreate() {
     if (!teamName.trim()) {
@@ -148,7 +233,7 @@ export default function CreateTeamScreen({
           name: teamName.trim(),
           ageGroup,
           divisionLevel: divisionLevel || undefined,
-          organizationId: organizationId || undefined,
+          organizationId: selectedOrgId || undefined,
           state: stateName || undefined,
           headCoachName: coachName.trim() || undefined,
           headCoachEmail: coachEmail.trim() || undefined,
@@ -186,7 +271,7 @@ export default function CreateTeamScreen({
                       name: teamName.trim(),
                       ageGroup,
                       divisionLevel: divisionLevel || undefined,
-                      organizationId: organizationId || undefined,
+                      organizationId: selectedOrgId || undefined,
                       state: stName || undefined,
                       headCoachName: coachName.trim() || undefined,
                       headCoachEmail: coachEmail.trim() || undefined,
@@ -844,13 +929,6 @@ export default function CreateTeamScreen({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {organizationName ? (
-            <View style={styles.orgBanner}>
-              <Ionicons name="business-outline" size={18} color={colors.navy} />
-              <Text style={styles.orgBannerText}>{organizationName}</Text>
-            </View>
-          ) : null}
-
           {error ? (
             <View style={styles.errorBanner}>
               <Ionicons name="alert-circle" size={18} color={colors.error} />
@@ -858,52 +936,7 @@ export default function CreateTeamScreen({
             </View>
           ) : null}
 
-          {/* Team Name */}
-          <Text style={styles.label}>Team Name *</Text>
-          <TextInput
-            style={styles.input}
-            value={teamName}
-            onChangeText={setTeamName}
-            placeholder="e.g. Chicago Jets"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="words"
-          />
-
-          {/* Age Group */}
-          <Text style={styles.label}>Age Group *</Text>
-          <TouchableOpacity
-            style={styles.selectInput}
-            onPress={() => setShowAgeGroupPicker(true)}
-          >
-            <Text
-              style={[
-                styles.selectInputText,
-                !ageGroup && styles.selectInputPlaceholder,
-              ]}
-            >
-              {ageGroup || 'Select age group'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-
-          {/* Division Level */}
-          <Text style={styles.label}>Division Level</Text>
-          <TouchableOpacity
-            style={styles.selectInput}
-            onPress={() => setShowDivisionPicker(true)}
-          >
-            <Text
-              style={[
-                styles.selectInputText,
-                !divisionLevel && styles.selectInputPlaceholder,
-              ]}
-            >
-              {divisionLevel || 'Select division (optional)'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-
-          {/* State */}
+          {/* 1. State */}
           <Text style={styles.label}>State *</Text>
           <TouchableOpacity
             style={styles.selectInput}
@@ -922,77 +955,167 @@ export default function CreateTeamScreen({
             <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
           </TouchableOpacity>
 
-          {/* Coach Info Section */}
-          <View style={styles.sectionDivider} />
-          <Text style={styles.sectionTitle}>Head Coach Info</Text>
-          <Text style={styles.sectionSubtitle}>
-            Auto-filled from your account. Edit if creating team for your head coach.
-          </Text>
+          {/* 2. Organization (only show after state is selected) */}
+          {state ? (
+            <>
+              <Text style={styles.label}>Organization *</Text>
+              <TouchableOpacity
+                style={styles.selectInput}
+                onPress={() => setShowOrgPicker(true)}
+              >
+                <Text
+                  style={[
+                    styles.selectInputText,
+                    !selectedOrgName && styles.selectInputPlaceholder,
+                  ]}
+                >
+                  {selectedOrgName || 'Select organization'}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+              {selectedOrgName ? (
+                <View style={styles.orgBanner}>
+                  <Ionicons name="business-outline" size={18} color={colors.navy} />
+                  <Text style={styles.orgBannerText}>{selectedOrgName}</Text>
+                </View>
+              ) : null}
+            </>
+          ) : null}
 
-          <Text style={styles.label}>Head Coach Name</Text>
-          <TextInput
-            style={styles.input}
-            value={coachName}
-            onChangeText={setCoachName}
-            placeholder="Coach name"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="words"
-          />
+          {/* 3. Age Group (only show after org is selected) */}
+          {selectedOrgId ? (
+            <>
+              <Text style={styles.label}>Age Group *</Text>
+              <TouchableOpacity
+                style={styles.selectInput}
+                onPress={() => setShowAgeGroupPicker(true)}
+                disabled={loadingLookups}
+              >
+                <Text
+                  style={[
+                    styles.selectInputText,
+                    !ageGroup && styles.selectInputPlaceholder,
+                  ]}
+                >
+                  {loadingLookups ? 'Loading...' : (ageGroup || 'Select age group')}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </>
+          ) : null}
 
-          <Text style={styles.label}>Head Coach Email</Text>
-          <TextInput
-            style={styles.input}
-            value={coachEmail}
-            onChangeText={setCoachEmail}
-            placeholder="coach@email.com"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          {/* 4. Division Level (only show after age group is selected) */}
+          {ageGroup ? (
+            <>
+              <Text style={styles.label}>Division Level</Text>
+              <TouchableOpacity
+                style={styles.selectInput}
+                onPress={() => setShowDivisionPicker(true)}
+              >
+                <Text
+                  style={[
+                    styles.selectInputText,
+                    !divisionLevel && styles.selectInputPlaceholder,
+                  ]}
+                >
+                  {divisionLevel || 'Select division (optional)'}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </>
+          ) : null}
 
-          <Text style={styles.label}>Head Coach Phone</Text>
-          <TextInput
-            style={styles.input}
-            value={coachPhone}
-            onChangeText={setCoachPhone}
-            placeholder="(555) 555-5555"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad"
-          />
+          {/* 5. Team Name (show after org is selected) */}
+          {selectedOrgId ? (
+            <>
+              <View style={styles.sectionDivider} />
+              <Text style={styles.label}>Team Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={teamName}
+                onChangeText={setTeamName}
+                placeholder="e.g. Chicago Jets"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+              />
+            </>
+          ) : null}
 
-          {/* Create Button */}
-          <TouchableOpacity
-            style={[
-              styles.createButton,
-              saving && styles.createButtonDisabled,
-            ]}
-            onPress={handleCreate}
-            disabled={saving}
-            activeOpacity={0.8}
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <>
-                <Ionicons name="add-circle" size={20} color={colors.white} />
-                <Text style={styles.createButtonText}>Create Team</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {/* Coach Info Section (show after org is selected) */}
+          {selectedOrgId ? (
+            <>
+              <View style={styles.sectionDivider} />
+              <Text style={styles.sectionTitle}>Head Coach Info</Text>
+              <Text style={styles.sectionSubtitle}>
+                Auto-filled from your account. Edit if creating team for your head coach.
+              </Text>
+
+              <Text style={styles.label}>Head Coach Name</Text>
+              <TextInput
+                style={styles.input}
+                value={coachName}
+                onChangeText={setCoachName}
+                placeholder="Coach name"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="words"
+              />
+
+              <Text style={styles.label}>Head Coach Email</Text>
+              <TextInput
+                style={styles.input}
+                value={coachEmail}
+                onChangeText={setCoachEmail}
+                placeholder="coach@email.com"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.label}>Head Coach Phone</Text>
+              <TextInput
+                style={styles.input}
+                value={coachPhone}
+                onChangeText={setCoachPhone}
+                placeholder="(555) 555-5555"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="phone-pad"
+              />
+
+              {/* Create Button */}
+              <TouchableOpacity
+                style={[
+                  styles.createButton,
+                  saving && styles.createButtonDisabled,
+                ]}
+                onPress={handleCreate}
+                disabled={saving}
+                activeOpacity={0.8}
+              >
+                {saving ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <>
+                    <Ionicons name="add-circle" size={20} color={colors.white} />
+                    <Text style={styles.createButtonText}>Create Team</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Pickers */}
       {showAgeGroupPicker &&
         renderPicker(
-          AGE_GROUPS,
+          dbAgeGroups,
           ageGroup,
           setAgeGroup,
           () => setShowAgeGroupPicker(false),
         )}
       {showDivisionPicker &&
         renderPicker(
-          DIVISION_LEVELS,
+          dbDivisionLevels,
           divisionLevel,
           setDivisionLevel,
           () => setShowDivisionPicker(false),
@@ -1005,6 +1128,83 @@ export default function CreateTeamScreen({
           () => setShowStatePicker(false),
           US_STATES.map((s) => `${s.name} (${s.code})`),
         )}
+      {showOrgPicker && (
+        <View style={styles.pickerOverlay}>
+          <View style={[styles.pickerContainer, { maxHeight: '80%' }]}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Organization</Text>
+              <TouchableOpacity onPress={() => setShowOrgPicker(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            {/* Search bar */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <TextInput
+                style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                value={orgSearchQuery}
+                onChangeText={setOrgSearchQuery}
+                placeholder="Search organizations..."
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                returnKeyType="search"
+                onSubmitEditing={handleOrgSearch}
+              />
+              {orgSearchQuery.length > 0 ? (
+                <TouchableOpacity onPress={handleClearOrgSearch}>
+                  <Ionicons name="close-circle" size={24} color={colors.textMuted} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={handleOrgSearch} disabled={!orgSearchQuery.trim()}>
+                  <Ionicons name="search" size={24} color={colors.navy} />
+                </TouchableOpacity>
+              )}
+            </View>
+            {loadingOrgs ? (
+              <View style={{ padding: spacing.xxl, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={colors.navy} />
+                <Text style={{ marginTop: spacing.md, color: colors.textMuted }}>Loading organizations...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.pickerScroll}>
+                {organizations.length === 0 ? (
+                  <Text style={{ padding: spacing.lg, textAlign: 'center', color: colors.textMuted }}>
+                    No organizations found. Try searching by name.
+                  </Text>
+                ) : (
+                  organizations.map((org: any) => (
+                    <TouchableOpacity
+                      key={org.id}
+                      style={[
+                        styles.pickerItem,
+                        selectedOrgId === org.id && styles.pickerItemSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedOrgId(org.id);
+                        setSelectedOrgName(org.name);
+                        setShowOrgPicker(false);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.pickerItemText, selectedOrgId === org.id && styles.pickerItemTextSelected]}>
+                          {org.name}
+                        </Text>
+                        {org.city ? (
+                          <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
+                            {org.city}, {org.state}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {selectedOrgId === org.id && (
+                        <Ionicons name="checkmark" size={20} color={colors.cyan} />
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      )}
     </View>
   );
 }

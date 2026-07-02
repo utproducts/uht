@@ -19,6 +19,21 @@ export async function getOrganizationsByState(state: string) {
 }
 
 // ==================
+// Lookups (age groups, divisions, state division levels)
+// ==================
+export async function getLookupValues(category: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/lookups?category=${encodeURIComponent(category)}`);
+  const json = await res.json() as any;
+  return json.success ? json.data : [];
+}
+
+export async function getStateDivisionLevels(state: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/lookups/state-divisions?state=${encodeURIComponent(state)}`);
+  const json = await res.json() as any;
+  return json.success ? json.data : [];
+}
+
+// ==================
 // Teams
 // ==================
 export async function getTeamsByOrg(orgId: string) {

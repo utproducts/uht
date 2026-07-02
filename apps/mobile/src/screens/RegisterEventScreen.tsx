@@ -292,7 +292,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
           division: team.division_level || '',
           email: currentUser.email,
           headCoachName: team.head_coach_name || currentUser.name,
-          paymentChoice: 'pay_later', // Register first, pay after
+          paymentChoice: paymentChoice, // Send actual choice so API sets correct initial status
         };
 
         // Hotel choices — per-team in multi mode, scalar in single mode

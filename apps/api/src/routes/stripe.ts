@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
+import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 
 export const stripeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -183,6 +184,43 @@ stripeRoutes.post('/confirm-payment', async (c) => {
         await db.prepare(
           `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
         ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+      }
+
+      // Send confirmation email now that payment has succeeded
+      for (const regId of regIds) {
+        try {
+          const reg = await db.prepare(
+            `SELECT er.team_name, er.age_group, er.division, er.email1, er.manager_first_name, er.manager_last_name,
+                    e.name as event_name, e.start_date, e.end_date, e.city, e.state, e.price_cents, e.deposit_cents, e.logo_url
+             FROM event_registrations er
+             JOIN events e ON e.id = er.event_id
+             WHERE er.id = ?`
+          ).bind(regId).first() as any;
+
+          if (reg && reg.email1) {
+            const startDate = new Date(reg.start_date + 'T12:00:00');
+            const endDate = new Date(reg.end_date + 'T12:00:00');
+            const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+            await sendRegistrationConfirmationEmail(c.env, {
+              recipientEmail: reg.email1,
+              recipientName: reg.manager_first_name
+                ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim()
+                : reg.team_name,
+              teamName: reg.team_name,
+              ageGroup: reg.age_group,
+              division: reg.division || undefined,
+              eventName: reg.event_name,
+              eventDate: eventDateStr,
+              eventCity: `${reg.city}, ${reg.state}`,
+              priceCents: reg.price_cents || undefined,
+              depositCents: reg.deposit_cents || undefined,
+              eventLogoUrl: reg.logo_url || undefined,
+            });
+          }
+        } catch (emailErr) {
+          console.error('Post-payment confirmation email error:', emailErr);
+        }
       }
 
       return c.json({
