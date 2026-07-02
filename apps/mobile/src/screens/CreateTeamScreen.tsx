@@ -11,8 +11,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   Share,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser } from '../services/auth';
 import { getOrganizationsByState, searchOrganizations, getLookupValues, getStateDivisionLevels } from '../services/api';
@@ -95,6 +97,13 @@ export default function CreateTeamScreen({
   const [previewPlayers, setPreviewPlayers] = useState<Array<{ firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }>>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [pendingTeamData, setPendingTeamData] = useState<{ name: string; inviteCode?: string; rosterShareToken?: string } | null>(null);
+
+  // Logo upload step state
+  const [showLogoStep, setShowLogoStep] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [orgLogos, setOrgLogos] = useState<string[]>([]);
+  const [loadingOrgLogos, setLoadingOrgLogos] = useState(false);
 
   // Auto-fill coach info from logged-in user
   useEffect(() => {
@@ -490,6 +499,78 @@ export default function CreateTeamScreen({
 
   function finishRosterStep() {
     setShowRosterStep(false);
+    // Go to logo step instead of directly to success
+    setShowLogoStep(true);
+    // Check if org has existing logos to suggest
+    if (createdTeamId) {
+      setLoadingOrgLogos(true);
+      authFetch(`/api/teams/${createdTeamId}/org-logos`)
+        .then(r => r.json())
+        .then((json: any) => {
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            setOrgLogos(json.data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingOrgLogos(false));
+    }
+  }
+
+  async function handlePickLogo() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    await uploadLogoFile(result.assets[0].uri);
+  }
+
+  async function uploadLogoFile(uri: string) {
+    if (!createdTeamId) return;
+    setUploadingLogo(true);
+    try {
+      const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const formData = new FormData();
+      formData.append('logo', { uri, name: `logo.${ext}`, type: mimeType } as any);
+      const res = await authFetch(`/api/teams/${createdTeamId}/logo`, {
+        method: 'POST',
+        body: formData,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const json = await res.json() as any;
+      if (json.success && json.data?.logo_url) {
+        setLogoUrl(json.data.logo_url);
+      } else {
+        Alert.alert('Upload Failed', json.error || 'Could not upload logo');
+      }
+    } catch {
+      Alert.alert('Upload Failed', 'Network error. Please try again.');
+    }
+    setUploadingLogo(false);
+  }
+
+  async function useOrgLogo(orgLogoUrl: string) {
+    if (!createdTeamId) return;
+    setUploadingLogo(true);
+    try {
+      // Download the org logo and re-upload it for this team
+      const res = await authFetch(`/api/teams/${createdTeamId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ logoUrl: orgLogoUrl }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setLogoUrl(orgLogoUrl);
+      }
+    } catch {}
+    setUploadingLogo(false);
+  }
+
+  function finishLogoStep() {
+    setShowLogoStep(false);
     if (pendingTeamData) {
       setCreatedTeam(pendingTeamData);
     }
@@ -829,6 +910,80 @@ export default function CreateTeamScreen({
 
           </ScrollView>
         </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  // Show logo upload step after roster import
+  if (showLogoStep && createdTeamId) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Team Logo" showBack={false} />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={{ alignItems: 'center', paddingTop: spacing.xl }}>
+            {/* Logo preview / upload area */}
+            <TouchableOpacity
+              style={logoStyles.logoCircle}
+              onPress={handlePickLogo}
+              disabled={uploadingLogo}
+              activeOpacity={0.7}
+            >
+              {uploadingLogo ? (
+                <ActivityIndicator size="large" color={colors.cyan} />
+              ) : logoUrl ? (
+                <Image source={{ uri: logoUrl }} style={logoStyles.logoImage} />
+              ) : (
+                <View style={logoStyles.logoPlaceholder}>
+                  <Ionicons name="camera-outline" size={40} color={colors.textMuted} />
+                  <Text style={logoStyles.logoPlaceholderText}>Add Logo</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {logoUrl ? (
+              <TouchableOpacity onPress={handlePickLogo} style={{ marginTop: spacing.md }}>
+                <Text style={{ color: colors.cyan, ...fonts.semibold, fontSize: 14 }}>Change Logo</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={logoStyles.hint}>Tap to upload your team logo</Text>
+            )}
+
+            {/* Org logo suggestion */}
+            {loadingOrgLogos ? (
+              <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.navy} />
+            ) : orgLogos.length > 0 && !logoUrl ? (
+              <View style={logoStyles.orgSection}>
+                <Text style={logoStyles.orgTitle}>Use your organization's logo?</Text>
+                <Text style={logoStyles.orgSubtitle}>Other teams in your org use this logo</Text>
+                <View style={logoStyles.orgLogoRow}>
+                  {orgLogos.map((url, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={logoStyles.orgLogoOption}
+                      onPress={() => useOrgLogo(url)}
+                      disabled={uploadingLogo}
+                      activeOpacity={0.7}
+                    >
+                      <Image source={{ uri: url }} style={logoStyles.orgLogoImg} />
+                      <Text style={logoStyles.orgLogoUseText}>Use This</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Continue / Skip buttons */}
+          <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xxxl }}>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={finishLogoStep}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.createButtonText}>{logoUrl ? 'Continue' : 'Skip for Now'}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -1677,5 +1832,79 @@ const rosterStyles = StyleSheet.create({
     color: colors.textMuted,
     ...fonts.regular,
     marginTop: 2,
+  },
+});
+
+const logoStyles = StyleSheet.create({
+  logoCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+  },
+  logoPlaceholder: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  logoPlaceholderText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    ...fonts.medium,
+  },
+  hint: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    marginTop: spacing.md,
+  },
+  orgSection: {
+    marginTop: spacing.xxxl,
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: spacing.xl,
+  },
+  orgTitle: {
+    fontSize: 17,
+    color: colors.text,
+    ...fonts.semibold,
+    marginBottom: spacing.xs,
+  },
+  orgSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    marginBottom: spacing.lg,
+  },
+  orgLogoRow: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    justifyContent: 'center',
+  },
+  orgLogoOption: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  orgLogoImg: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: colors.cyan,
+  },
+  orgLogoUseText: {
+    fontSize: 13,
+    color: colors.cyan,
+    ...fonts.semibold,
   },
 });

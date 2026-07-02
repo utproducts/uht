@@ -588,6 +588,27 @@ teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
 });
 
 // ==================
+// Get org logos — returns logo_url from other teams in the same org
+// ==================
+teamRoutes.get('/:teamId/org-logos', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param('teamId');
+
+  const team = await db.prepare(`SELECT organization_id FROM teams WHERE id = ?`).bind(teamId).first() as any;
+  if (!team?.organization_id) {
+    return c.json({ success: true, data: [] });
+  }
+
+  const logos = await db.prepare(`
+    SELECT DISTINCT logo_url FROM teams
+    WHERE organization_id = ? AND id != ? AND logo_url IS NOT NULL AND logo_url != ''
+    LIMIT 5
+  `).bind(team.organization_id, teamId).all();
+
+  return c.json({ success: true, data: (logos.results || []).map((r: any) => r.logo_url) });
+});
+
+// ==================
 // ADMIN: Delete team (soft)
 // ==================
 teamRoutes.delete('/admin/:id', authMiddleware, requireRole('admin'), async (c) => {
