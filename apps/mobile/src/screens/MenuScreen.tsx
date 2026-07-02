@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   Alert,
   Linking,
+  Share,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { CommonActions } from '@react-navigation/native';
+import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as Calendar from 'expo-calendar';
 import { colors, fonts, spacing, radii } from '../constants/theme';
@@ -35,13 +37,46 @@ interface MenuListItem {
 
 const SITE_URL = 'https://ultimatetournaments.com';
 
+interface ShareTeam {
+  id: string;
+  name: string;
+  age_group: string;
+  invite_code?: string;
+  roster_share_token?: string;
+  coaches?: { id: string }[];
+  managers?: { id: string }[];
+  created_by?: string;
+}
+
 export default function MenuScreen({ navigation }: { navigation: any }) {
   const appVersion = Constants.expoConfig?.version || '1.0.0';
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [myTeams, setMyTeams] = useState<ShareTeam[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
 
   useEffect(() => {
     getUser().then(setCurrentUser);
   }, []);
+
+  // Reload teams every time the screen focuses (picks up newly created teams)
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      async function load() {
+        setLoadingTeams(true);
+        try {
+          const res = await authFetch('/api/teams/my-teams');
+          const json = await res.json() as any;
+          if (!cancelled && json.success && Array.isArray(json.data)) {
+            setMyTeams(json.data);
+          }
+        } catch {}
+        if (!cancelled) setLoadingTeams(false);
+      }
+      load();
+      return () => { cancelled = true; };
+    }, []),
+  );
 
   const isAdmin = currentUser?.roles?.some(r =>
     ['admin', 'tournament_director', 'director'].includes(r)
@@ -49,6 +84,10 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 
   const isScorekeeper = currentUser?.roles?.some(r =>
     ['scorekeeper'].includes(r)
+  ) || false;
+
+  const isCoach = currentUser?.roles?.some(r =>
+    ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
   ) || false;
 
   function handleLogOut() {
@@ -232,6 +271,97 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     },
   ];
 
+  async function handleShareTeamCode(team: ShareTeam) {
+    if (!team.invite_code) return;
+    try {
+      await Share.share({
+        message: `Join ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nTeam Code: ${team.invite_code}\n\nDownload the UHT app and use this code to join as a coach or manager.`,
+      });
+    } catch {}
+  }
+
+  async function handleShareRosterLink(team: ShareTeam) {
+    if (!team.roster_share_token) return;
+    try {
+      await Share.share({
+        message: `You're invited to join ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nClaim your player's spot on the roster:\nhttps://ultimatetournaments.com/roster/${team.roster_share_token}`,
+      });
+    } catch {}
+  }
+
+  // Determine if the current user is a coach/creator of a specific team
+  function isTeamCoach(team: ShareTeam): boolean {
+    if (!currentUser) return false;
+    if (team.created_by === currentUser.id) return true;
+    if (team.coaches?.some(c => c.id === currentUser.id)) return true;
+    if (team.managers?.some(m => m.id === currentUser.id)) return true;
+    if (isCoach || isAdmin) return true;
+    return false;
+  }
+
+  function renderShareSection() {
+    if (myTeams.length === 0 && !loadingTeams) return null;
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>SHARE & INVITE</Text>
+
+        {loadingTeams && myTeams.length === 0 ? (
+          <View style={styles.shareLoadingRow}>
+            <ActivityIndicator size="small" color={colors.navy} />
+          </View>
+        ) : (
+          myTeams.map((team) => {
+            const teamIsCoach = isTeamCoach(team);
+            const hasInvite = !!team.invite_code;
+            const hasRoster = !!team.roster_share_token;
+
+            if (!hasInvite && !hasRoster) return null;
+
+            return (
+              <View key={team.id} style={styles.shareCard}>
+                {/* Team header */}
+                <View style={styles.shareCardHeader}>
+                  <View style={styles.shareTeamBadge}>
+                    <Text style={styles.shareTeamBadgeText}>{team.age_group}</Text>
+                  </View>
+                  <Text style={styles.shareTeamName} numberOfLines={1}>{team.name}</Text>
+                </View>
+
+                {/* Share buttons */}
+                <View style={styles.shareButtonsRow}>
+                  {teamIsCoach && hasInvite ? (
+                    <TouchableOpacity
+                      style={styles.shareButton}
+                      activeOpacity={0.7}
+                      onPress={() => handleShareTeamCode(team)}
+                    >
+                      <Ionicons name="person-add-outline" size={18} color={colors.white} />
+                      <Text style={styles.shareButtonText}>Invite Coaches</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {hasRoster ? (
+                    <TouchableOpacity
+                      style={[styles.shareButton, styles.shareButtonRoster]}
+                      activeOpacity={0.7}
+                      onPress={() => handleShareRosterLink(team)}
+                    >
+                      <Ionicons name="link-outline" size={18} color={colors.white} />
+                      <Text style={styles.shareButtonText}>
+                        {teamIsCoach ? 'Send Roster Link' : 'Share with Team'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+    );
+  }
+
   function renderGridSection(title: string, items: MenuGridItem[]) {
     // Filter out admin/scorekeeper-only items for regular users
     const visibleItems = items.filter(item => {
@@ -328,6 +458,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {renderShareSection()}
         {renderGridSection('MANAGE', MANAGE_ITEMS)}
         {renderGridSection('BROWSE', BROWSE_ITEMS)}
         {renderGridSection('SHOP', SHOP_ITEMS)}
@@ -449,6 +580,72 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     ...fonts.regular,
     marginTop: 1,
+  },
+
+  // Share & Invite section
+  shareLoadingRow: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  shareCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  shareTeamBadge: {
+    backgroundColor: colors.cyan,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.xs,
+    marginRight: spacing.sm,
+  },
+  shareTeamBadgeText: {
+    color: colors.white,
+    fontSize: 11,
+    ...fonts.bold,
+    textTransform: 'uppercase',
+  },
+  shareTeamName: {
+    fontSize: 15,
+    color: colors.text,
+    ...fonts.semibold,
+    flex: 1,
+  },
+  shareButtonsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  shareButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: radii.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+    gap: 6,
+  },
+  shareButtonRoster: {
+    backgroundColor: colors.cyan,
+  },
+  shareButtonText: {
+    color: colors.white,
+    fontSize: 13,
+    ...fonts.semibold,
   },
 
   // Version footer
