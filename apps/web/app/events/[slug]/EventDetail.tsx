@@ -285,49 +285,45 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
         const eventData = json.data;
         setEvent(eventData);
 
-        // Fetch hotels
+        // Fetch all supplemental data in parallel for speed
         if (eventData.id) {
-          try {
-            const hotelsRes = await fetch(`${API}/events/event-hotels/${eventData.id}`);
-            if (hotelsRes.ok) {
-              const hotelsJson = await hotelsRes.json();
-              setHotels(hotelsJson.data || []);
-            }
-          } catch {}
-        }
+          const fetches: Promise<void>[] = [];
 
-        // Fetch venue & rinks (legacy single venue fallback)
-        if (eventData.venue_id) {
-          try {
-            const venueRes = await fetch(`${API}/venues/${eventData.venue_id}`);
-            if (venueRes.ok) {
-              const venueJson = await venueRes.json();
-              setVenue(venueJson.data?.venue || null);
-              setRinks(venueJson.data?.rinks || []);
-            }
-          } catch {}
-        }
+          // Hotels
+          fetches.push(
+            fetch(`${API}/events/event-hotels/${eventData.id}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(j => { if (j?.data) setHotels(j.data); })
+              .catch(() => {})
+          );
 
-        // Fetch all event venues with rinks (city-matched)
-        if (eventData.id) {
-          try {
-            const venuesRes = await fetch(`${API}/events/event-venues/${eventData.id}`);
-            if (venuesRes.ok) {
-              const venuesJson = await venuesRes.json();
-              setEventVenues(venuesJson.data || []);
-            }
-          } catch {}
-        }
+          // Legacy single venue
+          if (eventData.venue_id) {
+            fetches.push(
+              fetch(`${API}/venues/${eventData.venue_id}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(j => { if (j?.data) { setVenue(j.data.venue || null); setRinks(j.data.rinks || []); } })
+                .catch(() => {})
+            );
+          }
 
-        // Fetch divisions with real pricing
-        if (eventData.id) {
-          try {
-            const divRes = await fetch(`${API}/events/event-divisions/${eventData.id}`);
-            if (divRes.ok) {
-              const divJson = await divRes.json();
-              setEventDivisions(divJson.data || []);
-            }
-          } catch {}
+          // All event venues with rinks
+          fetches.push(
+            fetch(`${API}/events/event-venues/${eventData.id}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(j => { if (j?.data) setEventVenues(j.data); })
+              .catch(() => {})
+          );
+
+          // Divisions with pricing
+          fetches.push(
+            fetch(`${API}/events/event-divisions/${eventData.id}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(j => { if (j?.data) setEventDivisions(j.data); })
+              .catch(() => {})
+          );
+
+          await Promise.all(fetches);
         }
       } catch (err) {
         setError('Failed to load event data');
