@@ -179,7 +179,7 @@ organizationRoutes.get('/search', async (c) => {
       FROM organizations
       WHERE is_active = 1 AND (${statePlaceholders})
       ORDER BY name ASC
-      LIMIT 50
+      LIMIT 500
     `;
     params.push(...stateValues);
   }
