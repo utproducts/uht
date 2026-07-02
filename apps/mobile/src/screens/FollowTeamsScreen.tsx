@@ -637,13 +637,23 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
       </View>
 
       <View style={styles.bottomSection}>
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={() => navigation.replace('Main')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.skipText}>Skip for now</Text>
-        </TouchableOpacity>
+        {teamSearchFollowed.size > 0 ? (
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => navigation.replace('Main')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryButtonText}>Continue</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={() => navigation.replace('Main')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipText}>Skip for now</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );

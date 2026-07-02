@@ -869,8 +869,8 @@ organizationRoutes.post('/', authMiddleware, requireRole('admin', 'organization'
   const orgId = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
-    INSERT INTO organizations (id, name, owner_id, usa_hockey_org_id, address, city, state, zip, phone, email, website)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, owner_id, usa_hockey_org_id, address, city, state, zip, phone, email, website, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).bind(orgId, data.name, user.id, data.usaHockeyOrgId || null, data.address || null,
     data.city || null, data.state || null, data.zip || null, data.phone || null,
     data.email || null, data.website || null

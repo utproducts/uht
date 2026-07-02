@@ -67,7 +67,52 @@ followRoutes.get('/', authMiddleware, async (c) => {
     ORDER BY t.name ASC
   `).bind(user.id).all();
 
-  return c.json({ success: true, data: result.results });
+  // Enrich each followed team with registered events
+  const teams = result.results as any[];
+  for (const team of teams) {
+    const teamEvents: any[] = [];
+    const seenEventIds = new Set<string>();
+
+    // From registrations table (team_id match)
+    try {
+      const regs = await db.prepare(`
+        SELECT r.status, e.id as event_id, e.name as event_name, e.slug, e.city, e.state,
+               e.start_date, e.end_date, e.logo_url
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        WHERE r.team_id = ? AND r.status NOT IN ('withdrawn','denied','rejected','cancelled')
+        ORDER BY e.start_date ASC
+      `).bind(team.team_id).all();
+      for (const r of (regs.results || [])) {
+        if (!seenEventIds.has((r as any).event_id)) {
+          seenEventIds.add((r as any).event_id);
+          teamEvents.push(r);
+        }
+      }
+    } catch {}
+
+    // From event_registrations table (team_name match)
+    try {
+      const legacyRegs = await db.prepare(`
+        SELECT er.status, e.id as event_id, e.name as event_name, e.slug, e.city, e.state,
+               e.start_date, e.end_date, e.logo_url
+        FROM event_registrations er
+        JOIN events e ON e.id = er.event_id
+        WHERE er.team_name = ? AND er.status NOT IN ('withdrawn','denied','rejected','cancelled')
+        ORDER BY e.start_date ASC
+      `).bind(team.team_name).all();
+      for (const r of (legacyRegs.results || [])) {
+        if (!seenEventIds.has((r as any).event_id)) {
+          seenEventIds.add((r as any).event_id);
+          teamEvents.push(r);
+        }
+      }
+    } catch {}
+
+    team.registered_events = teamEvents;
+  }
+
+  return c.json({ success: true, data: teams });
 });
 
 // ==================

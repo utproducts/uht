@@ -113,6 +113,28 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         }
       } catch {}
 
+      // Extract registered events from followed teams too
+      if (Array.isArray(teamData)) {
+        for (const ft of teamData) {
+          const regEvents = (ft as any).registered_events || [];
+          for (const re of regEvents) {
+            const seenEvents = new Set(myRegisteredEvents.map((e: Event) => e.id));
+            if (re.event_id && !seenEvents.has(re.event_id)) {
+              myRegisteredEvents.push({
+                id: re.event_id,
+                name: re.event_name || '',
+                slug: re.slug || '',
+                city: re.city,
+                state: re.state,
+                start_date: re.start_date || '',
+                end_date: re.end_date || '',
+                logo_url: re.logo_url,
+              });
+            }
+          }
+        }
+      }
+
       // Merge followed teams and my teams, dedup by team_id
       const allTeams = [...(teamData || []), ...myTeamsData];
       const seen = new Set<string>();
