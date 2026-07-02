@@ -34,6 +34,9 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
   ) ?? false;
 
+  const lastLoadRef = React.useRef<number>(0);
+  const STALE_MS = 30000; // 30 seconds
+
   useEffect(() => {
     getUser().then(u => setCurrentUser(u));
   }, []);
@@ -49,6 +52,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         setTeams(json.data);
+        lastLoadRef.current = Date.now();
       } else {
         setTeams([]);
       }
@@ -62,6 +66,10 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
+      // Skip if loaded recently (pull-to-refresh always refetches)
+      if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
+        return;
+      }
       fetchTeams();
     }, [fetchTeams]),
   );

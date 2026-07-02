@@ -54,13 +54,19 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   const [myTeams, setMyTeams] = useState<ShareTeam[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
 
+  const lastLoadRef = React.useRef<number>(0);
+  const STALE_MS = 30000; // 30 seconds
+
   useEffect(() => {
     getUser().then(setCurrentUser);
   }, []);
 
-  // Reload teams every time the screen focuses (picks up newly created teams)
+  // Reload teams when screen focuses, but skip if loaded recently
   useFocusEffect(
     useCallback(() => {
+      if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
+        return;
+      }
       let cancelled = false;
       async function load() {
         setLoadingTeams(true);
@@ -69,6 +75,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
           const json = await res.json() as any;
           if (!cancelled && json.success && Array.isArray(json.data)) {
             setMyTeams(json.data);
+            lastLoadRef.current = Date.now();
           }
         } catch {}
         if (!cancelled) setLoadingTeams(false);

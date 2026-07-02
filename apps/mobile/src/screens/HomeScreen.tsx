@@ -57,69 +57,76 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Track when data was last loaded to avoid refetching on every tab switch
+  const lastLoadRef = React.useRef<number>(0);
+  const STALE_MS = 30000; // 30 seconds
+
   const loadData = useCallback(async (isRefresh = false) => {
+    // Skip if data was loaded recently (unless pull-to-refresh)
+    if (!isRefresh && lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
+      return;
+    }
     if (!isRefresh) setLoading(true);
     try {
-      const [teamData, user] = await Promise.all([
+      // Fire ALL API calls in parallel — no waterfall
+      const [teamData, user, skEvents, myTeamsRes] = await Promise.all([
         getFollowedTeams().catch(() => []),
         getUser(),
+        getScorekeeperEvents().catch(() => []),
+        authFetch('/api/teams/my-teams').then(r => r.json()).catch(() => ({ success: false })),
       ]);
+
       if (user?.name) setUserName(user.name);
       if (user?.roles) setUserRoles(user.roles);
 
-      // If user is a scorekeeper, fetch their assignments
-      if (user?.roles?.includes('scorekeeper')) {
-        try {
-          const skEvents = await getScorekeeperEvents();
-          setScoringEvents(skEvents as any[]);
-        } catch {}
+      // Only use scorekeeper data if user has that role
+      if (user?.roles?.includes('scorekeeper') && Array.isArray(skEvents)) {
+        setScoringEvents(skEvents as any[]);
       }
 
-      // Fetch "my teams" (teams where user is coach/manager/creator) — includes registered_events
+      // Process my-teams response
       let myTeamsData: FollowedTeam[] = [];
       let myRegisteredEvents: Event[] = [];
-      try {
-        const res = await authFetch('/api/teams/my-teams');
-        const json = await res.json() as { success: boolean; data?: any[] };
-        if (json.success && Array.isArray(json.data)) {
-          myTeamsData = json.data.map((t: any) => ({
-            id: t.id,
-            team_id: t.id,
-            team_name: t.name,
-            org_name: t.organization_name,
-            age_group: t.age_group,
-          }));
+      const myTeamsJson = myTeamsRes as { success: boolean; data?: any[] };
+      if (myTeamsJson.success && Array.isArray(myTeamsJson.data)) {
+        myTeamsData = myTeamsJson.data.map((t: any) => ({
+          id: t.id,
+          team_id: t.id,
+          team_name: t.name,
+          org_name: t.organization_name,
+          age_group: t.age_group,
+        }));
 
-          // Extract registered events from all teams
-          const seenEvents = new Set<string>();
-          for (const team of json.data) {
-            const regEvents = (team as any).registered_events || [];
-            for (const re of regEvents) {
-              if (re.event_id && !seenEvents.has(re.event_id)) {
-                seenEvents.add(re.event_id);
-                myRegisteredEvents.push({
-                  id: re.event_id,
-                  name: re.event_name || '',
-                  slug: re.slug || '',
-                  city: re.city,
-                  state: re.state,
-                  start_date: re.start_date || '',
-                  end_date: re.end_date || '',
-                  logo_url: re.logo_url,
-                });
-              }
+        // Extract registered events from all teams
+        const seenEvents = new Set<string>();
+        for (const team of myTeamsJson.data) {
+          const regEvents = (team as any).registered_events || [];
+          for (const re of regEvents) {
+            if (re.event_id && !seenEvents.has(re.event_id)) {
+              seenEvents.add(re.event_id);
+              myRegisteredEvents.push({
+                id: re.event_id,
+                name: re.event_name || '',
+                slug: re.slug || '',
+                city: re.city,
+                state: re.state,
+                start_date: re.start_date || '',
+                end_date: re.end_date || '',
+                logo_url: re.logo_url,
+              });
             }
           }
         }
-      } catch {}
+      }
 
       // Extract registered events from followed teams too
       if (Array.isArray(teamData)) {
+        const seenEvents = new Set(myRegisteredEvents.map((e: Event) => e.id));
         for (const ft of teamData) {
           const regEvents = (ft as any).registered_events || [];
           for (const re of regEvents) {
-            const seenEvents = new Set(myRegisteredEvents.map((e: Event) => e.id));
             if (re.event_id && !seenEvents.has(re.event_id)) {
+              seenEvents.add(re.event_id);
               myRegisteredEvents.push({
                 id: re.event_id,
                 name: re.event_name || '',
@@ -153,6 +160,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         .sort((a: Event, b: Event) => a.start_date.localeCompare(b.start_date))
         .slice(0, 3);
       setUpcomingEvents(upcoming);
+      lastLoadRef.current = Date.now();
     } catch {}
     setLoading(false);
     setRefreshing(false);

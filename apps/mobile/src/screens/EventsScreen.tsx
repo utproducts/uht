@@ -81,6 +81,9 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState<string>('All');
 
+  const lastLoadRef = React.useRef<number>(0);
+  const STALE_MS = 60000; // 60 seconds — events change rarely
+
   const loadEvents = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     setError('');
@@ -92,6 +95,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         return dateA - dateB;
       });
       setAllEvents(sorted);
+      lastLoadRef.current = Date.now();
     } catch {
       setError('Failed to load events. Pull to refresh.');
     } finally {
@@ -102,6 +106,9 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
+      if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
+        return;
+      }
       loadEvents();
     }, [loadEvents]),
   );
