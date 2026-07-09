@@ -90,9 +90,8 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Event picker mode (when no event param in URL)
-  const [allEvents, setAllEvents] = useState<EventData[]>([]);
-  const [showEventPicker, setShowEventPicker] = useState(false);
+  // Redirect to create-team if no event param
+  const [redirectToCreateTeam, setRedirectToCreateTeam] = useState(false);
 
   // Auth
   const [auth, setAuth] = useState<{ token: string; user: any } | null>(null);
@@ -192,25 +191,13 @@ export default function RegisterPage() {
         }
       }
       if (!ev) {
-        // No event param or event not found — fetch all upcoming events for picker
-        try {
-          const allRes = await fetch(`${API}/events?per_page=100`);
-          const allJson = await allRes.json() as any;
-          const now = new Date();
-          const upcoming = (allJson.data || [])
-            .filter((e: any) => {
-              const end = new Date(e.end_date + 'T23:59:59');
-              const isOpen = e.status === 'published' || e.status === 'registration_open';
-              return end >= now && isOpen;
-            })
-            .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-          if (upcoming.length > 0) {
-            setAllEvents(upcoming);
-            setShowEventPicker(true);
-            setLoading(false);
-            return;
-          }
-        } catch {}
+        // No event param — redirect to create-team page
+        const params = new URLSearchParams(window.location.search);
+        if (!params.get('event') && !params.get('eventId')) {
+          setRedirectToCreateTeam(true);
+          setLoading(false);
+          return;
+        }
         setError('Event not found. Please go back and try again.');
       }
       setEvent(ev);
@@ -773,69 +760,15 @@ export default function RegisterPage() {
     );
   }
 
-  if (showEventPicker && allEvents.length > 0) {
+  if (redirectToCreateTeam) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/create-team';
+    }
     return (
-      <div className="min-h-screen bg-[#f5f5f7]">
-        <div className="bg-gradient-to-br from-[#003e79] to-[#001f3f] relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-[#00ccff] rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-          </div>
-          <div className="relative max-w-4xl mx-auto px-6 py-12 text-center">
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">Register Your Team</h1>
-            <p className="text-[#8ec5fc] text-lg">Select a tournament to get started</p>
-          </div>
-        </div>
-        <div className="max-w-4xl mx-auto px-6 py-10">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {allEvents.map(ev => {
-              const startDate = new Date(ev.start_date + 'T12:00:00');
-              const endDate = new Date(ev.end_date + 'T12:00:00');
-              const mo = startDate.toLocaleString('en-US', { month: 'short' });
-              const dateStr = startDate.getMonth() === endDate.getMonth()
-                ? `${mo} ${startDate.getDate()}–${endDate.getDate()}, ${startDate.getFullYear()}`
-                : `${mo} ${startDate.getDate()} – ${endDate.toLocaleString('en-US', { month: 'short' })} ${endDate.getDate()}, ${startDate.getFullYear()}`;
-              return (
-                <a
-                  key={ev.id}
-                  href={`/register/?event=${ev.slug}&eventId=${ev.id}`}
-                  className="group bg-white rounded-2xl overflow-hidden shadow-[0_2px_20px_-6px_rgba(0,62,121,0.12)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.22)] transition-all duration-300 hover:-translate-y-1 border border-[#e8e8ed] flex flex-col"
-                >
-                  <div className={`h-1.5 w-full bg-gradient-to-r ${cityGradient(ev.city)}`} />
-                  <div className="p-5 flex gap-4 items-start flex-1">
-                    <div className="shrink-0">
-                      {ev.logo_url ? (
-                        <div className="w-16 h-16 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed] flex items-center justify-center overflow-hidden">
-                          <img src={ev.logo_url} alt={ev.name} className="w-12 h-12 object-contain group-hover:scale-105 transition-transform duration-300" />
-                        </div>
-                      ) : (
-                        <div className="w-16 h-16 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed] flex items-center justify-center">
-                          <span className="text-2xl">🏒</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-[#1d1d1f] text-base group-hover:text-[#003e79] transition-colors leading-tight">{ev.name}</h3>
-                      <p className="text-sm text-[#6e6e73] mt-1">{ev.city}, {ev.state}</p>
-                      <p className="text-sm text-[#6e6e73]">{dateStr}</p>
-                      {ev.price_cents && (
-                        <p className="text-sm font-semibold text-[#003e79] mt-1.5">{formatPrice(ev.price_cents)} per team</p>
-                      )}
-                    </div>
-                    <div className="shrink-0 self-center">
-                      <div className="w-8 h-8 rounded-full bg-[#00ccff]/10 flex items-center justify-center group-hover:bg-[#00ccff] transition-colors">
-                        <svg className="w-4 h-4 text-[#00ccff] group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      </div>
-                    </div>
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-          <div className="text-center mt-8">
-            <a href="/events" className="text-[#00ccff] hover:text-[#003e79] font-semibold transition-colors">
-              View all events →
-            </a>
-          </div>
+      <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-3 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[#6e6e73]">Redirecting to team registration...</p>
         </div>
       </div>
     );
