@@ -1009,7 +1009,7 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
 
-  // Get teams where user is creator, coach, manager, team_member, or org owner
+  // Get teams where user is creator, coach, manager, team_member, org owner, OR following
   const result = await db.prepare(`
     SELECT DISTINCT t.*, o.name as organization_name,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
@@ -1020,9 +1020,10 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     LEFT JOIN team_managers tm ON tm.team_id = t.id
     LEFT JOIN team_members tmem ON tmem.team_id = t.id AND tmem.status = 'active'
     LEFT JOIN organizations org ON org.id = t.organization_id AND org.owner_id = ?
-    WHERE t.is_active = 1 AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR org.owner_id = ?)
+    LEFT JOIN user_follows uf ON uf.team_id = t.id AND uf.user_id = ?
+    WHERE t.is_active = 1 AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR org.owner_id = ? OR uf.id IS NOT NULL)
     ORDER BY t.age_group ASC, t.name ASC
-  `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
+  `).bind(user.id, user.id, user.id, user.id, user.id, user.id, user.id).all();
 
   // Enrich each team with its registered events (from both tables)
   const teams = result.results || [];

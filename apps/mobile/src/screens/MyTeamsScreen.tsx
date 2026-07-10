@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Alert,
   Image,
   Share,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -372,39 +374,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   function renderListFooter() {
     return (
       <View style={styles.footerActions}>
-        {/* Enter Team Code */}
-        <View style={styles.teamCodeCard}>
-          <Text style={styles.teamCodeCardTitle}>Have a team code?</Text>
-          <Text style={styles.teamCodeCardSubtitle}>
-            Enter a code from your coach or team manager to follow a team.
-          </Text>
-          <View style={styles.teamCodeInputRow}>
-            <TextInput
-              style={styles.teamCodeInput}
-              value={joinCode}
-              onChangeText={(t) => setJoinCode(t.toUpperCase())}
-              placeholder="Enter code"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={10}
-              editable={!joiningByCode}
-            />
-            <TouchableOpacity
-              style={[styles.teamCodeJoinBtn, joiningByCode && { opacity: 0.7 }]}
-              activeOpacity={0.7}
-              onPress={handleJoinByCode}
-              disabled={joiningByCode}
-            >
-              {joiningByCode ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.teamCodeJoinBtnText}>Join</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <TouchableOpacity
           style={styles.followAnotherBtn}
           activeOpacity={0.7}
@@ -443,11 +412,46 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScreenHeader
         title="My Teams"
         rightAction={renderHeaderRight()}
       />
+
+      {/* Team code input — always visible above the list */}
+      <View style={styles.teamCodeBar}>
+        <View style={styles.teamCodeInputRow}>
+          <TextInput
+            style={styles.teamCodeInput}
+            value={joinCode}
+            onChangeText={(t) => setJoinCode(t.toUpperCase())}
+            placeholder="Enter team code"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={10}
+            editable={!joiningByCode}
+            returnKeyType="go"
+            onSubmitEditing={handleJoinByCode}
+          />
+          <TouchableOpacity
+            style={[styles.teamCodeJoinBtn, joiningByCode && { opacity: 0.7 }]}
+            activeOpacity={0.7}
+            onPress={handleJoinByCode}
+            disabled={joiningByCode}
+          >
+            {joiningByCode ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <Text style={styles.teamCodeJoinBtnText}>Join</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <FlatList
         data={teams}
         keyExtractor={(item) => item.id}
@@ -459,10 +463,11 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
         onRefresh={handleRefresh}
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={renderEmptyState}
         ListFooterComponent={teams.length > 0 ? renderListFooter : undefined}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -703,27 +708,13 @@ const styles = StyleSheet.create({
     color: colors.navy,
   },
 
-  // Team code card
-  teamCodeCard: {
+  // Team code bar (above the list, always visible)
+  teamCodeBar: {
     backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  teamCodeCardTitle: {
-    fontSize: 16,
-    color: colors.text,
-    ...fonts.bold,
-    marginBottom: spacing.xs,
-  },
-  teamCodeCardSubtitle: {
-    fontSize: 13,
-    color: colors.textMuted,
-    ...fonts.regular,
-    marginBottom: spacing.md,
-    lineHeight: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
   },
   teamCodeInputRow: {
     flexDirection: 'row' as const,
@@ -736,8 +727,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 16,
+    paddingVertical: spacing.sm + 2,
+    fontSize: 15,
     color: colors.text,
     ...fonts.semibold,
     letterSpacing: 1,
