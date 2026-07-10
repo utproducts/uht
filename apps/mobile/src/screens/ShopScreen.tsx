@@ -13,7 +13,10 @@ import {
   RefreshControl,
   Dimensions,
   Modal,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useStripe } from '@stripe/stripe-react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
@@ -45,6 +48,7 @@ type Screen = 'browse' | 'detail' | 'cart' | 'checkout' | 'orders';
 const CATEGORIES = ['All', 'Beanies', 'Hats', 'Blankets', 'Pins'];
 
 export default function ShopScreen() {
+  const insets = useSafeAreaInsets();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   // Products
@@ -218,16 +222,30 @@ export default function ShopScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProducts(); }} tintColor={colors.cyan} />}
     >
-      {/* Hero banner — full-bleed like HomeScreen */}
+      {/* Hero banner — full-bleed, goes behind status bar */}
       <ImageBackground
         source={require('../../assets/shop-hero.png')}
-        style={styles.heroBanner}
+        style={[styles.heroBanner, { paddingTop: insets.top + spacing.xl }]}
         resizeMode="cover"
       >
         {/* Dark overlay for text readability */}
         <View style={styles.heroOverlay} />
         {/* Bright cyan bottom edge */}
         <View style={styles.heroCyanEdge} />
+        {/* Floating cart icon */}
+        <TouchableOpacity
+          style={[styles.heroCartBtn, { top: insets.top + spacing.sm }]}
+          onPress={() => setScreen('cart')}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="cart-outline" size={24} color={colors.white} />
+          {cartCount > 0 && (
+            <View style={styles.heroCartBadge}>
+              <Text style={styles.heroCartBadgeText}>{cartCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
         {/* Content */}
         <View style={styles.heroContent}>
           <Text style={styles.heroTitle}>UHT LOCKER ROOM</Text>
@@ -680,25 +698,28 @@ export default function ShopScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader
-        title={screenTitle()}
-        showBack={showBack}
-        onBack={() => {
-          if (screen === 'checkout') setScreen('cart');
-          else if (screen === 'detail' || screen === 'cart' || screen === 'orders') setScreen('browse');
-          else setScreen('browse');
-        }}
-        rightAction={(screen === 'browse' || screen === 'detail') ? (
-          <TouchableOpacity style={styles.cartIconWrap} onPress={() => setScreen('cart')}>
-            <Ionicons name="cart-outline" size={24} color={colors.white} />
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>{cartCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ) : undefined}
-      />
+      {/* No header on browse — hero goes edge-to-edge */}
+      {screen !== 'browse' && (
+        <ScreenHeader
+          title={screenTitle()}
+          showBack
+          onBack={() => {
+            if (screen === 'checkout') setScreen('cart');
+            else if (screen === 'detail' || screen === 'cart' || screen === 'orders') setScreen('browse');
+            else setScreen('browse');
+          }}
+          rightAction={screen === 'detail' ? (
+            <TouchableOpacity style={styles.cartIconWrap} onPress={() => setScreen('cart')}>
+              <Ionicons name="cart-outline" size={24} color={colors.white} />
+              {cartCount > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{cartCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ) : undefined}
+        />
+      )}
 
       {screen === 'browse' && renderBrowse()}
       {screen === 'detail' && renderDetail()}
@@ -720,16 +741,15 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // ── Hero — full-bleed like HomeScreen ──
+  // ── Hero — full-bleed, no header ──
   heroBanner: {
     overflow: 'hidden',
     marginBottom: spacing.lg,
     marginHorizontal: -spacing.lg,
     marginTop: -spacing.lg,
-    paddingTop: spacing.xxxl,
     paddingBottom: spacing.xxl,
     justifyContent: 'flex-end',
-    minHeight: 200,
+    minHeight: 220,
   },
   heroOverlay: {
     position: 'absolute',
@@ -758,6 +778,27 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
   },
   heroTagline: { fontSize: 13, color: colors.cyan, ...fonts.bold, letterSpacing: 0.5, opacity: 0.9 },
+
+  // Floating cart on hero
+  heroCartBtn: {
+    position: 'absolute' as const,
+    right: spacing.lg,
+    zIndex: 10,
+    padding: spacing.xs,
+  },
+  heroCartBadge: {
+    position: 'absolute' as const,
+    top: -2,
+    right: -4,
+    backgroundColor: colors.cyan,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 4,
+  },
+  heroCartBadgeText: { fontSize: 10, color: colors.navy, ...fonts.extrabold },
 
   // ── Categories ──
   categoryScroll: { marginBottom: spacing.lg },
