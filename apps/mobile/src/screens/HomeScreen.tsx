@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  ImageBackground,
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -185,12 +186,13 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   // --------------- Hero Banner ---------------
   function HeroBanner() {
     return (
-      <View style={[styles.hero, { paddingTop: insets.top + 8 }]}>
-        {/* Bold diagonal stripes — sporty feel */}
-        <View style={styles.heroStripe1} />
-        <View style={styles.heroStripe2} />
-        <View style={styles.heroStripe3} />
-        <View style={styles.heroStripe4} />
+      <ImageBackground
+        source={require('../../assets/hero-rink.jpg')}
+        style={[styles.hero, { paddingTop: insets.top + 8 }]}
+        resizeMode="cover"
+      >
+        {/* Dark overlay for text readability */}
+        <View style={styles.heroOverlay} />
 
         {/* Bright cyan bottom edge */}
         <View style={styles.heroCyanEdge} />
@@ -259,7 +261,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
         </View>
-      </View>
+      </ImageBackground>
     );
   }
 
@@ -478,52 +480,19 @@ const styles = StyleSheet.create({
   },
 
   // ==========================================
-  // HERO — Bold, sporty, ESPN-inspired
+  // HERO — Rink photo background, ESPN-inspired
   // ==========================================
   hero: {
-    backgroundColor: colors.navy,
     paddingBottom: 0,
     overflow: 'hidden',
   },
-  heroStripe1: {
+  heroOverlay: {
     position: 'absolute',
-    top: -60,
-    right: -30,
-    width: 200,
-    height: '250%',
-    backgroundColor: colors.cyan,
-    opacity: 0.1,
-    transform: [{ rotate: '-20deg' }],
-  },
-  heroStripe2: {
-    position: 'absolute',
-    top: -40,
-    right: 50,
-    width: 120,
-    height: '220%',
-    backgroundColor: colors.cyan,
-    opacity: 0.07,
-    transform: [{ rotate: '-20deg' }],
-  },
-  heroStripe3: {
-    position: 'absolute',
-    top: -20,
-    left: -80,
-    width: 160,
-    height: '200%',
-    backgroundColor: colors.white,
-    opacity: 0.04,
-    transform: [{ rotate: '-20deg' }],
-  },
-  heroStripe4: {
-    position: 'absolute',
-    top: -30,
-    left: 60,
-    width: 80,
-    height: '200%',
-    backgroundColor: colors.cyan,
-    opacity: 0.05,
-    transform: [{ rotate: '-20deg' }],
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 30, 60, 0.55)',
   },
   heroCyanEdge: {
     position: 'absolute',
