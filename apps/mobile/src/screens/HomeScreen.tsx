@@ -380,9 +380,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     <TouchableOpacity
                       style={styles.unfollowBtn}
                       onPress={() => handleUnfollowTeam(team)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                      <Ionicons name="close-circle" size={22} color="#8e919e" />
                     </TouchableOpacity>
                   </View>
                 ))
@@ -723,9 +723,10 @@ const styles = StyleSheet.create({
   },
   unfollowBtn: {
     position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    padding: 2,
+    top: spacing.xs,
+    right: spacing.xs,
+    padding: 4,
+    zIndex: 5,
   },
   teamBadge: {
     width: 46,
