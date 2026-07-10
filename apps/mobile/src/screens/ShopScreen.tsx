@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  ImageBackground,
   ActivityIndicator,
   Alert,
   TextInput,
@@ -218,26 +219,23 @@ export default function ShopScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProducts(); }} tintColor={colors.cyan} />}
     >
       {/* Hero banner */}
-      <View style={styles.heroBanner}>
-        {/* Background hockey-themed accents */}
-        <View style={styles.heroAccent} />
-        <View style={styles.heroAccent2} />
-        <View style={styles.heroIceOverlay} />
-        {/* Locker room inspired border */}
-        <View style={styles.heroTopStripe} />
+      <ImageBackground
+        source={require('../../assets/shop-hero.png')}
+        style={styles.heroBanner}
+        resizeMode="cover"
+      >
+        {/* Dark overlay for text readability */}
+        <View style={styles.heroOverlay} />
+        {/* Bright cyan bottom edge */}
+        <View style={styles.heroCyanEdge} />
+        {/* Content */}
         <View style={styles.heroContent}>
-          <View style={styles.heroIconRow}>
-            <Ionicons name="shirt-outline" size={22} color={colors.cyan} />
-            <Ionicons name="snow-outline" size={28} color={colors.white} style={{ opacity: 0.5 }} />
-            <Ionicons name="shirt-outline" size={22} color={colors.cyan} />
-          </View>
           <Text style={styles.heroTitle}>UHT Locker Room</Text>
           <Text style={styles.heroSubtitle}>Official gear & merchandise</Text>
           <View style={styles.heroDivider} />
           <Text style={styles.heroTagline}>Rep your team. Own the ice.</Text>
         </View>
-        <View style={styles.heroBottomStripe} />
-      </View>
+      </ImageBackground>
 
       {/* Category pills */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll} contentContainerStyle={styles.categoryScrollContent}>
@@ -724,53 +722,24 @@ const styles = StyleSheet.create({
 
   // ── Hero ──
   heroBanner: {
-    backgroundColor: colors.navy,
     borderRadius: radii.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.lg,
     paddingVertical: spacing.xxxl,
     paddingHorizontal: spacing.xxl,
     alignItems: 'center',
-    overflow: 'hidden',
-    marginBottom: spacing.lg,
-    position: 'relative',
+    justifyContent: 'flex-end',
+    minHeight: 200,
   },
-  heroAccent: {
-    position: 'absolute',
-    top: -40,
-    right: -60,
-    width: 180,
-    height: '200%',
-    backgroundColor: colors.cyan,
-    opacity: 0.08,
-    transform: [{ rotate: '-15deg' }],
-  },
-  heroAccent2: {
-    position: 'absolute',
-    bottom: -20,
-    left: -40,
-    width: 140,
-    height: '150%',
-    backgroundColor: colors.cyan,
-    opacity: 0.06,
-    transform: [{ rotate: '25deg' }],
-  },
-  heroIceOverlay: {
+  heroOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#ffffff',
-    opacity: 0.03,
+    backgroundColor: 'rgba(0, 30, 60, 0.55)',
   },
-  heroTopStripe: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: colors.cyan,
-  },
-  heroBottomStripe: {
+  heroCyanEdge: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -779,12 +748,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cyan,
   },
   heroContent: { alignItems: 'center', zIndex: 1 },
-  heroIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
   heroTitle: { fontSize: 26, color: colors.white, ...fonts.extrabold, letterSpacing: 1, textTransform: 'uppercase' },
   heroSubtitle: { fontSize: 14, color: colors.cyanLight, ...fonts.medium, marginTop: spacing.xs },
   heroDivider: {
