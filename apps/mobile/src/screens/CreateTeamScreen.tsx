@@ -100,6 +100,13 @@ export default function CreateTeamScreen({
   const [showPreview, setShowPreview] = useState(false);
   const [pendingTeamData, setPendingTeamData] = useState<{ name: string; inviteCode?: string; rosterShareToken?: string } | null>(null);
 
+  // Duplicate team detection state
+  const [duplicateTeam, setDuplicateTeam] = useState<{
+    id: string; name: string; ageGroup: string; city?: string; state?: string;
+    inviteCode?: string; headCoachName?: string; playerCount?: number;
+  } | null>(null);
+  const [joiningDuplicate, setJoiningDuplicate] = useState(false);
+
   // Logo upload step state
   const [showLogoStep, setShowLogoStep] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -264,55 +271,90 @@ export default function CreateTeamScreen({
         setCreatedTeamId(json.data?.id || json.data?.teamId || '');
         setShowRosterStep(true);
       } else if (json.error === 'duplicate_team') {
-        Alert.alert(
-          'Team Already Exists',
-          json.message || 'A team with that name and age group already exists.',
-          [
-            { text: 'Go Back', style: 'cancel' },
-            {
-              text: 'Create Anyway',
-              onPress: async () => {
-                setSaving(true);
-                try {
-                  const stEntry = US_STATES.find((s) => s.code === state);
-                  const stName = stEntry ? stEntry.name : state;
-                  const res2 = await authFetch('/api/teams', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      name: teamName.trim(),
-                      ageGroup,
-                      divisionLevel: divisionLevel || undefined,
-                      organizationId: selectedOrgId || undefined,
-                      state: stName || undefined,
-                      headCoachName: coachName.trim() || undefined,
-                      headCoachEmail: coachEmail.trim() || undefined,
-                      headCoachPhone: coachPhone.trim() || undefined,
-                      skipDuplicateCheck: true,
-                    }),
-                  });
-                  const json2 = await res2.json() as any;
-                  if (json2.success) {
-                    setPendingTeamData({
-                      name: teamName.trim(),
-                      inviteCode: json2.data?.inviteCode,
-                      rosterShareToken: json2.data?.roster_share_token,
-                    });
-                    setCreatedTeamId(json2.data?.id || json2.data?.teamId || '');
-                    setShowRosterStep(true);
-                  } else {
-                    setError(json2.error || 'Failed to create team');
-                  }
-                } catch {
-                  setError('Network error. Please try again.');
-                } finally {
-                  setSaving(false);
-                }
-              },
-            },
-          ],
-        );
+        // Show in-screen duplicate warning UI instead of basic Alert
+        const existing = json.existingTeam;
+        setDuplicateTeam({
+          id: existing?.id || '',
+          name: existing?.name || teamName.trim(),
+          ageGroup: existing?.ageGroup || ageGroup,
+          city: existing?.city,
+          state: existing?.state,
+          inviteCode: existing?.inviteCode,
+          headCoachName: existing?.headCoachName,
+          playerCount: existing?.playerCount,
+        });
       } else {
         setError(json.error || 'Failed to create team');
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // ==================
+  // Duplicate Team Handlers
+  // ==================
+  async function handleJoinDuplicate() {
+    if (!duplicateTeam?.inviteCode) {
+      Alert.alert('Cannot Join', 'This team does not have a join code. Try contacting the coach directly or create your own team.');
+      return;
+    }
+    setJoiningDuplicate(true);
+    try {
+      const res = await authFetch('/api/follows/by-code', {
+        method: 'POST',
+        body: JSON.stringify({ inviteCode: duplicateTeam.inviteCode }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        Alert.alert(
+          'Team Joined!',
+          `You're now following ${duplicateTeam.name}. You can find it on your My Teams page.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
+        );
+      } else {
+        Alert.alert('Error', json.error || 'Could not join team. Try again.');
+      }
+    } catch {
+      Alert.alert('Error', 'Network error. Please try again.');
+    } finally {
+      setJoiningDuplicate(false);
+    }
+  }
+
+  async function handleCreateAnyway() {
+    setSaving(true);
+    setDuplicateTeam(null);
+    try {
+      const stEntry = US_STATES.find((s) => s.code === state);
+      const stName = stEntry ? stEntry.name : state;
+      const res2 = await authFetch('/api/teams', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: teamName.trim(),
+          ageGroup,
+          divisionLevel: divisionLevel || undefined,
+          organizationId: selectedOrgId || undefined,
+          state: stName || undefined,
+          headCoachName: coachName.trim() || undefined,
+          headCoachEmail: coachEmail.trim() || undefined,
+          headCoachPhone: coachPhone.trim() || undefined,
+          skipDuplicateCheck: true,
+        }),
+      });
+      const json2 = await res2.json() as any;
+      if (json2.success) {
+        setPendingTeamData({
+          name: teamName.trim(),
+          inviteCode: json2.data?.inviteCode,
+          rosterShareToken: json2.data?.rosterShareToken || json2.data?.roster_share_token,
+        });
+        setCreatedTeamId(json2.data?.id || json2.data?.teamId || '');
+        setShowRosterStep(true);
+      } else {
+        setError(json2.error || 'Failed to create team');
       }
     } catch {
       setError('Network error. Please try again.');
@@ -650,6 +692,109 @@ export default function CreateTeamScreen({
       const message = `You've been invited to coach ${createdTeam.name} on UHT!\n\nJoin code: ${code}\n\nDownload the UHT app and use this code to join the team as a coach.`;
       try { await Share.share({ message }); } catch {}
     }
+  }
+
+  // ==================
+  // Duplicate Team Found Screen
+  // ==================
+  if (duplicateTeam) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title="Team Already Exists" showBack onBack={() => setDuplicateTeam(null)} />
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={dupStyles.warningBanner}>
+            <Ionicons name="alert-circle" size={28} color="#F59E0B" />
+            <Text style={dupStyles.warningTitle}>We Found a Match</Text>
+            <Text style={dupStyles.warningText}>
+              A team with this name and age group already exists. You can join it instead of creating a duplicate.
+            </Text>
+          </View>
+
+          <View style={dupStyles.teamCard}>
+            <View style={dupStyles.teamCardHeader}>
+              <Ionicons name="people" size={24} color={colors.navy} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={dupStyles.teamName}>{duplicateTeam.name}</Text>
+                <Text style={dupStyles.teamMeta}>{duplicateTeam.ageGroup}</Text>
+              </View>
+            </View>
+
+            {(duplicateTeam.city || duplicateTeam.state) && (
+              <View style={dupStyles.detailRow}>
+                <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+                <Text style={dupStyles.detailText}>
+                  {[duplicateTeam.city, duplicateTeam.state].filter(Boolean).join(', ')}
+                </Text>
+              </View>
+            )}
+
+            {duplicateTeam.headCoachName && (
+              <View style={dupStyles.detailRow}>
+                <Ionicons name="person-outline" size={16} color={colors.textMuted} />
+                <Text style={dupStyles.detailText}>Coach: {duplicateTeam.headCoachName}</Text>
+              </View>
+            )}
+
+            {duplicateTeam.inviteCode && (
+              <View style={dupStyles.detailRow}>
+                <Ionicons name="key-outline" size={16} color={colors.textMuted} />
+                <Text style={dupStyles.detailText}>Team Code: {duplicateTeam.inviteCode}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Join this team */}
+          <TouchableOpacity
+            style={dupStyles.joinButton}
+            onPress={handleJoinDuplicate}
+            disabled={joiningDuplicate}
+            activeOpacity={0.8}
+          >
+            {joiningDuplicate ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <>
+                <Ionicons name="log-in-outline" size={20} color={colors.white} />
+                <Text style={dupStyles.joinButtonText}>Join This Team</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <View style={dupStyles.dividerRow}>
+            <View style={dupStyles.dividerLine} />
+            <Text style={dupStyles.dividerText}>OR</Text>
+            <View style={dupStyles.dividerLine} />
+          </View>
+
+          {/* Create anyway */}
+          <TouchableOpacity
+            style={dupStyles.createAnywayButton}
+            onPress={handleCreateAnyway}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            {saving ? (
+              <ActivityIndicator color={colors.navy} />
+            ) : (
+              <>
+                <Ionicons name="add-circle-outline" size={20} color={colors.navy} />
+                <Text style={dupStyles.createAnywayText}>This is a different team — create it anyway</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Go back */}
+          <TouchableOpacity
+            style={dupStyles.goBackButton}
+            onPress={() => setDuplicateTeam(null)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={18} color={colors.textMuted} />
+            <Text style={dupStyles.goBackText}>Go back and edit</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
   }
 
   // Show roster import step after team creation
@@ -1917,5 +2062,126 @@ const logoStyles = StyleSheet.create({
     fontSize: 13,
     color: colors.cyan,
     ...fonts.semibold,
+  },
+});
+
+const dupStyles = StyleSheet.create({
+  warningBanner: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  warningTitle: {
+    fontSize: 20,
+    ...fonts.bold,
+    color: '#92400E',
+    marginTop: spacing.sm,
+  },
+  warningText: {
+    fontSize: 14,
+    ...fonts.regular,
+    color: '#92400E',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 20,
+  },
+  teamCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  teamCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  teamName: {
+    fontSize: 18,
+    ...fonts.bold,
+    color: colors.text,
+  },
+  teamMeta: {
+    fontSize: 14,
+    ...fonts.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: spacing.sm,
+  },
+  detailText: {
+    fontSize: 14,
+    ...fonts.regular,
+    color: colors.textSecondary,
+  },
+  joinButton: {
+    backgroundColor: '#059669',
+    borderRadius: radii.md,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: spacing.lg,
+  },
+  joinButtonText: {
+    color: colors.white,
+    fontSize: 17,
+    ...fonts.bold,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    marginHorizontal: spacing.md,
+    fontSize: 13,
+    ...fonts.semibold,
+    color: colors.textMuted,
+  },
+  createAnywayButton: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  createAnywayText: {
+    color: colors.navy,
+    fontSize: 15,
+    ...fonts.semibold,
+  },
+  goBackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+  },
+  goBackText: {
+    fontSize: 14,
+    ...fonts.regular,
+    color: colors.textMuted,
   },
 });
