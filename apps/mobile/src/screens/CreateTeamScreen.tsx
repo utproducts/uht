@@ -532,9 +532,13 @@ export default function CreateTeamScreen({
     setUploadingLogo(true);
     try {
       const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      // Convert file URI to a proper Blob (fixes "Unsupported FormDataPart implementation")
+      const fileResponse = await fetch(uri);
+      const blob = await fileResponse.blob();
+
       const formData = new FormData();
-      formData.append('logo', { uri, name: `logo.${ext}`, type: mimeType } as any);
+      formData.append('logo', blob, `logo.${ext}`);
       const res = await authFetch(`/api/teams/${createdTeamId}/logo`, {
         method: 'POST',
         body: formData,

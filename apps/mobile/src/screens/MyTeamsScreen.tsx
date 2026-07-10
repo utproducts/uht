@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, User } from '../services/auth';
 import { unfollowTeam } from '../services/api';
@@ -27,6 +29,8 @@ interface Team {
   head_coach_name: string;
   logo_url?: string;
   player_count?: number;
+  invite_code?: string;
+  roster_share_token?: string;
 }
 
 export default function MyTeamsScreen({ navigation }: { navigation: any }) {
@@ -34,6 +38,8 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const [uploadingTeamId, setUploadingTeamId] = useState<string | null>(null);
 
   const isCoach = currentUser?.roles?.some(r =>
     ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
@@ -105,6 +111,52 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     );
   }
 
+  async function handleLogoUpload(team: Team) {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      setUploadingTeamId(team.id);
+
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+
+      // Convert file URI to a proper Blob (fixes "Unsupported FormDataPart implementation")
+      const fileResponse = await fetch(asset.uri);
+      const blob = await fileResponse.blob();
+
+      const formData = new FormData();
+      formData.append('logo', blob, `team-logo.${ext}`);
+
+      const res = await authFetch(`/api/teams/${team.id}/logo`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json() as any;
+      if (json.success) {
+        setTeams((prev) =>
+          prev.map((t) =>
+            t.id === team.id ? { ...t, logo_url: json.data.logo_url } : t
+          )
+        );
+        Alert.alert('Logo Updated', 'Your team logo has been uploaded.');
+      } else {
+        Alert.alert('Error', json.error || 'Failed to upload logo');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Upload failed');
+    } finally {
+      setUploadingTeamId(null);
+    }
+  }
+
   function renderTeamCard({ item }: { item: Team }) {
     return (
       <TouchableOpacity
@@ -121,12 +173,18 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
             ) : (
               <Image source={require('../../assets/uht-logo.png')} style={styles.teamLogoFallback} resizeMode="contain" />
             )}
+            {uploadingTeamId === item.id && (
+              <View style={styles.logoOverlay}>
+                <ActivityIndicator color={colors.white} />
+              </View>
+            )}
           </View>
           <TouchableOpacity
             style={styles.editPencil}
-            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
+            onPress={() => handleLogoUpload(item)}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            disabled={uploadingTeamId === item.id}
           >
             <Ionicons name="pencil" size={14} color={colors.white} />
           </TouchableOpacity>
@@ -173,22 +231,38 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
 
         {/* Bottom actions row */}
         <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.cardActionBtn}
-            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, initialTab: 'share' } as never)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="link-outline" size={16} color={colors.navy} />
-            <Text style={styles.cardActionText}>Share Code</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.cardActionBtn}
-            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, initialTab: 'roster' } as never)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="link-outline" size={16} color={colors.navy} />
-            <Text style={styles.cardActionText}>Roster Link</Text>
-          </TouchableOpacity>
+          {item.invite_code ? (
+            <TouchableOpacity
+              style={styles.cardActionBtn}
+              onPress={async () => {
+                try {
+                  await Share.share({
+                    message: `Join ${item.name} on UHT!\n\nTeam code: ${item.invite_code}\n\nDownload the UHT app and use this code to join.`,
+                  });
+                } catch {}
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="key-outline" size={16} color={colors.navy} />
+              <Text style={styles.cardActionText}>Share Code</Text>
+            </TouchableOpacity>
+          ) : null}
+          {item.roster_share_token ? (
+            <TouchableOpacity
+              style={styles.cardActionBtn}
+              onPress={async () => {
+                try {
+                  await Share.share({
+                    message: `You've been invited to join ${item.name} on UHT! Claim your spot:\nhttps://ultimatetournaments.com/roster/${item.roster_share_token}`,
+                  });
+                } catch {}
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="link-outline" size={16} color={colors.navy} />
+              <Text style={styles.cardActionText}>Roster Link</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -277,8 +351,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <View style={styles.container}>
         <ScreenHeader
           title="My Teams"
-          showBack
-          onBack={() => navigation.goBack()}
           rightAction={renderHeaderRight()}
         />
         <View style={styles.loadingContainer}>
@@ -292,8 +364,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     <View style={styles.container}>
       <ScreenHeader
         title="My Teams"
-        showBack
-        onBack={() => navigation.goBack()}
         rightAction={renderHeaderRight()}
       />
       <FlatList
@@ -384,6 +454,17 @@ const styles = StyleSheet.create({
   teamLogoFallback: {
     width: 48,
     height: 48,
+  },
+  logoOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 44,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   editPencil: {
     position: 'absolute' as const,

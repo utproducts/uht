@@ -121,14 +121,14 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
       const asset = result.assets[0];
       setUploading(true);
 
-      const formData = new FormData();
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-      formData.append('logo', {
-        uri: asset.uri,
-        name: `team-logo.${ext}`,
-        type: mimeType,
-      } as any);
+
+      // Convert file URI to a proper Blob (fixes "Unsupported FormDataPart implementation")
+      const fileResponse = await fetch(asset.uri);
+      const blob = await fileResponse.blob();
+
+      const formData = new FormData();
+      formData.append('logo', blob, `team-logo.${ext}`);
 
       const res = await authFetch(`/api/teams/${teamId}/logo`, {
         method: 'POST',
