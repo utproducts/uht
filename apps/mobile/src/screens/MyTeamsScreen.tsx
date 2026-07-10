@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   FlatList,
   TouchableOpacity,
@@ -42,6 +43,8 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [uploadingTeamId, setUploadingTeamId] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState('');
+  const [joiningByCode, setJoiningByCode] = useState(false);
 
   const isCoach = currentUser?.roles?.some(r =>
     ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
@@ -111,6 +114,34 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         },
       ]
     );
+  }
+
+  async function handleJoinByCode() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code) {
+      Alert.alert('Enter a Code', 'Please enter a team code to continue.');
+      return;
+    }
+    setJoiningByCode(true);
+    try {
+      // Try follow-by-code first (for parents/fans)
+      const res = await authFetch('/api/follows/by-code', {
+        method: 'POST',
+        body: JSON.stringify({ inviteCode: code }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setJoinCode('');
+        Alert.alert('Team Followed!', `You're now following ${json.data.teamName}.`);
+        fetchTeams(true);
+      } else {
+        Alert.alert('Invalid Code', json.error || 'That team code was not found. Please check and try again.');
+      }
+    } catch {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setJoiningByCode(false);
+    }
   }
 
   async function handleLogoUpload(team: Team) {
@@ -245,30 +276,30 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               onPress={async () => {
                 try {
                   await Share.share({
-                    message: `You're invited to join ${item.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account\n3. Go to My Teams → Join with Code\n4. Enter code: ${item.invite_code}`,
+                    message: `You're invited to coach ${item.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the team code when prompted: ${item.invite_code}`,
                   });
                 } catch {}
               }}
               activeOpacity={0.7}
             >
-              <Ionicons name="key-outline" size={16} color={colors.navy} />
-              <Text style={styles.cardActionText}>Share Code</Text>
+              <Ionicons name="clipboard-outline" size={16} color={colors.navy} />
+              <Text style={styles.cardActionText}>Invite Coaches</Text>
             </TouchableOpacity>
           ) : null}
-          {item.roster_share_token ? (
+          {item.invite_code ? (
             <TouchableOpacity
               style={styles.cardActionBtn}
               onPress={async () => {
                 try {
                   await Share.share({
-                    message: `You're invited to join ${item.name} on Ultimate Hockey Tournaments!\n\nClaim your roster spot and create your parent account:\nhttps://ultimatetournaments.com/roster/${item.roster_share_token}\n\nThen download the UHT app to follow the team:\nhttps://apps.apple.com/app/id6786085393`,
+                    message: `Follow ${item.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the team code when prompted: ${item.invite_code}\n\nYou'll see all upcoming events, schedules, and scores!`,
                   });
                 } catch {}
               }}
               activeOpacity={0.7}
             >
-              <Ionicons name="link-outline" size={16} color={colors.navy} />
-              <Text style={styles.cardActionText}>Roster Link</Text>
+              <Ionicons name="people-outline" size={16} color={colors.navy} />
+              <Text style={styles.cardActionText}>Invite Families</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -331,6 +362,39 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   function renderListFooter() {
     return (
       <View style={styles.footerActions}>
+        {/* Enter Team Code */}
+        <View style={styles.teamCodeCard}>
+          <Text style={styles.teamCodeCardTitle}>Have a team code?</Text>
+          <Text style={styles.teamCodeCardSubtitle}>
+            Enter a code from your coach or team manager to follow a team.
+          </Text>
+          <View style={styles.teamCodeInputRow}>
+            <TextInput
+              style={styles.teamCodeInput}
+              value={joinCode}
+              onChangeText={(t) => setJoinCode(t.toUpperCase())}
+              placeholder="Enter code"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={10}
+              editable={!joiningByCode}
+            />
+            <TouchableOpacity
+              style={[styles.teamCodeJoinBtn, joiningByCode && { opacity: 0.7 }]}
+              activeOpacity={0.7}
+              onPress={handleJoinByCode}
+              disabled={joiningByCode}
+            >
+              {joiningByCode ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.teamCodeJoinBtnText}>Join</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <TouchableOpacity
           style={styles.followAnotherBtn}
           activeOpacity={0.7}
@@ -619,6 +683,58 @@ const styles = StyleSheet.create({
   },
   findTeamsButtonTextOutline: {
     color: colors.navy,
+  },
+
+  // Team code card
+  teamCodeCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  teamCodeCardTitle: {
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.bold,
+    marginBottom: spacing.xs,
+  },
+  teamCodeCardSubtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    ...fonts.regular,
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  teamCodeInputRow: {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+  },
+  teamCodeInput: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.semibold,
+    letterSpacing: 1,
+  },
+  teamCodeJoinBtn: {
+    backgroundColor: colors.navy,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.xl,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  teamCodeJoinBtnText: {
+    color: colors.white,
+    fontSize: 15,
+    ...fonts.semibold,
   },
 
   // Footer actions (when teams exist)

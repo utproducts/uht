@@ -131,6 +131,43 @@ followRoutes.delete('/:teamId', authMiddleware, async (c) => {
 });
 
 // ==================
+// POST /by-code — Follow a team using invite code (auth required)
+// ==================
+const followByCodeSchema = z.object({
+  inviteCode: z.string().min(4).max(10),
+});
+
+followRoutes.post('/by-code', authMiddleware, zValidator('json', followByCodeSchema), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const { inviteCode } = c.req.valid('json');
+  const code = inviteCode.toUpperCase().trim();
+
+  // Find team by invite code
+  const team = await db.prepare(
+    `SELECT id, name, age_group FROM teams WHERE invite_code = ? AND is_active = 1`
+  ).bind(code).first<{ id: string; name: string; age_group: string }>();
+
+  if (!team) {
+    return c.json({ success: false, error: 'Invalid team code. Please check and try again.' }, 404);
+  }
+
+  // Check for existing follow
+  const existing = await db.prepare(
+    `SELECT id FROM user_follows WHERE user_id = ? AND team_id = ?`
+  ).bind(user.id, team.id).first();
+
+  if (!existing) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(
+      `INSERT INTO user_follows (id, user_id, team_id) VALUES (?, ?, ?)`
+    ).bind(id, user.id, team.id).run();
+  }
+
+  return c.json({ success: true, data: { teamId: team.id, teamName: team.name, ageGroup: team.age_group } });
+});
+
+// ==================
 // POST /migrate — Create user_follows table
 // ==================
 followRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {

@@ -91,20 +91,20 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
     }, [loadTeam]),
   );
 
-  async function shareInviteCode() {
+  async function shareInviteCoaches() {
     if (!team?.invite_code) return;
     try {
       await Share.share({
-        message: `Join ${team.name} on UHT!\n\nTeam code: ${team.invite_code}\n\nDownload the UHT app and use this code to join.`,
+        message: `You're invited to coach ${team.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${team.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the team code when prompted: ${team.invite_code}`,
       });
     } catch {}
   }
 
-  async function shareRosterLink() {
-    if (!team?.roster_share_token) return;
+  async function shareInviteFamilies() {
+    if (!team?.invite_code) return;
     try {
       await Share.share({
-        message: `You've been invited to join ${team.name} on UHT! Claim your spot:\nhttps://ultimatetournaments.com/roster/${team.roster_share_token}`,
+        message: `Follow ${team.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${team.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the team code when prompted: ${team.invite_code}\n\nYou'll see all upcoming events, schedules, and scores!`,
       });
     } catch {}
   }
@@ -240,15 +240,15 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
         {/* Quick Actions */}
         <View style={styles.actionsRow}>
           {team?.invite_code ? (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteCode}>
-              <Ionicons name="key-outline" size={18} color={colors.navy} />
-              <Text style={styles.actionBtnText}>Share Code</Text>
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteCoaches}>
+              <Ionicons name="clipboard-outline" size={18} color={colors.navy} />
+              <Text style={styles.actionBtnText}>Invite Coaches</Text>
             </TouchableOpacity>
           ) : null}
-          {team?.roster_share_token ? (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareRosterLink}>
-              <Ionicons name="link-outline" size={18} color={colors.navy} />
-              <Text style={styles.actionBtnText}>Roster Link</Text>
+          {team?.invite_code ? (
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteFamilies}>
+              <Ionicons name="people-outline" size={18} color={colors.navy} />
+              <Text style={styles.actionBtnText}>Invite Families</Text>
             </TouchableOpacity>
           ) : null}
         </View>
