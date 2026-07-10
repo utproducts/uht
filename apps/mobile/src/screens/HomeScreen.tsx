@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getFollowedTeams, getScorekeeperEvents } from '../services/api';
 import { getUser, authFetch, User } from '../services/auth';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface FollowedTeam {
   id: string;
@@ -182,33 +185,78 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   // --------------- Hero Banner ---------------
   function HeroBanner() {
     return (
-      <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
-        {/* Background diagonal accent stripes */}
-        <View style={styles.heroAccent1} />
-        <View style={styles.heroAccent2} />
-        <View style={styles.heroAccent3} />
+      <View style={[styles.hero, { paddingTop: insets.top + 8 }]}>
+        {/* Bold diagonal stripes — sporty feel */}
+        <View style={styles.heroStripe1} />
+        <View style={styles.heroStripe2} />
+        <View style={styles.heroStripe3} />
+        <View style={styles.heroStripe4} />
 
-        {/* Bottom cyan edge stripe */}
-        <View style={styles.heroCyanStripe} />
+        {/* Bright cyan bottom edge */}
+        <View style={styles.heroCyanEdge} />
 
         {/* Content */}
         <View style={styles.heroContent}>
-          <View style={styles.heroLeft}>
+          <View style={styles.heroTop}>
             <Image
               source={require('../../assets/uht-logo.png')}
-              style={styles.heroLogoImage}
+              style={styles.heroLogo}
               resizeMode="contain"
             />
-            <Text style={styles.heroGreeting}>
-              {firstName ? `Welcome, ${firstName}!` : 'Welcome!'}
-            </Text>
+            <TouchableOpacity
+              style={styles.heroMenuBtn}
+              onPress={() => navigation.navigate('Menu' as never)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="notifications-outline" size={22} color={colors.white} />
+            </TouchableOpacity>
           </View>
+          <Text style={styles.heroSeason}>2026-27 SEASON</Text>
+          <Text style={styles.heroGreeting}>
+            {firstName ? `Welcome back, ${firstName}` : 'Welcome'}
+          </Text>
+        </View>
+
+        {/* Quick Actions — overlapping cards on hero */}
+        <View style={styles.quickActionsBar}>
           <TouchableOpacity
-            style={styles.heroSettingsBtn}
-            onPress={() => navigation.navigate('Menu' as never)}
-            activeOpacity={0.7}
+            style={styles.qaButton}
+            onPress={() => navigation.navigate('Events' as never)}
+            activeOpacity={0.8}
           >
-            <Ionicons name="settings-outline" size={24} color={colors.white} />
+            <View style={styles.qaIconBox}>
+              <Ionicons name="trophy" size={20} color={colors.white} />
+            </View>
+            <Text style={styles.qaLabel}>Events</Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
+          </TouchableOpacity>
+
+          <View style={styles.qaDivider} />
+
+          <TouchableOpacity
+            style={styles.qaButton}
+            onPress={() => navigation.navigate('My Teams')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.qaIconBox}>
+              <Ionicons name="shield" size={20} color={colors.white} />
+            </View>
+            <Text style={styles.qaLabel}>My Teams</Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
+          </TouchableOpacity>
+
+          <View style={styles.qaDivider} />
+
+          <TouchableOpacity
+            style={styles.qaButton}
+            onPress={() => navigation.navigate('Shop' as never)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.qaIconBox}>
+              <Ionicons name="cart" size={20} color={colors.white} />
+            </View>
+            <Text style={styles.qaLabel}>Shop</Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
         </View>
       </View>
@@ -238,49 +286,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={styles.scrollContent}
         ListHeaderComponent={
           <>
-            {/* Quick Actions */}
-            <View style={styles.quickActions}>
-              <TouchableOpacity
-                style={styles.quickAction}
-                onPress={() => navigation.navigate('Events' as never)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickIconWrap, { backgroundColor: colors.highlight }]}>
-                  <Ionicons name="calendar" size={22} color={colors.navy} />
-                </View>
-                <Text style={styles.quickLabel}>Events</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickAction}
-                onPress={() => navigation.navigate('My Teams')}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickIconWrap, { backgroundColor: '#e6f9ff' }]}>
-                  <Ionicons name="people" size={22} color={colors.cyan} />
-                </View>
-                <Text style={styles.quickLabel}>My Teams</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickAction}
-                onPress={() => navigation.navigate('Shop' as never)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickIconWrap, { backgroundColor: '#fff3e0' }]}>
-                  <Ionicons name="trophy" size={22} color={colors.warning} />
-                </View>
-                <Text style={styles.quickLabel}>Shop</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Followed Teams */}
+            {/* Your Teams */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionTitleRow}>
                   <View style={styles.sectionAccent} />
-                  <Text style={styles.sectionTitle}>Your Teams</Text>
+                  <Text style={styles.sectionTitle}>YOUR TEAMS</Text>
                 </View>
-                <TouchableOpacity onPress={() => navigation.navigate('My Teams')}>
-                  <Text style={styles.seeAll}>See All</Text>
+                <TouchableOpacity
+                  style={styles.seeAllBtn}
+                  onPress={() => navigation.navigate('My Teams')}
+                >
+                  <Text style={styles.seeAllText}>See All</Text>
+                  <Ionicons name="arrow-forward" size={14} color={colors.cyan} />
                 </TouchableOpacity>
               </View>
               {teams.length === 0 ? (
@@ -289,43 +307,44 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   onPress={() => navigation.navigate('FollowTeams')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.emptyIconWrap}>
-                    <Ionicons name="add-circle-outline" size={36} color={colors.cyan} />
+                  <View style={styles.emptyBadge}>
+                    <Ionicons name="shield-outline" size={32} color={colors.cyan} />
                   </View>
-                  <Text style={styles.emptyTitle}>Follow a Team</Text>
-                  <Text style={styles.emptyText}>
-                    Stay updated on schedules, scores, and standings by following your favorite teams
-                  </Text>
-                  <View style={styles.emptyActionRow}>
-                    <Text style={styles.emptyActionText}>Find Teams</Text>
-                    <Ionicons name="arrow-forward" size={16} color={colors.cyan} />
+                  <View style={styles.emptyContent}>
+                    <Text style={styles.emptyTitle}>Follow a Team</Text>
+                    <Text style={styles.emptyText}>
+                      Stay updated on schedules, scores & standings
+                    </Text>
+                  </View>
+                  <View style={styles.emptyArrow}>
+                    <Ionicons name="add-circle" size={28} color={colors.cyan} />
                   </View>
                 </TouchableOpacity>
               ) : (
-                teams.slice(0, 4).map((team) => (
+                teams.slice(0, 4).map((team, index) => (
                   <TouchableOpacity
                     key={team.id}
-                    style={styles.teamCard}
+                    style={[styles.teamCard, index === 0 && styles.teamCardFirst]}
                     activeOpacity={0.7}
                     onPress={() => navigation.navigate('My Teams')}
                   >
-                    <View style={styles.teamAvatar}>
-                      <Text style={styles.teamAvatarText}>
+                    <View style={styles.teamBadge}>
+                      <Text style={styles.teamBadgeText}>
                         {(team.team_name || '?')[0].toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.teamInfo}>
                       <Text style={styles.teamName}>{team.team_name}</Text>
                       {team.org_name ? (
-                        <Text style={styles.teamOrg}>{team.org_name}</Text>
-                      ) : null}
-                      {team.age_group ? (
-                        <View style={styles.ageBadge}>
-                          <Text style={styles.ageBadgeText}>{team.age_group}</Text>
-                        </View>
+                        <Text style={styles.teamOrg} numberOfLines={1}>{team.org_name}</Text>
                       ) : null}
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                    {team.age_group ? (
+                      <View style={styles.agePill}>
+                        <Text style={styles.agePillText}>{team.age_group}</Text>
+                      </View>
+                    ) : null}
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
                   </TouchableOpacity>
                 ))
               )}
@@ -337,10 +356,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 <View style={styles.sectionHeader}>
                   <View style={styles.sectionTitleRow}>
                     <View style={[styles.sectionAccent, { backgroundColor: '#34c759' }]} />
-                    <Text style={styles.sectionTitle}>My Scoring</Text>
+                    <Text style={styles.sectionTitle}>MY SCORING</Text>
                   </View>
-                  <TouchableOpacity onPress={() => navigation.navigate('Scorekeeper')}>
-                    <Text style={styles.seeAll}>View All</Text>
+                  <TouchableOpacity
+                    style={styles.seeAllBtn}
+                    onPress={() => navigation.navigate('Scorekeeper')}
+                  >
+                    <Text style={styles.seeAllText}>View All</Text>
+                    <Ionicons name="arrow-forward" size={14} color={colors.cyan} />
                   </TouchableOpacity>
                 </View>
                 {scoringEvents.slice(0, 2).map((event: any) => (
@@ -350,44 +373,50 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     activeOpacity={0.7}
                     onPress={() => navigation.navigate('Scorekeeper')}
                   >
-                    <View style={[styles.teamAvatar, { backgroundColor: '#34c759' }]}>
+                    <View style={[styles.teamBadge, { backgroundColor: '#34c759' }]}>
                       <Ionicons name="clipboard" size={18} color={colors.white} />
                     </View>
                     <View style={styles.teamInfo}>
                       <Text style={styles.teamName} numberOfLines={1}>{event.name}</Text>
                       <Text style={styles.teamOrg}>{event.game_count} games assigned</Text>
-                      {event.active_games > 0 && (
-                        <View style={[styles.ageBadge, { backgroundColor: '#e8f5e9' }]}>
-                          <Text style={[styles.ageBadgeText, { color: '#2e7d32' }]}>{event.active_games} active</Text>
-                        </View>
-                      )}
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+                    {event.active_games > 0 && (
+                      <View style={[styles.agePill, { backgroundColor: '#e8f5e9', borderColor: '#34c759' }]}>
+                        <Text style={[styles.agePillText, { color: '#2e7d32' }]}>{event.active_games} live</Text>
+                      </View>
+                    )}
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
                   </TouchableOpacity>
                 ))}
               </View>
             )}
 
-            {/* Upcoming Events */}
+            {/* Upcoming Events — KEEP AS-IS (Chad likes this section) */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionTitleRow}>
                   <View style={styles.sectionAccent} />
-                  <Text style={styles.sectionTitle}>My Upcoming Events</Text>
+                  <Text style={styles.sectionTitle}>MY UPCOMING EVENTS</Text>
                 </View>
-                <TouchableOpacity onPress={() => navigation.navigate('Events' as never)}>
-                  <Text style={styles.seeAll}>Browse Events</Text>
+                <TouchableOpacity
+                  style={styles.seeAllBtn}
+                  onPress={() => navigation.navigate('Events' as never)}
+                >
+                  <Text style={styles.seeAllText}>Browse</Text>
+                  <Ionicons name="arrow-forward" size={14} color={colors.cyan} />
                 </TouchableOpacity>
               </View>
               {upcomingEvents.length === 0 ? (
                 <View style={styles.emptyCard}>
-                  <View style={styles.emptyIconWrap}>
-                    <Ionicons name="calendar-outline" size={36} color={colors.textMuted} />
+                  <View style={[styles.emptyBadge, { backgroundColor: colors.bg }]}>
+                    <Ionicons name="calendar-outline" size={32} color={colors.textMuted} />
                   </View>
-                  <Text style={styles.emptyTitle}>No Upcoming Events</Text>
-                  <Text style={styles.emptyText}>
-                    Register for a tournament to see it here
-                  </Text>
+                  <View style={styles.emptyContent}>
+                    <Text style={styles.emptyTitle}>No Upcoming Events</Text>
+                    <Text style={styles.emptyText}>
+                      Register for a tournament to see it here
+                    </Text>
+                  </View>
                 </View>
               ) : (
                 upcomingEvents.map((event) => (
@@ -444,119 +473,143 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
+    paddingTop: spacing.md,
     paddingBottom: spacing.xxxl,
   },
 
-  // ==================
-  // Hero Banner
-  // ==================
+  // ==========================================
+  // HERO — Bold, sporty, ESPN-inspired
+  // ==========================================
   hero: {
     backgroundColor: colors.navy,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 0,
     overflow: 'hidden',
   },
-  heroAccent1: {
+  heroStripe1: {
+    position: 'absolute',
+    top: -60,
+    right: -30,
+    width: 200,
+    height: '250%',
+    backgroundColor: colors.cyan,
+    opacity: 0.1,
+    transform: [{ rotate: '-20deg' }],
+  },
+  heroStripe2: {
+    position: 'absolute',
+    top: -40,
+    right: 50,
+    width: 120,
+    height: '220%',
+    backgroundColor: colors.cyan,
+    opacity: 0.07,
+    transform: [{ rotate: '-20deg' }],
+  },
+  heroStripe3: {
+    position: 'absolute',
+    top: -20,
+    left: -80,
+    width: 160,
+    height: '200%',
+    backgroundColor: colors.white,
+    opacity: 0.04,
+    transform: [{ rotate: '-20deg' }],
+  },
+  heroStripe4: {
     position: 'absolute',
     top: -30,
-    right: -20,
-    width: 180,
-    height: '180%',
+    left: 60,
+    width: 80,
+    height: '200%',
     backgroundColor: colors.cyan,
-    opacity: 0.08,
-    transform: [{ rotate: '-18deg' }],
+    opacity: 0.05,
+    transform: [{ rotate: '-20deg' }],
   },
-  heroAccent2: {
-    position: 'absolute',
-    top: -10,
-    right: 40,
-    width: 100,
-    height: '160%',
-    backgroundColor: colors.cyan,
-    opacity: 0.06,
-    transform: [{ rotate: '-18deg' }],
-  },
-  heroAccent3: {
-    position: 'absolute',
-    top: 0,
-    left: -60,
-    width: 120,
-    height: '150%',
-    backgroundColor: colors.white,
-    opacity: 0.03,
-    transform: [{ rotate: '-18deg' }],
-  },
-  heroCyanStripe: {
+  heroCyanEdge: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 3,
+    height: 4,
     backgroundColor: colors.cyan,
   },
   heroContent: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  heroTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.md,
   },
-  heroLeft: {
-    flex: 1,
+  heroLogo: {
+    width: 140,
+    height: 52,
   },
-  heroLogoImage: {
-    width: 120,
-    height: 48,
-    marginBottom: 4,
+  heroMenuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroSeason: {
+    fontSize: 11,
+    letterSpacing: 3,
+    color: colors.cyan,
+    ...fonts.extrabold,
+    marginBottom: 2,
   },
   heroGreeting: {
-    fontSize: 16,
-    color: colors.cyanLight,
-    ...fonts.medium,
-    opacity: 0.9,
-  },
-  heroSettingsBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    fontSize: 22,
+    color: colors.white,
+    ...fonts.bold,
   },
 
-  // ==================
-  // Quick Actions
-  // ==================
-  quickActions: {
+  // ==========================================
+  // QUICK ACTIONS — Bold inline bar
+  // ==========================================
+  quickActionsBar: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    gap: spacing.md,
-  },
-  quickAction: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    marginHorizontal: 0,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
-  quickIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  qaButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+    gap: 6,
+  },
+  qaIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,204,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
-  quickLabel: {
+  qaLabel: {
     fontSize: 13,
-    color: colors.text,
-    ...fonts.semibold,
+    color: colors.white,
+    ...fonts.bold,
+    letterSpacing: 0.3,
+  },
+  qaDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
 
-  // ==================
-  // Sections
-  // ==================
+  // ==========================================
+  // SECTIONS
+  // ==========================================
   section: {
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.xl,
@@ -573,71 +626,73 @@ const styles = StyleSheet.create({
   },
   sectionAccent: {
     width: 4,
-    height: 20,
+    height: 22,
     backgroundColor: colors.cyan,
     borderRadius: 2,
     marginRight: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 15,
     color: colors.text,
-    ...fonts.bold,
+    ...fonts.extrabold,
+    letterSpacing: 1,
   },
-  seeAll: {
-    fontSize: 14,
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  seeAllText: {
+    fontSize: 13,
     color: colors.cyan,
     ...fonts.semibold,
   },
 
-  // ==================
-  // Empty State
-  // ==================
+  // ==========================================
+  // EMPTY STATE
+  // ==========================================
   emptyCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
-    padding: spacing.xxl,
+    padding: spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.cyan,
   },
-  emptyIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  emptyBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
     backgroundColor: colors.highlight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginRight: spacing.lg,
+  },
+  emptyContent: {
+    flex: 1,
   },
   emptyTitle: {
     fontSize: 16,
     color: colors.text,
-    ...fonts.semibold,
-    marginTop: spacing.xs,
+    ...fonts.bold,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     ...fonts.regular,
-    marginTop: spacing.xs,
-    textAlign: 'center',
-    lineHeight: 20,
+    marginTop: 2,
+    lineHeight: 18,
   },
-  emptyActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    gap: 6,
-  },
-  emptyActionText: {
-    fontSize: 14,
-    color: colors.cyan,
-    ...fonts.semibold,
+  emptyArrow: {
+    marginLeft: spacing.sm,
   },
 
-  // ==================
-  // Team Cards
-  // ==================
+  // ==========================================
+  // TEAM CARDS — Bold, sporty
+  // ==========================================
   teamCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -647,20 +702,25 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.navy,
   },
-  teamAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  teamCardFirst: {
+    borderLeftColor: colors.cyan,
+  },
+  teamBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
     backgroundColor: colors.navy,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.md,
   },
-  teamAvatarText: {
-    fontSize: 18,
+  teamBadgeText: {
+    fontSize: 20,
     color: colors.white,
-    ...fonts.bold,
+    ...fonts.extrabold,
   },
   teamInfo: {
     flex: 1,
@@ -668,7 +728,7 @@ const styles = StyleSheet.create({
   teamName: {
     fontSize: 15,
     color: colors.text,
-    ...fonts.semibold,
+    ...fonts.bold,
   },
   teamOrg: {
     fontSize: 13,
@@ -676,25 +736,24 @@ const styles = StyleSheet.create({
     ...fonts.regular,
     marginTop: 2,
   },
-  ageBadge: {
-    alignSelf: 'flex-start',
+  agePill: {
     backgroundColor: colors.highlight,
-    borderRadius: radii.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginTop: spacing.xs,
+    borderRadius: radii.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
     borderWidth: 1,
     borderColor: colors.cyan,
   },
-  ageBadgeText: {
+  agePillText: {
     fontSize: 11,
     color: colors.cyanDark,
-    ...fonts.semibold,
+    ...fonts.bold,
+    letterSpacing: 0.3,
   },
 
-  // ==================
-  // Event Cards
-  // ==================
+  // ==========================================
+  // EVENT CARDS (kept mostly same — Chad likes these)
+  // ==========================================
   eventCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
