@@ -40,6 +40,7 @@ interface Event {
   start_date: string;
   end_date: string;
   logo_url?: string;
+  teamNames?: string[];
 }
 
 function formatDateRange(startDate: string, endDate: string): string {
@@ -100,7 +101,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
       // Process my-teams response
       let myTeamsData: FollowedTeam[] = [];
-      let myRegisteredEvents: Event[] = [];
+      const eventMap = new Map<string, Event>();
+      const eventTeamNames = new Map<string, Set<string>>();
       const myTeamsJson = myTeamsRes as { success: boolean; data?: any[] };
       if (myTeamsJson.success && Array.isArray(myTeamsJson.data)) {
         myTeamsData = myTeamsJson.data.map((t: any) => ({
@@ -111,14 +113,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           age_group: t.age_group,
         }));
 
-        // Extract registered events from all teams
-        const seenEvents = new Set<string>();
+        // Extract registered events from all teams, tracking which teams go to each
         for (const team of myTeamsJson.data) {
+          const teamName = (team as any).name || '';
           const regEvents = (team as any).registered_events || [];
           for (const re of regEvents) {
-            if (re.event_id && !seenEvents.has(re.event_id)) {
-              seenEvents.add(re.event_id);
-              myRegisteredEvents.push({
+            if (!re.event_id) continue;
+            if (!eventMap.has(re.event_id)) {
+              eventMap.set(re.event_id, {
                 id: re.event_id,
                 name: re.event_name || '',
                 slug: re.slug || '',
@@ -128,20 +130,22 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 end_date: re.end_date || '',
                 logo_url: re.logo_url,
               });
+              eventTeamNames.set(re.event_id, new Set());
             }
+            if (teamName) eventTeamNames.get(re.event_id)!.add(teamName);
           }
         }
       }
 
       // Extract registered events from followed teams too
       if (Array.isArray(teamData)) {
-        const seenEvents = new Set(myRegisteredEvents.map((e: Event) => e.id));
         for (const ft of teamData) {
+          const teamName = (ft as any).team_name || '';
           const regEvents = (ft as any).registered_events || [];
           for (const re of regEvents) {
-            if (re.event_id && !seenEvents.has(re.event_id)) {
-              seenEvents.add(re.event_id);
-              myRegisteredEvents.push({
+            if (!re.event_id) continue;
+            if (!eventMap.has(re.event_id)) {
+              eventMap.set(re.event_id, {
                 id: re.event_id,
                 name: re.event_name || '',
                 slug: re.slug || '',
@@ -151,9 +155,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 end_date: re.end_date || '',
                 logo_url: re.logo_url,
               });
+              eventTeamNames.set(re.event_id, new Set());
             }
+            if (teamName) eventTeamNames.get(re.event_id)!.add(teamName);
           }
         }
+      }
+
+      // Attach team names to events
+      const myRegisteredEvents: Event[] = [];
+      for (const [eventId, event] of eventMap) {
+        const names = eventTeamNames.get(eventId);
+        event.teamNames = names ? Array.from(names) : [];
+        myRegisteredEvents.push(event);
       }
 
       // Merge followed teams and my teams, dedup by team_id
@@ -518,6 +532,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                           </Text>
                         </View>
                       ) : null}
+                      {event.teamNames && event.teamNames.length > 0 ? (
+                        <View style={styles.eventTeamsRow}>
+                          <Ionicons name="people-outline" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
+                          <Text style={styles.eventTeamNames} numberOfLines={2}>
+                            {event.teamNames.join(', ')}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
                   </TouchableOpacity>
@@ -877,5 +899,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     ...fonts.regular,
+  },
+  eventTeamsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 3,
+  },
+  eventTeamNames: {
+    fontSize: 13,
+    color: '#F59E0B',
+    ...fonts.semibold,
+    flex: 1,
   },
 });
