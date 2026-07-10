@@ -15,8 +15,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { authFetch, getUser } from '../services/auth';
+import { authFetch, getUser, getToken } from '../services/auth';
+import { API_URL } from '../constants/api';
 import { getOrganizationsByState, searchOrganizations, getLookupValues, getStateDivisionLevels } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
@@ -532,18 +534,24 @@ export default function CreateTeamScreen({
     setUploadingLogo(true);
     try {
       const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const token = await getToken();
 
-      // Convert file URI to a proper Blob (fixes "Unsupported FormDataPart implementation")
-      const fileResponse = await fetch(uri);
-      const blob = await fileResponse.blob();
-
-      const formData = new FormData();
-      formData.append('logo', blob, `logo.${ext}`);
-      const res = await authFetch(`/api/teams/${createdTeamId}/logo`, {
-        method: 'POST',
-        body: formData,
-      });
-      const json = await res.json() as any;
+      // Use FileSystem.uploadAsync for native multipart upload
+      const uploadResult = await FileSystem.uploadAsync(
+        `${API_URL}/api/teams/${createdTeamId}/logo`,
+        uri,
+        {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'logo',
+          mimeType,
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+      const json = JSON.parse(uploadResult.body) as any;
       if (json.success && json.data?.logo_url) {
         setLogoUrl(json.data.logo_url);
       } else {

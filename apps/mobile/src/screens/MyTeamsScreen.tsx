@@ -13,8 +13,10 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { authFetch, getUser, User } from '../services/auth';
+import { authFetch, getUser, getToken, User } from '../services/auth';
+import { API_URL } from '../constants/api';
 import { unfollowTeam } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
@@ -126,20 +128,26 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       setUploadingTeamId(team.id);
 
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const token = await getToken();
 
-      // Convert file URI to a proper Blob (fixes "Unsupported FormDataPart implementation")
-      const fileResponse = await fetch(asset.uri);
-      const blob = await fileResponse.blob();
+      // Use FileSystem.uploadAsync for native multipart upload
+      // This bypasses all FormData/Blob compatibility issues in RN/Hermes
+      const uploadResult = await FileSystem.uploadAsync(
+        `${API_URL}/api/teams/${team.id}/logo`,
+        asset.uri,
+        {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'logo',
+          mimeType,
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
 
-      const formData = new FormData();
-      formData.append('logo', blob, `team-logo.${ext}`);
-
-      const res = await authFetch(`/api/teams/${team.id}/logo`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const json = await res.json() as any;
+      const json = JSON.parse(uploadResult.body) as any;
       if (json.success) {
         setTeams((prev) =>
           prev.map((t) =>
@@ -237,7 +245,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               onPress={async () => {
                 try {
                   await Share.share({
-                    message: `Join ${item.name} on UHT!\n\nTeam code: ${item.invite_code}\n\nDownload the UHT app and use this code to join.`,
+                    message: `You're invited to join ${item.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account\n3. Go to My Teams → Join with Code\n4. Enter code: ${item.invite_code}`,
                   });
                 } catch {}
               }}
@@ -253,7 +261,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               onPress={async () => {
                 try {
                   await Share.share({
-                    message: `You've been invited to join ${item.name} on UHT! Claim your spot:\nhttps://ultimatetournaments.com/roster/${item.roster_share_token}`,
+                    message: `You're invited to join ${item.name} on Ultimate Hockey Tournaments!\n\nClaim your roster spot and create your parent account:\nhttps://ultimatetournaments.com/roster/${item.roster_share_token}\n\nThen download the UHT app to follow the team:\nhttps://apps.apple.com/app/id6786085393`,
                   });
                 } catch {}
               }}
