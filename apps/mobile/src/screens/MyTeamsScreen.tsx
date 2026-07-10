@@ -12,13 +12,15 @@ import {
   Share,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { authFetch, getUser, getToken, User } from '../services/auth';
+import { authFetch, getUser, getToken, getActiveRole, User } from '../services/auth';
 import { API_URL } from '../constants/api';
 import { unfollowTeam } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
@@ -47,16 +49,18 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const [uploadingTeamId, setUploadingTeamId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [joiningByCode, setJoiningByCode] = useState(false);
+  const [activeRoleState, setActiveRoleState] = useState<string>('');
 
-  const isCoach = currentUser?.roles?.some(r =>
-    ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
-  ) ?? false;
+  // Use activeRole for role-gating instead of raw roles array
+  const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRoleState);
+  const isParent = activeRoleState === 'parent';
 
   const lastLoadRef = React.useRef<number>(0);
   const STALE_MS = 30000; // 30 seconds
 
   useEffect(() => {
     getUser().then(u => setCurrentUser(u));
+    getActiveRole().then(r => { if (r) setActiveRoleState(r); });
   }, []);
 
   const fetchTeams = useCallback(async (isRefresh = false) => {
@@ -230,15 +234,17 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               </View>
             )}
           </View>
-          <TouchableOpacity
-            style={styles.editPencil}
-            onPress={() => handleLogoUpload(item)}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            disabled={uploadingTeamId === item.id}
-          >
-            <Ionicons name="pencil" size={14} color={colors.white} />
-          </TouchableOpacity>
+          {isCoach && (
+            <TouchableOpacity
+              style={styles.editPencil}
+              onPress={() => handleLogoUpload(item)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              disabled={uploadingTeamId === item.id}
+            >
+              <Ionicons name="pencil" size={14} color={colors.white} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Age Group + Division Pills */}
@@ -280,9 +286,9 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           </View>
         ) : null}
 
-        {/* Bottom actions row */}
+        {/* Bottom actions row — different for coach vs parent */}
         <View style={styles.cardActions}>
-          {item.invite_code ? (
+          {isCoach && item.invite_code ? (
             <TouchableOpacity
               style={styles.cardActionBtn}
               onPress={async () => {
@@ -311,7 +317,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               activeOpacity={0.7}
             >
               <Ionicons name="people-outline" size={16} color={colors.navy} />
-              <Text style={styles.cardActionText}>Invite Families</Text>
+              <Text style={styles.cardActionText}>{isParent ? 'Invite Family' : 'Invite Families'}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -448,6 +454,14 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
             ) : (
               <Text style={styles.teamCodeJoinBtnText}>Join</Text>
             )}
+          </TouchableOpacity>
+          {/* Dismiss keyboard button */}
+          <TouchableOpacity
+            style={styles.teamCodeDismissBtn}
+            activeOpacity={0.7}
+            onPress={() => Keyboard.dismiss()}
+          >
+            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
       </View>
@@ -744,6 +758,15 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 15,
     ...fonts.semibold,
+  },
+  teamCodeDismissBtn: {
+    backgroundColor: colors.bg,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
 
   // Footer actions (when teams exist)

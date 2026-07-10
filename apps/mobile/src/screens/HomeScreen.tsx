@@ -17,7 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getFollowedTeams, getScorekeeperEvents, unfollowTeam } from '../services/api';
-import { getUser, authFetch, User } from '../services/auth';
+import { getUser, authFetch, getActiveRole, User } from '../services/auth';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -56,6 +56,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const [userName, setUserName] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [activeRole, setActiveRoleState] = useState<string>('');
   const [teams, setTeams] = useState<FollowedTeam[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [scoringEvents, setScoringEvents] = useState<any[]>([]);
@@ -83,6 +84,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
       if (user?.name) setUserName(user.name);
       if (user?.roles) setUserRoles(user.roles);
+
+      // Load active role for role-aware UI
+      const savedRole = await getActiveRole();
+      if (savedRole && user?.roles?.includes(savedRole)) {
+        setActiveRoleState(savedRole);
+      } else if (user?.roles?.length) {
+        setActiveRoleState(user.roles[0]);
+      }
 
       // Only use scorekeeper data if user has that role
       if (user?.roles?.includes('scorekeeper') && Array.isArray(skEvents)) {
@@ -184,6 +193,11 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
   const firstName = userName ? userName.split(' ')[0] : '';
 
+  // Role-aware flags based on active role
+  const isScorekeeper = activeRole === 'scorekeeper';
+  const isParent = activeRole === 'parent';
+  const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRole);
+
   function handleUnfollowTeam(team: FollowedTeam) {
     Alert.alert(
       'Unfollow Team',
@@ -264,13 +278,13 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
           <TouchableOpacity
             style={styles.qaButton}
-            onPress={() => navigation.navigate('My Teams')}
+            onPress={() => navigation.navigate(isScorekeeper ? 'Scorekeeper' : 'My Teams')}
             activeOpacity={0.8}
           >
             <View style={styles.qaIconBox}>
-              <Ionicons name="shield" size={20} color={colors.white} />
+              <Ionicons name={isScorekeeper ? 'clipboard' : 'shield'} size={20} color={colors.white} />
             </View>
-            <Text style={styles.qaLabel}>My Teams</Text>
+            <Text style={styles.qaLabel}>{isScorekeeper ? 'My Scoring' : 'My Teams'}</Text>
             <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
 
@@ -315,122 +329,138 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={styles.scrollContent}
         ListHeaderComponent={
           <>
-            {/* Your Teams */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <View style={styles.sectionAccent} />
-                  <Text style={styles.sectionTitle}>YOUR TEAMS</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.seeAllBtn}
-                  onPress={() => navigation.navigate('My Teams')}
-                >
-                  <Text style={styles.seeAllText}>See All</Text>
-                  <Ionicons name="arrow-forward" size={14} color={colors.cyan} />
-                </TouchableOpacity>
-              </View>
-              {teams.length === 0 ? (
-                <TouchableOpacity
-                  style={styles.emptyCard}
-                  onPress={() => navigation.navigate('FollowTeams')}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.emptyBadge}>
-                    <Ionicons name="shield-outline" size={32} color={colors.cyan} />
-                  </View>
-                  <View style={styles.emptyContent}>
-                    <Text style={styles.emptyTitle}>Follow a Team</Text>
-                    <Text style={styles.emptyText}>
-                      Stay updated on schedules, scores & standings
-                    </Text>
-                  </View>
-                  <View style={styles.emptyArrow}>
-                    <Ionicons name="add-circle" size={28} color={colors.cyan} />
-                  </View>
-                </TouchableOpacity>
-              ) : (
-                teams.slice(0, 4).map((team, index) => (
-                  <View key={team.id} style={[styles.teamCard, index === 0 && styles.teamCardFirst]}>
-                    <TouchableOpacity
-                      style={styles.teamCardContent}
-                      activeOpacity={0.7}
-                      onPress={() => navigation.navigate('My Teams')}
-                    >
-                      <View style={styles.teamBadge}>
-                        {(team as any).logo_url ? (
-                          <Image source={{ uri: (team as any).logo_url }} style={styles.teamBadgeImg} />
-                        ) : (
-                          <Image source={require('../../assets/uht-logo.png')} style={styles.teamBadgeLogoFallback} resizeMode="contain" />
-                        )}
-                      </View>
-                      <View style={styles.teamInfo}>
-                        <Text style={styles.teamName}>{team.team_name}</Text>
-                        {team.org_name ? (
-                          <Text style={styles.teamOrg} numberOfLines={1}>{team.org_name}</Text>
-                        ) : null}
-                      </View>
-                      {team.age_group ? (
-                        <View style={styles.agePill}>
-                          <Text style={styles.agePillText}>{team.age_group}</Text>
-                        </View>
-                      ) : null}
-                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.unfollowBtn}
-                      onPress={() => handleUnfollowTeam(team)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons name="close-circle" size={22} color="#8e919e" />
-                    </TouchableOpacity>
-                  </View>
-                ))
-              )}
-            </View>
-
-            {/* Scorekeeper Assignments (only for scorekeeper role) */}
-            {userRoles.includes('scorekeeper') && scoringEvents.length > 0 && (
+            {/* SCOREKEEPER HOME: assigned events as primary content */}
+            {isScorekeeper && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <View style={styles.sectionTitleRow}>
                     <View style={[styles.sectionAccent, { backgroundColor: '#34c759' }]} />
-                    <Text style={styles.sectionTitle}>MY SCORING</Text>
+                    <Text style={styles.sectionTitle}>MY SCORING ASSIGNMENTS</Text>
                   </View>
-                  <TouchableOpacity
-                    style={styles.seeAllBtn}
-                    onPress={() => navigation.navigate('Scorekeeper')}
-                  >
-                    <Text style={styles.seeAllText}>View All</Text>
-                    <Ionicons name="arrow-forward" size={14} color={colors.cyan} />
-                  </TouchableOpacity>
                 </View>
-                {scoringEvents.slice(0, 2).map((event: any) => (
-                  <TouchableOpacity
-                    key={event.id}
-                    style={styles.teamCard}
-                    activeOpacity={0.7}
-                    onPress={() => navigation.navigate('Scorekeeper')}
-                  >
-                    <View style={[styles.teamBadge, { backgroundColor: '#34c759' }]}>
-                      <Ionicons name="clipboard" size={18} color={colors.white} />
+                {scoringEvents.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <View style={[styles.emptyBadge, { backgroundColor: '#e8f5e9' }]}>
+                      <Ionicons name="clipboard-outline" size={32} color="#34c759" />
                     </View>
-                    <View style={styles.teamInfo}>
-                      <Text style={styles.teamName} numberOfLines={1}>{event.name}</Text>
-                      <Text style={styles.teamOrg}>{event.game_count} games assigned</Text>
+                    <View style={styles.emptyContent}>
+                      <Text style={styles.emptyTitle}>No Assignments Yet</Text>
+                      <Text style={styles.emptyText}>
+                        An admin will assign you to events and games
+                      </Text>
                     </View>
-                    {event.active_games > 0 && (
-                      <View style={[styles.agePill, { backgroundColor: '#e8f5e9', borderColor: '#34c759' }]}>
-                        <Text style={[styles.agePillText, { color: '#2e7d32' }]}>{event.active_games} live</Text>
+                  </View>
+                ) : (
+                  scoringEvents.map((event: any) => (
+                    <TouchableOpacity
+                      key={event.id}
+                      style={styles.scorekeeperEventCard}
+                      activeOpacity={0.7}
+                      onPress={() => navigation.navigate('Scorekeeper', { eventId: event.id, eventName: event.name })}
+                    >
+                      <View style={[styles.teamBadge, { backgroundColor: '#34c759' }]}>
+                        <Ionicons name="clipboard" size={20} color={colors.white} />
                       </View>
-                    )}
-                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
-                  </TouchableOpacity>
-                ))}
+                      <View style={styles.teamInfo}>
+                        <Text style={styles.teamName} numberOfLines={1}>{event.name}</Text>
+                        <Text style={styles.teamOrg}>{event.game_count} games assigned</Text>
+                        {event.start_date && (
+                          <Text style={[styles.teamOrg, { marginTop: 2 }]}>
+                            {formatDateRange(event.start_date, event.end_date || event.start_date)}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={{ alignItems: 'center' }}>
+                        {event.active_games > 0 && (
+                          <View style={[styles.agePill, { backgroundColor: '#e8f5e9', borderColor: '#34c759', marginBottom: 4 }]}>
+                            <Text style={[styles.agePillText, { color: '#2e7d32' }]}>{event.active_games} live</Text>
+                          </View>
+                        )}
+                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
               </View>
             )}
 
-            {/* Upcoming Events — KEEP AS-IS (Chad likes this section) */}
+            {/* Your Teams — show for coach and parent, not scorekeeper primary */}
+            {!isScorekeeper && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleRow}>
+                    <View style={styles.sectionAccent} />
+                    <Text style={styles.sectionTitle}>YOUR TEAMS</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.seeAllBtn}
+                    onPress={() => navigation.navigate('My Teams')}
+                  >
+                    <Text style={styles.seeAllText}>See All</Text>
+                    <Ionicons name="arrow-forward" size={14} color={colors.cyan} />
+                  </TouchableOpacity>
+                </View>
+                {teams.length === 0 ? (
+                  <TouchableOpacity
+                    style={styles.emptyCard}
+                    onPress={() => navigation.navigate('FollowTeams')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.emptyBadge}>
+                      <Ionicons name="shield-outline" size={32} color={colors.cyan} />
+                    </View>
+                    <View style={styles.emptyContent}>
+                      <Text style={styles.emptyTitle}>Follow a Team</Text>
+                      <Text style={styles.emptyText}>
+                        Stay updated on schedules, scores & standings
+                      </Text>
+                    </View>
+                    <View style={styles.emptyArrow}>
+                      <Ionicons name="add-circle" size={28} color={colors.cyan} />
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  teams.slice(0, 4).map((team, index) => (
+                    <View key={team.id} style={[styles.teamCard, index === 0 && styles.teamCardFirst]}>
+                      <TouchableOpacity
+                        style={styles.teamCardContent}
+                        activeOpacity={0.7}
+                        onPress={() => navigation.navigate('My Teams')}
+                      >
+                        <View style={styles.teamBadge}>
+                          {(team as any).logo_url ? (
+                            <Image source={{ uri: (team as any).logo_url }} style={styles.teamBadgeImg} />
+                          ) : (
+                            <Image source={require('../../assets/uht-logo.png')} style={styles.teamBadgeLogoFallback} resizeMode="contain" />
+                          )}
+                        </View>
+                        <View style={styles.teamInfo}>
+                          <Text style={styles.teamName}>{team.team_name}</Text>
+                          {team.org_name ? (
+                            <Text style={styles.teamOrg} numberOfLines={1}>{team.org_name}</Text>
+                          ) : null}
+                        </View>
+                        {team.age_group ? (
+                          <View style={styles.agePill}>
+                            <Text style={styles.agePillText}>{team.age_group}</Text>
+                          </View>
+                        ) : null}
+                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.unfollowBtn}
+                        onPress={() => handleUnfollowTeam(team)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons name="close-circle" size={22} color="#8e919e" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
+            {/* Upcoming Events */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionTitleRow}>
@@ -778,6 +808,22 @@ const styles = StyleSheet.create({
     color: colors.cyanDark,
     ...fonts.bold,
     letterSpacing: 0.3,
+  },
+
+  // ==========================================
+  // SCOREKEEPER EVENT CARD
+  // ==========================================
+  scorekeeperEventCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: spacing.lg,
+    borderLeftWidth: 4,
+    borderLeftColor: '#34c759',
   },
 
   // ==========================================
