@@ -6,11 +6,13 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, User } from '../services/auth';
+import { unfollowTeam } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface Team {
@@ -78,12 +80,35 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     fetchTeams(true);
   }
 
+  function handleUnfollowTeam(team: Team) {
+    Alert.alert(
+      'Unfollow Team',
+      `Are you sure you want to unfollow ${team.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unfollow',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await unfollowTeam(team.id);
+              setTeams((prev) => prev.filter((t) => t.id !== team.id));
+            } catch {
+              Alert.alert('Error', 'Failed to unfollow team. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
   function renderTeamCard({ item }: { item: Team }) {
     return (
       <TouchableOpacity
         style={styles.teamCard}
         activeOpacity={0.7}
         onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
+        onLongPress={() => handleUnfollowTeam(item)}
       >
         <View style={styles.teamCardRow}>
           <View style={{ flex: 1 }}>

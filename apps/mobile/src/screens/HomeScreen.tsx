@@ -10,12 +10,13 @@ import {
   Image,
   ImageBackground,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getFollowedTeams, getScorekeeperEvents } from '../services/api';
+import { getFollowedTeams, getScorekeeperEvents, unfollowTeam } from '../services/api';
 import { getUser, authFetch, User } from '../services/auth';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -183,6 +184,32 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
   const firstName = userName ? userName.split(' ')[0] : '';
 
+  function handleUnfollowTeam(team: FollowedTeam) {
+    Alert.alert(
+      'Unfollow Team',
+      `Are you sure you want to unfollow ${team.team_name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unfollow',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const teamId = team.team_id || team.id;
+              await unfollowTeam(teamId);
+              setTeams((prev) => prev.filter((t) => (t.team_id || t.id) !== teamId));
+              // Refresh data to update upcoming events too
+              lastLoadRef.current = 0;
+              loadData(true);
+            } catch {
+              Alert.alert('Error', 'Failed to unfollow team. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
   // --------------- Hero Banner ---------------
   function HeroBanner() {
     return (
@@ -329,6 +356,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     style={[styles.teamCard, index === 0 && styles.teamCardFirst]}
                     activeOpacity={0.7}
                     onPress={() => navigation.navigate('My Teams')}
+                    onLongPress={() => handleUnfollowTeam(team)}
                   >
                     <View style={styles.teamBadge}>
                       <Text style={styles.teamBadgeText}>
