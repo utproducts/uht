@@ -175,7 +175,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         asset.uri,
         {
           httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          uploadType: 1 as any, // FileSystemUploadType.MULTIPART
           fieldName: 'logo',
           mimeType,
           headers: {

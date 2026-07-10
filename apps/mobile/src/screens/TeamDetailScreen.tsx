@@ -133,7 +133,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
         asset.uri,
         {
           httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          uploadType: 1 as any, // FileSystemUploadType.MULTIPART
           fieldName: 'logo',
           mimeType,
           headers: {
