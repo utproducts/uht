@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,8 @@ interface Team {
   state: string;
   organization_name: string;
   head_coach_name: string;
+  logo_url?: string;
+  player_count?: number;
 }
 
 export default function MyTeamsScreen({ navigation }: { navigation: any }) {
@@ -110,50 +113,82 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
         onLongPress={() => handleUnfollowTeam(item)}
       >
-        <View style={styles.teamCardRow}>
-          <View style={{ flex: 1 }}>
-            {/* Age Group Badge */}
-            <View style={styles.badgeRow}>
-              <View style={styles.ageGroupBadge}>
-                <Text style={styles.ageGroupText}>{item.age_group}</Text>
-              </View>
-            </View>
-
-            {/* Team Name */}
-            <Text style={styles.teamName}>{item.name}</Text>
-
-            {/* Location */}
-            <View style={styles.locationRow}>
-              {item.state ? (
-                <View style={styles.stateBadge}>
-                  <Text style={styles.stateBadgeText}>{item.state}</Text>
-                </View>
-              ) : null}
-              {item.city ? (
-                <Text style={styles.cityText}>{item.city}</Text>
-              ) : null}
-            </View>
-
-            {/* Divider */}
-            <View style={styles.divider} />
-
-            {/* Details */}
-            <View style={styles.detailsRow}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Coach</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {item.head_coach_name || '--'}
-                </Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Division</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {item.division_level || '--'}
-                </Text>
-              </View>
-            </View>
+        {/* Logo + Edit Pencil */}
+        <View style={styles.logoSection}>
+          <View style={styles.logoContainer}>
+            {item.logo_url ? (
+              <Image source={{ uri: item.logo_url }} style={styles.teamLogo} />
+            ) : (
+              <Image source={require('../../assets/uht-logo.png')} style={styles.teamLogoFallback} resizeMode="contain" />
+            )}
           </View>
-          <Ionicons name="chevron-forward" size={22} color={colors.textMuted} style={{ marginLeft: spacing.sm }} />
+          <TouchableOpacity
+            style={styles.editPencil}
+            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="pencil" size={14} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Age Group + Division Pills */}
+        <View style={styles.badgeRow}>
+          <View style={styles.ageGroupBadge}>
+            <Text style={styles.ageGroupText}>{item.age_group}</Text>
+          </View>
+          {item.division_level ? (
+            <View style={styles.divisionBadge}>
+              <Text style={styles.divisionBadgeText}>{item.division_level}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Team Name */}
+        <Text style={styles.teamName}>{item.name}</Text>
+
+        {/* Location + Org */}
+        {(item.city || item.organization_name) ? (
+          <View style={styles.metaSection}>
+            {item.city ? (
+              <View style={styles.metaRow}>
+                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.metaText}>{item.city}{item.state ? `, ${item.state}` : ''}</Text>
+              </View>
+            ) : null}
+            {item.organization_name ? (
+              <View style={styles.metaRow}>
+                <Ionicons name="business-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.metaText}>{item.organization_name}</Text>
+              </View>
+            ) : null}
+            {item.head_coach_name ? (
+              <View style={styles.metaRow}>
+                <Ionicons name="person-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.metaText}>Coach {item.head_coach_name}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Bottom actions row */}
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.cardActionBtn}
+            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, initialTab: 'share' } as never)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="link-outline" size={16} color={colors.navy} />
+            <Text style={styles.cardActionText}>Share Code</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cardActionBtn}
+            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, initialTab: 'roster' } as never)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="link-outline" size={16} color={colors.navy} />
+            <Text style={styles.cardActionText}>Roster Link</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -243,7 +278,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         <ScreenHeader
           title="My Teams"
           showBack
-          onBack={() => navigation.navigate('Menu')}
+          onBack={() => navigation.goBack()}
           rightAction={renderHeaderRight()}
         />
         <View style={styles.loadingContainer}>
@@ -258,7 +293,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <ScreenHeader
         title="My Teams"
         showBack
-        onBack={() => navigation.navigate('Menu')}
+        onBack={() => navigation.goBack()}
         rightAction={renderHeaderRight()}
       />
       <FlatList
@@ -318,18 +353,54 @@ const styles = StyleSheet.create({
   // Team card
   teamCard: {
     backgroundColor: colors.card,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    alignItems: 'center' as const,
   },
-  teamCardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  logoSection: {
+    position: 'relative' as const,
+    marginBottom: spacing.md,
+  },
+  logoContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.bg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed' as any,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    overflow: 'hidden' as const,
+  },
+  teamLogo: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+  },
+  teamLogoFallback: {
+    width: 48,
+    height: 48,
+  },
+  editPencil: {
+    position: 'absolute' as const,
+    bottom: 0,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.navy,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderWidth: 2,
+    borderColor: colors.card,
   },
   badgeRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
   ageGroupBadge: {
@@ -342,62 +413,65 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 12,
     ...fonts.bold,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  divisionBadge: {
+    backgroundColor: colors.navy,
+    borderRadius: radii.xs,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs,
+  },
+  divisionBadgeText: {
+    color: colors.white,
+    fontSize: 12,
+    ...fonts.bold,
+    textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
   },
   teamName: {
     fontSize: 20,
     color: colors.text,
     ...fonts.bold,
+    textAlign: 'center' as const,
     marginBottom: spacing.sm,
   },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  metaSection: {
+    alignSelf: 'stretch' as const,
+    gap: spacing.xs + 2,
     marginBottom: spacing.md,
   },
-  stateBadge: {
-    backgroundColor: colors.bg,
-    borderRadius: radii.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs - 1,
-    borderWidth: 1,
-    borderColor: colors.border,
+  metaRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: spacing.xs,
   },
-  stateBadgeText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    ...fonts.semibold,
-  },
-  cityText: {
+  metaText: {
     fontSize: 14,
     color: colors.textSecondary,
     ...fonts.regular,
   },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
+  cardActions: {
+    flexDirection: 'row' as const,
+    alignSelf: 'stretch' as const,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    marginTop: spacing.xs,
   },
-  detailsRow: {
-    flexDirection: 'row',
-  },
-  detailItem: {
+  cardActionBtn: {
     flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
   },
-  detailLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
+  cardActionText: {
+    fontSize: 14,
+    color: colors.navy,
     ...fonts.semibold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
-  },
-  detailValue: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.medium,
   },
 
   // Empty state

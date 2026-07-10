@@ -133,7 +133,6 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
       const res = await authFetch(`/api/teams/${teamId}/logo`, {
         method: 'POST',
         body: formData,
-        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       const json = await res.json() as any;

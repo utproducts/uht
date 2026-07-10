@@ -538,7 +538,6 @@ export default function CreateTeamScreen({
       const res = await authFetch(`/api/teams/${createdTeamId}/logo`, {
         method: 'POST',
         body: formData,
-        headers: { 'Content-Type': 'multipart/form-data' },
       });
       const json = await res.json() as any;
       if (json.success && json.data?.logo_url) {

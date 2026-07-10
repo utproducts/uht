@@ -106,10 +106,12 @@ export async function login(email: string, password: string): Promise<{ success:
 
 export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getToken();
+  const isFormData = options.body instanceof FormData;
   return fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      // Don't set Content-Type for FormData — let React Native auto-set with boundary
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },

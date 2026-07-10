@@ -359,9 +359,11 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                     onLongPress={() => handleUnfollowTeam(team)}
                   >
                     <View style={styles.teamBadge}>
-                      <Text style={styles.teamBadgeText}>
-                        {(team.team_name || '?')[0].toUpperCase()}
-                      </Text>
+                      {(team as any).logo_url ? (
+                        <Image source={{ uri: (team as any).logo_url }} style={styles.teamBadgeImg} />
+                      ) : (
+                        <Image source={require('../../assets/uht-logo.png')} style={styles.teamBadgeLogoFallback} resizeMode="contain" />
+                      )}
                     </View>
                     <View style={styles.teamInfo}>
                       <Text style={styles.teamName}>{team.team_name}</Text>
@@ -718,6 +720,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.white,
     ...fonts.extrabold,
+  },
+  teamBadgeImg: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+  },
+  teamBadgeLogoFallback: {
+    width: 32,
+    height: 32,
   },
   teamInfo: {
     flex: 1,
