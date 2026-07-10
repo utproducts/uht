@@ -19,7 +19,7 @@ import * as FileSystem from 'expo-file-system';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, getToken } from '../services/auth';
 import { API_URL } from '../constants/api';
-import { getOrganizationsByState, searchOrganizations, getLookupValues, getStateDivisionLevels } from '../services/api';
+import { getOrganizationsByState, searchOrganizations, getLookupValues, getStateDivisionLevels, getTeamsByOrgDivision } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 const US_STATES = [
@@ -107,6 +107,12 @@ export default function CreateTeamScreen({
   } | null>(null);
   const [joiningDuplicate, setJoiningDuplicate] = useState(false);
 
+  // Existing team review step state (duplicate prevention)
+  const [existingTeams, setExistingTeams] = useState<any[]>([]);
+  const [loadingExistingTeams, setLoadingExistingTeams] = useState(false);
+  const [reviewedExistingTeams, setReviewedExistingTeams] = useState(false);
+  const [hasSearchedTeams, setHasSearchedTeams] = useState(false);
+
   // Logo upload step state
   const [showLogoStep, setShowLogoStep] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -192,6 +198,29 @@ export default function CreateTeamScreen({
       }
     })();
   }, [state]);
+
+  // Reset existing teams review when selections change
+  useEffect(() => {
+    setExistingTeams([]);
+    setReviewedExistingTeams(false);
+    setHasSearchedTeams(false);
+  }, [selectedOrgId, ageGroup, divisionLevel]);
+
+  // Fetch existing teams for review when age group is selected (and optionally division)
+  async function loadExistingTeams() {
+    if (!selectedOrgId || !ageGroup) return;
+    setLoadingExistingTeams(true);
+    setHasSearchedTeams(false);
+    try {
+      const teams = await getTeamsByOrgDivision(selectedOrgId, ageGroup, divisionLevel || undefined);
+      setExistingTeams(teams || []);
+    } catch {
+      setExistingTeams([]);
+    } finally {
+      setLoadingExistingTeams(false);
+      setHasSearchedTeams(true);
+    }
+  }
 
   // Org search handler
   const handleOrgSearch = useCallback(async () => {
@@ -1336,8 +1365,107 @@ export default function CreateTeamScreen({
             </>
           ) : null}
 
-          {/* 5. Team Name (show after org is selected) */}
-          {selectedOrgId ? (
+          {/* 5. Existing Team Review (show after age group selected, BEFORE team name) */}
+          {ageGroup && selectedOrgId && !reviewedExistingTeams ? (
+            <>
+              <View style={styles.sectionDivider} />
+              <View style={reviewStyles.reviewSection}>
+                <Ionicons name="search" size={24} color={colors.navy} />
+                <Text style={reviewStyles.reviewTitle}>Check for Existing Teams</Text>
+                <Text style={reviewStyles.reviewDesc}>
+                  Before creating a new team, let's make sure your team doesn't already exist for {selectedOrgName} — {ageGroup}{divisionLevel ? ` — ${divisionLevel}` : ''}.
+                </Text>
+                <TouchableOpacity
+                  style={reviewStyles.reviewButton}
+                  onPress={loadExistingTeams}
+                  disabled={loadingExistingTeams}
+                  activeOpacity={0.8}
+                >
+                  {loadingExistingTeams ? (
+                    <ActivityIndicator color={colors.white} size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="people-outline" size={18} color={colors.white} />
+                      <Text style={reviewStyles.reviewButtonText}>Show Existing Teams</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Existing teams list */}
+                {hasSearchedTeams && existingTeams.length > 0 ? (
+                  <View style={reviewStyles.teamsList}>
+                    <Text style={reviewStyles.teamsListTitle}>
+                      {existingTeams.length} team{existingTeams.length !== 1 ? 's' : ''} found
+                    </Text>
+                    {existingTeams.map((team: any) => (
+                      <View key={team.id} style={reviewStyles.teamCard}>
+                        <View style={reviewStyles.teamCardTop}>
+                          <Ionicons name="people" size={20} color={colors.navy} />
+                          <View style={{ flex: 1, marginLeft: 10 }}>
+                            <Text style={reviewStyles.teamCardName}>{team.name}</Text>
+                            <Text style={reviewStyles.teamCardMeta}>
+                              {team.age_group}{team.division_level ? ` · ${team.division_level}` : ''}
+                              {team.player_count ? ` · ${team.player_count} players` : ''}
+                            </Text>
+                            {team.head_coach_name ? (
+                              <Text style={reviewStyles.teamCardCoach}>Coach: {team.head_coach_name}</Text>
+                            ) : null}
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={reviewStyles.joinTeamBtn}
+                          onPress={() => {
+                            setDuplicateTeam({
+                              id: team.id,
+                              name: team.name,
+                              ageGroup: team.age_group,
+                              city: team.city,
+                              state: team.state,
+                              inviteCode: team.invite_code,
+                              headCoachName: team.head_coach_name,
+                              playerCount: team.player_count,
+                            });
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="log-in-outline" size={16} color={colors.navy} />
+                          <Text style={reviewStyles.joinTeamBtnText}>This Is My Team</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+
+                    <TouchableOpacity
+                      style={reviewStyles.notListedBtn}
+                      onPress={() => setReviewedExistingTeams(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color={colors.cyan} />
+                      <Text style={reviewStyles.notListedBtnText}>My team is not listed — create new</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {/* No existing teams found */}
+                {hasSearchedTeams && existingTeams.length === 0 ? (
+                  <View style={reviewStyles.noTeamsFound}>
+                    <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                    <Text style={reviewStyles.noTeamsText}>No existing teams found. You're clear to create!</Text>
+                    <TouchableOpacity
+                      style={reviewStyles.continueBtn}
+                      onPress={() => setReviewedExistingTeams(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={reviewStyles.continueBtnText}>Continue</Text>
+                      <Ionicons name="arrow-forward" size={18} color={colors.white} />
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          {/* 6. Team Name (show after reviewed existing teams) */}
+          {reviewedExistingTeams && selectedOrgId ? (
             <>
               <View style={styles.sectionDivider} />
               <Text style={styles.label}>Team Name *</Text>
@@ -1352,8 +1480,8 @@ export default function CreateTeamScreen({
             </>
           ) : null}
 
-          {/* Coach Info Section (show after org is selected) */}
-          {selectedOrgId ? (
+          {/* Coach Info Section (show after reviewed existing teams) */}
+          {reviewedExistingTeams && selectedOrgId ? (
             <>
               <View style={styles.sectionDivider} />
               <Text style={styles.sectionTitle}>Head Coach Info</Text>
@@ -2062,6 +2190,147 @@ const logoStyles = StyleSheet.create({
     fontSize: 13,
     color: colors.cyan,
     ...fonts.semibold,
+  },
+});
+
+const reviewStyles = StyleSheet.create({
+  reviewSection: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  reviewTitle: {
+    ...fonts.bold,
+    fontSize: 18,
+    color: colors.navy,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  reviewDesc: {
+    ...fonts.regular,
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.md,
+    lineHeight: 20,
+  },
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 8,
+    width: '100%',
+  },
+  reviewButtonText: {
+    ...fonts.semibold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  teamsList: {
+    width: '100%',
+    marginTop: spacing.lg,
+  },
+  teamsListTitle: {
+    ...fonts.semibold,
+    fontSize: 14,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  teamCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  teamCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  teamCardName: {
+    ...fonts.semibold,
+    fontSize: 16,
+    color: colors.navy,
+  },
+  teamCardMeta: {
+    ...fonts.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  teamCardCoach: {
+    ...fonts.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  joinTeamBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: radii.sm,
+    paddingVertical: 10,
+    marginTop: spacing.sm,
+    gap: 6,
+  },
+  joinTeamBtnText: {
+    ...fonts.semibold,
+    fontSize: 14,
+    color: colors.navy,
+  },
+  notListedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    marginTop: spacing.sm,
+    gap: 8,
+    borderWidth: 2,
+    borderColor: colors.cyan,
+    borderRadius: radii.md,
+    borderStyle: 'dashed',
+  },
+  notListedBtnText: {
+    ...fonts.semibold,
+    fontSize: 14,
+    color: colors.cyan,
+  },
+  noTeamsFound: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  noTeamsText: {
+    ...fonts.regular,
+    fontSize: 14,
+    color: colors.success,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  continueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    marginTop: spacing.md,
+    gap: 8,
+  },
+  continueBtnText: {
+    ...fonts.semibold,
+    fontSize: 15,
+    color: colors.white,
   },
 });
 

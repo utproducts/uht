@@ -703,6 +703,41 @@ teamRoutes.post('/admin/purge-no-contact', authMiddleware, requireRole('admin'),
 });
 
 // ==================
+// PUBLIC: Get existing teams by org + age group + division level (for duplicate prevention)
+// ==================
+teamRoutes.get('/by-org-division', async (c) => {
+  const db = c.env.DB;
+  const orgId = c.req.query('orgId');
+  const ageGroup = c.req.query('ageGroup');
+  const divisionLevel = c.req.query('divisionLevel');
+
+  if (!orgId || !ageGroup) {
+    return c.json({ success: true, data: [] });
+  }
+
+  let sql = `
+    SELECT t.id, t.name, t.age_group, t.division_level, t.city, t.state,
+           t.head_coach_name, t.invite_code,
+           o.name as organization_name,
+           (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count
+    FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
+    WHERE t.organization_id = ? AND t.age_group = ? AND t.is_active = 1 AND t.created_by IS NOT NULL
+  `;
+  const params: any[] = [orgId, ageGroup];
+
+  if (divisionLevel) {
+    sql += ` AND t.division_level = ?`;
+    params.push(divisionLevel);
+  }
+
+  sql += ` ORDER BY t.name ASC`;
+
+  const result = await db.prepare(sql).bind(...params).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
 // PUBLIC: Get active teams for an organization (for mobile app team follow)
 // ==================
 teamRoutes.get('/by-org/:orgId', async (c) => {

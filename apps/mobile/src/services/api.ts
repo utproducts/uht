@@ -42,6 +42,14 @@ export async function getTeamsByOrg(orgId: string) {
   return json.success ? json.data : [];
 }
 
+export async function getTeamsByOrgDivision(orgId: string, ageGroup: string, divisionLevel?: string) {
+  let url = `https://uht.chad-157.workers.dev/api/teams/by-org-division?orgId=${encodeURIComponent(orgId)}&ageGroup=${encodeURIComponent(ageGroup)}`;
+  if (divisionLevel) url += `&divisionLevel=${encodeURIComponent(divisionLevel)}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  return json.success ? json.data : [];
+}
+
 export async function searchTeams(query: string) {
   const res = await fetch(`https://uht.chad-157.workers.dev/api/teams/search?q=${encodeURIComponent(query)}`);
   const json = await res.json();
