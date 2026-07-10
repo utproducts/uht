@@ -351,33 +351,40 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 </TouchableOpacity>
               ) : (
                 teams.slice(0, 4).map((team, index) => (
-                  <TouchableOpacity
-                    key={team.id}
-                    style={[styles.teamCard, index === 0 && styles.teamCardFirst]}
-                    activeOpacity={0.7}
-                    onPress={() => navigation.navigate('My Teams')}
-                    onLongPress={() => handleUnfollowTeam(team)}
-                  >
-                    <View style={styles.teamBadge}>
-                      {(team as any).logo_url ? (
-                        <Image source={{ uri: (team as any).logo_url }} style={styles.teamBadgeImg} />
-                      ) : (
-                        <Image source={require('../../assets/uht-logo.png')} style={styles.teamBadgeLogoFallback} resizeMode="contain" />
-                      )}
-                    </View>
-                    <View style={styles.teamInfo}>
-                      <Text style={styles.teamName}>{team.team_name}</Text>
-                      {team.org_name ? (
-                        <Text style={styles.teamOrg} numberOfLines={1}>{team.org_name}</Text>
-                      ) : null}
-                    </View>
-                    {team.age_group ? (
-                      <View style={styles.agePill}>
-                        <Text style={styles.agePillText}>{team.age_group}</Text>
+                  <View key={team.id} style={[styles.teamCard, index === 0 && styles.teamCardFirst]}>
+                    <TouchableOpacity
+                      style={styles.teamCardContent}
+                      activeOpacity={0.7}
+                      onPress={() => navigation.navigate('My Teams')}
+                    >
+                      <View style={styles.teamBadge}>
+                        {(team as any).logo_url ? (
+                          <Image source={{ uri: (team as any).logo_url }} style={styles.teamBadgeImg} />
+                        ) : (
+                          <Image source={require('../../assets/uht-logo.png')} style={styles.teamBadgeLogoFallback} resizeMode="contain" />
+                        )}
                       </View>
-                    ) : null}
-                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
-                  </TouchableOpacity>
+                      <View style={styles.teamInfo}>
+                        <Text style={styles.teamName}>{team.team_name}</Text>
+                        {team.org_name ? (
+                          <Text style={styles.teamOrg} numberOfLines={1}>{team.org_name}</Text>
+                        ) : null}
+                      </View>
+                      {team.age_group ? (
+                        <View style={styles.agePill}>
+                          <Text style={styles.agePillText}>{team.age_group}</Text>
+                        </View>
+                      ) : null}
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.unfollowBtn}
+                      onPress={() => handleUnfollowTeam(team)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
                 ))
               )}
             </View>
@@ -695,7 +702,6 @@ const styles = StyleSheet.create({
   teamCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
-    padding: spacing.lg,
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
@@ -703,9 +709,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderLeftWidth: 4,
     borderLeftColor: colors.navy,
+    position: 'relative',
+  },
+  teamCardContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    paddingRight: spacing.xxl,
   },
   teamCardFirst: {
     borderLeftColor: colors.cyan,
+  },
+  unfollowBtn: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    padding: 2,
   },
   teamBadge: {
     width: 46,

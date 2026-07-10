@@ -218,7 +218,7 @@ export default function ShopScreen() {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProducts(); }} tintColor={colors.cyan} />}
     >
-      {/* Hero banner */}
+      {/* Hero banner — full-bleed like HomeScreen */}
       <ImageBackground
         source={require('../../assets/shop-hero.png')}
         style={styles.heroBanner}
@@ -230,7 +230,7 @@ export default function ShopScreen() {
         <View style={styles.heroCyanEdge} />
         {/* Content */}
         <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>UHT Locker Room</Text>
+          <Text style={styles.heroTitle}>UHT LOCKER ROOM</Text>
           <Text style={styles.heroSubtitle}>Official gear & merchandise</Text>
           <View style={styles.heroDivider} />
           <Text style={styles.heroTagline}>Rep your team. Own the ice.</Text>
@@ -720,14 +720,14 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // ── Hero ──
+  // ── Hero — full-bleed like HomeScreen ──
   heroBanner: {
-    borderRadius: radii.lg,
     overflow: 'hidden',
     marginBottom: spacing.lg,
-    paddingVertical: spacing.xxxl,
-    paddingHorizontal: spacing.xxl,
-    alignItems: 'center',
+    marginHorizontal: -spacing.lg,
+    marginTop: -spacing.lg,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.xxl,
     justifyContent: 'flex-end',
     minHeight: 200,
   },
@@ -747,8 +747,8 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: colors.cyan,
   },
-  heroContent: { alignItems: 'center', zIndex: 1 },
-  heroTitle: { fontSize: 26, color: colors.white, ...fonts.extrabold, letterSpacing: 1, textTransform: 'uppercase' },
+  heroContent: { alignItems: 'flex-start', zIndex: 1, paddingHorizontal: spacing.xl },
+  heroTitle: { fontSize: 26, color: colors.white, ...fonts.extrabold, letterSpacing: 1 },
   heroSubtitle: { fontSize: 14, color: colors.cyanLight, ...fonts.medium, marginTop: spacing.xs },
   heroDivider: {
     width: 50,
