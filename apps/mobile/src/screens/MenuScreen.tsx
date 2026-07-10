@@ -164,54 +164,94 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       }
 
       // Get or create UHT calendar
-      const calendars = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
-      let uhtCalendar = calendars.find(cal => cal.title === 'UHT Tournaments');
-
-      if (!uhtCalendar) {
-        uhtCalendar = await Calendar.createCalendar({
+      const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      let uhtCalendarId: string | undefined;
+      const existing = calendars.find(cal => cal.title === 'UHT Tournaments');
+      if (existing) {
+        uhtCalendarId = existing.id;
+      } else {
+        // Find a default calendar source
+        const defaultSource = calendars.find(cal => cal.source && cal.source.name === 'iCloud')?.source
+          || calendars.find(cal => cal.allowsModifications)?.source
+          || { isLocalAccount: true, name: 'UHT', type: Calendar.CalendarType.LOCAL as any };
+        uhtCalendarId = await Calendar.createCalendarAsync({
           title: 'UHT Tournaments',
           color: '#003e79',
           entityType: Calendar.EntityTypes.EVENT,
+          sourceId: (defaultSource as any).id,
+          source: defaultSource as any,
           name: 'uht-tournaments',
           ownerAccount: 'UHT',
           accessLevel: Calendar.CalendarAccessLevel.OWNER,
         });
       }
 
-      // Fetch user's followed team schedules
-      const res = await authFetch('/api/teams/my-teams');
-      const json = await res.json();
-      if (!json.success || !json.data?.length) {
-        Alert.alert('No Teams', 'Follow some teams first to sync their schedules.');
+      if (!uhtCalendarId) {
+        Alert.alert('Error', 'Could not create calendar.');
         return;
       }
 
-      // Fetch games for followed teams
       let totalAdded = 0;
-      for (const team of json.data) {
-        try {
-          const gamesRes = await authFetch(`/api/teams/${team.id}/games`);
-          const gamesJson = await gamesRes.json();
-          const games = gamesJson.data || gamesJson.games || [];
-          for (const game of games) {
-            if (!game.start_time) continue;
-            const start = new Date(game.start_time);
-            const end = new Date(start.getTime() + 90 * 60 * 1000); // 90 min default
-            try {
-              await uhtCalendar.createEvent({
-                title: `${game.home_team_name || 'Home'} vs ${game.away_team_name || 'Away'}`,
-                startDate: start,
-                endDate: end,
-                location: game.rink_name || game.venue_name || '',
-                notes: `Game #${game.game_number || ''} — ${[game.age_group, game.division_level].filter(Boolean).join(' ')}`,
-              });
-              totalAdded++;
-            } catch {}
-          }
-        } catch {}
-      }
 
-      Alert.alert('Calendar Synced', `Added ${totalAdded} game${totalAdded !== 1 ? 's' : ''} to your UHT Tournaments calendar.`);
+      // 1. Sync ALL UHT tournament events as multi-day calendar entries
+      try {
+        const eventsRes = await fetch('https://uht.chad-157.workers.dev/api/events?per_page=200');
+        const eventsJson = await eventsRes.json() as any;
+        const allEvents = eventsJson.success ? (eventsJson.data || []) : [];
+        for (const evt of allEvents) {
+          if (!evt.start_date) continue;
+          const start = new Date(evt.start_date + 'T08:00:00');
+          const end = evt.end_date
+            ? new Date(evt.end_date + 'T20:00:00')
+            : new Date(start.getTime() + 3 * 24 * 60 * 60 * 1000);
+          const location = [evt.city, evt.state].filter(Boolean).join(', ');
+          try {
+            await Calendar.createEventAsync(uhtCalendarId, {
+              title: evt.name || 'UHT Event',
+              startDate: start,
+              endDate: end,
+              allDay: true,
+              location,
+              notes: `Ultimate Hockey Tournaments\nhttps://ultimatetournaments.com/events/${evt.slug || evt.id}`,
+            });
+            totalAdded++;
+          } catch {}
+        }
+      } catch {}
+
+      // 2. Also sync individual games for followed teams
+      try {
+        const teamsRes = await authFetch('/api/teams/my-teams');
+        const teamsJson = await teamsRes.json() as any;
+        const teams = (teamsJson.success && Array.isArray(teamsJson.data)) ? teamsJson.data : [];
+        for (const team of teams) {
+          try {
+            const gamesRes = await authFetch(`/api/teams/${team.id}/games`);
+            const gamesJson = await gamesRes.json() as any;
+            const games = gamesJson.data || gamesJson.games || [];
+            for (const game of games) {
+              if (!game.start_time) continue;
+              const start = new Date(game.start_time);
+              const end = new Date(start.getTime() + 90 * 60 * 1000);
+              try {
+                await Calendar.createEventAsync(uhtCalendarId, {
+                  title: `${game.home_team_name || 'Home'} vs ${game.away_team_name || 'Away'}`,
+                  startDate: start,
+                  endDate: end,
+                  location: game.rink_name || game.venue_name || '',
+                  notes: `Game #${game.game_number || ''} — ${[game.age_group, game.division_level].filter(Boolean).join(' ')}`,
+                });
+                totalAdded++;
+              } catch {}
+            }
+          } catch {}
+        }
+      } catch {}
+
+      Alert.alert(
+        'Calendar Synced',
+        `Added ${totalAdded} item${totalAdded !== 1 ? 's' : ''} to your UHT Tournaments calendar (events + games).`,
+      );
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Calendar sync failed.');
     }

@@ -204,6 +204,16 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
         onLongPress={() => handleUnfollowTeam(item)}
       >
+        {/* Unfollow button */}
+        <TouchableOpacity
+          style={styles.unfollowBtn}
+          onPress={() => handleUnfollowTeam(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close-circle" size={22} color="#8e919e" />
+        </TouchableOpacity>
+
         {/* Logo + Edit Pencil */}
         <View style={styles.logoSection}>
           <View style={styles.logoContainer}>
@@ -501,6 +511,14 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
     alignItems: 'center' as const,
+    position: 'relative' as const,
+  },
+  unfollowBtn: {
+    position: 'absolute' as const,
+    top: spacing.xs,
+    right: spacing.xs,
+    padding: 4,
+    zIndex: 5,
   },
   logoSection: {
     position: 'relative' as const,

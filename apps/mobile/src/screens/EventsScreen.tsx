@@ -45,12 +45,22 @@ const STATE_ABBREV_TO_NAME: Record<string, string> = {
   VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
 };
 
+// Reverse map: full name → abbreviation
+const STATE_NAME_TO_ABBREV: Record<string, string> = {};
+for (const [abbrev, name] of Object.entries(STATE_ABBREV_TO_NAME)) {
+  STATE_NAME_TO_ABBREV[name.toUpperCase()] = abbrev;
+}
+
 function normalizeState(raw: string): string {
   const trimmed = raw.trim();
   const upper = trimmed.toUpperCase();
-  // If it's a 2-letter abbreviation, convert to full name
+  // If it's already a 2-letter abbreviation, return it
   if (upper.length === 2 && STATE_ABBREV_TO_NAME[upper]) {
-    return STATE_ABBREV_TO_NAME[upper];
+    return upper;
+  }
+  // If it's a full state name, convert to abbreviation
+  if (STATE_NAME_TO_ABBREV[upper]) {
+    return STATE_NAME_TO_ABBREV[upper];
   }
   // Otherwise return as-is with title case
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
