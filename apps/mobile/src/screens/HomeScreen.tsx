@@ -292,7 +292,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
           <TouchableOpacity
             style={styles.qaButton}
-            onPress={() => navigation.navigate(isScorekeeper ? 'Scorekeeper' : 'My Teams')}
+            onPress={() => navigation.navigate(isScorekeeper ? 'Menu' : 'My Teams', isScorekeeper ? { screen: 'Scorekeeper' } : undefined)}
             activeOpacity={0.8}
           >
             <View style={styles.qaIconBox}>
@@ -370,7 +370,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                       key={event.id}
                       style={styles.scorekeeperEventCard}
                       activeOpacity={0.7}
-                      onPress={() => navigation.navigate('Scorekeeper', { eventId: event.id, eventName: event.name })}
+                      onPress={() => navigation.navigate('Menu', { screen: 'Scorekeeper', params: { eventId: event.id, eventName: event.name } })}
                     >
                       <View style={[styles.teamBadge, { backgroundColor: '#34c759' }]}>
                         <Ionicons name="clipboard" size={20} color={colors.white} />

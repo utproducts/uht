@@ -29,6 +29,7 @@ import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
 
 const Stack = createNativeStackNavigator();
+const MenuStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
@@ -38,6 +39,34 @@ const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inacti
   Shop: { active: 'cart', inactive: 'cart-outline' },
   Menu: { active: 'menu', inactive: 'menu-outline' },
 };
+
+function MenuStackNavigator() {
+  return (
+    <MenuStack.Navigator screenOptions={{ headerShown: false }}>
+      <MenuStack.Screen name="MenuHome" component={MenuScreen} />
+      <MenuStack.Screen
+        name="Scorekeeper"
+        component={ScorekeeperScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MenuStack.Screen
+        name="AccountSettings"
+        component={AccountSettingsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MenuStack.Screen
+        name="NotificationSettings"
+        component={NotificationSettingsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MenuStack.Screen
+        name="AdminRegistrations"
+        component={AdminRegistrationsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+    </MenuStack.Navigator>
+  );
+}
 
 function MainTabs() {
   return (
@@ -68,7 +97,7 @@ function MainTabs() {
       <Tab.Screen name="Shop" component={ShopScreen} />
       <Tab.Screen
         name="Menu"
-        component={MenuScreen}
+        component={MenuStackNavigator}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
             // If Menu is already focused, navigate to Home instead
@@ -138,26 +167,6 @@ export default function AppNavigator() {
         <Stack.Screen
           name="CreateTeam"
           component={CreateTeamScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="Scorekeeper"
-          component={ScorekeeperScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="AccountSettings"
-          component={AccountSettingsScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="NotificationSettings"
-          component={NotificationSettingsScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="AdminRegistrations"
-          component={AdminRegistrationsScreen}
           options={{ headerShown: false, animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

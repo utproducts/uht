@@ -376,7 +376,7 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScreenHeader
-        title={viewMode === 'divisions' ? selectedEventName || 'Event' : 'My Scoring'}
+        title={viewMode === 'divisions' ? selectedEventName || 'Event' : 'Scorekeeper'}
         showBack={true}
         onBack={viewMode === 'divisions' ? goBackToEvents : () => navigation.goBack()}
       />
