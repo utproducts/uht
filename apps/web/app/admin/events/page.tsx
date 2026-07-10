@@ -6,6 +6,15 @@ const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
 const UPLOAD_API = 'https://uht.chad-157.workers.dev/api/upload/image';
 
+function adminHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('uht_token');
+    if (token) h['Authorization'] = `Bearer ${token}`;
+  }
+  return h;
+}
+
 interface EventItem {
   id: string;
   name: string;
@@ -588,7 +597,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${HOTEL_API}/link/${event.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ master_hotel_id: masterHotelId }),
       });
       const json = await res.json();
@@ -606,7 +615,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${API_BASE}/admin/event-hotels`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ event_id: event.id, ...newHotel, sort_order: hotels.length }),
       });
       const json = await res.json();
@@ -621,7 +630,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
   const handleDeleteHotel = async (hotelId: string) => {
     try {
-      await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, { method: 'DELETE', headers: adminHeaders() });
       setHotels(prev => prev.filter(h => h.id !== hotelId));
       // Un-mark from suggestions
       setSuggestedHotels(prev => prev.map(h => {
@@ -636,7 +645,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updates),
       });
       const json = await res.json();

@@ -15,7 +15,7 @@ import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as Calendar from 'expo-calendar';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { clearAuth, getUser, authFetch, User } from '../services/auth';
+import { clearAuth, getUser, authFetch, User, getActiveRole, setActiveRole, ROLE_LABELS, ROLE_ICONS } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface MenuGridItem {
@@ -53,12 +53,27 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myTeams, setMyTeams] = useState<ShareTeam[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
+  const [activeRole, setActiveRoleState] = useState<string>('');
 
   const lastLoadRef = React.useRef<number>(0);
   const STALE_MS = 30000; // 30 seconds
 
   useEffect(() => {
-    getUser().then(setCurrentUser);
+    (async () => {
+      const user = await getUser();
+      setCurrentUser(user);
+      if (user) {
+        const saved = await getActiveRole();
+        if (saved && user.roles?.includes(saved)) {
+          setActiveRoleState(saved);
+        } else {
+          // Default to first role
+          const defaultRole = user.roles?.[0] || 'parent';
+          setActiveRoleState(defaultRole);
+          await setActiveRole(defaultRole);
+        }
+      }
+    })();
   }, []);
 
   // Reload teams when screen focuses, but skip if loaded recently
@@ -85,17 +100,20 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     }, []),
   );
 
-  const isAdmin = currentUser?.roles?.some(r =>
+  // Role checks based on active role selection
+  const isAdmin = ['admin', 'tournament_director', 'director'].includes(activeRole);
+  const isScorekeeper = activeRole === 'scorekeeper';
+  const isCoach = ['coach', 'manager'].includes(activeRole) || isAdmin;
+
+  // Check if user HAS a role (regardless of active selection) for certain features
+  const hasAdminRole = currentUser?.roles?.some(r =>
     ['admin', 'tournament_director', 'director'].includes(r)
   ) || false;
 
-  const isScorekeeper = currentUser?.roles?.some(r =>
-    ['scorekeeper'].includes(r)
-  ) || false;
-
-  const isCoach = currentUser?.roles?.some(r =>
-    ['coach', 'manager', 'admin', 'director', 'tournament_director'].includes(r)
-  ) || false;
+  async function handleSwitchRole(role: string) {
+    setActiveRoleState(role);
+    await setActiveRole(role);
+  }
 
   function handleLogOut() {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -133,9 +151,10 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       onPress: () => navigation.navigate('My Teams'),
     },
     {
-      label: 'Team Stats',
-      icon: 'stats-chart-outline',
-      onPress: () => navigation.navigate('My Teams'),
+      label: 'Registrations',
+      icon: 'checkmark-done-outline',
+      adminOnly: true,
+      onPress: () => navigation.navigate('AdminRegistrations'),
     },
     {
       label: 'Assign Scorekeepers',
@@ -346,6 +365,50 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     return false;
   }
 
+  function renderRoleSwitcher() {
+    const roles = currentUser?.roles || [];
+    // Dedupe and normalize role names (tournament_director → director)
+    const uniqueRoles = [...new Set(roles.map(r => r === 'tournament_director' ? 'director' : r))];
+    if (uniqueRoles.length <= 1) return null;
+
+    const effectiveActive = activeRole === 'tournament_director' ? 'director' : activeRole;
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>SWITCH ROLE</Text>
+        <View style={styles.roleContainer}>
+          {uniqueRoles.map((role) => {
+            const isActive = role === effectiveActive;
+            const label = ROLE_LABELS[role] || role.charAt(0).toUpperCase() + role.slice(1);
+            const iconName = ROLE_ICONS[role] || 'person';
+            return (
+              <TouchableOpacity
+                key={role}
+                style={[styles.roleCard, isActive && styles.roleCardActive]}
+                onPress={() => handleSwitchRole(role)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={iconName as any}
+                  size={20}
+                  color={isActive ? colors.white : colors.navy}
+                />
+                <Text style={[styles.roleLabel, isActive && styles.roleLabelActive]} numberOfLines={1}>
+                  {label}
+                </Text>
+                {isActive && (
+                  <View style={styles.roleCheck}>
+                    <Ionicons name="checkmark-circle" size={16} color={colors.white} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
   function renderShareSection() {
     if (myTeams.length === 0 && !loadingTeams) return null;
 
@@ -505,6 +568,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {renderRoleSwitcher()}
         {renderShareSection()}
         {renderGridSection('MANAGE', MANAGE_ITEMS)}
         {renderGridSection('BROWSE', BROWSE_ITEMS)}
@@ -547,6 +611,39 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.xs,
     paddingHorizontal: 2,
+  },
+
+  // Role switcher
+  roleContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  roleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    gap: 6,
+  },
+  roleCardActive: {
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
+  },
+  roleLabel: {
+    fontSize: 13,
+    color: colors.navy,
+    ...fonts.semibold,
+  },
+  roleLabelActive: {
+    color: colors.white,
+  },
+  roleCheck: {
+    marginLeft: 2,
   },
 
   // Grid cards — compact 3-column layout

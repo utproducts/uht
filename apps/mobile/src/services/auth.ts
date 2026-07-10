@@ -3,6 +3,33 @@ import { API_URL } from '../constants/api';
 
 const TOKEN_KEY = 'uht_token';
 const USER_KEY = 'uht_user';
+const ACTIVE_ROLE_KEY = 'uht_active_role';
+
+export type UserRole = 'admin' | 'director' | 'organization' | 'coach' | 'manager' | 'parent' | 'scorekeeper' | 'referee';
+
+export const ROLE_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  director: 'Tournament Director',
+  tournament_director: 'Tournament Director',
+  organization: 'Organization',
+  coach: 'Coach',
+  manager: 'Team Manager',
+  parent: 'Parent / Player',
+  scorekeeper: 'Scorekeeper',
+  referee: 'Referee',
+};
+
+export const ROLE_ICONS: Record<string, string> = {
+  admin: 'shield',
+  director: 'flag',
+  tournament_director: 'flag',
+  organization: 'business',
+  coach: 'megaphone',
+  manager: 'clipboard',
+  parent: 'people',
+  scorekeeper: 'create',
+  referee: 'stopwatch',
+};
 
 export interface User {
   id: string;
@@ -30,9 +57,18 @@ export async function setUser(user: User): Promise<void> {
   await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
 }
 
+export async function getActiveRole(): Promise<string | null> {
+  return SecureStore.getItemAsync(ACTIVE_ROLE_KEY);
+}
+
+export async function setActiveRole(role: string): Promise<void> {
+  await SecureStore.setItemAsync(ACTIVE_ROLE_KEY, role);
+}
+
 export async function clearAuth(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
   await SecureStore.deleteItemAsync(USER_KEY);
+  await SecureStore.deleteItemAsync(ACTIVE_ROLE_KEY);
 }
 
 export async function signup(data: {

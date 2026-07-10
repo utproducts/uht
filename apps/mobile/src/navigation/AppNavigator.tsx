@@ -26,6 +26,7 @@ import RegisterEventScreen from '../screens/RegisterEventScreen';
 import ScorekeeperScreen from '../screens/ScorekeeperScreen';
 import AccountSettingsScreen from '../screens/AccountSettingsScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -152,6 +153,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="NotificationSettings"
           component={NotificationSettingsScreen}
+          options={{ headerShown: false, animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="AdminRegistrations"
+          component={AdminRegistrationsScreen}
           options={{ headerShown: false, animation: 'slide_from_right' }}
         />
       </Stack.Navigator>
