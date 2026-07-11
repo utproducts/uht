@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, getToken } from '../services/auth';
 import { API_URL } from '../constants/api';
@@ -608,21 +607,21 @@ export default function CreateTeamScreen({
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const token = await getToken();
 
-      // Use FileSystem.uploadAsync for native multipart upload
-      const uploadResult = await FileSystem.uploadAsync(
-        `${API_URL}/api/teams/${createdTeamId}/logo`,
+      const formData = new FormData();
+      formData.append('logo', {
         uri,
-        {
-          httpMethod: 'POST',
-          uploadType: 1 as any, // FileSystemUploadType.MULTIPART
-          fieldName: 'logo',
-          mimeType,
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
-      const json = JSON.parse(uploadResult.body) as any;
+        type: mimeType,
+        name: `logo.${ext}`,
+      } as any);
+
+      const uploadResult = await fetch(`${API_URL}/api/teams/${createdTeamId}/logo`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+      const json = await uploadResult.json() as any;
       if (json.success && json.data?.logo_url) {
         setLogoUrl(json.data.logo_url);
       } else {
