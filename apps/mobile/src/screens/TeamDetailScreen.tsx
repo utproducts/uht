@@ -267,6 +267,14 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
         <View style={styles.section} onLayout={(e) => { rosterYRef.current = e.nativeEvent.layout.y; }}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Roster ({roster.length})</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('CreateTeam', { editRosterTeamId: teamId, editRosterTeamName: team?.name || teamName })}
+              style={styles.manageRosterBtn}
+            >
+              <Ionicons name="add-circle-outline" size={16} color={colors.cyan} />
+              <Text style={styles.manageRosterText}>{roster.length > 0 ? 'Add More' : 'Add Players'}</Text>
+            </TouchableOpacity>
           </View>
           {roster.length > 0 ? (
             roster.map((player) => (
@@ -274,26 +282,50 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
                 <Text style={styles.jerseyNumber}>
                   {player.jersey_number || '--'}
                 </Text>
-                <Text style={styles.playerName}>
+                <Text style={styles.playerName} numberOfLines={1}>
                   {player.first_name} {player.last_name}
                 </Text>
                 {player.position ? (
                   <Text style={styles.playerPosition}>{player.position}</Text>
                 ) : null}
+                <TouchableOpacity
+                  style={styles.removePlayerBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => {
+                    Alert.alert(
+                      'Remove Player',
+                      `Remove ${player.first_name} ${player.last_name} from the roster?`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              const res = await authFetch(`/api/teams/${teamId}/players/${player.id}`, { method: 'DELETE' });
+                              const json = await res.json() as any;
+                              if (json.success) {
+                                setRoster((prev) => prev.filter((p) => p.id !== player.id));
+                              } else {
+                                Alert.alert('Error', json.error || 'Failed to remove player');
+                              }
+                            } catch {
+                              Alert.alert('Error', 'Failed to remove player');
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#8e919e" />
+                </TouchableOpacity>
               </View>
             ))
           ) : (
             <View style={styles.emptySection}>
               <Ionicons name="people-outline" size={32} color={colors.textMuted} />
               <Text style={styles.emptySectionText}>No players on roster yet</Text>
-              <TouchableOpacity
-                style={styles.addPlayersBtn}
-                activeOpacity={0.7}
-                onPress={() => navigation.navigate('CreateTeam', { editRosterTeamId: teamId, editRosterTeamName: team?.name || teamName })}
-              >
-                <Ionicons name="add-circle-outline" size={18} color={colors.white} />
-                <Text style={styles.addPlayersBtnText}>Add Players</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -527,6 +559,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     ...fonts.regular,
+    marginRight: spacing.sm,
+  },
+  removePlayerBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  manageRosterBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  manageRosterText: {
+    fontSize: 13,
+    color: colors.cyan,
+    ...fonts.semibold,
   },
 
   // Events

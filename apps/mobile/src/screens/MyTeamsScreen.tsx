@@ -284,16 +284,18 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           </View>
         ) : null}
 
-        {/* Add Roster prompt for coaches with no roster */}
-        {isCoach && (!item.player_count || item.player_count === 0) && (
+        {/* Roster management for coaches */}
+        {isCoach && (
           <TouchableOpacity
-            style={styles.addRosterBtn}
+            style={[styles.addRosterBtn, item.player_count > 0 && styles.manageRosterBtn]}
             onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, showRoster: true } as never)}
             activeOpacity={0.7}
           >
-            <Ionicons name="document-text-outline" size={16} color="#D97706" />
-            <Text style={styles.addRosterText}>Add Roster</Text>
-            <Ionicons name="chevron-forward" size={14} color="#D97706" />
+            <Ionicons name={item.player_count > 0 ? "people-outline" : "document-text-outline"} size={16} color={item.player_count > 0 ? colors.cyan : "#D97706"} />
+            <Text style={[styles.addRosterText, item.player_count > 0 && styles.manageRosterText]}>
+              {item.player_count > 0 ? `Roster (${item.player_count})` : 'Add Roster'}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={item.player_count > 0 ? colors.cyan : "#D97706"} />
           </TouchableOpacity>
         )}
 
@@ -663,6 +665,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 8,
     gap: 6,
+  },
+  manageRosterBtn: {
+    backgroundColor: 'rgba(0, 204, 255, 0.08)',
+  },
+  manageRosterText: {
+    color: colors.cyan,
   },
   addRosterText: {
     fontSize: 13,
