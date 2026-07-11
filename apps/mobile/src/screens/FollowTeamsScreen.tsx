@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -163,38 +163,45 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  // Search within selected state
-  const handleOrgSearch = useCallback(async () => {
-    if (!orgSearch.trim() || !selectedState) return;
-    setError('');
-    setLoadingOrgs(true);
-    try {
-      const results = await searchOrganizations(orgSearch.trim(), selectedState.code);
-      setOrgs(results);
-      if (results.length === 0) {
-        setError('No organizations found. Try a different search.');
-      }
-    } catch {
-      setError('Search failed. Please try again.');
-    } finally {
-      setLoadingOrgs(false);
-    }
-  }, [orgSearch, selectedState]);
+  // Debounced live org search as user types
+  const orgSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear search and reload all orgs for state
-  async function handleClearOrgSearch() {
-    setOrgSearch('');
-    if (!selectedState) return;
-    setLoadingOrgs(true);
-    try {
-      const results = await getOrganizationsByState(selectedState.code);
-      setOrgs(results);
-    } catch {
-      setError('Failed to load organizations.');
-    } finally {
-      setLoadingOrgs(false);
+  useEffect(() => {
+    if (!selectedState || screenState !== 'orgs') return;
+
+    if (orgSearchTimer.current) clearTimeout(orgSearchTimer.current);
+
+    const query = orgSearch.trim();
+
+    if (!query) {
+      setLoadingOrgs(true);
+      getOrganizationsByState(selectedState.code)
+        .then((results) => setOrgs(results))
+        .catch(() => setError('Failed to load organizations.'))
+        .finally(() => setLoadingOrgs(false));
+      return;
     }
-  }
+
+    orgSearchTimer.current = setTimeout(async () => {
+      setError('');
+      setLoadingOrgs(true);
+      try {
+        const results = await searchOrganizations(query, selectedState.code);
+        setOrgs(results);
+        if (results.length === 0) {
+          setError('No organizations found. Try a different search.');
+        }
+      } catch {
+        setError('Search failed. Please try again.');
+      } finally {
+        setLoadingOrgs(false);
+      }
+    }, 300);
+
+    return () => {
+      if (orgSearchTimer.current) clearTimeout(orgSearchTimer.current);
+    };
+  }, [orgSearch, selectedState, screenState]);
 
   async function handleSelectOrg(org: Organization) {
     setSelectedOrg(org);
@@ -440,39 +447,22 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
         </View>
 
         <View style={styles.searchSection}>
-          <View style={styles.searchRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, height: 44 }}>
+            <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
             <TextInput
-              style={styles.searchInput}
+              style={{ flex: 1, fontSize: 16, color: colors.text, padding: 0 }}
               value={orgSearch}
               onChangeText={setOrgSearch}
               placeholder="Search organizations..."
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              returnKeyType="search"
-              onSubmitEditing={handleOrgSearch}
             />
             {orgSearch.length > 0 ? (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={handleClearOrgSearch}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.clearButtonText}>Clear</Text>
+              <TouchableOpacity onPress={() => setOrgSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close-circle" size={20} color={colors.textMuted} />
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={handleOrgSearch}
-              disabled={loadingOrgs || !orgSearch.trim()}
-              activeOpacity={0.85}
-            >
-              {loadingOrgs ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.searchButtonText}>Search</Text>
-              )}
-            </TouchableOpacity>
           </View>
         </View>
 

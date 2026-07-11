@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -221,35 +221,46 @@ export default function CreateTeamScreen({
     }
   }
 
-  // Org search handler
-  const handleOrgSearch = useCallback(async () => {
-    if (!orgSearchQuery.trim() || !state) return;
-    setLoadingOrgs(true);
-    try {
-      const stateEntry = US_STATES.find((s) => s.code === state);
-      const results = await searchOrganizations(orgSearchQuery.trim(), stateEntry?.name || state);
-      setOrganizations(results || []);
-    } catch {
-      setOrganizations([]);
-    } finally {
-      setLoadingOrgs(false);
-    }
-  }, [orgSearchQuery, state]);
+  // Debounced live org search as user types
+  const orgSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleClearOrgSearch = useCallback(async () => {
-    setOrgSearchQuery('');
-    if (!state) return;
-    setLoadingOrgs(true);
-    try {
+  useEffect(() => {
+    if (!state || !showOrgPicker) return;
+
+    // Clear any pending debounce
+    if (orgSearchTimer.current) clearTimeout(orgSearchTimer.current);
+
+    const query = orgSearchQuery.trim();
+
+    // If empty query, reload all orgs for the state
+    if (!query) {
+      setLoadingOrgs(true);
       const stateEntry = US_STATES.find((s) => s.code === state);
-      const orgs = await getOrganizationsByState(stateEntry?.name || state);
-      setOrganizations(orgs || []);
-    } catch {
-      setOrganizations([]);
-    } finally {
-      setLoadingOrgs(false);
+      getOrganizationsByState(stateEntry?.name || state)
+        .then((orgs) => setOrganizations(orgs || []))
+        .catch(() => setOrganizations([]))
+        .finally(() => setLoadingOrgs(false));
+      return;
     }
-  }, [state]);
+
+    // Debounce search by 300ms
+    orgSearchTimer.current = setTimeout(async () => {
+      setLoadingOrgs(true);
+      try {
+        const stateEntry = US_STATES.find((s) => s.code === state);
+        const results = await searchOrganizations(query, stateEntry?.name || state);
+        setOrganizations(results || []);
+      } catch {
+        setOrganizations([]);
+      } finally {
+        setLoadingOrgs(false);
+      }
+    }, 300);
+
+    return () => {
+      if (orgSearchTimer.current) clearTimeout(orgSearchTimer.current);
+    };
+  }, [orgSearchQuery, state, showOrgPicker]);
 
   async function handleCreate() {
     if (!teamName.trim()) {
@@ -1568,45 +1579,44 @@ export default function CreateTeamScreen({
         )}
       {showOrgPicker && (
         <View style={styles.pickerOverlay}>
-          <View style={[styles.pickerContainer, { maxHeight: '80%' }]}>
+          <View style={[styles.pickerContainer, { maxHeight: '85%' }]}>
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Select Organization</Text>
-              <TouchableOpacity onPress={() => setShowOrgPicker(false)}>
+              <TouchableOpacity onPress={() => { setShowOrgPicker(false); setOrgSearchQuery(''); }}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-            {/* Search bar */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <TextInput
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                value={orgSearchQuery}
-                onChangeText={setOrgSearchQuery}
-                placeholder="Search organizations..."
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="none"
-                returnKeyType="search"
-                onSubmitEditing={handleOrgSearch}
-              />
-              {orgSearchQuery.length > 0 ? (
-                <TouchableOpacity onPress={handleClearOrgSearch}>
-                  <Ionicons name="close-circle" size={24} color={colors.textMuted} />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={handleOrgSearch} disabled={!orgSearchQuery.trim()}>
-                  <Ionicons name="search" size={24} color={colors.navy} />
-                </TouchableOpacity>
-              )}
+            {/* Live search bar */}
+            <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radii.sm, paddingHorizontal: spacing.md, height: 44 }}>
+                <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
+                <TextInput
+                  style={{ flex: 1, fontSize: 16, color: colors.text, padding: 0 }}
+                  value={orgSearchQuery}
+                  onChangeText={setOrgSearchQuery}
+                  placeholder="Search organizations..."
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                />
+                {orgSearchQuery.length > 0 ? (
+                  <TouchableOpacity onPress={() => setOrgSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
             {loadingOrgs ? (
               <View style={{ padding: spacing.xxl, alignItems: 'center' }}>
                 <ActivityIndicator size="large" color={colors.navy} />
-                <Text style={{ marginTop: spacing.md, color: colors.textMuted }}>Loading organizations...</Text>
+                <Text style={{ marginTop: spacing.md, color: colors.textMuted }}>Searching...</Text>
               </View>
             ) : (
-              <ScrollView style={styles.pickerScroll}>
+              <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
                 {organizations.length === 0 ? (
                   <Text style={{ padding: spacing.lg, textAlign: 'center', color: colors.textMuted }}>
-                    No organizations found. Try searching by name.
+                    {orgSearchQuery.trim() ? 'No organizations found. Try a different search.' : 'No organizations found.'}
                   </Text>
                 ) : (
                   organizations.map((org: any) => (
@@ -1620,6 +1630,7 @@ export default function CreateTeamScreen({
                         setSelectedOrgId(org.id);
                         setSelectedOrgName(org.name);
                         setShowOrgPicker(false);
+                        setOrgSearchQuery('');
                       }}
                     >
                       <View style={{ flex: 1 }}>

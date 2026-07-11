@@ -185,8 +185,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       const today = new Date().toISOString().split('T')[0];
       const upcoming = myRegisteredEvents
         .filter((e: Event) => e.end_date >= today)
-        .sort((a: Event, b: Event) => a.start_date.localeCompare(b.start_date))
-        .slice(0, 3);
+        .sort((a: Event, b: Event) => a.start_date.localeCompare(b.start_date));
       setUpcomingEvents(upcoming);
       lastLoadRef.current = Date.now();
     } catch {}
