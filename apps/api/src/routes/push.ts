@@ -73,13 +73,14 @@ pushRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zVali
   const { team_id, title, body, data } = c.req.valid('json');
 
   const result = await db.prepare(`
-    SELECT pt.token
+    SELECT pt.token, pt.user_id
     FROM push_tokens pt
     JOIN user_follows uf ON uf.user_id = pt.user_id
     WHERE uf.team_id = ?
   `).bind(team_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
+  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for team followers' });
@@ -97,6 +98,9 @@ pushRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zVali
     sent_count: sent,
     sent_by: user.id,
   });
+
+  // Create per-user notification records for inbox
+  await createUserNotifications(db, userIds, title, body, 'team', data);
 
   return c.json({ success: true, data: { sent } });
 });
@@ -117,7 +121,7 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
   const { event_id, title, body, data } = c.req.valid('json');
 
   const result = await db.prepare(`
-    SELECT DISTINCT pt.token
+    SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
     JOIN user_follows uf ON uf.user_id = pt.user_id
     JOIN event_registrations er ON er.team_id = uf.team_id
@@ -125,6 +129,7 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
   `).bind(event_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
+  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for event followers' });
@@ -141,6 +146,8 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
     sent_count: sent,
     sent_by: user.id,
   });
+
+  await createUserNotifications(db, userIds, title, body, 'event_update', data);
 
   return c.json({ success: true, data: { sent } });
 });
@@ -163,7 +170,7 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
 
   // Get all push tokens for users following teams in this division
   const result = await db.prepare(`
-    SELECT DISTINCT pt.token
+    SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
     JOIN user_follows uf ON uf.user_id = pt.user_id
     JOIN event_registrations er ON er.team_id = uf.team_id
@@ -171,6 +178,7 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
   `).bind(event_id, event_division_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
+  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for division followers' });
@@ -198,6 +206,8 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
     metadata: JSON.stringify({ event_division_id, division_name: divInfo ? `${divInfo.age_group || ''} ${divInfo.division_level || ''}`.trim() : '' }),
   });
 
+  await createUserNotifications(db, userIds, title, body, 'division_update', data);
+
   return c.json({ success: true, data: { sent } });
 });
 
@@ -216,10 +226,11 @@ pushRoutes.post('/send-all', authMiddleware, requireRole('admin'), zValidator('j
   const { title, body, data } = c.req.valid('json');
 
   const result = await db.prepare(`
-    SELECT DISTINCT token FROM push_tokens
+    SELECT DISTINCT token, user_id FROM push_tokens
   `).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
+  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found' });
@@ -236,6 +247,8 @@ pushRoutes.post('/send-all', authMiddleware, requireRole('admin'), zValidator('j
     sent_count: sent,
     sent_by: user.id,
   });
+
+  await createUserNotifications(db, userIds, title, body, 'broadcast', data);
 
   return c.json({ success: true, data: { sent } });
 });
@@ -278,7 +291,7 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   // Also check notes field for team names (mock data uses notes)
   // Find followers of teams registered for the event in the game's division
   const result = await db.prepare(`
-    SELECT DISTINCT pt.token
+    SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
     JOIN user_follows uf ON uf.user_id = pt.user_id
     JOIN event_registrations er ON er.team_id = uf.team_id
@@ -287,6 +300,7 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   `).bind(game.event_id, game.event_division_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
+  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for teams in this game' });
@@ -300,11 +314,8 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   const title = `Locker Room Assignment - Game #${game.game_number}`;
   const body = `${game.notes || 'Game'} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
 
-  const sent = await sendExpoPushNotifications(tokens, title, body, {
-    type: 'locker_room',
-    game_id,
-    event_id: game.event_id,
-  });
+  const pushData = { type: 'locker_room', game_id, event_id: game.event_id };
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
 
   await logNotification(db, {
     type: 'locker_room',
@@ -316,6 +327,8 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
     sent_by: user.id,
     metadata: JSON.stringify({ game_id, game_number: game.game_number }),
   });
+
+  await createUserNotifications(db, userIds, title, body, 'locker_room', pushData);
 
   return c.json({ success: true, data: { sent, game_number: game.game_number } });
 });
@@ -439,7 +452,7 @@ pushRoutes.post('/check-locker-room-alerts', async (c) => {
   for (const game of (games.results || []) as any[]) {
     // Get push tokens for all followers of teams in this division
     const tokenResult = await db.prepare(`
-      SELECT DISTINCT pt.token
+      SELECT DISTINCT pt.token, pt.user_id
       FROM push_tokens pt
       JOIN user_follows uf ON uf.user_id = pt.user_id
       JOIN event_registrations er ON er.team_id = uf.team_id
@@ -447,6 +460,7 @@ pushRoutes.post('/check-locker-room-alerts', async (c) => {
     `).bind(game.event_id, game.event_division_id).all();
 
     const tokens = (tokenResult.results || []).map((r: any) => r.token as string);
+    const autoUserIds = [...new Set((tokenResult.results || []).map((r: any) => r.user_id as string))];
     if (tokens.length === 0) continue;
 
     const gameTime = game.start_time ? new Date(game.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
@@ -457,11 +471,8 @@ pushRoutes.post('/check-locker-room-alerts', async (c) => {
     const title = `Locker Room - Game #${game.game_number}`;
     const body = `${game.notes || 'Game'} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
 
-    const sent = await sendExpoPushNotifications(tokens, title, body, {
-      type: 'locker_room',
-      game_id: game.id,
-      event_id: game.event_id,
-    });
+    const pushData = { type: 'locker_room', game_id: game.id, event_id: game.event_id };
+    const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
 
     totalSent += sent;
     gamesNotified.push(game.game_number);
@@ -482,6 +493,8 @@ pushRoutes.post('/check-locker-room-alerts', async (c) => {
       sent_by: 'system',
       metadata: JSON.stringify({ game_id: game.id, game_number: game.game_number }),
     });
+
+    await createUserNotifications(db, autoUserIds, title, body, 'locker_room', pushData);
   }
 
   return c.json({
@@ -492,6 +505,84 @@ pushRoutes.post('/check-locker-room-alerts', async (c) => {
       total_sent: totalSent,
     },
   });
+});
+
+// ==================
+// GET /user-notifications — Get current user's notification inbox
+// ==================
+pushRoutes.get('/user-notifications', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const limit = parseInt(c.req.query('limit') || '50');
+  const offset = parseInt(c.req.query('offset') || '0');
+
+  const result = await db.prepare(`
+    SELECT id, title, body, type, data, is_read, read_at, created_at
+    FROM user_notifications
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `).bind(user.id, limit, offset).all();
+
+  const countResult = await db.prepare(
+    `SELECT COUNT(*) as total FROM user_notifications WHERE user_id = ?`
+  ).bind(user.id).first() as any;
+
+  return c.json({
+    success: true,
+    data: {
+      notifications: result.results || [],
+      total: countResult?.total || 0,
+      limit,
+      offset,
+    },
+  });
+});
+
+// ==================
+// GET /unread-count — Get current user's unread notification count
+// ==================
+pushRoutes.get('/unread-count', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+
+  const result = await db.prepare(
+    `SELECT COUNT(*) as count FROM user_notifications WHERE user_id = ? AND is_read = 0`
+  ).bind(user.id).first() as any;
+
+  return c.json({
+    success: true,
+    data: { unread_count: result?.count || 0 },
+  });
+});
+
+// ==================
+// POST /mark-read/:id — Mark a single notification as read
+// ==================
+pushRoutes.post('/mark-read/:id', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const notifId = c.req.param('id');
+
+  await db.prepare(
+    `UPDATE user_notifications SET is_read = 1, read_at = datetime('now') WHERE id = ? AND user_id = ?`
+  ).bind(notifId, user.id).run();
+
+  return c.json({ success: true });
+});
+
+// ==================
+// POST /mark-all-read — Mark all user's notifications as read
+// ==================
+pushRoutes.post('/mark-all-read', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+
+  await db.prepare(
+    `UPDATE user_notifications SET is_read = 1, read_at = datetime('now') WHERE user_id = ? AND is_read = 0`
+  ).bind(user.id).run();
+
+  return c.json({ success: true });
 });
 
 // ==================
@@ -528,6 +619,30 @@ pushRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `).run();
+
+  // Create user_notifications table for per-user inbox
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS user_notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      type TEXT,
+      data TEXT,
+      is_read INTEGER DEFAULT 0,
+      read_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `).run();
+
+  // Create index for user inbox queries
+  try {
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications(user_id, created_at DESC)`).run();
+  } catch (e) { /* index may already exist */ }
+
+  try {
+    await db.prepare(`CREATE INDEX IF NOT EXISTS idx_user_notifications_unread ON user_notifications(user_id, is_read)`).run();
+  } catch (e) { /* index may already exist */ }
 
   // Add locker room columns to games table
   try {
@@ -572,6 +687,32 @@ async function logNotification(db: any, data: {
     INSERT INTO notifications (id, type, title, body, audience, target_id, sent_count, sent_by, metadata)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(id, data.type, data.title, data.body, data.audience, data.target_id, data.sent_count, data.sent_by, data.metadata || null).run();
+}
+
+// ==================
+// Helper: Create per-user notification records for inbox
+// ==================
+async function createUserNotifications(
+  db: any,
+  userIds: string[],
+  title: string,
+  body: string,
+  type: string,
+  data?: Record<string, unknown>
+) {
+  const dataStr = data ? JSON.stringify(data) : null;
+  // Batch insert — D1 doesn't support multi-row INSERT, so we loop
+  for (const userId of userIds) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    try {
+      await db.prepare(`
+        INSERT INTO user_notifications (id, user_id, title, body, type, data)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(id, userId, title, body, type, dataStr).run();
+    } catch (e) {
+      console.error('Failed to create user notification:', e);
+    }
+  }
 }
 
 // ==================

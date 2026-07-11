@@ -6,7 +6,7 @@ import { ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
-import { registerForPushNotifications } from '../services/notifications';
+import { registerForPushNotifications, refreshBadgeCount, addNotificationListener } from '../services/notifications';
 
 // Screens
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -27,6 +27,7 @@ import ScorekeeperScreen from '../screens/ScorekeeperScreen';
 import AccountSettingsScreen from '../screens/AccountSettingsScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
+import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
 
 const Stack = createNativeStackNavigator();
 const MenuStack = createNativeStackNavigator();
@@ -123,10 +124,19 @@ export default function AppNavigator() {
         if (token) {
           setInitialRoute('Main');
           registerForPushNotifications();
+          // Set initial badge count from server
+          refreshBadgeCount();
         }
       } catch {}
       setChecking(false);
     })();
+
+    // When a push comes in while app is open, refresh badge count
+    const sub = addNotificationListener(() => {
+      refreshBadgeCount();
+    });
+
+    return () => sub.remove();
   }, []);
 
   if (checking) {
@@ -167,6 +177,11 @@ export default function AppNavigator() {
         <Stack.Screen
           name="CreateTeam"
           component={CreateTeamScreen}
+          options={{ headerShown: false, animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="NotificationsInbox"
+          component={NotificationsInboxScreen}
           options={{ headerShown: false, animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

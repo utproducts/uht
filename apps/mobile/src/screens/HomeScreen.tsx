@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getFollowedTeams, getScorekeeperEvents, unfollowTeam } from '../services/api';
 import { getUser, authFetch, getActiveRole, User } from '../services/auth';
+import { refreshBadgeCount } from '../services/notifications';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -70,6 +71,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [scoringEvents, setScoringEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Track when data was last loaded to avoid refetching on every tab switch
   const lastLoadRef = React.useRef<number>(0);
@@ -83,12 +85,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     if (!isRefresh) setLoading(true);
     try {
       // Fire ALL API calls in parallel — no waterfall
-      const [teamData, user, skEvents, myTeamsRes] = await Promise.all([
+      const [teamData, user, skEvents, myTeamsRes, badgeCount] = await Promise.all([
         getFollowedTeams().catch(() => []),
         getUser(),
         getScorekeeperEvents().catch(() => []),
         authFetch('/api/teams/my-teams').then(r => r.json()).catch(() => ({ success: false })),
+        refreshBadgeCount().catch(() => 0),
       ]);
+      setUnreadCount(badgeCount as number);
 
       if (user?.name) setUserName(user.name);
       if (user?.roles) setUserRoles(user.roles);
@@ -284,10 +288,17 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             />
             <TouchableOpacity
               style={styles.heroMenuBtn}
-              onPress={() => navigation.navigate('Menu' as never)}
+              onPress={() => navigation.navigate('NotificationsInbox' as never)}
               activeOpacity={0.7}
             >
               <Ionicons name="notifications-outline" size={22} color={colors.white} />
+              {unreadCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.heroSeason}>2026-27 SEASON</Text>
@@ -653,6 +664,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative' as const,
+  },
+  bellBadge: {
+    position: 'absolute' as const,
+    top: -2,
+    right: -4,
+    backgroundColor: '#E53935',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderWidth: 1.5,
+    borderColor: colors.navy,
+  },
+  bellBadgeText: {
+    fontSize: 10,
+    color: colors.white,
+    ...fonts.bold,
   },
   heroSeason: {
     fontSize: 11,
