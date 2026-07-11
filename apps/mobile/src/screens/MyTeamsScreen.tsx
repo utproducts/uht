@@ -284,6 +284,19 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           </View>
         ) : null}
 
+        {/* Add Roster prompt for coaches with no roster */}
+        {isCoach && (!item.player_count || item.player_count === 0) && (
+          <TouchableOpacity
+            style={styles.addRosterBtn}
+            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, showRoster: true } as never)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="document-text-outline" size={16} color="#D97706" />
+            <Text style={styles.addRosterText}>Add Roster</Text>
+            <Ionicons name="chevron-forward" size={14} color="#D97706" />
+          </TouchableOpacity>
+        )}
+
         {/* Bottom actions row — different for coach vs parent */}
         <View style={styles.cardActions}>
           {isCoach && item.invite_code ? (
@@ -639,6 +652,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     ...fonts.regular,
+  },
+  addRosterBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    alignSelf: 'stretch' as const,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+    gap: 6,
+  },
+  addRosterText: {
+    fontSize: 13,
+    color: '#D97706',
+    ...fonts.semibold,
+    flex: 1,
   },
   cardActions: {
     flexDirection: 'row' as const,

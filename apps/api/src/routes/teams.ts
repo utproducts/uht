@@ -1069,9 +1069,15 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     try {
       const normRegs = await db.prepare(`
         SELECT r.id as reg_id, r.status, r.payment_status, e.id as event_id, e.name as event_name,
-          e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
+          e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url,
+          r.hotel_assigned,
+          eh.hotel_name as hotel_name, eh.booking_url as hotel_booking_url,
+          eh.booking_code as hotel_booking_code, eh.rate_description as hotel_rate,
+          eh.price_per_night as hotel_price_per_night, eh.phone as hotel_phone,
+          eh.address as hotel_address, eh.city as hotel_city, eh.state as hotel_state
         FROM registrations r
         JOIN events e ON e.id = r.event_id
+        LEFT JOIN event_hotels eh ON eh.id = r.hotel_assigned
         WHERE r.team_id = ? AND r.status NOT IN ('withdrawn','denied','rejected')
         ORDER BY e.start_date ASC
       `).bind((team as any).id).all();
@@ -1084,9 +1090,15 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     try {
       const legacyRegs = await db.prepare(`
         SELECT er.id as reg_id, er.status, er.payment_status, e.id as event_id, e.name as event_name,
-          e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
+          e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url,
+          er.hotel_assigned,
+          eh.hotel_name as hotel_name, eh.booking_url as hotel_booking_url,
+          eh.booking_code as hotel_booking_code, eh.rate_description as hotel_rate,
+          eh.price_per_night as hotel_price_per_night, eh.phone as hotel_phone,
+          eh.address as hotel_address, eh.city as hotel_city, eh.state as hotel_state
         FROM event_registrations er
         JOIN events e ON e.id = er.event_id
+        LEFT JOIN event_hotels eh ON eh.id = er.hotel_assigned
         WHERE er.team_name = ? AND er.status NOT IN ('withdrawn','denied','rejected')
         ORDER BY e.start_date ASC
       `).bind((team as any).name).all();

@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { sendApprovalEmail } from '../lib/approval-email';
+import { sendHotelConfirmationEmail } from '../lib/hotel-confirmation-email';
 import { getResolvedFields } from '../lib/template-overrides';
 
 export const registrationRoutes = new Hono<{ Bindings: Env }>();
@@ -377,7 +378,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       head_coach_email: reg.email1,
     };
   } else {
-    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email FROM teams WHERE id = ?')
+    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone FROM teams WHERE id = ?')
       .bind(reg.team_id).first<any>();
   }
 
@@ -488,7 +489,67 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     console.error('Approval email error:', err);
   }
 
-  return c.json({ success: true, message: 'Registration approved', email_sent: emailSent });
+  // Send hotel confirmation email to hotel contact
+  let hotelEmailSent = false;
+  if (hotelInfo && hotelInfo.contact_email) {
+    try {
+      // Get manager info (for consumer regs, use the registration fields)
+      let managerName = '';
+      let managerEmail = '';
+      let managerPhone = '';
+      if (isConsumer) {
+        managerName = [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ');
+        managerEmail = reg.email2 || '';
+        managerPhone = reg.phone2 || '';
+      } else {
+        // Look up team managers
+        try {
+          const mgrRow = await db.prepare(`
+            SELECT u.first_name, u.last_name, u.email, u.phone
+            FROM users u JOIN team_managers tm ON tm.user_id = u.id
+            WHERE tm.team_id = ? LIMIT 1
+          `).bind(reg.team_id).first<any>();
+          if (mgrRow) {
+            managerName = [mgrRow.first_name, mgrRow.last_name].filter(Boolean).join(' ');
+            managerEmail = mgrRow.email || '';
+            managerPhone = mgrRow.phone || '';
+          }
+        } catch {}
+      }
+
+      const startDate = new Date(event.start_date + 'T12:00:00');
+      const hotelEventDate = startDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+
+      let divisionInfo2: any = null;
+      if (!isConsumer && reg.event_division_id) {
+        divisionInfo2 = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?')
+          .bind(reg.event_division_id).first<any>();
+      }
+
+      const hotelResult = await sendHotelConfirmationEmail(c.env, {
+        hotelContactEmail: hotelInfo.contact_email,
+        hotelContactName: hotelInfo.contact_name || '',
+        hotelName: hotelInfo.hotel_name,
+        teamName: team.name,
+        ageGroup: divisionInfo2?.age_group || reg.age_group || team.age_group || '',
+        division: divisionInfo2?.division_level || reg.division || undefined,
+        eventName: event.name,
+        eventDate: hotelEventDate,
+        eventCity: `${event.city}, ${event.state}`,
+        coachName: team.head_coach_name || '',
+        coachEmail: team.head_coach_email || '',
+        coachPhone: team.head_coach_phone || '',
+        managerName,
+        managerEmail,
+        managerPhone,
+      });
+      hotelEmailSent = hotelResult.success;
+    } catch (err: any) {
+      console.error('Hotel confirmation email error:', err);
+    }
+  }
+
+  return c.json({ success: true, message: 'Registration approved', email_sent: emailSent, hotel_email_sent: hotelEmailSent });
 });
 
 // ==================

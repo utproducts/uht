@@ -656,20 +656,50 @@ function CoachDash() {
                       {team.registered_events && team.registered_events.length > 0 ? (
                         <div className="space-y-2">
                           {team.registered_events.map((evt: any) => (
-                            <div key={evt.id || evt.event_id} className="flex items-center justify-between bg-[#f5f5f7] rounded-lg px-3 py-2">
-                              <div>
-                                <span className="text-sm font-medium text-[#1d1d1f]">{evt.event_name || evt.name}</span>
-                                {evt.event_date && (
-                                  <span className="text-xs text-[#86868b] ml-2">{evt.event_date}</span>
-                                )}
+                            <div key={evt.id || evt.event_id} className="bg-[#f5f5f7] rounded-lg px-3 py-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="text-sm font-medium text-[#1d1d1f]">{evt.event_name || evt.name}</span>
+                                  {evt.event_date && (
+                                    <span className="text-xs text-[#86868b] ml-2">{evt.event_date}</span>
+                                  )}
+                                </div>
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                  evt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                                  evt.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {evt.status || 'registered'}
+                                </span>
                               </div>
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                evt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                                evt.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>
-                                {evt.status || 'registered'}
-                              </span>
+                              {evt.hotel_name && (
+                                <div className="mt-2 bg-white rounded-lg px-3 py-2 border border-[#e0ecf7]">
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <svg className="w-3.5 h-3.5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                    <span className="text-xs font-semibold text-[#003e79]">{evt.hotel_name}</span>
+                                  </div>
+                                  {evt.hotel_rate && (
+                                    <p className="text-[11px] text-[#6e6e73] mb-1">{evt.hotel_rate}</p>
+                                  )}
+                                  {evt.hotel_price_per_night && !evt.hotel_rate && (
+                                    <p className="text-[11px] text-[#6e6e73] mb-1">${evt.hotel_price_per_night}/night</p>
+                                  )}
+                                  {evt.hotel_booking_code && (
+                                    <p className="text-[11px] text-[#6e6e73] mb-1">Booking Code: <strong>{evt.hotel_booking_code}</strong></p>
+                                  )}
+                                  {evt.hotel_booking_url && (
+                                    <a href={evt.hotel_booking_url} target="_blank" rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] px-3 py-1 rounded-full transition mt-1">
+                                      Book Your Room
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

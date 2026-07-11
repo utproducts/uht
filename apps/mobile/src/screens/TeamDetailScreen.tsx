@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -50,12 +50,14 @@ interface TeamEvent {
 }
 
 export default function TeamDetailScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { teamId, teamName } = route.params || {};
+  const { teamId, teamName, showRoster } = route.params || {};
   const [team, setTeam] = useState<TeamDetail | null>(null);
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const rosterYRef = useRef<number>(0);
 
   const loadTeam = useCallback(async () => {
     setLoading(true);
@@ -89,6 +91,15 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
       loadTeam();
     }, [loadTeam]),
   );
+
+  // Auto-scroll to roster section when navigated with showRoster
+  useEffect(() => {
+    if (showRoster && !loading && rosterYRef.current > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: rosterYRef.current - 20, animated: true });
+      }, 300);
+    }
+  }, [showRoster, loading]);
 
   async function shareInviteCoaches() {
     if (!team?.invite_code) return;
@@ -172,7 +183,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
     <View style={styles.container}>
       <ScreenHeader title={displayTeam.name || 'Team'} showBack onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Team Logo + Info Card */}
         <View style={styles.infoCard}>
           <TouchableOpacity
@@ -253,7 +264,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
         </View>
 
         {/* Roster */}
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={(e) => { rosterYRef.current = e.nativeEvent.layout.y; }}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Roster ({roster.length})</Text>
           </View>
@@ -275,6 +286,14 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
             <View style={styles.emptySection}>
               <Ionicons name="people-outline" size={32} color={colors.textMuted} />
               <Text style={styles.emptySectionText}>No players on roster yet</Text>
+              <TouchableOpacity
+                style={styles.addPlayersBtn}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('CreateTeam', { editRosterTeamId: teamId, editRosterTeamName: team?.name || teamName })}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={colors.white} />
+                <Text style={styles.addPlayersBtnText}>Add Players</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -542,5 +561,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     ...fonts.regular,
+  },
+  addPlayersBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.navy,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: 4,
+  },
+  addPlayersBtnText: {
+    fontSize: 14,
+    color: colors.white,
+    ...fonts.semibold,
   },
 });

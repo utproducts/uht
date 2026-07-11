@@ -11,6 +11,7 @@ import {
   ImageBackground,
   Dimensions,
   Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,6 +30,7 @@ interface FollowedTeam {
   age_group?: string;
   next_event_name?: string;
   next_event_date?: string;
+  isOwnTeam?: boolean;
 }
 
 interface Event {
@@ -41,6 +43,11 @@ interface Event {
   end_date: string;
   logo_url?: string;
   teamNames?: string[];
+  hotel_name?: string;
+  hotel_booking_url?: string;
+  hotel_booking_code?: string;
+  hotel_rate?: string;
+  hotel_price_per_night?: number;
 }
 
 function formatDateRange(startDate: string, endDate: string): string {
@@ -111,6 +118,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           team_name: t.name,
           org_name: t.organization_name,
           age_group: t.age_group,
+          isOwnTeam: true,
         }));
 
         // Extract registered events from all teams, tracking which teams go to each
@@ -129,8 +137,21 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 start_date: re.start_date || '',
                 end_date: re.end_date || '',
                 logo_url: re.logo_url,
+                hotel_name: re.hotel_name || undefined,
+                hotel_booking_url: re.hotel_booking_url || undefined,
+                hotel_booking_code: re.hotel_booking_code || undefined,
+                hotel_rate: re.hotel_rate || undefined,
+                hotel_price_per_night: re.hotel_price_per_night || undefined,
               });
               eventTeamNames.set(re.event_id, new Set());
+            } else if (re.hotel_name && !eventMap.get(re.event_id)!.hotel_name) {
+              // Fill hotel info from another team's registration if first had none
+              const existing = eventMap.get(re.event_id)!;
+              existing.hotel_name = re.hotel_name;
+              existing.hotel_booking_url = re.hotel_booking_url || undefined;
+              existing.hotel_booking_code = re.hotel_booking_code || undefined;
+              existing.hotel_rate = re.hotel_rate || undefined;
+              existing.hotel_price_per_night = re.hotel_price_per_night || undefined;
             }
             if (teamName) eventTeamNames.get(re.event_id)!.add(teamName);
           }
@@ -195,6 +216,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
+      // Reset stale timer so data always refreshes on tab focus
+      lastLoadRef.current = 0;
       loadData();
     }, [loadData])
   );
@@ -460,13 +483,15 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                         ) : null}
                         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.unfollowBtn}
-                        onPress={() => handleUnfollowTeam(team)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Ionicons name="close-circle" size={22} color="#8e919e" />
-                      </TouchableOpacity>
+                      {!team.isOwnTeam && (
+                        <TouchableOpacity
+                          style={styles.unfollowBtn}
+                          onPress={() => handleUnfollowTeam(team)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="close-circle" size={22} color="#8e919e" />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))
                 )}
@@ -537,6 +562,23 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                           <Text style={styles.eventTeamNames} numberOfLines={2}>
                             {event.teamNames.join(', ')}
                           </Text>
+                        </View>
+                      ) : null}
+                      {event.hotel_name ? (
+                        <View style={styles.hotelRow}>
+                          <View style={styles.hotelInfo}>
+                            <Ionicons name="bed-outline" size={13} color={colors.navy} style={{ marginRight: 4 }} />
+                            <Text style={styles.hotelName} numberOfLines={1}>{event.hotel_name}</Text>
+                          </View>
+                          {event.hotel_booking_url ? (
+                            <TouchableOpacity
+                              onPress={() => Linking.openURL(event.hotel_booking_url!)}
+                              style={styles.bookBtn}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={styles.bookBtnText}>Book Room</Text>
+                            </TouchableOpacity>
+                          ) : null}
                         </View>
                       ) : null}
                     </View>
@@ -909,5 +951,38 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     ...fonts.semibold,
     flex: 1,
+  },
+  hotelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    backgroundColor: '#F0F7FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  hotelInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  hotelName: {
+    fontSize: 12,
+    color: colors.navy,
+    ...fonts.semibold,
+    flex: 1,
+  },
+  bookBtn: {
+    backgroundColor: colors.navy,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  bookBtnText: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    ...fonts.bold,
   },
 });

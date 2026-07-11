@@ -56,7 +56,7 @@ export default function CreateTeamScreen({
   route: any;
   navigation: any;
 }) {
-  const { organizationId: routeOrgId, organizationName: routeOrgName, fromOnboarding } = route.params || {};
+  const { organizationId: routeOrgId, organizationName: routeOrgName, fromOnboarding, editRosterTeamId, editRosterTeamName } = route.params || {};
 
   const [teamName, setTeamName] = useState('');
   const [ageGroup, setAgeGroup] = useState('');
@@ -118,6 +118,14 @@ export default function CreateTeamScreen({
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [orgLogos, setOrgLogos] = useState<string[]>([]);
   const [loadingOrgLogos, setLoadingOrgLogos] = useState(false);
+
+  // If opened in roster-only mode (from TeamDetail "Add Players"), jump to roster step
+  useEffect(() => {
+    if (editRosterTeamId) {
+      setCreatedTeamId(editRosterTeamId);
+      setShowRosterStep(true);
+    }
+  }, [editRosterTeamId]);
 
   // Auto-fill coach info from logged-in user
   useEffect(() => {
@@ -581,6 +589,11 @@ export default function CreateTeamScreen({
   }
 
   function finishRosterStep() {
+    // If in roster-only mode, just go back to TeamDetail
+    if (editRosterTeamId) {
+      navigation.goBack();
+      return;
+    }
     setShowRosterStep(false);
     // Go to logo step instead of directly to success
     setShowLogoStep(true);
@@ -885,7 +898,7 @@ export default function CreateTeamScreen({
     // Main roster import step
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Add Roster" showBack={false} />
+        <ScreenHeader title={editRosterTeamId ? `Add Roster — ${editRosterTeamName || 'Team'}` : "Add Roster"} showBack={!!editRosterTeamId} onBack={editRosterTeamId ? () => navigation.goBack() : undefined} />
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
