@@ -600,10 +600,10 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
   const isAdmin = user.roles?.includes('admin') || user.roles?.includes('director');
   let team: any;
   if (isAdmin) {
-    team = await db.prepare(`SELECT id FROM teams WHERE id = ?`).bind(teamId).first();
+    team = await db.prepare(`SELECT id, organization_id FROM teams WHERE id = ?`).bind(teamId).first();
   } else {
     team = await db.prepare(`
-      SELECT t.id FROM teams t
+      SELECT t.id, t.organization_id FROM teams t
       LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
       LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
       WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
@@ -612,7 +612,7 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
 
   if (!team) return c.json({ success: false, error: 'Not authorized' }, 403);
 
-  const body = await c.req.json() as { data: string; mimeType: string };
+  const body = await c.req.json() as { data: string; mimeType: string; applyToOrg?: boolean };
   if (!body.data || !body.mimeType) {
     return c.json({ success: false, error: 'Missing data or mimeType' }, 400);
   }
@@ -640,10 +640,32 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
 
   const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
 
+  // Always save to the team
   await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
     .bind(logoUrl, teamId).run();
 
-  return c.json({ success: true, data: { logo_url: logoUrl } });
+  // If applyToOrg is true, also save to the organization and copy to org-logos R2 key
+  if (body.applyToOrg && team.organization_id) {
+    const orgKey = `org-logos/${team.organization_id}.${ext}`;
+    await storage.put(orgKey, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
+    const orgLogoUrl = `https://uht.chad-157.workers.dev/api/assets/${orgKey}?v=${Date.now()}`;
+    await db.prepare("UPDATE organizations SET logo_url = ? WHERE id = ?")
+      .bind(orgLogoUrl, team.organization_id).run();
+  }
+
+  // Check if org has a logo (for the confirmation prompt on the client)
+  let orgHasLogo = false;
+  let orgName = '';
+  if (team.organization_id) {
+    const org = await db.prepare(`SELECT name, logo_url FROM organizations WHERE id = ?`)
+      .bind(team.organization_id).first<{ name: string; logo_url: string | null }>();
+    if (org) {
+      orgName = org.name || '';
+      orgHasLogo = !!(org.logo_url && org.logo_url.length > 0);
+    }
+  }
+
+  return c.json({ success: true, data: { logo_url: logoUrl, orgHasLogo, orgName, orgId: team.organization_id } });
 });
 
 // ==================
@@ -1106,6 +1128,7 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
   // Get teams where user is creator, coach, manager, team_member, org owner, OR following
   const result = await db.prepare(`
     SELECT DISTINCT t.*, o.name as organization_name,
+      COALESCE(t.logo_url, o.logo_url) as effective_logo_url,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
       (SELECT COUNT(*) FROM registrations r WHERE r.team_id = t.id AND r.status IN ('pending', 'approved')) as active_registrations
     FROM teams t

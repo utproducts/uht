@@ -123,7 +123,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           team_name: t.name,
           org_name: t.organization_name,
           age_group: t.age_group,
-          logo_url: t.logo_url,
+          logo_url: t.effective_logo_url || t.logo_url,
           isOwnTeam: true,
         }));
 

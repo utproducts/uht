@@ -903,4 +903,47 @@ organizationRoutes.patch('/:id', authMiddleware, async (c) => {
   return c.json({ success: true });
 });
 
+// ==================
+// Upload org logo (base64 — admin)
+// ==================
+organizationRoutes.post('/:orgId/logo-base64', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const storage = c.env.STORAGE;
+  const orgId = c.req.param('orgId');
+
+  const org = await db.prepare(`SELECT id, name FROM organizations WHERE id = ?`).bind(orgId).first();
+  if (!org) return c.json({ success: false, error: 'Organization not found' }, 404);
+
+  const body = await c.req.json() as { data: string; mimeType: string };
+  if (!body.data || !body.mimeType) {
+    return c.json({ success: false, error: 'Missing data or mimeType' }, 400);
+  }
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(body.mimeType)) {
+    return c.json({ success: false, error: 'Invalid image type. Use JPEG, PNG, or WebP.' }, 400);
+  }
+
+  const binaryString = atob(body.data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  if (bytes.length > 5 * 1024 * 1024) {
+    return c.json({ success: false, error: 'Image too large. Max 5MB.' }, 400);
+  }
+
+  const ext = body.mimeType === 'image/png' ? 'png' : body.mimeType === 'image/webp' ? 'webp' : 'jpg';
+  const key = `org-logos/${orgId}.${ext}`;
+
+  await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
+
+  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
+
+  await db.prepare("UPDATE organizations SET logo_url = ? WHERE id = ?")
+    .bind(logoUrl, orgId).run();
+
+  return c.json({ success: true, data: { logo_url: logoUrl } });
+});
 

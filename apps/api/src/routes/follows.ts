@@ -59,7 +59,7 @@ followRoutes.get('/', authMiddleware, async (c) => {
   const result = await db.prepare(`
     SELECT uf.id as follow_id, uf.created_at as followed_at,
            t.id, t.id as team_id, t.name as team_name, t.age_group, t.city, t.state,
-           t.logo_url,
+           COALESCE(t.logo_url, o.logo_url) as logo_url,
            o.name as org_name, o.name as organization_name
     FROM user_follows uf
     JOIN teams t ON t.id = uf.team_id
