@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-// Logo upload uses React Native's built-in FormData with { uri, type, name }
+// Logo upload uses base64 JSON to avoid RN FormData/multipart issues
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, getToken } from '../services/auth';
 import { API_URL } from '../constants/api';
@@ -619,32 +619,32 @@ export default function CreateTeamScreen({
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      base64: true,
     });
     if (result.canceled || !result.assets?.[0]) return;
-    await uploadLogoFile(result.assets[0].uri);
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      Alert.alert('Error', 'Could not read image data');
+      return;
+    }
+    const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+    await uploadLogoBase64(asset.base64, mimeType);
   }
 
-  async function uploadLogoFile(uri: string) {
+  async function uploadLogoBase64(base64Data: string, mimeType: string) {
     if (!createdTeamId) return;
     setUploadingLogo(true);
     try {
-      const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const token = await getToken();
 
-      const formData = new FormData();
-      formData.append('logo', {
-        uri,
-        type: mimeType,
-        name: `logo.${ext}`,
-      } as any);
-
-      const uploadResult = await fetch(`${API_URL}/api/teams/${createdTeamId}/logo`, {
+      const uploadResult = await fetch(`${API_URL}/api/teams/${createdTeamId}/logo-base64`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: formData,
+        body: JSON.stringify({ data: base64Data, mimeType }),
       });
 
       const json = await uploadResult.json() as any;

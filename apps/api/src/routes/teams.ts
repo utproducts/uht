@@ -588,6 +588,65 @@ teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
 });
 
 // ==================
+// Upload team logo (base64 — mobile app)
+// ==================
+teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const storage = c.env.STORAGE;
+  const teamId = c.req.param('teamId');
+
+  // Verify ownership or admin
+  const isAdmin = user.roles?.includes('admin') || user.roles?.includes('director');
+  let team: any;
+  if (isAdmin) {
+    team = await db.prepare(`SELECT id FROM teams WHERE id = ?`).bind(teamId).first();
+  } else {
+    team = await db.prepare(`
+      SELECT t.id FROM teams t
+      LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
+      LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
+      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
+    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+  }
+
+  if (!team) return c.json({ success: false, error: 'Not authorized' }, 403);
+
+  const body = await c.req.json() as { data: string; mimeType: string };
+  if (!body.data || !body.mimeType) {
+    return c.json({ success: false, error: 'Missing data or mimeType' }, 400);
+  }
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(body.mimeType)) {
+    return c.json({ success: false, error: 'Invalid image type. Use JPEG, PNG, or WebP.' }, 400);
+  }
+
+  // Decode base64
+  const binaryString = atob(body.data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  if (bytes.length > 5 * 1024 * 1024) {
+    return c.json({ success: false, error: 'Image too large. Max 5MB.' }, 400);
+  }
+
+  const ext = body.mimeType === 'image/png' ? 'png' : body.mimeType === 'image/webp' ? 'webp' : 'jpg';
+  const key = `team-logos/${teamId}.${ext}`;
+
+  await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
+
+  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+
+  await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(logoUrl, teamId).run();
+
+  return c.json({ success: true, data: { logo_url: logoUrl } });
+});
+
+// ==================
 // Get org logos — returns logo_url from other teams in the same org
 // ==================
 teamRoutes.get('/:teamId/org-logos', authMiddleware, async (c) => {

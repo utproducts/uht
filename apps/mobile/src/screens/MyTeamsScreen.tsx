@@ -157,30 +157,29 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (result.canceled || !result.assets?.[0]) return;
 
       const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Error', 'Could not read image data');
+        return;
+      }
       setUploadingTeamId(team.id);
 
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const token = await getToken();
 
-      const formData = new FormData();
-      formData.append('logo', {
-        uri: asset.uri,
-        type: mimeType,
-        name: `logo.${ext}`,
-      } as any);
-
-      const uploadResult = await fetch(`${API_URL}/api/teams/${team.id}/logo`, {
+      const uploadResult = await fetch(`${API_URL}/api/teams/${team.id}/logo-base64`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: formData,
+        body: JSON.stringify({ data: asset.base64, mimeType }),
       });
 
       const json = await uploadResult.json() as any;
