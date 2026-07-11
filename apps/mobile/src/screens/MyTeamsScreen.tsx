@@ -18,7 +18,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+// Logo upload uses React Native's built-in FormData with { uri, type, name }
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, getToken, getActiveRole, User } from '../services/auth';
 import { API_URL } from '../constants/api';
@@ -168,21 +168,22 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const token = await getToken();
 
-      const uploadResult = await FileSystem.uploadAsync(
-        `${API_URL}/api/teams/${team.id}/logo`,
-        asset.uri,
-        {
-          httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          fieldName: 'logo',
-          mimeType,
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
-      );
+      const formData = new FormData();
+      formData.append('logo', {
+        uri: asset.uri,
+        type: mimeType,
+        name: `logo.${ext}`,
+      } as any);
 
-      const json = JSON.parse(uploadResult.body) as any;
+      const uploadResult = await fetch(`${API_URL}/api/teams/${team.id}/logo`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const json = await uploadResult.json() as any;
       if (json.success) {
         setTeams((prev) =>
           prev.map((t) =>
