@@ -29,6 +29,7 @@ interface FollowedTeam {
   team_name: string;
   org_name?: string;
   age_group?: string;
+  logo_url?: string;
   next_event_name?: string;
   next_event_date?: string;
   isOwnTeam?: boolean;
@@ -122,6 +123,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           team_name: t.name,
           org_name: t.organization_name,
           age_group: t.age_group,
+          logo_url: t.logo_url,
           isOwnTeam: true,
         }));
 
@@ -475,8 +477,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                         onPress={() => navigation.navigate('My Teams')}
                       >
                         <View style={styles.teamBadge}>
-                          {(team as any).logo_url ? (
-                            <Image source={{ uri: (team as any).logo_url }} style={styles.teamBadgeImg} />
+                          {team.logo_url ? (
+                            <Image source={{ uri: team.logo_url }} style={styles.teamBadgeImg} />
                           ) : (
                             <Image source={require('../../assets/uht-logo.png')} style={styles.teamBadgeLogoFallback} resizeMode="contain" />
                           )}

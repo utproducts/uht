@@ -579,7 +579,7 @@ teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
   const arrayBuffer = await file.arrayBuffer();
   await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
 
-  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
 
   await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
     .bind(logoUrl, teamId).run();
@@ -638,7 +638,7 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
 
   await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
 
-  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
 
   await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
     .bind(logoUrl, teamId).run();
