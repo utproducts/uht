@@ -2056,20 +2056,19 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
   let query = `
     SELECT g.id, g.game_number, g.event_id, g.event_division_id,
       g.home_team_id, g.away_team_id, g.venue_id, g.rink_id,
-      g.start_time, g.date, g.time, g.status,
+      g.start_time, g.end_time, g.status, g.game_type, g.pool_name,
       g.home_score, g.away_score, g.period, g.is_overtime, g.is_shootout,
       g.home_locker_room, g.away_locker_room,
       g.delay_minutes, g.delay_note,
-      g.round, g.pool_name, g.bracket_round,
       ht.name as home_team_name,
-      at.name as away_team_name,
+      at2.name as away_team_name,
       vr.name as rink_name,
       v.name as venue_name,
       ed.age_group, ed.division_level,
       (ed.age_group || ' ' || COALESCE(ed.division_level, '')) as division_name
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
-    LEFT JOIN teams at ON at.id = g.away_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
     LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
     LEFT JOIN venues v ON v.id = g.venue_id
     LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
@@ -2082,7 +2081,7 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
     bindings.push(teamId, teamId);
   }
 
-  query += ` ORDER BY g.start_time, g.date, g.time, g.game_number`;
+  query += ` ORDER BY g.start_time ASC, g.game_number ASC`;
 
   const result = await db.prepare(query).bind(...bindings).all();
   return c.json({ success: true, data: result.results });

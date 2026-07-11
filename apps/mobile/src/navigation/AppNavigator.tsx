@@ -111,12 +111,16 @@ function MainTabs() {
       <Tab.Screen
         name="Menu"
         component={MenuStackNavigator}
-        listeners={({ navigation }) => ({
+        listeners={({ navigation, route }) => ({
           tabPress: (e) => {
-            // If Menu is already focused, navigate to Home instead
             if (navigation.isFocused()) {
+              // If already on Menu tab, toggle back to Home
               e.preventDefault();
               navigation.navigate('Home');
+            } else {
+              // Coming back to Menu tab — always reset to MenuHome
+              e.preventDefault();
+              navigation.navigate('Menu', { screen: 'MenuHome' });
             }
           },
         })}
