@@ -837,8 +837,8 @@ export default function EventDetailScreen({
                   <Text style={[styles.teamName, isMyHome ? styles.myTeamHighlight : null]}>
                     {item.home_team_name || item.home_team || 'TBD'}
                   </Text>
-                  {isFinal && item.home_score != null && (
-                    <Text style={styles.inlineScore}>{item.home_score}</Text>
+                  {(isFinal || isLive) && item.home_score != null && (
+                    <Text style={[styles.inlineScore, isLive ? { color: '#e74c3c' } : null]}>{item.home_score}</Text>
                   )}
                 </View>
                 {item.home_locker_room ? (
@@ -853,8 +853,8 @@ export default function EventDetailScreen({
                   <Text style={[styles.teamName, isMyAway ? styles.myTeamHighlight : null]}>
                     {item.away_team_name || item.away_team || 'TBD'}
                   </Text>
-                  {isFinal && item.away_score != null && (
-                    <Text style={styles.inlineScore}>{item.away_score}</Text>
+                  {(isFinal || isLive) && item.away_score != null && (
+                    <Text style={[styles.inlineScore, isLive ? { color: '#e74c3c' } : null]}>{item.away_score}</Text>
                   )}
                 </View>
                 {item.away_locker_room ? (

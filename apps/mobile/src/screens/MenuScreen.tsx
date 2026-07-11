@@ -157,6 +157,12 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       onPress: () => navigation.navigate('AdminRegistrations'),
     },
     {
+      label: 'Score Management',
+      icon: 'stats-chart-outline',
+      adminOnly: true,
+      onPress: () => navigation.navigate('DirectorGames'),
+    },
+    {
       label: 'Assign Scorekeepers',
       icon: 'clipboard-outline',
       adminOnly: true,

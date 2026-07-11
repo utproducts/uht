@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -163,8 +162,10 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
   };
 
   const openScoring = (game: ScorekeeperGame) => {
-    const url = `https://uht-web.pages.dev/scoring/game?gameId=${game.id}`;
-    Linking.openURL(url);
+    navigation.navigate('ScoreGame', {
+      gameId: game.id,
+      gameName: `Game #${game.game_number}`,
+    });
   };
 
   const getStatusColor = (status: string) => {

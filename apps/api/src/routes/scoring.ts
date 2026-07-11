@@ -240,10 +240,20 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Verify PIN from header (lightweight scorekeeper auth)
+  // Verify auth: PIN header, JWT Bearer token, or dev bypass
   const pin = c.req.header('X-Scorekeeper-Pin');
   const devBypass = c.req.header('X-Dev-Bypass') === 'true';
-  if (!devBypass && !pin) {
+  let jwtValid = false;
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ') && c.env.JWT_SECRET) {
+    try {
+      const { jwtVerify } = await import('jose');
+      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
+      await jwtVerify(authHeader.slice(7), secret);
+      jwtValid = true;
+    } catch {}
+  }
+  if (!devBypass && !pin && !jwtValid) {
     return c.json({ success: false, error: 'Scorekeeper PIN required' }, 401);
   }
 
@@ -307,7 +317,17 @@ scoringRoutes.delete('/games/:gameId/events/:eventId', async (c) => {
 
   const pin = c.req.header('X-Scorekeeper-Pin');
   const devBypass = c.req.header('X-Dev-Bypass') === 'true';
-  if (!devBypass && !pin) {
+  let jwtValid = false;
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ') && c.env.JWT_SECRET) {
+    try {
+      const { jwtVerify } = await import('jose');
+      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
+      await jwtVerify(authHeader.slice(7), secret);
+      jwtValid = true;
+    } catch {}
+  }
+  if (!devBypass && !pin && !jwtValid) {
     return c.json({ success: false, error: 'Scorekeeper PIN required' }, 401);
   }
 
@@ -636,6 +656,68 @@ scoringRoutes.put('/contests/:contestId', authMiddleware, requireRole('admin', '
 });
 
 // ==========================================
+// DIRECTOR: Edit game score directly
+// ==========================================
+scoringRoutes.put('/games/:gameId/score', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  homeScore: z.number().min(0),
+  awayScore: z.number().min(0),
+  status: z.enum(['scheduled', 'in_progress', 'intermission', 'final']).optional(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { homeScore, awayScore, status } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    const game = await db.prepare('SELECT id FROM games WHERE id = ?').bind(gameId).first();
+    if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+    let query = `UPDATE games SET home_score = ?, away_score = ?, updated_at = datetime('now')`;
+    const params: (string | number)[] = [homeScore, awayScore];
+    if (status) {
+      query += `, status = ?`;
+      params.push(status);
+    }
+    query += ` WHERE id = ?`;
+    params.push(gameId);
+
+    await db.prepare(query).bind(...params).run();
+
+    // If status changed to final, notify coaches
+    if (status === 'final') {
+      notifyCoachesOnFinal(db, c.env, gameId).catch(err => console.error('Coach notify error:', err));
+    }
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to update score' }, 500);
+  }
+});
+
+// ==========================================
+// DIRECTOR: Get all games for an event (with scores, for director dashboard)
+// ==========================================
+scoringRoutes.get('/events/:eventId/director-games', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  const games = await db.prepare(`
+    SELECT g.id, g.game_number, g.start_time, g.status, g.home_score, g.away_score,
+      g.period, g.game_type, g.home_team_id, g.away_team_id,
+      ht.name as home_team_name, at2.name as away_team_name,
+      vr.name as rink_name, ed.age_group, ed.division_level
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    WHERE g.event_id = ?
+    ORDER BY g.start_time ASC, g.game_number ASC
+  `).bind(eventId).all();
+
+  return c.json({ success: true, data: games.results });
+});
+
+// ==========================================
 // PUBLIC: Full Game Sheet (all data for score sheet display)
 // ==========================================
 scoringRoutes.get('/games/:gameId/sheet', async (c) => {
@@ -777,7 +859,17 @@ scoringRoutes.post('/games/:gameId/lineups/load', async (c) => {
 
   const pin = c.req.header('X-Scorekeeper-Pin');
   const devBypass = c.req.header('X-Dev-Bypass') === 'true';
-  if (!devBypass && !pin) return c.json({ success: false, error: 'PIN required' }, 401);
+  let jwtValid = false;
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ') && c.env.JWT_SECRET) {
+    try {
+      const { jwtVerify } = await import('jose');
+      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
+      await jwtVerify(authHeader.slice(7), secret);
+      jwtValid = true;
+    } catch {}
+  }
+  if (!devBypass && !pin && !jwtValid) return c.json({ success: false, error: 'PIN required' }, 401);
 
   const game = await db.prepare('SELECT home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
   if (!game) return c.json({ success: false, error: 'Game not found' }, 404);

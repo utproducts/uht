@@ -28,6 +28,8 @@ import AccountSettingsScreen from '../screens/AccountSettingsScreen';
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
 import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
+import ScoreGameScreen from '../screens/ScoreGameScreen';
+import DirectorGamesScreen from '../screens/DirectorGamesScreen';
 
 const Stack = createNativeStackNavigator();
 const MenuStack = createNativeStackNavigator();
@@ -63,6 +65,16 @@ function MenuStackNavigator() {
       <MenuStack.Screen
         name="AdminRegistrations"
         component={AdminRegistrationsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MenuStack.Screen
+        name="ScoreGame"
+        component={ScoreGameScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MenuStack.Screen
+        name="DirectorGames"
+        component={DirectorGamesScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </MenuStack.Navigator>
