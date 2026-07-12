@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getScorekeeperEvents, getScorekeeperGames } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
+import { ageGroupSortKey, getOrderedAgeGroups } from '../utils/ageGroups';
 
 interface ScorekeeperEvent {
   id: string;
@@ -85,7 +86,8 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
 
   const [events, setEvents] = useState<ScorekeeperEvent[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
-  const [expandedDivision, setExpandedDivision] = useState<string | null>(null);
+  const [selectedAgeGroup, setSelectedAgeGroup] = useState<string>('all');
+  const [allGames, setAllGames] = useState<ScorekeeperGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingDivisions, setLoadingDivisions] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -109,6 +111,7 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
     setLoadingDivisions(true);
     try {
       const games = await getScorekeeperGames(eventId) as ScorekeeperGame[];
+      setAllGames(games);
 
       // Group games by division (age_group + division_level)
       const divMap = new Map<string, ScorekeeperGame[]>();
@@ -149,7 +152,7 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
     setSelectedEventId(event.id);
     setSelectedEventName(event.name);
     setViewMode('divisions');
-    setExpandedDivision(null);
+    setSelectedAgeGroup('all');
     await loadDivisionsForEvent(event.id);
   };
 
@@ -158,7 +161,8 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
     setSelectedEventId(null);
     setSelectedEventName('');
     setDivisions([]);
-    setExpandedDivision(null);
+    setAllGames([]);
+    setSelectedAgeGroup('all');
   };
 
   const openScoring = (game: ScorekeeperGame) => {
@@ -252,127 +256,142 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
     </ScrollView>
   );
 
-  // ============= DIVISIONS VIEW =============
-  const renderDivisionsView = () => (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            if (selectedEventId) await loadDivisionsForEvent(selectedEventId);
-            setRefreshing(false);
-          }}
-          tintColor={colors.navy}
-        />
-      }
-    >
-      {loadingDivisions ? (
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="large" color={colors.navy} />
-        </View>
-      ) : divisions.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="grid-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyTitle}>No Games Yet</Text>
-          <Text style={styles.emptyText}>
-            No games have been assigned for this event yet.
-          </Text>
-        </View>
-      ) : (
-        divisions.map(div => {
-          const isExpanded = expandedDivision === div.key;
-          return (
-            <View key={div.key} style={styles.divisionCard}>
-              <TouchableOpacity
-                style={styles.divisionHeader}
-                onPress={() => setExpandedDivision(isExpanded ? null : div.key)}
-                activeOpacity={0.7}
+  // ============= GAMES VIEW (age group pills + flat game list) =============
+  const renderDivisionsView = () => {
+    const ageGroups = getOrderedAgeGroups(allGames.map(g => ({ age_group: g.age_group })));
+    const filteredGames = selectedAgeGroup === 'all'
+      ? allGames
+      : allGames.filter(g => g.age_group === selectedAgeGroup);
+    // Sort filtered games by date/time
+    const sortedGames = [...filteredGames].sort((a, b) => {
+      if (!a.start_time) return 1;
+      if (!b.start_time) return -1;
+      return a.start_time.localeCompare(b.start_time);
+    });
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={async () => {
+              setRefreshing(true);
+              if (selectedEventId) await loadDivisionsForEvent(selectedEventId);
+              setRefreshing(false);
+            }}
+            tintColor={colors.navy}
+          />
+        }
+      >
+        {loadingDivisions ? (
+          <View style={styles.loadingCenter}>
+            <ActivityIndicator size="large" color={colors.navy} />
+          </View>
+        ) : allGames.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="grid-outline" size={48} color={colors.textMuted} />
+            <Text style={styles.emptyTitle}>No Games Yet</Text>
+            <Text style={styles.emptyText}>
+              No games have been assigned for this event yet.
+            </Text>
+          </View>
+        ) : (
+          <>
+            {/* Age group filter pills */}
+            {ageGroups.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.ageFilterRow}
+                style={styles.ageFilterScroll}
               >
-                <View style={styles.divisionLeft}>
-                  <View style={styles.divisionIcon}>
-                    <Ionicons name="shield" size={18} color={colors.white} />
-                  </View>
-                  <View>
-                    <Text style={styles.divisionName}>{div.label}</Text>
-                    <Text style={styles.divisionCount}>{div.games.length} game{div.games.length !== 1 ? 's' : ''}</Text>
-                  </View>
-                </View>
-                <View style={styles.divisionRight}>
-                  {div.activeCount > 0 && (
-                    <View style={styles.activeBadge}>
-                      <View style={styles.activeDot} />
-                      <Text style={styles.activeText}>{div.activeCount} live</Text>
+                <TouchableOpacity
+                  style={[styles.ageFilterPill, selectedAgeGroup === 'all' && styles.ageFilterPillActive]}
+                  onPress={() => setSelectedAgeGroup('all')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.ageFilterPillText, selectedAgeGroup === 'all' && styles.ageFilterPillTextActive]}>
+                    All ({allGames.length})
+                  </Text>
+                </TouchableOpacity>
+                {ageGroups.map(ag => {
+                  const count = allGames.filter(g => g.age_group === ag).length;
+                  return (
+                    <TouchableOpacity
+                      key={ag}
+                      style={[styles.ageFilterPill, selectedAgeGroup === ag && styles.ageFilterPillActive]}
+                      onPress={() => setSelectedAgeGroup(ag)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.ageFilterPillText, selectedAgeGroup === ag && styles.ageFilterPillTextActive]}>
+                        {ag} ({count})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Flat game list */}
+            {sortedGames.map(game => {
+              const statusColors = getStatusColor(game.status);
+              const isActive = ['in_progress', 'warmup', 'intermission'].includes(game.status);
+              const divLabel = [game.age_group, game.division_level].filter(Boolean).join(' ');
+
+              return (
+                <View key={game.id} style={[styles.gameCard, isActive && styles.gameCardActive]}>
+                  <View style={styles.gameTop}>
+                    <Text style={styles.gameNumber}>Game #{game.game_number}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+                      <Text style={[styles.statusText, { color: statusColors.text }]}>
+                        {getStatusLabel(game.status)}
+                      </Text>
                     </View>
+                  </View>
+                  {selectedAgeGroup === 'all' && divLabel ? (
+                    <Text style={styles.gameDivisionLabel}>{divLabel}</Text>
+                  ) : null}
+                  <View style={styles.gameMatchup}>
+                    <Text style={styles.gameTeam} numberOfLines={1}>{game.home_team_name || 'TBD'}</Text>
+                    <Text style={styles.gameVs}>vs</Text>
+                    <Text style={styles.gameTeam} numberOfLines={1}>{game.away_team_name || 'TBD'}</Text>
+                  </View>
+                  {(game.status === 'in_progress' || game.status === 'final') && (
+                    <Text style={styles.gameScore}>
+                      {game.home_score} - {game.away_score}
+                    </Text>
                   )}
-                  <Ionicons
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={colors.textMuted}
-                  />
+                  <View style={styles.gameDetails}>
+                    <View style={styles.gameDetailItem}>
+                      <Ionicons name="time-outline" size={12} color={colors.textMuted} />
+                      <Text style={styles.gameDetailText}>
+                        {formatDay(game.start_time)} {formatTime(game.start_time)}
+                      </Text>
+                    </View>
+                    <View style={styles.gameDetailItem}>
+                      <Ionicons name="location-outline" size={12} color={colors.textMuted} />
+                      <Text style={styles.gameDetailText}>{game.rink_name || '—'}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.scoreButton}
+                    onPress={() => openScoring(game)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="create-outline" size={16} color={colors.white} />
+                    <Text style={styles.scoreButtonText}>
+                      {game.status === 'final' ? 'View Game Sheet' : 'Score Game'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-
-              {isExpanded && (
-                <View style={styles.gamesContainer}>
-                  {div.games.map(game => {
-                    const statusColors = getStatusColor(game.status);
-                    const isActive = ['in_progress', 'warmup', 'intermission'].includes(game.status);
-
-                    return (
-                      <View key={game.id} style={[styles.gameCard, isActive && styles.gameCardActive]}>
-                        <View style={styles.gameTop}>
-                          <Text style={styles.gameNumber}>Game #{game.game_number}</Text>
-                          <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
-                            <Text style={[styles.statusText, { color: statusColors.text }]}>
-                              {getStatusLabel(game.status)}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.gameMatchup}>
-                          <Text style={styles.gameTeam} numberOfLines={1}>{game.home_team_name || 'TBD'}</Text>
-                          <Text style={styles.gameVs}>vs</Text>
-                          <Text style={styles.gameTeam} numberOfLines={1}>{game.away_team_name || 'TBD'}</Text>
-                        </View>
-                        {(game.status === 'in_progress' || game.status === 'final') && (
-                          <Text style={styles.gameScore}>
-                            {game.home_score} - {game.away_score}
-                          </Text>
-                        )}
-                        <View style={styles.gameDetails}>
-                          <View style={styles.gameDetailItem}>
-                            <Ionicons name="time-outline" size={12} color={colors.textMuted} />
-                            <Text style={styles.gameDetailText}>
-                              {formatDay(game.start_time)} {formatTime(game.start_time)}
-                            </Text>
-                          </View>
-                          <View style={styles.gameDetailItem}>
-                            <Ionicons name="location-outline" size={12} color={colors.textMuted} />
-                            <Text style={styles.gameDetailText}>{game.rink_name || '—'}</Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.scoreButton}
-                          onPress={() => openScoring(game)}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="create-outline" size={16} color={colors.white} />
-                          <Text style={styles.scoreButtonText}>
-                            {game.status === 'final' ? 'View Game Sheet' : 'Score Game'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          );
-        })
-      )}
-    </ScrollView>
-  );
+              );
+            })}
+          </>
+        )}
+      </ScrollView>
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -658,5 +677,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     ...fonts.bold,
     color: colors.white,
+  },
+
+  // Age group filter pills
+  ageFilterScroll: {
+    marginBottom: spacing.md,
+  },
+  ageFilterRow: {
+    gap: spacing.xs,
+  },
+  ageFilterPill: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full || 999,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  ageFilterPillActive: {
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
+  },
+  ageFilterPillText: {
+    fontSize: 13,
+    ...fonts.semibold,
+    color: colors.textMuted,
+  },
+  ageFilterPillTextActive: {
+    color: colors.white,
+  },
+  gameDivisionLabel: {
+    fontSize: 12,
+    ...fonts.semibold,
+    color: colors.navy,
+    marginBottom: 4,
   },
 });

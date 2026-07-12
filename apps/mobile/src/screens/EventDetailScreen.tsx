@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
 import { getUser, User } from '../services/auth';
+import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
 
 // ==================
 // Tab configuration matching USSSA layout
@@ -41,13 +42,13 @@ interface TabDef {
 }
 
 const EVENT_TABS: TabDef[] = [
-  { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
-  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
   { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
   { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
-  { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
   { key: 'venues', label: 'Venues', icon: 'location-outline' },
   { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
+  { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
+  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
+  { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
   { key: 'whos_coming', label: "Who's Coming", icon: 'people-outline' },
   { key: 'merchandise', label: 'Merchandise', icon: 'cart-outline' },
   { key: 'contact', label: 'Contact', icon: 'mail-outline' },
@@ -209,7 +210,7 @@ export default function EventDetailScreen({
   navigation: any;
 }) {
   const { eventId, eventName, event: navEvent } = route.params || {};
-  const [activeTab, setActiveTab] = useState<TabKey>('info');
+  const [activeTab, setActiveTab] = useState<TabKey>('my_schedule');
   const [event, setEvent] = useState<EventInfo | null>(
     navEvent
       ? {
@@ -432,7 +433,10 @@ export default function EventDetailScreen({
   const eventVenues: EventVenue[] = displayEvent?.venues || [];
   const eventHotels: EventHotel[] = displayEvent?.hotels || [];
   const registeredTeams: RegisteredTeam[] = displayEvent?.registered_teams || [];
-  const eventDivisions: EventDivision[] = (displayEvent?.divisions || []) as EventDivision[];
+  const eventDivisions: EventDivision[] = sortByAgeGroup(
+    (displayEvent?.divisions || []) as EventDivision[],
+    d => d.age_group
+  );
 
   // Group scores by date
   const scoresByDate = scores.reduce<Record<string, ScoreGame[]>>((acc, game) => {
@@ -919,7 +923,7 @@ export default function EventDetailScreen({
         divMap.set(d.id, { id: d.id, label });
       }
     });
-    return [...divMap.values()].sort((a, b) => a.label.localeCompare(b.label));
+    return sortByAgeGroup([...divMap.values()], d => d.label);
   })();
 
   function getFilteredSchedule() {
