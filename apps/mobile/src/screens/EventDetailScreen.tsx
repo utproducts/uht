@@ -42,11 +42,11 @@ interface TabDef {
 }
 
 const EVENT_TABS: TabDef[] = [
+  { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
   { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
   { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
   { key: 'venues', label: 'Venues', icon: 'location-outline' },
   { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
-  { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
   { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
   { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
   { key: 'whos_coming', label: "Who's Coming", icon: 'people-outline' },
@@ -210,7 +210,7 @@ export default function EventDetailScreen({
   navigation: any;
 }) {
   const { eventId, eventName, event: navEvent } = route.params || {};
-  const [activeTab, setActiveTab] = useState<TabKey>('my_schedule');
+  const [activeTab, setActiveTab] = useState<TabKey>('info');
   const [event, setEvent] = useState<EventInfo | null>(
     navEvent
       ? {
