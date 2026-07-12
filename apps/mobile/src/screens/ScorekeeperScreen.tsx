@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -110,7 +110,8 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
   const loadDivisionsForEvent = async (eventId: string, eventList?: ScorekeeperEvent[]) => {
     setLoadingDivisions(true);
     try {
-      const games = await getScorekeeperGames(eventId) as ScorekeeperGame[];
+      const gamesData = await getScorekeeperGames(eventId);
+      const games = (Array.isArray(gamesData) ? gamesData : []) as ScorekeeperGame[];
       setAllGames(games);
 
       // Group games by division (age_group + division_level)
@@ -138,9 +139,24 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
       setDivisions(divList);
     } catch {
       setDivisions([]);
+      setAllGames([]);
     }
     setLoadingDivisions(false);
   };
+
+  // Watch route params — when navigating from HomeScreen with an eventId,
+  // useState initializers won't re-run if the screen is already mounted
+  useEffect(() => {
+    const eid = route?.params?.eventId;
+    const ename = route?.params?.eventName;
+    if (eid) {
+      setViewMode('divisions');
+      setSelectedEventId(eid);
+      setSelectedEventName(ename || '');
+      setSelectedAgeGroup('all');
+      loadDivisionsForEvent(eid);
+    }
+  }, [route?.params?.eventId]);
 
   useFocusEffect(
     useCallback(() => {
