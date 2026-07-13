@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-const API = 'https://uht.chad-157.workers.dev/api';
+const API = 'https://api.ultimatetournaments.com/api';
 
 /* ── types ── */
 interface EventData {

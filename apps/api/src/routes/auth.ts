@@ -37,8 +37,8 @@ authRoutes.post('/register', rateLimit(5, 60_000), zValidator('json', registerSc
   try {
     // Create user
     await db.prepare(`
-      INSERT INTO users (id, email, password_hash, first_name, last_name, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password_hash, first_name, last_name, phone, is_app_user)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
     `).bind(userId, data.email.toLowerCase(), passwordHash, data.firstName, data.lastName, data.phone || null).run();
 
     // Assign role
@@ -131,8 +131,8 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
   try {
     // Create user (no password — magic link only)
     await db.prepare(`
-      INSERT INTO users (id, email, password_hash, first_name, last_name, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password_hash, first_name, last_name, phone, is_app_user)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
     `).bind(userId, data.email.toLowerCase(), 'magic_link', data.firstName, data.lastName, data.phone || null).run();
 
     // Assign role
@@ -212,7 +212,7 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
             subject: 'Welcome to Ultimate Tournaments!',
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                  <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                  <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                   <h2 style="color: #1d1d1f; margin-bottom: 8px;">Welcome, ${data.firstName}!</h2>
                   <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                     Your account has been created. Click the button below to sign in for the first time.
@@ -223,6 +223,11 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
                   <p style="color: #aeaeb2; font-size: 13px; margin-top: 32px;">
                     This link expires in 15 minutes. You can always request a new one from the login page.
                   </p>
+                  <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                    <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                  </div>
                 </div>
               `,
           }),
@@ -401,7 +406,7 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
           subject: mlSubject,
           html: `
               <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                 <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${user.first_name},</h2>
                 <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                   ${mlBody}
@@ -412,6 +417,11 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
                 <p style="color: #aeaeb2; font-size: 13px; margin-top: 32px;">
                   ${mlFooter}
                 </p>
+                <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                  <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                  <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                  <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                </div>
               </div>
             `,
         }),

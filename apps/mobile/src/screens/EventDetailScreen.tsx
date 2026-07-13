@@ -70,6 +70,8 @@ interface GameSlot {
   away_team_name?: string;
   home_team?: string;
   away_team?: string;
+  home_team_logo?: string;
+  away_team_logo?: string;
   home_score?: number | null;
   away_score?: number | null;
   division_name?: string;
@@ -94,6 +96,8 @@ interface ScoreGame {
   start_time?: string;
   home_team_name?: string;
   away_team_name?: string;
+  home_team_logo?: string;
+  away_team_logo?: string;
   home_score: number;
   away_score: number;
   status: string;
@@ -608,7 +612,7 @@ export default function EventDetailScreen({
                   const eventName = displayEvent?.name || 'this tournament';
                   try {
                     await Share.share({
-                      message: `Hey Coach! Check out ${eventName} on UHT and register our team: https://uht-web.pages.dev/events/${slug}`,
+                      message: `Hey Coach! Check out ${eventName} on UHT and register our team: https://ultimatetournaments.com/events/${slug}`,
                     });
                   } catch {}
                 }}
@@ -838,6 +842,9 @@ export default function EventDetailScreen({
               <View style={styles.matchup}>
                 <View style={styles.teamRow}>
                   <Text style={styles.teamLabel}>HOME</Text>
+                  {item.home_team_logo ? (
+                    <Image source={{ uri: item.home_team_logo }} style={styles.teamLogo} />
+                  ) : null}
                   <Text style={[styles.teamName, isMyHome ? styles.myTeamHighlight : null]}>
                     {item.home_team_name || item.home_team || 'TBD'}
                   </Text>
@@ -854,6 +861,9 @@ export default function EventDetailScreen({
                 <Text style={styles.vsText}>vs</Text>
                 <View style={styles.teamRow}>
                   <Text style={styles.teamLabel}>AWAY</Text>
+                  {item.away_team_logo ? (
+                    <Image source={{ uri: item.away_team_logo }} style={styles.teamLogo} />
+                  ) : null}
                   <Text style={[styles.teamName, isMyAway ? styles.myTeamHighlight : null]}>
                     {item.away_team_name || item.away_team || 'TBD'}
                   </Text>
@@ -1059,6 +1069,9 @@ export default function EventDetailScreen({
               <View style={styles.matchup}>
                 <View style={styles.teamRow}>
                   <Text style={styles.teamLabel}>HOME</Text>
+                  {item.home_team_logo ? (
+                    <Image source={{ uri: item.home_team_logo }} style={styles.teamLogo} />
+                  ) : null}
                   <Text style={[styles.teamName, isMyHome ? styles.myTeamHighlight : null]}>{item.home_team_name || item.home_team || 'TBD'}</Text>
                   {(isFinal || isLive) && item.home_score != null && (
                     <Text style={[styles.inlineScore, isFinal && (item.home_score ?? 0) > (item.away_score ?? 0) ? styles.inlineScoreWin : null]}>{item.home_score}</Text>
@@ -1073,6 +1086,9 @@ export default function EventDetailScreen({
                 <Text style={styles.vsText}>vs</Text>
                 <View style={styles.teamRow}>
                   <Text style={styles.teamLabel}>AWAY</Text>
+                  {item.away_team_logo ? (
+                    <Image source={{ uri: item.away_team_logo }} style={styles.teamLogo} />
+                  ) : null}
                   <Text style={[styles.teamName, isMyAway ? styles.myTeamHighlight : null]}>{item.away_team_name || item.away_team || 'TBD'}</Text>
                   {(isFinal || isLive) && item.away_score != null && (
                     <Text style={[styles.inlineScore, isFinal && (item.away_score ?? 0) > (item.home_score ?? 0) ? styles.inlineScoreWin : null]}>{item.away_score}</Text>
@@ -1169,6 +1185,9 @@ export default function EventDetailScreen({
                     <View style={styles.scoreMatchup}>
                       <View style={styles.scoreTeamCol}>
                         <Text style={styles.scoreTeamLabel}>AWAY</Text>
+                        {game.away_team_logo ? (
+                          <Image source={{ uri: game.away_team_logo }} style={styles.scoreTeamLogo} />
+                        ) : null}
                         <Text style={[styles.scoreTeamName, awayWins ? styles.scoreTeamWinner : null]} numberOfLines={2}>
                           {game.away_team_name || 'TBD'}
                         </Text>
@@ -1192,6 +1211,9 @@ export default function EventDetailScreen({
                       </View>
                       <View style={[styles.scoreTeamCol, styles.scoreTeamColRight]}>
                         <Text style={styles.scoreTeamLabel}>HOME</Text>
+                        {game.home_team_logo ? (
+                          <Image source={{ uri: game.home_team_logo }} style={styles.scoreTeamLogo} />
+                        ) : null}
                         <Text style={[styles.scoreTeamName, homeWins ? styles.scoreTeamWinner : null]} numberOfLines={2}>
                           {game.home_team_name || 'TBD'}
                         </Text>
@@ -1937,6 +1959,7 @@ const styles = StyleSheet.create({
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   teamLabel: { fontSize: 11, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, width: 40 },
   teamName: { fontSize: 15, color: colors.text, ...fonts.semibold, flex: 1 },
+  teamLogo: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#f0f0f0' },
   lockerText: { fontSize: 11, color: colors.cyan, ...fonts.semibold },
   lockerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 48, marginTop: 2 },
   vsText: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', marginLeft: 48 },
@@ -1996,6 +2019,7 @@ const styles = StyleSheet.create({
   scoreTeamColRight: { alignItems: 'flex-end' },
   scoreTeamLabel: { fontSize: 10, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, marginBottom: 2, textTransform: 'uppercase' },
   scoreTeamName: { fontSize: 14, color: colors.text, ...fonts.semibold },
+  scoreTeamLogo: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f0f0f0', marginBottom: 4 },
   scoreTeamWinner: { ...fonts.bold, color: colors.navy },
   scoreCenter: { alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 70 },
   scoreNumbers: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

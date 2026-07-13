@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api/sponsors';
+const API_BASE = 'https://api.ultimatetournaments.com/api/sponsors';
 
 interface Sponsor {
   id: string;

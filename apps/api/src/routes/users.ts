@@ -46,6 +46,7 @@ const listQuerySchema = z.object({
   q: z.string().optional(),
   role: z.enum(['admin', 'director', 'organization', 'coach', 'manager', 'parent', 'scorekeeper', 'referee']).optional(),
   status: z.enum(['active', 'inactive']).optional(),
+  app_users: z.enum(['true', 'false']).default('true'),
   page: z.string().default('1').transform(v => Math.max(1, parseInt(v) || 1)),
   per_page: z.string().default('20').transform(v => Math.min(100, Math.max(1, parseInt(v) || 20))),
 });
@@ -58,7 +59,7 @@ userRoutes.get('/',
   requireRole('admin'),
   zValidator('query', listQuerySchema, validationHook),
   async (c) => {
-    const { q, role, status, page, per_page } = c.req.valid('query');
+    const { q, role, status, app_users, page, per_page } = c.req.valid('query');
     const db = c.env.DB;
 
     let baseQuery = `
@@ -80,6 +81,11 @@ userRoutes.get('/',
     `;
 
     const params: (string | number)[] = [];
+
+    // Filter to app users only (exclude imported contacts)
+    if (app_users === 'true') {
+      baseQuery += ` AND u.is_app_user = 1`;
+    }
 
     // Search by name or email
     if (q) {
@@ -104,7 +110,8 @@ userRoutes.get('/',
 
     // Count total before pagination
     const countQuery = `SELECT COUNT(DISTINCT u.id) as count FROM users u LEFT JOIN user_roles ur ON u.id = ur.user_id WHERE 1=1${
-      q ? ` AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)` : ''
+      app_users === 'true' ? ` AND u.is_app_user = 1` : ''
+    }${q ? ` AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)` : ''
     }${status === 'active' ? ` AND u.is_active = 1` : status === 'inactive' ? ` AND u.is_active = 0` : ''}`;
 
     const countParams = q ? [
@@ -242,7 +249,9 @@ userRoutes.get('/',
     let roleCounts: Record<string, number> = {};
     try {
       const rc = await db.prepare(`
-        SELECT role, COUNT(*) as cnt FROM user_roles GROUP BY role ORDER BY role
+        SELECT ur.role, COUNT(*) as cnt FROM user_roles ur
+        ${app_users === 'true' ? 'JOIN users u ON u.id = ur.user_id WHERE u.is_app_user = 1' : ''}
+        GROUP BY ur.role ORDER BY ur.role
       `).all<{ role: string; cnt: number }>();
       for (const r of rc.results || []) {
         roleCounts[r.role] = r.cnt;
@@ -380,8 +389,8 @@ userRoutes.post('/',
     try {
       // Create user
       await db.prepare(`
-        INSERT INTO users (id, email, password_hash, first_name, last_name, phone, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, email, password_hash, first_name, last_name, phone, is_app_user, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
       `).bind(
         userId,
         data.email.toLowerCase(),

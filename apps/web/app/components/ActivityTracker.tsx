@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api';
+const API_BASE = 'https://api.ultimatetournaments.com/api';
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 function getSessionId(): string {

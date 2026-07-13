@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api/sponsors';
+const API_BASE = 'https://api.ultimatetournaments.com/api/sponsors';
 
 interface SponsorPackage {
   id: string;
@@ -44,7 +44,7 @@ function InquiryModal({ packageName, onClose }: { packageName: string; onClose: 
     if (!form.name || !form.email) return;
     setSubmitting(true);
     try {
-      const res = await fetch('https://uht.chad-157.workers.dev/api/sponsors/inquiry', {
+      const res = await fetch('https://api.ultimatetournaments.com/api/sponsors/inquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

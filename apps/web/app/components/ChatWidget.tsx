@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
 
 interface Message {
   role: 'user' | 'assistant';

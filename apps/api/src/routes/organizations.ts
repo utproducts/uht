@@ -682,7 +682,8 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
 
       // Send invite email via Resend
       try {
-        const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.headCoachEmail)}&role=coach`;
+        const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+        const signupUrl = `${siteUrl}/signup?invite=${inviteCode}&email=${encodeURIComponent(data.headCoachEmail)}&role=coach`;
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -715,7 +716,8 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
       `).bind(invId, teamId, data.managerEmail.toLowerCase(), user.id).run();
 
       try {
-        const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.managerEmail)}&role=manager`;
+        const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+        const signupUrl = `${siteUrl}/signup?invite=${inviteCode}&email=${encodeURIComponent(data.managerEmail)}&role=manager`;
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -787,7 +789,8 @@ organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zVali
 
   // Send invite email via Resend
   try {
-    const signupUrl = `https://uht-web.pages.dev/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
+    const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+    const signupUrl = `${siteUrl}/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -939,7 +942,8 @@ organizationRoutes.post('/:orgId/logo-base64', authMiddleware, requireRole('admi
 
   await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
 
-  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
+  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
 
   await db.prepare("UPDATE organizations SET logo_url = ? WHERE id = ?")
     .bind(logoUrl, orgId).run();

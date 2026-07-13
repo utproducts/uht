@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -35,6 +36,8 @@ interface ScorekeeperGame {
   status: string;
   home_team_name: string;
   away_team_name: string;
+  home_team_logo?: string;
+  away_team_logo?: string;
   home_score: number;
   away_score: number;
   period: number;
@@ -42,6 +45,12 @@ interface ScorekeeperGame {
   rink_name: string;
   age_group: string;
   division_level: string;
+  delay_status?: string;
+  delay_reason?: string;
+  delay_minutes?: number;
+  delay_note?: string;
+  home_locker_room?: string;
+  away_locker_room?: string;
 }
 
 interface Division {
@@ -194,6 +203,7 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
       case 'intermission': return { bg: '#fff3e0', text: '#e67700' };
       case 'warmup': return { bg: '#e6f9ff', text: colors.cyan };
       case 'final': return { bg: '#e8f5e9', text: '#2e7d32' };
+      case 'delayed': return { bg: '#fff3e0', text: '#e65100' };
       default: return { bg: '#f5f5f7', text: '#86868b' };
     }
   };
@@ -205,6 +215,7 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
       case 'warmup': return 'WARMUP';
       case 'final': return 'FINAL';
       case 'scheduled': return 'SCHEDULED';
+      case 'delayed': return 'DELAYED';
       default: return status?.toUpperCase() || '';
     }
   };
@@ -369,14 +380,33 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
                     <Text style={styles.gameDivisionLabel}>{divLabel}</Text>
                   ) : null}
                   <View style={styles.gameMatchup}>
-                    <Text style={styles.gameTeam} numberOfLines={1}>{game.home_team_name || 'TBD'}</Text>
+                    <View style={styles.gameTeamRow}>
+                      {game.home_team_logo ? (
+                        <Image source={{ uri: game.home_team_logo }} style={styles.gameTeamLogo} />
+                      ) : null}
+                      <Text style={styles.gameTeam} numberOfLines={1}>{game.home_team_name || 'TBD'}</Text>
+                    </View>
                     <Text style={styles.gameVs}>vs</Text>
-                    <Text style={styles.gameTeam} numberOfLines={1}>{game.away_team_name || 'TBD'}</Text>
+                    <View style={styles.gameTeamRow}>
+                      {game.away_team_logo ? (
+                        <Image source={{ uri: game.away_team_logo }} style={styles.gameTeamLogo} />
+                      ) : null}
+                      <Text style={styles.gameTeam} numberOfLines={1}>{game.away_team_name || 'TBD'}</Text>
+                    </View>
                   </View>
                   {(game.status === 'in_progress' || game.status === 'final') && (
                     <Text style={styles.gameScore}>
                       {game.home_score} - {game.away_score}
                     </Text>
+                  )}
+                  {(game.status === 'delayed' || game.delay_status === 'delayed') && (
+                    <View style={{ backgroundColor: '#fff3e0', borderRadius: 8, padding: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons name="alert-circle" size={14} color="#e65100" style={{ marginRight: 6 }} />
+                      <Text style={{ color: '#e65100', fontSize: 12, fontWeight: '600', flex: 1 }}>
+                        {game.delay_reason || game.delay_note || 'Delayed'}
+                        {game.delay_minutes ? ` (${game.delay_minutes} min)` : ''}
+                      </Text>
+                    </View>
                   )}
                   <View style={styles.gameDetails}>
                     <View style={styles.gameDetailItem}>
@@ -389,6 +419,14 @@ export default function ScorekeeperScreen({ navigation, route }: { navigation: a
                       <Ionicons name="location-outline" size={12} color={colors.textMuted} />
                       <Text style={styles.gameDetailText}>{game.rink_name || '—'}</Text>
                     </View>
+                    {(game.home_locker_room || game.away_locker_room) && (
+                      <View style={styles.gameDetailItem}>
+                        <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
+                        <Text style={styles.gameDetailText}>
+                          LR: {game.home_locker_room || '—'} / {game.away_locker_room || '—'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={styles.scoreButton}
@@ -644,6 +682,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  gameTeamRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  gameTeamLogo: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#f0f0f0',
   },
   gameTeam: {
     flex: 1,

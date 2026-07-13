@@ -511,11 +511,14 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
   const games = await db.prepare(`
     SELECT g.id, g.game_number, g.start_time, g.end_time, g.game_type, g.pool_name,
       g.home_score, g.away_score, g.period, g.status, g.delay_minutes, g.delay_note,
+      g.delay_status, g.delay_reason,
       g.checked_in_at, g.rink_id, g.is_overtime, g.is_shootout,
       ht.name as home_team_name, at2.name as away_team_name,
+      ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
       vr.name as rink_name, v.name as venue_name,
       ed.age_group, ed.division_level,
-      glr_home.name as home_locker_room, glr_away.name as away_locker_room
+      COALESCE(glr_home.name, g.home_locker_room) as home_locker_room,
+      COALESCE(glr_away.name, g.away_locker_room) as away_locker_room
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at2 ON at2.id = g.away_team_id
@@ -567,6 +570,98 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
   });
 
   return c.json({ success: true, data: enriched });
+});
+
+// ==========================================
+// ADMIN: Set game delay status
+// ==========================================
+scoringRoutes.put('/games/:gameId/delay', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  delayStatus: z.enum(['delayed', 'on_time']).nullable(),
+  delayReason: z.string().optional().nullable(),
+  delayMinutes: z.number().min(0).optional(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { delayStatus, delayReason, delayMinutes } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    const game = await db.prepare('SELECT id FROM games WHERE id = ?').bind(gameId).first();
+    if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+    const updates: string[] = ["updated_at = datetime('now')"];
+    const params: any[] = [];
+
+    // Update delay_status column
+    updates.push('delay_status = ?');
+    params.push(delayStatus || null);
+
+    // Update delay_reason column
+    updates.push('delay_reason = ?');
+    params.push(delayReason || null);
+
+    // Update legacy delay_note with the reason too
+    updates.push('delay_note = ?');
+    params.push(delayReason || null);
+
+    // Update delay_minutes if provided
+    if (delayMinutes !== undefined) {
+      updates.push('delay_minutes = ?');
+      params.push(delayMinutes);
+    } else if (delayStatus === 'delayed') {
+      // Default to 15 min delay if not specified
+      updates.push('delay_minutes = ?');
+      params.push(15);
+    } else if (!delayStatus || delayStatus === 'on_time') {
+      updates.push('delay_minutes = ?');
+      params.push(0);
+    }
+
+    // If marking delayed, also update game status
+    if (delayStatus === 'delayed') {
+      updates.push('status = ?');
+      params.push('delayed');
+    } else if (delayStatus === 'on_time') {
+      // Only reset status if currently delayed
+      const currentGame = await db.prepare('SELECT status FROM games WHERE id = ?').bind(gameId).first<any>();
+      if (currentGame?.status === 'delayed') {
+        updates.push('status = ?');
+        params.push('scheduled');
+      }
+    }
+
+    params.push(gameId);
+    await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to update delay' }, 500);
+  }
+});
+
+// ==========================================
+// ADMIN: Set game locker rooms (direct column update)
+// ==========================================
+scoringRoutes.put('/games/:gameId/locker-rooms', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  homeLockerRoom: z.string().optional().nullable(),
+  awayLockerRoom: z.string().optional().nullable(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { homeLockerRoom, awayLockerRoom } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    const game = await db.prepare('SELECT id FROM games WHERE id = ?').bind(gameId).first();
+    if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+    await db.prepare(`
+      UPDATE games SET home_locker_room = ?, away_locker_room = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).bind(homeLockerRoom || null, awayLockerRoom || null, gameId).run();
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to update locker rooms' }, 500);
+  }
 });
 
 // ==========================================
@@ -704,6 +799,7 @@ scoringRoutes.get('/events/:eventId/director-games', authMiddleware, requireRole
     SELECT g.id, g.game_number, g.start_time, g.status, g.home_score, g.away_score,
       g.period, g.game_type, g.home_team_id, g.away_team_id,
       ht.name as home_team_name, at2.name as away_team_name,
+      ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
       vr.name as rink_name, ed.age_group, ed.division_level
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
@@ -1198,7 +1294,8 @@ async function notifyCoachesOnFinal(db: D1Database, env: Env, gameId: string) {
   if (coachPhones.length === 0) return;
 
   // Build the contest URL
-  const contestUrl = `https://uht-web.pages.dev/scoring/contest/?gameId=${gameId}`;
+  const siteBase = env.SITE_URL || 'https://ultimatetournaments.com';
+  const contestUrl = `${siteBase}/scoring/contest/?gameId=${gameId}`;
 
   for (const coach of coachPhones) {
     const message = `🏒 FINAL SCORE — ${game.age_group} ${game.division_level}\n` +
@@ -1251,22 +1348,31 @@ async function sendTelnyxSms(env: Env, to: string, body: string): Promise<string
 // SCOREKEEPER DASHBOARD: My assigned events
 // ==========================================
 scoringRoutes.get('/my-events', authMiddleware, async (c) => {
-  const user = (c as any).user;
+  const user = c.get('user') as any;
   const db = c.env.DB;
 
   try {
-    // Find events where this user has games assigned as scorekeeper
+    // Find events where this user has games assigned OR is an event-level scorekeeper
     const events = await db.prepare(`
       SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.city, e.state,
         e.venue_id, v.name as venue_name,
-        (SELECT COUNT(*) FROM games g2 WHERE g2.event_id = e.id AND g2.scorekeeper_id = ?) as game_count,
-        (SELECT COUNT(*) FROM games g3 WHERE g3.event_id = e.id AND g3.scorekeeper_id = ? AND g3.status IN ('scheduled', 'warmup', 'in_progress', 'intermission')) as active_games
+        CASE WHEN es.user_id IS NOT NULL
+          THEN (SELECT COUNT(*) FROM games g2 WHERE g2.event_id = e.id)
+          ELSE (SELECT COUNT(*) FROM games g2 WHERE g2.event_id = e.id AND g2.scorekeeper_id = ?)
+        END as game_count,
+        CASE WHEN es.user_id IS NOT NULL
+          THEN (SELECT COUNT(*) FROM games g3 WHERE g3.event_id = e.id AND g3.status IN ('scheduled', 'warmup', 'in_progress', 'intermission'))
+          ELSE (SELECT COUNT(*) FROM games g3 WHERE g3.event_id = e.id AND g3.scorekeeper_id = ? AND g3.status IN ('scheduled', 'warmup', 'in_progress', 'intermission'))
+        END as active_games,
+        CASE WHEN es.user_id IS NOT NULL THEN 1 ELSE 0 END as is_event_scorekeeper
       FROM events e
-      JOIN games g ON g.event_id = e.id AND g.scorekeeper_id = ?
+      LEFT JOIN event_scorekeepers es ON es.event_id = e.id AND es.user_id = ?
+      LEFT JOIN games g ON g.event_id = e.id AND g.scorekeeper_id = ?
       LEFT JOIN venues v ON v.id = e.venue_id
+      WHERE es.user_id IS NOT NULL OR g.scorekeeper_id IS NOT NULL
       GROUP BY e.id
       ORDER BY e.start_date DESC
-    `).bind(user.id, user.id, user.id).all();
+    `).bind(user.id, user.id, user.id, user.id).all();
 
     return c.json({ success: true, data: events.results });
   } catch (err: any) {
@@ -1278,26 +1384,52 @@ scoringRoutes.get('/my-events', authMiddleware, async (c) => {
 // SCOREKEEPER DASHBOARD: My games for an event
 // ==========================================
 scoringRoutes.get('/my-events/:eventId/games', authMiddleware, async (c) => {
-  const user = (c as any).user;
+  const user = c.get('user') as any;
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
   try {
-    const games = await db.prepare(`
-      SELECT g.*,
-        ht.name as home_team_name, ht.logo_url as home_team_logo,
-        at2.name as away_team_name, at2.logo_url as away_team_logo,
-        vr.name as rink_name, v.name as venue_name,
-        ed.age_group, ed.division_level
-      FROM games g
-      LEFT JOIN teams ht ON ht.id = g.home_team_id
-      LEFT JOIN teams at2 ON at2.id = g.away_team_id
-      LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
-      LEFT JOIN venues v ON v.id = g.venue_id
-      LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
-      WHERE g.event_id = ? AND g.scorekeeper_id = ?
-      ORDER BY g.start_time ASC, g.game_number ASC
-    `).bind(eventId, user.id).all();
+    // Check if user is an event-level scorekeeper (sees ALL games)
+    const eventSk = await db.prepare(`
+      SELECT user_id FROM event_scorekeepers WHERE event_id = ? AND user_id = ?
+    `).bind(eventId, user.id).first();
+
+    let games;
+    if (eventSk) {
+      // Event-level scorekeeper — show ALL games
+      games = await db.prepare(`
+        SELECT g.*,
+          ht.name as home_team_name, ht.logo_url as home_team_logo,
+          at2.name as away_team_name, at2.logo_url as away_team_logo,
+          vr.name as rink_name, v.name as venue_name,
+          ed.age_group, ed.division_level
+        FROM games g
+        LEFT JOIN teams ht ON ht.id = g.home_team_id
+        LEFT JOIN teams at2 ON at2.id = g.away_team_id
+        LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+        LEFT JOIN venues v ON v.id = g.venue_id
+        LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+        WHERE g.event_id = ?
+        ORDER BY g.start_time ASC, g.game_number ASC
+      `).bind(eventId).all();
+    } else {
+      // Game-level scorekeeper — show only assigned games
+      games = await db.prepare(`
+        SELECT g.*,
+          ht.name as home_team_name, ht.logo_url as home_team_logo,
+          at2.name as away_team_name, at2.logo_url as away_team_logo,
+          vr.name as rink_name, v.name as venue_name,
+          ed.age_group, ed.division_level
+        FROM games g
+        LEFT JOIN teams ht ON ht.id = g.home_team_id
+        LEFT JOIN teams at2 ON at2.id = g.away_team_id
+        LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+        LEFT JOIN venues v ON v.id = g.venue_id
+        LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+        WHERE g.event_id = ? AND g.scorekeeper_id = ?
+        ORDER BY g.start_time ASC, g.game_number ASC
+      `).bind(eventId, user.id).all();
+    }
 
     return c.json({ success: true, data: games.results });
   } catch (err: any) {
@@ -1373,15 +1505,15 @@ scoringRoutes.put('/events/:eventId/bulk-unassign', authMiddleware, requireRole(
 });
 
 // ==========================================
-// ADMIN: Get scorekeepers for an event (users assigned to any game)
+// ADMIN: Get scorekeepers for an event (both event-level and game-level)
 // ==========================================
 scoringRoutes.get('/events/:eventId/scorekeepers', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
   try {
-    // Get all unique scorekeepers assigned to games in this event
-    const assigned = await db.prepare(`
+    // Get game-level assigned scorekeepers
+    const gameLevel = await db.prepare(`
       SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, u.phone,
         COUNT(g.id) as assigned_games,
         SUM(CASE WHEN g.status = 'final' THEN 1 ELSE 0 END) as completed_games,
@@ -1393,8 +1525,63 @@ scoringRoutes.get('/events/:eventId/scorekeepers', authMiddleware, requireRole('
       ORDER BY u.last_name, u.first_name
     `).bind(eventId).all();
 
-    return c.json({ success: true, data: assigned.results });
+    // Get event-level scorekeepers
+    const eventLevel = await db.prepare(`
+      SELECT es.id as assignment_id, es.user_id, es.created_at,
+             u.id, u.first_name, u.last_name, u.email, u.phone
+      FROM event_scorekeepers es
+      JOIN users u ON u.id = es.user_id
+      WHERE es.event_id = ?
+      ORDER BY u.last_name, u.first_name
+    `).bind(eventId).all();
+
+    return c.json({ success: true, data: gameLevel.results, eventScorekeepers: eventLevel.results });
   } catch (err: any) {
     return c.json({ success: false, error: err?.message || 'Failed to fetch scorekeepers' }, 500);
+  }
+});
+
+// ==========================================
+// ADMIN: Add scorekeeper to event (event-level — sees all games)
+// ==========================================
+scoringRoutes.post('/events/:eventId/event-scorekeepers', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  userIds: z.array(z.string()).min(1),
+})), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { userIds } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    let added = 0;
+    for (const userId of userIds) {
+      try {
+        await db.prepare(`
+          INSERT INTO event_scorekeepers (id, event_id, user_id)
+          VALUES (?, ?, ?)
+        `).bind(crypto.randomUUID().replace(/-/g, ''), eventId, userId).run();
+        added++;
+      } catch {
+        // unique constraint — already assigned, skip
+      }
+    }
+    return c.json({ success: true, message: `${added} scorekeeper(s) added to event` });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to add event scorekeeper' }, 500);
+  }
+});
+
+// ==========================================
+// ADMIN: Remove scorekeeper from event (event-level)
+// ==========================================
+scoringRoutes.delete('/events/:eventId/event-scorekeepers/:userId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const userId = c.req.param('userId');
+  const db = c.env.DB;
+
+  try {
+    await db.prepare(`DELETE FROM event_scorekeepers WHERE event_id = ? AND user_id = ?`).bind(eventId, userId).run();
+    return c.json({ success: true, message: 'Scorekeeper removed from event' });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to remove scorekeeper' }, 500);
   }
 });

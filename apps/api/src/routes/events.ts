@@ -1666,7 +1666,8 @@ eventRoutes.post('/admin/hotel-image/:hotelId', authMiddleware, requireRole('adm
   });
 
   // Build public URL via Worker proxy
-  const imageUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const imageUrl = `${apiBase}/api/assets/${key}`;
 
   // Save URL to database
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
@@ -2529,7 +2530,7 @@ eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
     return c.json({ success: true, data: { emailsSent: 0, message: 'No teams need hotel notifications.' } });
   }
 
-  const siteBase = c.env.SITE_URL || 'https://uht-web.pages.dev';
+  const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
   let sentCount = 0;
 
   for (const reg of registrations) {
@@ -2556,7 +2557,7 @@ eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
-              <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
+              <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
               <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">Hotels Now Available!</h1>
               <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">Book your team's hotel for the tournament</p>
             </td>
@@ -2621,6 +2622,21 @@ eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
                     <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">
                       Select your top 3 hotel preferences and we'll do our best to accommodate your first choice. Tournament hotel rates are typically lower than standard rates.
                     </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- App Download -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                    <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
                   </td>
                 </tr>
               </table>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api';
+const API_BASE = 'https://api.ultimatetournaments.com/api';
 const devHeaders = { 'X-Dev-Bypass': 'true' };
 const authFetch = (url: string, opts: RequestInit = {}) =>
   fetch(url, { ...opts, headers: { ...devHeaders, ...(opts.headers || {}) } });
@@ -799,7 +799,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
         body.event_division_id = divisionId || null;
       }
 
-      const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
+      const res = await fetch(`https://api.ultimatetournaments.com/api/events/admin/registration/${reg.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify(body),

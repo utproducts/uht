@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht-api.ultimatetournaments.com';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
 
 interface FAQItem {
   id: string;

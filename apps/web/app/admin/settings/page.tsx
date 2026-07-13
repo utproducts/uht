@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const API = 'https://uht.chad-157.workers.dev/api';
+const API = 'https://api.ultimatetournaments.com/api';
 
 interface LookupValue {
   id: string;

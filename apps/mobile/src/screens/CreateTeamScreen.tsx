@@ -431,12 +431,16 @@ export default function CreateTeamScreen({
     return '';
   }
 
-  function parseRows(rows: string[][]): Array<{ firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }> {
+  function stripJerseyPrefix(raw: string): string {
+    return raw.replace(/^[HA]\s+/, '').trim();
+  }
+
+  function parseRows(rows: string[][]): Array<{ firstName: string; lastName: string; jerseyNumber: string; awayJerseyNumber?: string; position: string; shoots: string }> {
     if (rows.length === 0) return [];
     const firstRow = rows[0].map(c => c.toLowerCase().trim());
     let colMap: Record<string, number> = {};
     let startRow = 0;
-    const headerKeywords = ['jersey', '#', 'first', 'last', 'name', 'pos', 'shoot', 'usa', 'number'];
+    const headerKeywords = ['jersey', '#', 'first', 'last', 'name', 'pos', 'shoot', 'usa', 'number', 'dob'];
     const isHeader = firstRow.some(c => headerKeywords.some(kw => c.includes(kw)));
     if (isHeader) {
       startRow = 1;
@@ -448,12 +452,34 @@ export default function CreateTeamScreen({
         else if (h === 'name' || h === 'player') colMap.fullName = i;
         else if (h.includes('pos')) colMap.position = i;
         else if (h.includes('shoot')) colMap.shoots = i;
+        else if (h.includes('dob') || h.includes('birth')) colMap.dob = i;
       }
     }
+
+    // Detect USA Hockey H/A jersey format
+    let awayJerseyCol = -1;
+    const sampleRow = rows[startRow];
+    if (colMap.jersey !== undefined && sampleRow) {
+      const jerseyVal = (sampleRow[colMap.jersey] || '').trim();
+      if (/^H\s+\d/.test(jerseyVal) || /^H\s*$/.test(jerseyVal)) {
+        const nextCol = colMap.jersey + 1;
+        const nextVal = (sampleRow[nextCol] || '').trim();
+        if (/^A\s+\d/.test(nextVal) || /^A\s*$/.test(nextVal)) {
+          awayJerseyCol = nextCol;
+          if (colMap.position !== undefined && colMap.position === awayJerseyCol) {
+            colMap.position = awayJerseyCol + 1;
+          }
+          if (colMap.dob !== undefined && colMap.dob >= awayJerseyCol) {
+            colMap.dob = colMap.dob + 1;
+          }
+        }
+      }
+    }
+
     if (Object.keys(colMap).length === 0) {
       const sample = rows[startRow] || [];
       if (sample.length >= 3) {
-        if (/^\d{1,3}$/.test(sample[0]?.trim())) {
+        if (/^\d{1,3}$/.test(sample[0]?.trim()) || /^[HA]\s+\d/.test(sample[0]?.trim())) {
           colMap = { jersey: 0, firstName: 1, lastName: 2, position: 3, shoots: 4 };
         } else if (sample[0]?.includes(',')) {
           colMap = { fullName: 0, jersey: 1, position: 2, shoots: 3 };
@@ -462,7 +488,7 @@ export default function CreateTeamScreen({
         }
       }
     }
-    const players: Array<{ firstName: string; lastName: string; jerseyNumber: string; position: string; shoots: string }> = [];
+    const players: Array<{ firstName: string; lastName: string; jerseyNumber: string; awayJerseyNumber?: string; position: string; shoots: string }> = [];
     for (let i = startRow; i < rows.length; i++) {
       const row = rows[i];
       if (row.every(c => !c.trim())) continue;
@@ -481,10 +507,20 @@ export default function CreateTeamScreen({
         lastName = (colMap.lastName !== undefined ? row[colMap.lastName] : '')?.trim() || '';
       }
       if (!firstName && !lastName) continue;
+
+      let jerseyNumber = (colMap.jersey !== undefined ? row[colMap.jersey] : '')?.trim() || '';
+      jerseyNumber = stripJerseyPrefix(jerseyNumber);
+      let awayJerseyNumber = '';
+      if (awayJerseyCol >= 0) {
+        awayJerseyNumber = stripJerseyPrefix((row[awayJerseyCol] || '').trim());
+      }
+      let posRaw = colMap.position !== undefined ? row[colMap.position] || '' : '';
+      if (posRaw.trim().toLowerCase() === 'none') posRaw = '';
+
       players.push({
-        firstName, lastName,
-        jerseyNumber: (colMap.jersey !== undefined ? row[colMap.jersey] : '')?.trim() || '',
-        position: normalizePosition(colMap.position !== undefined ? row[colMap.position] || '' : ''),
+        firstName, lastName, jerseyNumber,
+        awayJerseyNumber: awayJerseyNumber || undefined,
+        position: normalizePosition(posRaw),
         shoots: normalizeShoots(colMap.shoots !== undefined ? row[colMap.shoots] || '' : ''),
       });
     }

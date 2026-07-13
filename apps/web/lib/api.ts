@@ -3,7 +3,7 @@
  * Handles all communication between Next.js frontend and Cloudflare Workers API
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://uht-api.ultimatetournaments.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
 
 interface RequestOptions {
   method?: string;

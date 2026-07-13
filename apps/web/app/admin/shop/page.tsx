@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, Fragment } from 'react';
 
-const API = 'https://uht.chad-157.workers.dev';
+const API = 'https://api.ultimatetournaments.com';
 
 /* ─── Types ─── */
 

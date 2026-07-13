@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, X, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api';
+const API_BASE = 'https://api.ultimatetournaments.com/api';
 
 // Interfaces
 interface Event {

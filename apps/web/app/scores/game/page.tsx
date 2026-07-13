@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api';
+const API_BASE = 'https://api.ultimatetournaments.com/api';
 
 // ============================================================================
 // Types

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api';
+const API_BASE = 'https://api.ultimatetournaments.com/api';
 
 interface Game {
   id: string;

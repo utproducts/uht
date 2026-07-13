@@ -46,8 +46,8 @@ app.use('*', cors({
     ];
     // Allow localhost only in non-production environments
     if (c.env.ENVIRONMENT !== 'production' && origin?.startsWith('http://localhost')) return origin;
-    // Allow all Cloudflare Pages preview deploys (*.uht-web.pages.dev)
-    if (origin?.endsWith('.uht-web.pages.dev')) return origin;
+    // Allow all Cloudflare Pages preview deploys
+    if (origin?.endsWith('.pages.dev')) return origin;
     return allowed.includes(origin ?? '') ? origin! : '';
   },
   credentials: true,
@@ -113,7 +113,8 @@ app.post('/api/upload/image', async (c) => {
   });
 
   // Return the public URL via R2 custom domain or worker proxy
-  const url = `https://uht.chad-157.workers.dev/api/upload/${key}`;
+  const apiUrl = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const url = `${apiUrl}/api/upload/${key}`;
   return c.json({ success: true, url, key });
 });
 

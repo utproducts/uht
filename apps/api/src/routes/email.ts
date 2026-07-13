@@ -801,7 +801,7 @@ emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), z
 function buildMagicLinkHtml(recipientName: string, loginUrl: string, fields: Record<string, string>): string {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-      <img src="https://uht-web.pages.dev/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+      <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
       <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${recipientName},</h2>
       <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
         ${fields.body_text || 'Click the button below to sign in to your Ultimate Tournaments account. This link expires in 15 minutes.'}
@@ -812,6 +812,11 @@ function buildMagicLinkHtml(recipientName: string, loginUrl: string, fields: Rec
       <p style="color: #aeaeb2; font-size: 13px; margin-top: 32px;">
         ${fields.footer_text || "If you didn't request this link, you can safely ignore this email."}
       </p>
+      <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+        <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+        <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+        <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+      </div>
     </div>`;
 }
 

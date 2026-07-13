@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api';
+const API_BASE = 'https://api.ultimatetournaments.com/api';
 const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true' };
 const authFetch = (url: string, opts: RequestInit = {}) =>
   fetch(url, { ...opts, headers: { ...devHeaders, ...(opts.headers || {}) } });

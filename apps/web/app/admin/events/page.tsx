@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 
-const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
-const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
-const UPLOAD_API = 'https://uht.chad-157.workers.dev/api/upload/image';
+const API_BASE = 'https://api.ultimatetournaments.com/api/events';
+const HOTEL_API = 'https://api.ultimatetournaments.com/api/hotels';
+const UPLOAD_API = 'https://api.ultimatetournaments.com/api/upload/image';
 
 function adminHeaders(extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
@@ -395,7 +395,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const ageList = form.age_groups.length > 0 ? form.age_groups.join(', ') : 'various age groups';
       const prompt = `Write a short, exciting marketing description (2-3 sentences max) for a youth hockey tournament called "${form.name}" in ${form.city}, ${form.state}. ${form.start_date && form.end_date ? `It runs from ${form.start_date} to ${form.end_date}.` : ''} Age groups: ${ageList}. Keep it professional, enthusiastic, and focused on the competitive experience. Do not use emojis.`;
-      const res = await fetch('https://uht.chad-157.workers.dev/api/chatbot/ask', {
+      const res = await fetch('https://api.ultimatetournaments.com/api/chatbot/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: prompt }),
@@ -418,7 +418,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       }).catch(() => setLoadingHotels(false));
       // Load venue rinks for director assignment
       if (event.venue_id) {
-        fetch(`https://uht.chad-157.workers.dev/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
+        fetch(`https://api.ultimatetournaments.com/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
           if (json.data && Array.isArray(json.data)) setVenueRinks(json.data);
         }).catch(() => {});
       }
@@ -441,9 +441,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'venues' && isEdit && event?.id && allVenuesList.length === 0) {
       setLoadingVenuesTab(true);
       Promise.all([
-        fetch('https://uht.chad-157.workers.dev/api/venues').then(r => r.json()),
-        fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${event.id}`).then(r => r.json()),
-        fetch('https://uht.chad-157.workers.dev/api/cities').then(r => r.json()),
+        fetch('https://api.ultimatetournaments.com/api/venues').then(r => r.json()),
+        fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${event.id}`).then(r => r.json()),
+        fetch('https://api.ultimatetournaments.com/api/cities').then(r => r.json()),
       ]).then(async ([venuesJson, assignedJson, citiesJson]) => {
         if (venuesJson.success) setAllVenuesList(venuesJson.data || []);
         if (citiesJson.success) setVenueCities((citiesJson.data || []).filter((c: any) => c.venue_count > 0));
@@ -456,7 +456,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
           const rinksMap: Record<string, any[]> = {};
           await Promise.all(Array.from(ids).map(async (vid) => {
             try {
-              const rRes = await fetch(`https://uht.chad-157.workers.dev/api/venues/${vid}/rinks`).then(r => r.json());
+              const rRes = await fetch(`https://api.ultimatetournaments.com/api/venues/${vid}/rinks`).then(r => r.json());
               if (rRes.success) rinksMap[vid] = rRes.data || [];
             } catch (_) {}
           }));
@@ -540,8 +540,8 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'rules' && isEdit && event?.id) {
       setLoadingRules(true);
       Promise.all([
-        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/rules`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
-        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/team-ratings`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
+        fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event.id}/rules`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
+        fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event.id}/team-ratings`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
       ]).then(([rulesJson, ratingsJson]) => {
         if (rulesJson.success) {
           setScheduleRules((rulesJson.data || []).map((r: any) => ({ ruleType: r.rule_type, ruleValue: r.rule_value, priority: r.priority })));
@@ -551,7 +551,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       }).catch(() => setLoadingRules(false));
       // Load rinks for rink rules
       if (event.venue_id) {
-        fetch(`https://uht.chad-157.workers.dev/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
+        fetch(`https://api.ultimatetournaments.com/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
           if (json.success) setRulesVenueRinks(json.data || []);
         }).catch(() => {});
       }
@@ -562,7 +562,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   useEffect(() => {
     if (activeTab === 'directors' && isEdit && event?.id) {
       setLoadingDirectors(true);
-      fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
+      fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, {
         headers: { 'X-Dev-Bypass': 'true' }
       }).then(r => r.json()).then(json => {
         if (json.success) setDirectors(json.data);
@@ -575,7 +575,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   useEffect(() => {
     if (activeTab === 'directors' && directorOptions.length === 0) {
       setLoadingDirectorOptions(true);
-      fetch(`https://uht.chad-157.workers.dev/api/users?role=director`, {
+      fetch(`https://api.ultimatetournaments.com/api/users?role=director`, {
         headers: { 'X-Dev-Bypass': 'true' }
       }).then(r => r.json()).then(json => {
         if (json.success) setDirectorOptions(json.data);
@@ -680,7 +680,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (!selectedDirectorId || !event?.id) return;
     setAssigningDirector(true);
     try {
-      const res = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
+      const res = await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({ userId: selectedDirectorId, rinkIds: rinkIds || [] }),
@@ -688,7 +688,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       const json = await res.json();
       if (json.success) {
         // Reload directors list
-        const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
+        const dirRes = await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
         const dirJson = await dirRes.json();
         if (dirJson.success) setDirectors(dirJson.data);
         setSelectedDirectorId('');
@@ -700,13 +700,13 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const handleUpdateDirectorRinks = async (userId: string, rinkIds: string[]) => {
     if (!event?.id) return;
     try {
-      await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
+      await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({ userId, rinkIds }),
       });
       // Reload
-      const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
+      const dirRes = await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
       const dirJson = await dirRes.json();
       if (dirJson.success) setDirectors(dirJson.data);
     } catch (e) { /* ignore */ }
@@ -715,7 +715,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const handleRemoveDirector = async (userId: string) => {
     if (!event?.id) return;
     try {
-      await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors/${userId}`, {
+      await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors/${userId}`, {
         method: 'DELETE',
         headers: { 'X-Dev-Bypass': 'true' }
       });
@@ -775,7 +775,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
           // Save venues
           if (selectedVenueIds.size > 0) {
             try {
-              await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${newEventId}`, {
+              await fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${newEventId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                 body: JSON.stringify({
@@ -1348,7 +1348,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         setSavingVenues(true);
                         setVenuesSaveStatus('idle');
                         try {
-                          const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${event!.id}`, {
+                          const res = await fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${event!.id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                             body: JSON.stringify({ venue_ids: Array.from(assignedVenueIds), primary_venue_id: primaryVenueIdTab }),
@@ -1461,7 +1461,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                 if (next.size === 1) setPrimaryVenueIdTab(v.id);
                                 // Load rinks if not loaded
                                 if (!eventRinksMap[v.id]) {
-                                  fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
+                                  fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
                                     if (json.success) setEventRinksMap(prev => ({ ...prev, [v.id]: json.data || [] }));
                                   }).catch(() => {});
                                 }
@@ -1488,7 +1488,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                               {isAssigned && (
                                 <button onClick={(e) => { e.stopPropagation(); setExpandedVenueId(isExpanded ? null : v.id);
                                   if (!isExpanded && !eventRinksMap[v.id]) {
-                                    fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
+                                    fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
                                       if (json.success) setEventRinksMap(prev => ({ ...prev, [v.id]: json.data || [] }));
                                     }).catch(() => {});
                                   }
@@ -1534,7 +1534,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                         if (!newRinkName.trim()) return;
                                         setSavingRink(true);
                                         try {
-                                          const res = await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`, {
+                                          const res = await fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks`, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                                             body: JSON.stringify({ name: newRinkName.trim(), surface_size: newRinkSize || undefined }),
@@ -1568,7 +1568,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                         <button onClick={async () => {
                                           if (!confirm(`Remove ${rink.name}?`)) return;
                                           try {
-                                            await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks/${rink.id}`, { method: 'DELETE', headers: { 'X-Dev-Bypass': 'true' } });
+                                            await fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks/${rink.id}`, { method: 'DELETE', headers: { 'X-Dev-Bypass': 'true' } });
                                             setEventRinksMap(prev => ({ ...prev, [v.id]: (prev[v.id] || []).filter((r: any) => r.id !== rink.id) }));
                                             if (event?.venue_id === v.id) setVenueRinks(prev => prev.filter(r => r.id !== rink.id));
                                           } catch (_) {}
@@ -1608,7 +1608,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                       setRulesSaveStatus('idle');
                       try {
                         // Save rules
-                        const res = await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event!.id}/rules`, {
+                        const res = await fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event!.id}/rules`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                           body: JSON.stringify({ rules: scheduleRules }),
@@ -1616,7 +1616,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         // Save MHR ratings
                         const ratingsToSave = teamRatings.filter(t => t.mhr_rating !== null).map(t => ({ registration_id: t.registration_id, mhr_rating: t.mhr_rating }));
                         if (ratingsToSave.length > 0) {
-                          await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event!.id}/team-ratings`, {
+                          await fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event!.id}/team-ratings`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                             body: JSON.stringify({ ratings: ratingsToSave }),
@@ -3053,9 +3053,9 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   // Load all venues, cities, and currently assigned
   useEffect(() => {
     Promise.all([
-      fetch('https://uht.chad-157.workers.dev/api/venues').then(r => r.json()),
-      fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${eventId}`).then(r => r.json()),
-      fetch('https://uht.chad-157.workers.dev/api/cities').then(r => r.json()),
+      fetch('https://api.ultimatetournaments.com/api/venues').then(r => r.json()),
+      fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${eventId}`).then(r => r.json()),
+      fetch('https://api.ultimatetournaments.com/api/cities').then(r => r.json()),
     ]).then(([venuesJson, assignedJson, citiesJson]) => {
       if (venuesJson.success) setAllVenues(venuesJson.data || []);
       if (citiesJson.success) setCities((citiesJson.data || []).filter((c: any) => c.venue_count > 0));
@@ -3072,7 +3072,7 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   // Load rinks for expanded venue
   useEffect(() => {
     if (!expandedVenue || venueRinksMap[expandedVenue]) return;
-    fetch(`https://uht.chad-157.workers.dev/api/venues/${expandedVenue}/rinks`)
+    fetch(`https://api.ultimatetournaments.com/api/venues/${expandedVenue}/rinks`)
       .then(r => r.json())
       .then(json => {
         if (json.success) setVenueRinksMap(prev => ({ ...prev, [expandedVenue]: json.data || [] }));
@@ -3105,7 +3105,7 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
     setSaving(true);
     setSaveStatus('idle');
     try {
-      const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${eventId}`, {
+      const res = await fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${eventId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({
@@ -3311,6 +3311,238 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// --- Schedule Games Tab with Delay Controls ---
+function ScheduleGamesTab({ eventId }: { eventId: string }) {
+  const [games, setGames] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [delayForm, setDelayForm] = useState<Record<string, { reason: string; minutes: string }>>({});
+  const [expandedDelay, setExpandedDelay] = useState<string | null>(null);
+  const [savingDelay, setSavingDelay] = useState<string | null>(null);
+  const [filterDivision, setFilterDivision] = useState('all');
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true', 'Content-Type': 'application/json' } });
+
+  const loadGames = () => {
+    setLoading(true);
+    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) setGames(json.data || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadGames(); }, [eventId]);
+
+  const setDelay = async (gameId: string, status: 'delayed' | null) => {
+    setSavingDelay(gameId);
+    const form = delayForm[gameId];
+    try {
+      await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/${gameId}/delay`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          delayStatus: status,
+          delayReason: status === 'delayed' ? (form?.reason || '') : null,
+          delayMinutes: status === 'delayed' ? (parseInt(form?.minutes || '15') || 15) : 0,
+        }),
+      });
+      setExpandedDelay(null);
+      loadGames();
+    } catch {}
+    setSavingDelay(null);
+  };
+
+  const formatTime = (iso: string) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const formatDay = (iso: string) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  // Get unique divisions for filter
+  const divisions = Array.from(new Set(games.map((g: any) => [g.age_group, g.division_level].filter(Boolean).join(' ')).filter(Boolean))).sort();
+
+  const filteredGames = filterDivision === 'all' ? games : games.filter((g: any) => {
+    const div = [g.age_group, g.division_level].filter(Boolean).join(' ');
+    return div === filterDivision;
+  });
+
+  // Group games by date
+  const gamesByDate: Record<string, any[]> = {};
+  filteredGames.forEach((g: any) => {
+    const dateKey = g.start_time ? formatDay(g.start_time) : 'Unscheduled';
+    if (!gamesByDate[dateKey]) gamesByDate[dateKey] = [];
+    gamesByDate[dateKey].push(g);
+  });
+
+  if (loading) return <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  if (games.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+        <svg className="w-14 h-14 mx-auto text-[#003e79] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+        <p className="font-semibold text-[#1d1d1f] text-lg">No schedule yet</p>
+        <p className="text-sm text-[#6e6e73] mt-1 mb-5">Build the game schedule for this event in the Schedule Builder.</p>
+        <a href="/admin/schedule" className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors shadow-sm">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          Open Schedule Builder
+        </a>
+      </div>
+    );
+  }
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case 'in_progress': return 'bg-blue-100 text-blue-700';
+      case 'final': return 'bg-green-100 text-green-700';
+      case 'delayed': return 'bg-orange-100 text-orange-700';
+      case 'warmup': return 'bg-cyan-100 text-cyan-700';
+      case 'intermission': return 'bg-amber-100 text-amber-700';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[#1d1d1f]">{games.length} games</span>
+          {divisions.length > 1 && (
+            <select value={filterDivision} onChange={e => setFilterDivision(e.target.value)}
+              className="text-sm border border-[#e0e0e5] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none">
+              <option value="all">All Divisions</option>
+              {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+        </div>
+        <a href="/admin/schedule" className="text-sm text-[#003e79] font-medium hover:underline flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+          Schedule Builder
+        </a>
+      </div>
+
+      {/* Games grouped by date */}
+      {Object.entries(gamesByDate).map(([dateLabel, dateGames]) => (
+        <div key={dateLabel}>
+          <h3 className="text-sm font-bold text-[#86868b] uppercase tracking-wider mb-2 px-1">{dateLabel}</h3>
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#e8e8ed] bg-[#f8f8fa]">
+                  <th className="text-left px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">#</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Matchup</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Division</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Time</th>
+                  <th className="text-left px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Rink</th>
+                  <th className="text-center px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Score</th>
+                  <th className="text-center px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Status</th>
+                  <th className="text-center px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">LR</th>
+                  <th className="text-right px-4 py-2 text-[11px] font-bold text-[#86868b] uppercase">Delay</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f0f0f2]">
+                {(dateGames as any[]).map((g: any) => {
+                  const isDelayExpanded = expandedDelay === g.id;
+                  const isDelayed = g.status === 'delayed' || g.delay_status === 'delayed';
+                  const divLabel = [g.age_group, g.division_level].filter(Boolean).join(' ');
+                  return (
+                    <Fragment key={g.id}>
+                      <tr className={`hover:bg-[#fafafa] ${isDelayed ? 'bg-orange-50/50' : ''}`}>
+                        <td className="px-4 py-2.5 font-mono text-xs text-[#86868b]">#{g.game_number}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'}</div>
+                          <div className="text-[#6e6e73]">vs {g.away_team_name || 'TBD'}</div>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-[#6e6e73]">{divLabel || '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{formatTime(g.start_time)}</td>
+                        <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{g.rink_name || '—'}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          {(g.status === 'in_progress' || g.status === 'final' || g.status === 'intermission') ? (
+                            <span className="font-bold text-[#1d1d1f]">{g.home_score} - {g.away_score}</span>
+                          ) : <span className="text-[#c8c8cd]">—</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(g.status)}`}>
+                            {g.status === 'in_progress' ? 'LIVE' : (g.status || 'scheduled').toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-center text-xs text-[#6e6e73]">
+                          {(g.home_locker_room || g.away_locker_room) ? `${g.home_locker_room || '—'} / ${g.away_locker_room || '—'}` : '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {isDelayed ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-xs text-orange-600 font-medium max-w-[120px] truncate" title={g.delay_reason || g.delay_note || ''}>
+                                {g.delay_reason || g.delay_note || 'Delayed'}
+                              </span>
+                              <button onClick={() => setDelay(g.id, null)} disabled={savingDelay === g.id}
+                                className="px-2 py-1 text-[11px] font-semibold bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition disabled:opacity-50">
+                                {savingDelay === g.id ? '...' : 'Clear'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setExpandedDelay(isDelayExpanded ? null : g.id);
+                                if (!delayForm[g.id]) setDelayForm(prev => ({ ...prev, [g.id]: { reason: '', minutes: '15' } }));
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold bg-orange-50 text-orange-600 rounded-md hover:bg-orange-100 transition">
+                              Delay
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {isDelayExpanded && !isDelayed && (
+                        <tr className="bg-orange-50/30">
+                          <td colSpan={9} className="px-4 py-3">
+                            <div className="flex items-center gap-3 ml-8">
+                              <input
+                                type="text"
+                                placeholder="Reason (e.g., Zamboni, overtime, injury)"
+                                value={delayForm[g.id]?.reason || ''}
+                                onChange={e => setDelayForm(prev => ({ ...prev, [g.id]: { ...prev[g.id], reason: e.target.value } }))}
+                                className="flex-1 max-w-sm px-3 py-2 border border-orange-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-300/50 outline-none"
+                              />
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={delayForm[g.id]?.minutes || '15'}
+                                onChange={e => setDelayForm(prev => ({ ...prev, [g.id]: { ...prev[g.id], minutes: e.target.value } }))}
+                                className="w-20 px-3 py-2 border border-orange-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-300/50 outline-none text-center"
+                              />
+                              <span className="text-xs text-[#86868b]">min</span>
+                              <button
+                                onClick={() => setDelay(g.id, 'delayed')}
+                                disabled={savingDelay === g.id}
+                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50">
+                                {savingDelay === g.id ? 'Saving...' : 'Set Delay'}
+                              </button>
+                              <button onClick={() => setExpandedDelay(null)}
+                                className="px-3 py-2 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-medium rounded-lg text-sm transition">
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -3553,38 +3785,75 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
 function ScorekeepersTab({ eventId }: { eventId: string }) {
   const [games, setGames] = useState<any[]>([]);
   const [scorekeepers, setScorekeepers] = useState<any[]>([]);
+  const [eventScorekeepers, setEventScorekeepers] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
+  const [addingEventSk, setAddingEventSk] = useState(false);
   const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
   const [selectedScorekeeper, setSelectedScorekeeper] = useState('');
-  const [searchUser, setSearchUser] = useState('');
+  const [selectedEventSk, setSelectedEventSk] = useState('');
+  const [showGameAssign, setShowGameAssign] = useState(false);
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
-  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+  const skFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...adminHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
 
   const loadData = () => {
     setLoading(true);
     Promise.all([
-      apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()),
-      apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
-      apiFetch(`${API_BASE.replace('/api/events', '/api')}/users?role=scorekeeper`).then(r => r.json()),
-    ]).then(([gamesJson, skJson, usersJson]) => {
+      skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()),
+      skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
+      skFetch(`${API_BASE.replace('/api/events', '/api/scheduling')}/staff`).then(r => r.json()),
+    ]).then(([gamesJson, skJson, staffJson]) => {
       if (gamesJson.success) setGames(gamesJson.data || []);
-      if (skJson.success) setScorekeepers(skJson.data || []);
-      if (usersJson.success) setAllUsers((usersJson.data || []).filter((u: any) => u.roles?.includes('scorekeeper') || u.role === 'scorekeeper'));
+      if (skJson.success) {
+        setScorekeepers(skJson.data || []);
+        setEventScorekeepers(skJson.eventScorekeepers || []);
+      }
+      if (staffJson.success) {
+        const skUsers = (staffJson.data || []).filter((u: any) => {
+          const roles = typeof u.roles === 'string' ? u.roles.split(',') : (u.roles || []);
+          return roles.includes('scorekeeper');
+        });
+        setAllUsers(skUsers);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   };
 
   useEffect(() => { loadData(); }, [eventId]);
 
+  const addEventScorekeeper = async () => {
+    if (!selectedEventSk) return;
+    setAddingEventSk(true);
+    try {
+      const res = await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/event-scorekeepers`, {
+        method: 'POST',
+        body: JSON.stringify({ userIds: [selectedEventSk] }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSelectedEventSk('');
+        loadData();
+      }
+    } catch {}
+    setAddingEventSk(false);
+  };
+
+  const removeEventScorekeeper = async (userId: string) => {
+    try {
+      await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/event-scorekeepers/${userId}`, {
+        method: 'DELETE',
+      });
+      loadData();
+    } catch {}
+  };
+
   const assignScorekeeper = async () => {
     if (!selectedScorekeeper || selectedGames.size === 0) return;
     setAssigning(true);
     try {
-      const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/assign-scorekeeper`, {
-        method: 'POST',
+      const res = await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/bulk-assign`, {
+        method: 'PUT',
         body: JSON.stringify({ gameIds: Array.from(selectedGames), scorekeeperId: selectedScorekeeper }),
       });
       const json = await res.json();
@@ -3599,9 +3868,9 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
 
   const unassignGames = async (gameIds: string[]) => {
     try {
-      await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/unassign-scorekeeper`, {
-        method: 'POST',
-        body: JSON.stringify({ gameIds, eventId }),
+      await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/bulk-unassign`, {
+        method: 'PUT',
+        body: JSON.stringify({ gameIds }),
       });
       loadData();
     } catch {}
@@ -3615,9 +3884,10 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
     });
   };
 
-  const selectAll = () => {
-    if (selectedGames.size === games.length) setSelectedGames(new Set());
-    else setSelectedGames(new Set(games.map(g => g.id)));
+  const selectAllUnassigned = () => {
+    const unassigned = games.filter(g => !g.scorekeeper_id);
+    if (selectedGames.size === unassigned.length) setSelectedGames(new Set());
+    else setSelectedGames(new Set(unassigned.map(g => g.id)));
   };
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
@@ -3634,149 +3904,232 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
     } catch { return t; }
   };
 
-  const filteredUsers = allUsers.filter(u =>
-    !searchUser || `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(searchUser.toLowerCase())
-  );
+  // Filter out users already assigned as event scorekeepers
+  const eventSkIds = new Set(eventScorekeepers.map((es: any) => es.user_id));
+  const availableForEvent = allUsers.filter(u => !eventSkIds.has(u.id));
 
   return (
     <div className="space-y-6">
-      {/* Currently Assigned Scorekeepers */}
-      {scorekeepers.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h3 className="text-lg font-bold text-[#1d1d1f] mb-4">Assigned Scorekeepers</h3>
+      {/* Event-Level Scorekeepers */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-8 h-8 bg-[#34c759] rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+          </div>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Event Scorekeepers</h3>
+        </div>
+        <p className="text-sm text-[#86868b] mb-4 ml-11">These scorekeepers can see and score ALL games at this event</p>
+
+        {/* Add event scorekeeper */}
+        {allUsers.length === 0 ? (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
+            No users with the scorekeeper role found. Add the scorekeeper role to users on the Users page first.
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex-1">
+              <select
+                value={selectedEventSk}
+                onChange={e => setSelectedEventSk(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#34c759] focus:ring-2 focus:ring-green-100 outline-none bg-white"
+              >
+                <option value="">Select a scorekeeper to add...</option>
+                {availableForEvent.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.firstName || u.first_name || ''} {u.lastName || u.last_name || ''} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={addEventScorekeeper}
+              disabled={addingEventSk || !selectedEventSk}
+              className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
+                (addingEventSk || !selectedEventSk
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#34c759] text-white hover:bg-[#2db84e]')}
+            >
+              {addingEventSk ? 'Adding...' : 'Add to Event'}
+            </button>
+          </div>
+        )}
+
+        {/* List of event scorekeepers */}
+        {eventScorekeepers.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {scorekeepers.map((sk: any) => (
-              <div key={sk.user_id} className="flex items-center gap-3 p-3 bg-[#f5f5f7] rounded-xl">
-                <div className="w-10 h-10 bg-[#003e79] rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  {(sk.first_name?.[0] || '?').toUpperCase()}
+            {eventScorekeepers.map((es: any) => (
+              <div key={es.user_id} className="flex items-center gap-3 p-3 bg-[#e8f5e9] rounded-xl border border-[#c8e6c9]">
+                <div className="w-10 h-10 bg-[#34c759] rounded-full flex items-center justify-center text-white font-bold text-sm">
+                  {(es.first_name?.[0] || '?').toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-[#1d1d1f] truncate">{sk.first_name} {sk.last_name}</p>
-                  <p className="text-xs text-[#86868b]">{sk.game_count} game{sk.game_count !== 1 ? 's' : ''} assigned</p>
+                  <p className="font-semibold text-sm text-[#1d1d1f] truncate">{es.first_name} {es.last_name}</p>
+                  <p className="text-xs text-[#34c759] font-medium">All games</p>
                 </div>
+                <button
+                  onClick={() => removeEventScorekeeper(es.user_id)}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1"
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Assign Scorekeeper to Games */}
+        {eventScorekeepers.length === 0 && (
+          <p className="text-sm text-[#86868b] text-center py-3">No event-level scorekeepers assigned yet</p>
+        )}
+      </div>
+
+      {/* Per-Game Assignments (collapsible) */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#1d1d1f] mb-4">Assign Scorekeeper to Games</h3>
-
-        {games.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-[#86868b]">No games scheduled for this event yet.</p>
-            <p className="text-sm text-[#86868b] mt-1">Use the Schedule Builder to create games first.</p>
+        <button
+          onClick={() => setShowGameAssign(!showGameAssign)}
+          className="flex items-center gap-3 w-full text-left"
+        >
+          <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" /><path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" /></svg>
           </div>
-        ) : (
-          <>
-            {/* Scorekeeper selector + assign button */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  placeholder="Search scorekeepers..."
-                  value={searchUser}
-                  onChange={e => setSearchUser(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none"
-                />
-                {searchUser && filteredUsers.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl mt-1 shadow-lg z-10 max-h-48 overflow-y-auto">
-                    {filteredUsers.map(u => (
-                      <button key={u.id} onClick={() => { setSelectedScorekeeper(u.id); setSearchUser(`${u.first_name} ${u.last_name}`); }}
-                        className={"w-full text-left px-4 py-2.5 text-sm hover:bg-[#f5f5f7] transition " + (selectedScorekeeper === u.id ? 'bg-blue-50 text-[#003e79] font-medium' : 'text-[#1d1d1f]')}>
-                        {u.first_name} {u.last_name} <span className="text-[#86868b]">({u.email})</span>
-                      </button>
-                    ))}
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-[#1d1d1f]">Per-Game Assignments</h3>
+            <p className="text-sm text-[#86868b]">Assign specific scorekeepers to individual games</p>
+          </div>
+          <svg className={`w-5 h-5 text-[#86868b] transition-transform ${showGameAssign ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        </button>
+
+        {showGameAssign && (
+          <div className="mt-4 pt-4 border-t border-[#e8e8ed]">
+            {games.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-[#86868b]">No games scheduled for this event yet.</p>
+                <p className="text-sm text-[#86868b] mt-1">Use the Schedule Builder to create games first.</p>
+              </div>
+            ) : (
+              <>
+                {/* Currently assigned per-game scorekeepers */}
+                {scorekeepers.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Assigned Scorekeepers</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {scorekeepers.map((sk: any) => (
+                        <div key={sk.user_id} className="flex items-center gap-2 p-2 bg-[#f5f5f7] rounded-lg">
+                          <div className="w-8 h-8 bg-[#003e79] rounded-full flex items-center justify-center text-white font-bold text-xs">
+                            {(sk.first_name?.[0] || '?').toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-xs text-[#1d1d1f] truncate">{sk.first_name} {sk.last_name}</p>
+                            <p className="text-xs text-[#86868b]">{sk.game_count} game{sk.game_count !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
-              <button
-                onClick={assignScorekeeper}
-                disabled={assigning || !selectedScorekeeper || selectedGames.size === 0}
-                className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
-                  (assigning || !selectedScorekeeper || selectedGames.size === 0
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#003e79] text-white hover:bg-[#002d5a]')}
-              >
-                {assigning ? 'Assigning...' : `Assign to ${selectedGames.size} Game${selectedGames.size !== 1 ? 's' : ''}`}
-              </button>
-            </div>
 
-            {/* Unassigned Games */}
-            {unassignedGames.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <p className="text-sm font-semibold text-[#1d1d1f]">Unassigned Games ({unassignedGames.length})</p>
-                  <button onClick={selectAll} className="text-xs text-[#003e79] font-medium hover:underline">
-                    {selectedGames.size === games.length ? 'Deselect All' : 'Select All'}
+                {/* Scorekeeper selector + assign button */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="flex-1">
+                    <select
+                      value={selectedScorekeeper}
+                      onChange={e => setSelectedScorekeeper(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none bg-white"
+                    >
+                      <option value="">Select a scorekeeper...</option>
+                      {allUsers.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.firstName || u.first_name || ''} {u.lastName || u.last_name || ''} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={assignScorekeeper}
+                    disabled={assigning || !selectedScorekeeper || selectedGames.size === 0}
+                    className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
+                      (assigning || !selectedScorekeeper || selectedGames.size === 0
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-[#003e79] text-white hover:bg-[#002d5a]')}
+                  >
+                    {assigning ? 'Assigning...' : `Assign to ${selectedGames.size} Game${selectedGames.size !== 1 ? 's' : ''}`}
                   </button>
                 </div>
-                <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
-                      <th className="px-3 py-2 text-left w-8"></th>
-                      <th className="px-3 py-2 text-left">Game</th>
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">Time</th>
-                      <th className="px-3 py-2 text-left">Rink</th>
-                      <th className="px-3 py-2 text-left">Division</th>
-                    </tr></thead>
-                    <tbody>
-                      {unassignedGames.map(g => (
-                        <tr key={g.id} onClick={() => toggleGame(g.id)}
-                          className={"border-t border-[#e8e8ed] cursor-pointer transition " + (selectedGames.has(g.id) ? 'bg-blue-50' : 'hover:bg-[#fafafa]')}>
-                          <td className="px-3 py-2.5">
-                            <input type="checkbox" checked={selectedGames.has(g.id)} onChange={() => toggleGame(g.id)}
-                              className="rounded border-gray-300 text-[#003e79] focus:ring-[#003e79]" />
-                          </td>
-                          <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
-                          <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-xs font-medium">{g.division_name || g.age_group || '—'}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
 
-            {/* Assigned Games */}
-            {assignedGames.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-[#1d1d1f] mb-3">Assigned Games ({assignedGames.length})</p>
-                <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
-                      <th className="px-3 py-2 text-left">Game</th>
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">Time</th>
-                      <th className="px-3 py-2 text-left">Rink</th>
-                      <th className="px-3 py-2 text-left">Scorekeeper</th>
-                      <th className="px-3 py-2 text-left w-20"></th>
-                    </tr></thead>
-                    <tbody>
-                      {assignedGames.map(g => (
-                        <tr key={g.id} className="border-t border-[#e8e8ed]">
-                          <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
-                          <td className="px-3 py-2.5 text-[#003e79] font-medium">{g.scorekeeper_name || '—'}</td>
-                          <td className="px-3 py-2.5">
-                            <button onClick={() => unassignGames([g.id])} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                {/* Unassigned Games */}
+                {unassignedGames.length > 0 && (
+                  <div className="mb-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <p className="text-sm font-semibold text-[#1d1d1f]">Unassigned Games ({unassignedGames.length})</p>
+                      <button onClick={selectAllUnassigned} className="text-xs text-[#003e79] font-medium hover:underline">
+                        {selectedGames.size === unassignedGames.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                          <th className="px-3 py-2 text-left w-8"></th>
+                          <th className="px-3 py-2 text-left">Game</th>
+                          <th className="px-3 py-2 text-left">Date</th>
+                          <th className="px-3 py-2 text-left">Time</th>
+                          <th className="px-3 py-2 text-left">Rink</th>
+                          <th className="px-3 py-2 text-left">Division</th>
+                        </tr></thead>
+                        <tbody>
+                          {unassignedGames.map(g => (
+                            <tr key={g.id} onClick={() => toggleGame(g.id)}
+                              className={"border-t border-[#e8e8ed] cursor-pointer transition " + (selectedGames.has(g.id) ? 'bg-blue-50' : 'hover:bg-[#fafafa]')}>
+                              <td className="px-3 py-2.5">
+                                <input type="checkbox" checked={selectedGames.has(g.id)} onChange={() => toggleGame(g.id)}
+                                  className="rounded border-gray-300 text-[#003e79] focus:ring-[#003e79]" />
+                              </td>
+                              <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
+                              <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-xs font-medium">{g.division_name || g.age_group || '—'}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Assigned Games */}
+                {assignedGames.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-[#1d1d1f] mb-3">Assigned Games ({assignedGames.length})</p>
+                    <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                          <th className="px-3 py-2 text-left">Game</th>
+                          <th className="px-3 py-2 text-left">Date</th>
+                          <th className="px-3 py-2 text-left">Time</th>
+                          <th className="px-3 py-2 text-left">Rink</th>
+                          <th className="px-3 py-2 text-left">Scorekeeper</th>
+                          <th className="px-3 py-2 text-left w-20"></th>
+                        </tr></thead>
+                        <tbody>
+                          {assignedGames.map(g => (
+                            <tr key={g.id} className="border-t border-[#e8e8ed]">
+                              <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
+                              <td className="px-3 py-2.5 text-[#003e79] font-medium">{g.scorekeeper_name || '—'}</td>
+                              <td className="px-3 py-2.5">
+                                <button onClick={() => unassignGames([g.id])} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -4301,18 +4654,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       )}
 
       {tab === 'schedules' && (
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-          <svg className="w-14 h-14 mx-auto text-[#003e79] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-          <p className="font-semibold text-[#1d1d1f] text-lg">No schedule yet</p>
-          <p className="text-sm text-[#6e6e73] mt-1 mb-5">Build the game schedule for this event in the Schedule Builder.</p>
-          <a
-            href="/admin/schedule"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors shadow-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            Open Schedule Builder
-          </a>
-        </div>
+        <ScheduleGamesTab eventId={eventId} />
       )}
 
       {tab === 'locker_rooms' && (
@@ -4422,7 +4764,7 @@ export default function AdminEventsPage() {
   const runImport = useCallback(async () => {
     setImportState('importing');
     try {
-      const res = await fetch('https://uht.chad-157.workers.dev/api/events/admin/bulk-import', {
+      const res = await fetch('https://api.ultimatetournaments.com/api/events/admin/bulk-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({ events: importRows }),

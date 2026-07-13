@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
 
 function VerifyContent() {
   const router = useRouter();

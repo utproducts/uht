@@ -579,7 +579,8 @@ teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
   const arrayBuffer = await file.arrayBuffer();
   await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
 
-  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
+  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
 
   await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
     .bind(logoUrl, teamId).run();
@@ -638,7 +639,8 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
 
   await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
 
-  const logoUrl = `https://uht.chad-157.workers.dev/api/assets/${key}?v=${Date.now()}`;
+  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
 
   // Always save to the team
   await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
@@ -648,7 +650,7 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
   if (body.applyToOrg && team.organization_id) {
     const orgKey = `org-logos/${team.organization_id}.${ext}`;
     await storage.put(orgKey, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
-    const orgLogoUrl = `https://uht.chad-157.workers.dev/api/assets/${orgKey}?v=${Date.now()}`;
+    const orgLogoUrl = `${apiBase}/api/assets/${orgKey}?v=${Date.now()}`;
     await db.prepare("UPDATE organizations SET logo_url = ? WHERE id = ?")
       .bind(orgLogoUrl, team.organization_id).run();
   }
@@ -1061,7 +1063,7 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
   try {
     const inviterName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'A coach';
     const roleLabel = body.role === 'coach' ? 'Coach' : 'Team Manager';
-    const siteBase = c.env.SITE_URL || 'https://uht-web.pages.dev';
+    const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
     const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(email)}&role=${body.role}`;
 
     await fetch('https://api.resend.com/emails', {
@@ -1094,8 +1096,13 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
                 <p style="color: #003e79; font-size: 28px; font-weight: bold; font-family: monospace; letter-spacing: 4px; margin: 0;">${inviteCode}</p>
               </div>
               <p style="color: #aeaeb2; font-size: 12px; text-align: center; margin-top: 20px;">
-                You can also sign up at uht-web.pages.dev and use this team code to join.
+                You can also sign up at ultimatetournaments.com and use this team code to join.
               </p>
+              <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+              </div>
             </div>
           </div>
         `,
@@ -1801,7 +1808,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -1815,6 +1822,11 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                     <p style="color: #aeaeb2; font-size: 13px; margin-top: 24px;">
                       Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
                     </p>
+                    <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                      <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                      <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                      <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                    </div>
                   </div>
                 `,
               }),
@@ -1863,7 +1875,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -1877,6 +1889,11 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                     <p style="color: #aeaeb2; font-size: 13px; margin-top: 24px;">
                       Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
                     </p>
+                    <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                      <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                      <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                      <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                    </div>
                   </div>
                 `,
               }),
@@ -2141,8 +2158,8 @@ teamRoutes.post('/:id/players/bulk', authMiddleware, async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{ players: Array<{
     firstName: string; lastName: string; jerseyNumber?: string;
-    position?: string; shoots?: string; dateOfBirth?: string;
-    usaHockeyNumber?: string;
+    awayJerseyNumber?: string; position?: string; shoots?: string;
+    dateOfBirth?: string; usaHockeyNumber?: string;
   }> }>();
 
   if (!body.players?.length) {
@@ -2167,11 +2184,11 @@ teamRoutes.post('/:id/players/bulk', authMiddleware, async (c) => {
 
     const playerId = crypto.randomUUID().replace(/-/g, '');
     await db.prepare(`
-      INSERT INTO players (id, first_name, last_name, date_of_birth, usa_hockey_number, jersey_number, position, shoots)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO players (id, first_name, last_name, date_of_birth, usa_hockey_number, jersey_number, away_jersey_number, position, shoots)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       playerId, p.firstName.trim(), p.lastName.trim(), p.dateOfBirth || null,
-      p.usaHockeyNumber || null, p.jerseyNumber || null,
+      p.usaHockeyNumber || null, p.jerseyNumber || null, p.awayJerseyNumber || null,
       p.position || null, p.shoots || null
     ).run();
 
@@ -2235,7 +2252,7 @@ teamRoutes.get('/:id/roster', authMiddleware, async (c) => {
 
   const players = await db.prepare(`
     SELECT p.id, p.first_name, p.last_name, p.date_of_birth, p.usa_hockey_number,
-           p.jersey_number, p.position, p.shoots, p.avatar_id,
+           p.jersey_number, p.away_jersey_number, p.position, p.shoots, p.avatar_id,
            p.claimed_by, p.parent_name, p.parent_email, p.parent_phone,
            tp.status as roster_status, tp.added_at
     FROM players p
@@ -2256,6 +2273,7 @@ const addPlayerSchema = z.object({
   dateOfBirth: z.string().optional(),
   usaHockeyNumber: z.string().optional(),
   jerseyNumber: z.string().optional(),
+  awayJerseyNumber: z.string().optional(),
   position: z.enum(['forward', 'defense', 'goalie']).optional(),
   shoots: z.enum(['left', 'right']).optional(),
 });
@@ -2281,11 +2299,11 @@ teamRoutes.post('/:id/players', authMiddleware, zValidator('json', addPlayerSche
 
   // Create player
   await db.prepare(`
-    INSERT INTO players (id, first_name, last_name, date_of_birth, usa_hockey_number, jersey_number, position, shoots)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO players (id, first_name, last_name, date_of_birth, usa_hockey_number, jersey_number, away_jersey_number, position, shoots)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     playerId, data.firstName, data.lastName, data.dateOfBirth || null,
-    data.usaHockeyNumber || null, data.jerseyNumber || null,
+    data.usaHockeyNumber || null, data.jerseyNumber || null, data.awayJerseyNumber || null,
     data.position || null, data.shoots || null
   ).run();
 
