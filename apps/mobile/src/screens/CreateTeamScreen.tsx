@@ -76,6 +76,7 @@ export default function CreateTeamScreen({
   // Organization selection (now inline instead of from route params)
   const [selectedOrgId, setSelectedOrgId] = useState(routeOrgId || '');
   const [selectedOrgName, setSelectedOrgName] = useState(routeOrgName || '');
+  const [selectedOrgLogoUrl, setSelectedOrgLogoUrl] = useState<string | null>(null);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [loadingOrgs, setLoadingOrgs] = useState(false);
   const [showOrgPicker, setShowOrgPicker] = useState(false);
@@ -634,8 +635,11 @@ export default function CreateTeamScreen({
     setShowRosterStep(false);
     // Go to logo step instead of directly to success
     setShowLogoStep(true);
-    // Check if org has existing logos to suggest
-    if (createdTeamId) {
+    // If the selected org already has a logo, use that as primary suggestion
+    // Otherwise check if sibling teams have logos to suggest
+    if (selectedOrgLogoUrl) {
+      setOrgLogos([selectedOrgLogoUrl]);
+    } else if (createdTeamId) {
       setLoadingOrgLogos(true);
       authFetch(`/api/teams/${createdTeamId}/org-logos`)
         .then(r => r.json())
@@ -1199,13 +1203,17 @@ export default function CreateTeamScreen({
               <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.navy} />
             ) : orgLogos.length > 0 && !logoUrl ? (
               <View style={logoStyles.orgSection}>
-                <Text style={logoStyles.orgTitle}>Use your organization's logo?</Text>
-                <Text style={logoStyles.orgSubtitle}>Other teams in your org use this logo</Text>
+                <Text style={logoStyles.orgTitle}>
+                  {selectedOrgLogoUrl ? `Use ${selectedOrgName}'s logo?` : "Use your organization's logo?"}
+                </Text>
+                <Text style={logoStyles.orgSubtitle}>
+                  {selectedOrgLogoUrl ? 'This is your organization\'s official logo' : 'Other teams in your org use this logo'}
+                </Text>
                 <View style={logoStyles.orgLogoRow}>
                   {orgLogos.map((url, i) => (
                     <TouchableOpacity
                       key={i}
-                      style={logoStyles.orgLogoOption}
+                      style={[logoStyles.orgLogoOption, selectedOrgLogoUrl ? { borderWidth: 2, borderColor: colors.cyan } : {}]}
                       onPress={() => useOrgLogo(url)}
                       disabled={uploadingLogo}
                       activeOpacity={0.7}
@@ -1215,6 +1223,11 @@ export default function CreateTeamScreen({
                     </TouchableOpacity>
                   ))}
                 </View>
+                {selectedOrgLogoUrl ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: spacing.sm, textAlign: 'center' }}>
+                    Or tap above to upload a different logo for just this team
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -1680,10 +1693,18 @@ export default function CreateTeamScreen({
                       onPress={() => {
                         setSelectedOrgId(org.id);
                         setSelectedOrgName(org.name);
+                        setSelectedOrgLogoUrl(org.logo_url || null);
                         setShowOrgPicker(false);
                         setOrgSearchQuery('');
                       }}
                     >
+                      {org.logo_url ? (
+                        <Image source={{ uri: org.logo_url }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: spacing.md }} />
+                      ) : (
+                        <View style={{ width: 36, height: 36, borderRadius: 18, marginRight: spacing.md, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="shield-outline" size={18} color={colors.textMuted} />
+                        </View>
+                      )}
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.pickerItemText, selectedOrgId === org.id && styles.pickerItemTextSelected]}>
                           {org.name}

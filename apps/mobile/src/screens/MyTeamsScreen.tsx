@@ -177,7 +177,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const base64Data = asset.base64;
 
-      // First upload with applyToOrg=false to get org context
       const token = await getToken();
       const uploadResult = await fetch(`${API_URL}/api/teams/${team.id}/logo-base64`, {
         method: 'POST',
@@ -185,7 +184,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ data: base64Data, mimeType, applyToOrg: false }),
+        body: JSON.stringify({ data: base64Data, mimeType }),
       });
 
       const json = await uploadResult.json() as any;
@@ -196,48 +195,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
             t.id === team.id ? { ...t, logo_url: newLogoUrl } : t
           )
         );
-
-        // If org has no logo yet, ask if this should apply to the whole org
-        if (!json.data.orgHasLogo && json.data.orgId && json.data.orgName) {
-          const orgName = json.data.orgName;
-          Alert.alert(
-            'Organization Logo',
-            `Is this the logo for your entire organization (${orgName})?\n\nIf yes, all teams under ${orgName} will use this logo.`,
-            [
-              {
-                text: 'No, just this team',
-                style: 'cancel',
-              },
-              {
-                text: 'Yes, use for all teams',
-                onPress: async () => {
-                  try {
-                    // Re-upload with applyToOrg=true
-                    const token2 = await getToken();
-                    await fetch(`${API_URL}/api/teams/${team.id}/logo-base64`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        ...(token2 ? { Authorization: `Bearer ${token2}` } : {}),
-                      },
-                      body: JSON.stringify({ data: base64Data, mimeType, applyToOrg: true }),
-                    });
-                    // Update all teams from the same org in the local list
-                    setTeams((prev) =>
-                      prev.map((t) =>
-                        (t.organization_name === orgName && !t.logo_url)
-                          ? { ...t, logo_url: newLogoUrl }
-                          : t
-                      )
-                    );
-                  } catch {}
-                },
-              },
-            ]
-          );
-        } else {
-          Alert.alert('Logo Updated', 'Your team logo has been uploaded.');
-        }
+        Alert.alert('Logo Updated', 'Your team logo has been uploaded.');
       } else {
         Alert.alert('Error', json.error || 'Failed to upload logo');
       }
