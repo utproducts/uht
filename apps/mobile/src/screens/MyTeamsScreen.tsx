@@ -134,18 +134,34 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     }
     setJoiningByCode(true);
     try {
-      // Try follow-by-code first (for parents/fans)
-      const res = await authFetch('/api/follows/by-code', {
-        method: 'POST',
-        body: JSON.stringify({ inviteCode: code }),
-      });
-      const json = await res.json() as any;
-      if (json.success) {
-        setJoinCode('');
-        Alert.alert('Team Followed!', `You're now following ${json.data.teamName}.`);
-        fetchTeams(true);
+      if (isCoach) {
+        // Coach/manager: join as staff via /api/teams/join
+        const res = await authFetch('/api/teams/join', {
+          method: 'POST',
+          body: JSON.stringify({ inviteCode: code }),
+        });
+        const json = await res.json() as any;
+        if (json.success) {
+          setJoinCode('');
+          Alert.alert('Joined!', `You've been added to ${json.data?.teamName || 'the team'} as a ${json.data?.role || 'coach'}.`);
+          fetchTeams(true);
+        } else {
+          Alert.alert('Invalid Code', json.error || 'That team code was not found. Please check and try again.');
+        }
       } else {
-        Alert.alert('Invalid Code', json.error || 'That team code was not found. Please check and try again.');
+        // Parent/fan: follow by code
+        const res = await authFetch('/api/follows/by-code', {
+          method: 'POST',
+          body: JSON.stringify({ inviteCode: code }),
+        });
+        const json = await res.json() as any;
+        if (json.success) {
+          setJoinCode('');
+          Alert.alert('Team Followed!', `You're now following ${json.data.teamName}.`);
+          fetchTeams(true);
+        } else {
+          Alert.alert('Invalid Code', json.error || 'That team code was not found. Please check and try again.');
+        }
       }
     } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.');
