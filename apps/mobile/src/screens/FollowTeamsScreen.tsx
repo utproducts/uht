@@ -9,6 +9,7 @@ import {
   FlatList,
   ActivityIndicator,
   ScrollView,
+  Share,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam, searchTeams } from '../services/api';
@@ -341,16 +342,28 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                   ) : (
                     <>
                       <Ionicons name="time-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
-                      <Text style={styles.emptyTitle}>Your Coach Hasn't Created This Team Yet</Text>
+                      <Text style={styles.emptyTitle}>No Teams Created Yet</Text>
                       <Text style={styles.emptyText}>
-                        In the meantime, check out our upcoming events! Once your coach creates the team, you can follow it right away.
+                        Your coach hasn't set up the team yet. Send them a link so they can get started!
                       </Text>
                       <TouchableOpacity
-                        style={[styles.primaryButton, { backgroundColor: colors.cyan, marginTop: 20, alignSelf: 'center', paddingHorizontal: 32 }]}
+                        style={[styles.primaryButton, { marginTop: 20, alignSelf: 'center', paddingHorizontal: 32, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          Share.share({
+                            message: `Hey Coach! Our ${selectedOrg?.name || ''} team needs to be set up on the Ultimate Hockey Tournaments app so families can follow along with schedules, scores, and standings. Download the app and create our team here: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393`,
+                          });
+                        }}
+                      >
+                        <Ionicons name="share-outline" size={18} color={colors.white} />
+                        <Text style={styles.primaryButtonText}>Send Link to Coach</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.skipButton, { marginTop: 16 }]}
                         activeOpacity={0.7}
                         onPress={() => navigation.replace('Main')}
                       >
-                        <Text style={styles.primaryButtonText}>Browse Events</Text>
+                        <Text style={styles.skipText}>Browse Events Instead</Text>
                       </TouchableOpacity>
                     </>
                   )}
@@ -588,8 +601,30 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
               }}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No Teams Found</Text>
-                  <Text style={styles.emptyText}>Try a different search, or browse by state below.</Text>
+                  <Ionicons name="people-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
+                  <Text style={styles.emptyTitle}>Team Not Found</Text>
+                  <Text style={styles.emptyText}>
+                    {isCoach
+                      ? "No teams match your search. Try a different name, or browse by state below to create your team."
+                      : "Your coach may not have created the team yet. Send them a link to get set up!"}
+                  </Text>
+                  {!isCoach && (
+                    <TouchableOpacity
+                      style={[styles.primaryButton, { marginTop: 20, alignSelf: 'center', paddingHorizontal: 32, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        Share.share({
+                          message: `Hey Coach! Our team needs to be set up on the Ultimate Hockey Tournaments app so we can follow along with schedules, scores, and standings. Download the app and create our team here: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393`,
+                        });
+                      }}
+                    >
+                      <Ionicons name="share-outline" size={18} color={colors.white} />
+                      <Text style={styles.primaryButtonText}>Send Link to Coach</Text>
+                    </TouchableOpacity>
+                  )}
+                  <Text style={[styles.emptyText, { marginTop: 16, fontSize: 13 }]}>
+                    Or browse by state below to find your organization.
+                  </Text>
                 </View>
               }
             />
