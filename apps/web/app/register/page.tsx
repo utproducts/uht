@@ -141,7 +141,7 @@ export default function RegisterPage() {
 
   // Discount code
   const [discountCode, setDiscountCode] = useState('');
-  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name: string; code_id: string } | null>(null);
+  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name?: string; code_id?: string; type?: string; amount?: number } | null>(null);
   const [validatingCode, setValidatingCode] = useState(false);
   const [discountError, setDiscountError] = useState('');
   const [discountExpanded, setDiscountExpanded] = useState(false);
@@ -553,13 +553,14 @@ export default function RegisterPage() {
     setLoadingUpsell(false);
   };
 
-  // Validate discount code
+  // Validate discount code (checks event discount codes AND meeting reward codes)
   const validateDiscountCode = async () => {
     if (!discountCode.trim()) return;
     setValidatingCode(true);
     setDiscountError('');
     try {
       const teamId = multiTeamMode ? selectedTeams[0]?.id : selectedTeam?.id;
+      // Try event-specific discount codes first
       const res = await fetch(`${API}/events/validate-discount-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -569,8 +570,24 @@ export default function RegisterPage() {
       if (json.success) {
         setDiscountValidation({ valid: true, ...json.data });
       } else {
-        setDiscountError(json.error || 'Invalid code');
-        setDiscountValidation(null);
+        // Fallback: try meeting reward code validation
+        try {
+          const rewardRes = await fetch(`${API}/api/meeting-reward/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: discountCode.trim().toUpperCase() }),
+          });
+          const rewardJson = await rewardRes.json() as any;
+          if (rewardJson.success && rewardJson.data?.valid) {
+            setDiscountValidation({ valid: true, type: 'meeting_reward', amount: rewardJson.data.amount, discount_hotel_cents: rewardJson.data.amount * 100, discount_local_cents: rewardJson.data.amount * 100 });
+          } else {
+            setDiscountError(rewardJson.error || json.error || 'Invalid code');
+            setDiscountValidation(null);
+          }
+        } catch {
+          setDiscountError(json.error || 'Invalid code');
+          setDiscountValidation(null);
+        }
       }
     } catch { setDiscountError('Failed to validate code'); }
     setValidatingCode(false);
@@ -652,11 +669,23 @@ export default function RegisterPage() {
               email: auth.user?.email || 'unknown@email.com',
               eventName: event.name,
               teamNames,
+              ...(discountCode.trim() ? { discountCode: discountCode.trim().toUpperCase() } : {}),
             }),
           });
           const stripeJson = await stripeRes.json() as any;
 
-          if (stripeJson.success && stripeJson.data?.clientSecret) {
+          if (stripeJson.success && stripeJson.data?.fullyDiscounted) {
+            // Discount covered the full amount — no payment needed
+            setRegResult({
+              ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
+              discountCode: discountCode.trim().toUpperCase(),
+              discountAmount: stripeJson.data.discountApplied ? stripeJson.data.discountApplied / 100 : 0,
+              paymentNote: 'Your discount code covered the full registration!',
+            });
+            loadUpsellEvents();
+            setStep('confirmed');
+            return;
+          } else if (stripeJson.success && stripeJson.data?.clientSecret) {
             setClientSecret(stripeJson.data.clientSecret);
             setPaymentIntentId(stripeJson.data.paymentIntentId);
             setPaymentAmountCents(stripeJson.data.totalCents || 0);

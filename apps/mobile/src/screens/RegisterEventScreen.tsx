@@ -356,12 +356,24 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
           email: currentUser.email,
           eventName: eventName || 'Tournament',
           teamNames: teamsToRegister.map(t => t.name),
+          ...(discountCode.trim() ? { discountCode: discountCode.trim().toUpperCase() } : {}),
         }),
       });
       const piJson = await piRes.json() as any;
 
       if (!piJson.success) {
         Alert.alert('Payment Error', piJson.error || 'Could not set up payment. Your registration has been saved — you can pay later.');
+        setStep('done');
+        return;
+      }
+
+      // If discount covered the full amount, skip Stripe entirely
+      if (piJson.data?.fullyDiscounted) {
+        setRegistrationResult({
+          discountCode: discountCode.trim().toUpperCase(),
+          discountAmount: piJson.data.discountApplied ? piJson.data.discountApplied / 100 : 0,
+          message: 'Your discount code covered the full registration!',
+        });
         setStep('done');
         return;
       }

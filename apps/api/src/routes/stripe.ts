@@ -37,6 +37,7 @@ const paymentIntentSchema = z.object({
   email: z.string().email(),
   eventName: z.string(),
   teamNames: z.array(z.string()).min(1),
+  discountCode: z.string().optional(),
 });
 
 stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSchema), async (c) => {
@@ -96,8 +97,46 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     descriptions.push(`${teamName}${data.paymentChoice === 'pay_deposit' ? ' (Deposit)' : ''}`);
   }
 
+  // Apply discount code if provided (single-use reward codes)
+  let discountCents = 0;
+  let discountCode = '';
+  if (data.discountCode) {
+    const reward = await db.prepare(
+      'SELECT id, code, amount, redeemed FROM meeting_rewards WHERE UPPER(code) = UPPER(?)'
+    ).bind(data.discountCode.trim()).first() as any;
+
+    if (!reward) {
+      return c.json({ success: false, error: 'Invalid discount code' }, 400);
+    }
+    if (reward.redeemed === 1) {
+      return c.json({ success: false, error: 'This code has already been used' }, 409);
+    }
+
+    discountCents = (reward.amount || 0) * 100; // amount is in dollars, convert to cents
+    discountCode = reward.code;
+
+    // Mark as redeemed immediately to prevent double-use
+    await db.prepare(
+      "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
+    ).bind(data.email, reward.id).run();
+  }
+
+  totalCents = Math.max(0, totalCents - discountCents);
+
   if (totalCents <= 0) {
-    return c.json({ success: false, error: 'Total amount must be greater than $0' }, 400);
+    // Fully covered by discount — no charge needed, just update registrations
+    for (const regId of data.registrationIds) {
+      await db.prepare(
+        `UPDATE event_registrations SET payment_status = 'paid', amount_paid_cents = 0, discount_code = ?, discount_cents = ? WHERE id = ?`
+      ).bind(discountCode, discountCents, regId).run().catch(() => {});
+      await db.prepare(
+        `UPDATE registrations SET payment_status = 'paid', amount_paid_cents = 0, discount_code = ?, discount_cents = ? WHERE id = ?`
+      ).bind(discountCode, discountCents, regId).run().catch(() => {});
+    }
+    return c.json({
+      success: true,
+      data: { clientSecret: null, paymentIntentId: null, totalCents: 0, discountApplied: discountCents, fullyDiscounted: true },
+    });
   }
 
   // Minimum Stripe amount is 50 cents
@@ -110,12 +149,16 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       'amount': String(totalCents),
       'currency': 'usd',
       'automatic_payment_methods[enabled]': 'true',
-      'description': `${data.eventName} — ${descriptions.join(', ')}`,
+      'description': `${data.eventName} — ${descriptions.join(', ')}${discountCode ? ` (discount: ${discountCode})` : ''}`,
       'receipt_email': data.email,
       'metadata[registration_ids]': data.registrationIds.join(','),
       'metadata[payment_choice]': data.paymentChoice,
       'metadata[event_name]': data.eventName,
     };
+    if (discountCode) {
+      params['metadata[discount_code]'] = discountCode;
+      params['metadata[discount_cents]'] = String(discountCents);
+    }
 
     const paymentIntent = await stripeRequest('/payment_intents', stripeKey, params);
 
