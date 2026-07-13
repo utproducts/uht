@@ -10,7 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { colors, fonts, spacing, radii } from '../constants/theme';
@@ -107,7 +107,10 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
         onPress={() => {
           markAsRead(item.id);
           if (item.type === 'meeting_reward') {
-            navigation.navigate('RewardReveal');
+            // Use CommonActions.navigate to reach root Stack from nested navigator
+            navigation.dispatch(
+              CommonActions.navigate({ name: 'RewardReveal' })
+            );
           }
         }}
       >
