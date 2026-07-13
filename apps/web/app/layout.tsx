@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   title: 'Ultimate Hockey Tournaments',
   description: 'Premier youth and adult hockey tournaments across the Midwest. Register your team, view schedules, and track live scores.',
   keywords: ['hockey', 'tournaments', 'youth hockey', 'USA Hockey', 'ice hockey', 'tournament registration'],
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
   openGraph: {
     title: 'Ultimate Hockey Tournaments',
     description: 'Premier youth and adult hockey tournaments across the Midwest.',

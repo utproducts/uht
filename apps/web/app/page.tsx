@@ -140,7 +140,7 @@ export default function HomePage() {
 
   /* Counter refs — hardcoded stats for social proof */
   const eventsCounter = useCountUp(totalEvents || 36, 2000);
-  const teamsCounter = useCountUp(1500, 2000);
+  const teamsCounter = useCountUp(1900, 2000);
   const citiesCounter = useCountUp(7, 1500);
   const statesCounter = useCountUp(4, 1200);
 
