@@ -49,6 +49,7 @@ function getNotifIcon(type: string): { name: keyof typeof Ionicons.glyphMap; col
     case 'division_update': return { name: 'trophy', color: colors.warning };
     case 'locker_room': return { name: 'key', color: colors.success };
     case 'team': return { name: 'people', color: colors.navy };
+    case 'meeting_reward': return { name: 'gift', color: '#FFD700' };
     default: return { name: 'notifications', color: colors.cyan };
   }
 }
@@ -103,7 +104,12 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
       <TouchableOpacity
         style={[styles.notifCard, isUnread && styles.notifUnread]}
         activeOpacity={0.7}
-        onPress={() => markAsRead(item.id)}
+        onPress={() => {
+          markAsRead(item.id);
+          if (item.type === 'meeting_reward') {
+            navigation.navigate('RewardReveal');
+          }
+        }}
       >
         {/* Unread dot */}
         {isUnread && <View style={styles.unreadDot} />}
