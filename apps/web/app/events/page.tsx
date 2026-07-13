@@ -656,8 +656,8 @@ export default function EventsPage() {
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Event</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Location</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Dates</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center pl-4 border-l border-[#e8e8ed]">Status</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right pl-4 border-l border-[#e8e8ed]">Price</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center border-l border-[#e8e8ed]">Status</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center border-l border-[#e8e8ed]">Price</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right pl-4 border-l border-[#e8e8ed]"></span>
             </div>
 
@@ -775,7 +775,7 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-center pl-4 border-l border-[#e8e8ed]">
+                    <div className="flex items-center justify-center border-l border-[#e8e8ed]">
                       {scheduleLive ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-700">
                           <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />Live
@@ -787,7 +787,7 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-right pl-4 border-l border-[#e8e8ed]">
+                    <div className="flex items-center justify-center border-l border-[#e8e8ed]">
                       {(event.price_min_cents || event.price_cents) && isUp ? (
                         <span className="text-sm font-bold text-[#003e79] whitespace-nowrap">{formatPriceRange(event)}</span>
                       ) : (
