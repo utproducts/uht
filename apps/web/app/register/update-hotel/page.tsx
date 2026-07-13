@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const API = 'https://api.ultimatetournaments.com/api';
+const API = 'https://uht.chad-157.workers.dev/api';
 
 interface EventHotel {
   id: string;
@@ -192,7 +192,7 @@ export default function UpdateHotelPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-[#003e79] to-[#001f3f] text-white">
         <div className="max-w-2xl mx-auto px-4 py-8 text-center">
-          <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" className="h-10 mx-auto mb-4 object-contain" />
+          <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" className="h-10 mx-auto mb-4 object-contain" />
           <h1 className="text-2xl font-bold mb-1">Select Your Hotel Preferences</h1>
           {regInfo && (
             <p className="text-white/70 text-sm">

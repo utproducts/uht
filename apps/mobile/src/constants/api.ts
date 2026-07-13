@@ -1,1 +1,1 @@
-export const API_URL = 'https://api.ultimatetournaments.com';
+export const API_URL = 'https://uht.chad-157.workers.dev';

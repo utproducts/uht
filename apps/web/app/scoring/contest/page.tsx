@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-const API_BASE = 'https://api.ultimatetournaments.com/api';
+const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
 function ContestPageInner() {
   const searchParams = useSearchParams();

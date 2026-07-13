@@ -57,7 +57,7 @@ interface LockerRoom {
   sort_order: number;
 }
 
-const API_BASE = 'https://api.ultimatetournaments.com/api';
+const API_BASE = 'https://uht.chad-157.workers.dev/api';
 const HEADERS = { 'X-Dev-Bypass': 'true', 'Content-Type': 'application/json' };
 
 const statusColors: Record<string, { bg: string; text: string; badge: string }> = {

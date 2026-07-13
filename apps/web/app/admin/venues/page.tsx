@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const API_BASE = 'https://api.ultimatetournaments.com/api';
+const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
 interface City {
   id: string;

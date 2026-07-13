@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = 'https://api.ultimatetournaments.com/api/ice-booking';
+const API_BASE = 'https://uht.chad-157.workers.dev/api/ice-booking';
 
 interface Slot {
   id: string;

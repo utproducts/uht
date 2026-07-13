@@ -27,7 +27,7 @@ const US_STATES = [
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
 ];
 
-const API = 'https://api.ultimatetournaments.com/api';
+const API = 'https://uht.chad-157.workers.dev/api';
 
 interface Organization {
   id: string;

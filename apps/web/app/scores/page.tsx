@@ -456,7 +456,7 @@ function LoadingSkeleton() {
 // ============================================================================
 
 export default function ScoresPage() {
-  const API_BASE = 'https://api.ultimatetournaments.com/api';
+  const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');

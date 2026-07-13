@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API = 'https://api.ultimatetournaments.com/api/financials';
-const EVENTS_API = 'https://api.ultimatetournaments.com/api/events';
+const API = 'https://uht.chad-157.workers.dev/api/financials';
+const EVENTS_API = 'https://uht.chad-157.workers.dev/api/events';
 
 const fmt = (cents: number) => '$' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtMonth = (m: string) => {

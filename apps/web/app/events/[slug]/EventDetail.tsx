@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
-const API = 'https://api.ultimatetournaments.com/api';
+const API = 'https://uht.chad-157.workers.dev/api';
 
 /* ── Types ── */
 interface EventData {

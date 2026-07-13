@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Oswald } from 'next/font/google';
 
 const oswald = Oswald({ subsets: ['latin'], weight: ['700'] });
-const API = 'https://api.ultimatetournaments.com/api';
+const API = 'https://uht.chad-157.workers.dev/api';
 
 interface Event {
   id: string;

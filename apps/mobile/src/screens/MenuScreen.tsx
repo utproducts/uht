@@ -220,7 +220,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 
       // 1. Sync ALL UHT tournament events as multi-day calendar entries
       try {
-        const eventsRes = await fetch('https://api.ultimatetournaments.com/api/events?per_page=200');
+        const eventsRes = await fetch('https://uht.chad-157.workers.dev/api/events?per_page=200');
         const eventsJson = await eventsRes.json() as any;
         const allEvents = eventsJson.success ? (eventsJson.data || []) : [];
         for (const evt of allEvents) {

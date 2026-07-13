@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 
-const API_BASE = 'https://api.ultimatetournaments.com/api/events';
-const HOTEL_API = 'https://api.ultimatetournaments.com/api/hotels';
-const UPLOAD_API = 'https://api.ultimatetournaments.com/api/upload/image';
+const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
+const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
+const UPLOAD_API = 'https://uht.chad-157.workers.dev/api/upload/image';
 
 function adminHeaders(extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
@@ -395,7 +395,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const ageList = form.age_groups.length > 0 ? form.age_groups.join(', ') : 'various age groups';
       const prompt = `Write a short, exciting marketing description (2-3 sentences max) for a youth hockey tournament called "${form.name}" in ${form.city}, ${form.state}. ${form.start_date && form.end_date ? `It runs from ${form.start_date} to ${form.end_date}.` : ''} Age groups: ${ageList}. Keep it professional, enthusiastic, and focused on the competitive experience. Do not use emojis.`;
-      const res = await fetch('https://api.ultimatetournaments.com/api/chatbot/ask', {
+      const res = await fetch('https://uht.chad-157.workers.dev/api/chatbot/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: prompt }),
@@ -418,7 +418,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       }).catch(() => setLoadingHotels(false));
       // Load venue rinks for director assignment
       if (event.venue_id) {
-        fetch(`https://api.ultimatetournaments.com/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
+        fetch(`https://uht.chad-157.workers.dev/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
           if (json.data && Array.isArray(json.data)) setVenueRinks(json.data);
         }).catch(() => {});
       }
@@ -441,9 +441,9 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'venues' && isEdit && event?.id && allVenuesList.length === 0) {
       setLoadingVenuesTab(true);
       Promise.all([
-        fetch('https://api.ultimatetournaments.com/api/venues').then(r => r.json()),
-        fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${event.id}`).then(r => r.json()),
-        fetch('https://api.ultimatetournaments.com/api/cities').then(r => r.json()),
+        fetch('https://uht.chad-157.workers.dev/api/venues').then(r => r.json()),
+        fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${event.id}`).then(r => r.json()),
+        fetch('https://uht.chad-157.workers.dev/api/cities').then(r => r.json()),
       ]).then(async ([venuesJson, assignedJson, citiesJson]) => {
         if (venuesJson.success) setAllVenuesList(venuesJson.data || []);
         if (citiesJson.success) setVenueCities((citiesJson.data || []).filter((c: any) => c.venue_count > 0));
@@ -456,7 +456,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
           const rinksMap: Record<string, any[]> = {};
           await Promise.all(Array.from(ids).map(async (vid) => {
             try {
-              const rRes = await fetch(`https://api.ultimatetournaments.com/api/venues/${vid}/rinks`).then(r => r.json());
+              const rRes = await fetch(`https://uht.chad-157.workers.dev/api/venues/${vid}/rinks`).then(r => r.json());
               if (rRes.success) rinksMap[vid] = rRes.data || [];
             } catch (_) {}
           }));
@@ -540,8 +540,8 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'rules' && isEdit && event?.id) {
       setLoadingRules(true);
       Promise.all([
-        fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event.id}/rules`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
-        fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event.id}/team-ratings`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
+        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/rules`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
+        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/team-ratings`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
       ]).then(([rulesJson, ratingsJson]) => {
         if (rulesJson.success) {
           setScheduleRules((rulesJson.data || []).map((r: any) => ({ ruleType: r.rule_type, ruleValue: r.rule_value, priority: r.priority })));
@@ -551,7 +551,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       }).catch(() => setLoadingRules(false));
       // Load rinks for rink rules
       if (event.venue_id) {
-        fetch(`https://api.ultimatetournaments.com/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
+        fetch(`https://uht.chad-157.workers.dev/api/venues/${event.venue_id}/rinks`).then(r => r.json()).then(json => {
           if (json.success) setRulesVenueRinks(json.data || []);
         }).catch(() => {});
       }
@@ -562,7 +562,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   useEffect(() => {
     if (activeTab === 'directors' && isEdit && event?.id) {
       setLoadingDirectors(true);
-      fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, {
+      fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
         headers: { 'X-Dev-Bypass': 'true' }
       }).then(r => r.json()).then(json => {
         if (json.success) setDirectors(json.data);
@@ -575,7 +575,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   useEffect(() => {
     if (activeTab === 'directors' && directorOptions.length === 0) {
       setLoadingDirectorOptions(true);
-      fetch(`https://api.ultimatetournaments.com/api/users?role=director`, {
+      fetch(`https://uht.chad-157.workers.dev/api/users?role=director`, {
         headers: { 'X-Dev-Bypass': 'true' }
       }).then(r => r.json()).then(json => {
         if (json.success) setDirectorOptions(json.data);
@@ -680,7 +680,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (!selectedDirectorId || !event?.id) return;
     setAssigningDirector(true);
     try {
-      const res = await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({ userId: selectedDirectorId, rinkIds: rinkIds || [] }),
@@ -688,7 +688,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       const json = await res.json();
       if (json.success) {
         // Reload directors list
-        const dirRes = await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
+        const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
         const dirJson = await dirRes.json();
         if (dirJson.success) setDirectors(dirJson.data);
         setSelectedDirectorId('');
@@ -700,13 +700,13 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const handleUpdateDirectorRinks = async (userId: string, rinkIds: string[]) => {
     if (!event?.id) return;
     try {
-      await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, {
+      await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({ userId, rinkIds }),
       });
       // Reload
-      const dirRes = await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
+      const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
       const dirJson = await dirRes.json();
       if (dirJson.success) setDirectors(dirJson.data);
     } catch (e) { /* ignore */ }
@@ -715,7 +715,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const handleRemoveDirector = async (userId: string) => {
     if (!event?.id) return;
     try {
-      await fetch(`https://api.ultimatetournaments.com/api/director/events/${event.id}/directors/${userId}`, {
+      await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors/${userId}`, {
         method: 'DELETE',
         headers: { 'X-Dev-Bypass': 'true' }
       });
@@ -775,7 +775,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
           // Save venues
           if (selectedVenueIds.size > 0) {
             try {
-              await fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${newEventId}`, {
+              await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${newEventId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                 body: JSON.stringify({
@@ -1348,7 +1348,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         setSavingVenues(true);
                         setVenuesSaveStatus('idle');
                         try {
-                          const res = await fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${event!.id}`, {
+                          const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${event!.id}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                             body: JSON.stringify({ venue_ids: Array.from(assignedVenueIds), primary_venue_id: primaryVenueIdTab }),
@@ -1461,7 +1461,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                 if (next.size === 1) setPrimaryVenueIdTab(v.id);
                                 // Load rinks if not loaded
                                 if (!eventRinksMap[v.id]) {
-                                  fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
+                                  fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
                                     if (json.success) setEventRinksMap(prev => ({ ...prev, [v.id]: json.data || [] }));
                                   }).catch(() => {});
                                 }
@@ -1488,7 +1488,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                               {isAssigned && (
                                 <button onClick={(e) => { e.stopPropagation(); setExpandedVenueId(isExpanded ? null : v.id);
                                   if (!isExpanded && !eventRinksMap[v.id]) {
-                                    fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
+                                    fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`).then(r => r.json()).then(json => {
                                       if (json.success) setEventRinksMap(prev => ({ ...prev, [v.id]: json.data || [] }));
                                     }).catch(() => {});
                                   }
@@ -1534,7 +1534,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                         if (!newRinkName.trim()) return;
                                         setSavingRink(true);
                                         try {
-                                          const res = await fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks`, {
+                                          const res = await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                                             body: JSON.stringify({ name: newRinkName.trim(), surface_size: newRinkSize || undefined }),
@@ -1568,7 +1568,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                         <button onClick={async () => {
                                           if (!confirm(`Remove ${rink.name}?`)) return;
                                           try {
-                                            await fetch(`https://api.ultimatetournaments.com/api/venues/${v.id}/rinks/${rink.id}`, { method: 'DELETE', headers: { 'X-Dev-Bypass': 'true' } });
+                                            await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks/${rink.id}`, { method: 'DELETE', headers: { 'X-Dev-Bypass': 'true' } });
                                             setEventRinksMap(prev => ({ ...prev, [v.id]: (prev[v.id] || []).filter((r: any) => r.id !== rink.id) }));
                                             if (event?.venue_id === v.id) setVenueRinks(prev => prev.filter(r => r.id !== rink.id));
                                           } catch (_) {}
@@ -1608,7 +1608,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                       setRulesSaveStatus('idle');
                       try {
                         // Save rules
-                        const res = await fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event!.id}/rules`, {
+                        const res = await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event!.id}/rules`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                           body: JSON.stringify({ rules: scheduleRules }),
@@ -1616,7 +1616,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         // Save MHR ratings
                         const ratingsToSave = teamRatings.filter(t => t.mhr_rating !== null).map(t => ({ registration_id: t.registration_id, mhr_rating: t.mhr_rating }));
                         if (ratingsToSave.length > 0) {
-                          await fetch(`https://api.ultimatetournaments.com/api/scheduling/events/${event!.id}/team-ratings`, {
+                          await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event!.id}/team-ratings`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
                             body: JSON.stringify({ ratings: ratingsToSave }),
@@ -3053,9 +3053,9 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   // Load all venues, cities, and currently assigned
   useEffect(() => {
     Promise.all([
-      fetch('https://api.ultimatetournaments.com/api/venues').then(r => r.json()),
-      fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${eventId}`).then(r => r.json()),
-      fetch('https://api.ultimatetournaments.com/api/cities').then(r => r.json()),
+      fetch('https://uht.chad-157.workers.dev/api/venues').then(r => r.json()),
+      fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${eventId}`).then(r => r.json()),
+      fetch('https://uht.chad-157.workers.dev/api/cities').then(r => r.json()),
     ]).then(([venuesJson, assignedJson, citiesJson]) => {
       if (venuesJson.success) setAllVenues(venuesJson.data || []);
       if (citiesJson.success) setCities((citiesJson.data || []).filter((c: any) => c.venue_count > 0));
@@ -3072,7 +3072,7 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   // Load rinks for expanded venue
   useEffect(() => {
     if (!expandedVenue || venueRinksMap[expandedVenue]) return;
-    fetch(`https://api.ultimatetournaments.com/api/venues/${expandedVenue}/rinks`)
+    fetch(`https://uht.chad-157.workers.dev/api/venues/${expandedVenue}/rinks`)
       .then(r => r.json())
       .then(json => {
         if (json.success) setVenueRinksMap(prev => ({ ...prev, [expandedVenue]: json.data || [] }));
@@ -3105,7 +3105,7 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
     setSaving(true);
     setSaveStatus('idle');
     try {
-      const res = await fetch(`https://api.ultimatetournaments.com/api/events/admin/event-venues/${eventId}`, {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${eventId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({
@@ -4764,7 +4764,7 @@ export default function AdminEventsPage() {
   const runImport = useCallback(async () => {
     setImportState('importing');
     try {
-      const res = await fetch('https://api.ultimatetournaments.com/api/events/admin/bulk-import', {
+      const res = await fetch('https://uht.chad-157.workers.dev/api/events/admin/bulk-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
         body: JSON.stringify({ events: importRows }),

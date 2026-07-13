@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-const API_BASE = 'https://api.ultimatetournaments.com/api';
+const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
 // Dev auth header — TODO: replace with real JWT auth when login is wired up
 const devHeaders = { 'X-Dev-Bypass': 'true' };

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 // Pre-generate pages for all events — actual content loaded client-side via API
 export async function generateStaticParams() {
   try {
-    const res = await fetch('https://api.ultimatetournaments.com/api/events?per_page=100', { next: { revalidate: 60 } });
+    const res = await fetch('https://uht.chad-157.workers.dev/api/events?per_page=100', { next: { revalidate: 60 } });
     if (res.ok) {
       const json = await res.json();
       const events = json.data || [];

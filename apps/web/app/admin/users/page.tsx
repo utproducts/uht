@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const API_BASE = 'https://api.ultimatetournaments.com/api/users';
+const API_BASE = 'https://uht.chad-157.workers.dev/api/users';
 
 const ROLES = ['admin', 'director', 'organization', 'coach', 'manager', 'parent', 'scorekeeper', 'referee'];
 

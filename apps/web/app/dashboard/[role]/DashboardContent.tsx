@@ -51,7 +51,7 @@ function PendingRegistrations() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  const API = 'https://api.ultimatetournaments.com/api';
+  const API = 'https://uht.chad-157.workers.dev/api';
   const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true' };
 
   const fetchPending = async () => {
@@ -251,7 +251,7 @@ function AdminDash() {
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
-    const API = 'https://api.ultimatetournaments.com/api';
+    const API = 'https://uht.chad-157.workers.dev/api';
     const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true' };
     Promise.all([
       fetch(`${API}/events/admin/list?filter=upcoming`, { headers: devHeaders }).then(r => r.json()),
@@ -382,7 +382,7 @@ function AdminDash() {
 /* OrgDash is imported from ./OrgDashboard.tsx */
 
 function CoachDash() {
-  const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
+  const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
@@ -856,7 +856,7 @@ function getAvatarEmoji(avatarId: string | null): string {
 }
 
 function ParentDash() {
-  const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
+  const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPlayer, setEditingPlayer] = useState<any | null>(null);

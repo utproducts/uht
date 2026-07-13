@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import RosterImport from '../../../components/RosterImport';
 import { OrgTeams, OrgCoaches, OrgRosters, OrgEvents } from './OrgPages';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('uht_token');

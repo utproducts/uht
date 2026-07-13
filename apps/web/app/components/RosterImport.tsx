@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.ultimatetournaments.com';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
 interface Player {
   id?: string;

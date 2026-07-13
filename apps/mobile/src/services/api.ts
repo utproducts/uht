@@ -7,13 +7,13 @@ export async function searchOrganizations(query: string, state?: string) {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
   if (state) params.set('state', state);
-  const res = await fetch(`https://api.ultimatetournaments.com/api/organizations/search?${params.toString()}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/organizations/search?${params.toString()}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
 
 export async function getOrganizationsByState(state: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/organizations/search?state=${encodeURIComponent(state)}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/organizations/search?state=${encodeURIComponent(state)}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
@@ -22,13 +22,13 @@ export async function getOrganizationsByState(state: string) {
 // Lookups (age groups, divisions, state division levels)
 // ==================
 export async function getLookupValues(category: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/lookups?category=${encodeURIComponent(category)}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/lookups?category=${encodeURIComponent(category)}`);
   const json = await res.json() as any;
   return json.success ? json.data : [];
 }
 
 export async function getStateDivisionLevels(state: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/lookups/state-divisions?state=${encodeURIComponent(state)}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/lookups/state-divisions?state=${encodeURIComponent(state)}`);
   const json = await res.json() as any;
   return json.success ? json.data : [];
 }
@@ -37,13 +37,13 @@ export async function getStateDivisionLevels(state: string) {
 // Teams
 // ==================
 export async function getTeamsByOrg(orgId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/teams/by-org/${orgId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/teams/by-org/${orgId}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
 
 export async function getTeamsByOrgDivision(orgId: string, ageGroup: string, divisionLevel?: string) {
-  let url = `https://api.ultimatetournaments.com/api/teams/by-org-division?orgId=${encodeURIComponent(orgId)}&ageGroup=${encodeURIComponent(ageGroup)}`;
+  let url = `https://uht.chad-157.workers.dev/api/teams/by-org-division?orgId=${encodeURIComponent(orgId)}&ageGroup=${encodeURIComponent(ageGroup)}`;
   if (divisionLevel) url += `&divisionLevel=${encodeURIComponent(divisionLevel)}`;
   const res = await fetch(url);
   const json = await res.json();
@@ -51,7 +51,7 @@ export async function getTeamsByOrgDivision(orgId: string, ageGroup: string, div
 }
 
 export async function searchTeams(query: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/teams/search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/teams/search?q=${encodeURIComponent(query)}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
@@ -82,25 +82,25 @@ export async function getFollowedTeams() {
 // Events
 // ==================
 export async function getEvents() {
-  const res = await fetch('https://api.ultimatetournaments.com/api/events?per_page=100');
+  const res = await fetch('https://uht.chad-157.workers.dev/api/events?per_page=100');
   const json = await res.json();
   return json.success ? json.data : [];
 }
 
 export async function getEventDetail(eventId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/events/${eventId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}`);
   const json = await res.json();
   return json.success ? json.data : null;
 }
 
 export async function getTeamSchedule(eventId: string, teamId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/events/${eventId}/schedule?team_id=${teamId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}/schedule?team_id=${teamId}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
 
 export async function getEventSchedule(eventId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/events/${eventId}/schedule`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}/schedule`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
@@ -134,13 +134,13 @@ export async function getMyTeamIds(): Promise<string[]> {
 // Scores & Standings
 // ==================
 export async function getEventScores(eventId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/scoring/events/${eventId}/games`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/games`);
   const json = await res.json() as { success: boolean; data?: unknown[] };
   return json.success ? json.data : [];
 }
 
 export async function getEventStandings(eventId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/scoring/events/${eventId}/standings`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings`);
   const json = await res.json() as { success: boolean; data?: unknown[] };
   return json.success ? json.data : [];
 }
@@ -164,7 +164,7 @@ export async function getScorekeeperGames(eventId: string) {
 // Event Hotels
 // ==================
 export async function getEventHotels(eventId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/events/event-hotels/${eventId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/event-hotels/${eventId}`);
   const json = await res.json() as { success: boolean; data?: unknown[] };
   return json.success ? json.data : [];
 }
@@ -173,7 +173,7 @@ export async function getEventHotels(eventId: string) {
 // Event Divisions (for pricing display)
 // ==================
 export async function getEventDivisions(eventId: string) {
-  const res = await fetch(`https://api.ultimatetournaments.com/api/events/event-divisions/${eventId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/event-divisions/${eventId}`);
   const json = await res.json() as { success: boolean; data?: unknown[] };
   return json.success ? json.data : [];
 }

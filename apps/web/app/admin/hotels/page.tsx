@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const HOTEL_API = 'https://api.ultimatetournaments.com/api/hotels';
+const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
 
 function adminHeaders(extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
