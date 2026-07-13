@@ -174,7 +174,7 @@ hotelRoutes.post('/master/:id/image', authMiddleware, requireRole('admin'), asyn
   const arrayBuffer = await file.arrayBuffer();
   await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
 
-  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
   const imageUrl = `${apiBase}/api/assets/${key}`;
 
   try { await db.prepare("ALTER TABLE master_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }

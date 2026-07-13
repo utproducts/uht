@@ -113,7 +113,7 @@ app.post('/api/upload/image', async (c) => {
   });
 
   // Return the public URL via R2 custom domain or worker proxy
-  const apiUrl = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const apiUrl = c.env.API_URL || 'https://uht.chad-157.workers.dev';
   const url = `${apiUrl}/api/upload/${key}`;
   return c.json({ success: true, url, key });
 });
@@ -158,6 +158,18 @@ app.get('/api/assets/hotels/:filename', async (c) => {
 app.get('/api/assets/team-logos/:filename', async (c) => {
   const filename = c.req.param('filename');
   const object = await c.env.STORAGE.get(`team-logos/${filename}`);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/png');
+  headers.set('Cache-Control', 'public, max-age=31536000');
+  return new Response(object.body, { headers });
+});
+
+// Serve org logos from R2
+app.get('/api/assets/org-logos/:filename', async (c) => {
+  const filename = c.req.param('filename');
+  const object = await c.env.STORAGE.get(`org-logos/${filename}`);
   if (!object) return c.json({ error: 'Not found' }, 404);
 
   const headers = new Headers();

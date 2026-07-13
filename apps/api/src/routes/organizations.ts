@@ -942,7 +942,7 @@ organizationRoutes.post('/:orgId/logo-base64', authMiddleware, requireRole('admi
 
   await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
 
-  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
   const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
 
   await db.prepare("UPDATE organizations SET logo_url = ? WHERE id = ?")

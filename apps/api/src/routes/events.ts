@@ -1666,7 +1666,7 @@ eventRoutes.post('/admin/hotel-image/:hotelId', authMiddleware, requireRole('adm
   });
 
   // Build public URL via Worker proxy
-  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
   const imageUrl = `${apiBase}/api/assets/${key}`;
 
   // Save URL to database

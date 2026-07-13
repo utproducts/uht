@@ -579,7 +579,7 @@ teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
   const arrayBuffer = await file.arrayBuffer();
   await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
 
-  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
   const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
 
   await db.prepare("UPDATE teams SET logo_url = ?, updated_at = datetime('now') WHERE id = ?")
@@ -639,7 +639,7 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
 
   await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
 
-  const apiBase = c.env.API_URL || 'https://api.ultimatetournaments.com';
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
   const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
 
   // Always save to the team
