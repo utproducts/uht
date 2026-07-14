@@ -72,6 +72,11 @@ export async function unfollowTeam(teamId: string) {
   return res.json();
 }
 
+export async function leaveTeam(teamId: string) {
+  const res = await authFetch(`/api/teams/${teamId}/leave`, { method: 'DELETE' });
+  return res.json();
+}
+
 export async function getFollowedTeams() {
   const res = await authFetch('/api/follows');
   const json = await res.json();

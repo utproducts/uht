@@ -22,7 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, getToken, getActiveRole, User } from '../services/auth';
 import { API_URL } from '../constants/api';
-import { unfollowTeam } from '../services/api';
+import { unfollowTeam, leaveTeam } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface Team {
@@ -37,6 +37,7 @@ interface Team {
   logo_url?: string;
   player_count?: number;
   invite_code?: string;
+  parent_invite_code?: string;
   roster_share_token?: string;
 }
 
@@ -107,26 +108,36 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     fetchTeams(true);
   }
 
-  function handleUnfollowTeam(team: Team) {
-    Alert.alert(
-      'Unfollow Team',
-      `Are you sure you want to unfollow ${team.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unfollow',
-          style: 'destructive',
-          onPress: async () => {
-            try {
+  function handleRemoveTeam(team: Team) {
+    const actionLabel = isCoach ? 'Leave Team' : 'Unfollow Team';
+    const confirmLabel = isCoach ? 'Leave' : 'Unfollow';
+    const prompt = isCoach
+      ? `Are you sure you want to leave ${team.name}? You will lose coach access to this team.`
+      : `Are you sure you want to unfollow ${team.name}?`;
+
+    Alert.alert(actionLabel, prompt, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: confirmLabel,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (isCoach) {
+              const result = await leaveTeam(team.id);
+              if (result.success === false) {
+                Alert.alert('Cannot Leave', result.error || 'Unable to leave this team.');
+                return;
+              }
+            } else {
               await unfollowTeam(team.id);
-              setTeams((prev) => prev.filter((t) => t.id !== team.id));
-            } catch {
-              Alert.alert('Error', 'Failed to unfollow team. Please try again.');
             }
-          },
+            setTeams((prev) => prev.filter((t) => t.id !== team.id));
+          } catch {
+            Alert.alert('Error', `Failed to ${isCoach ? 'leave' : 'unfollow'} team. Please try again.`);
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function handleJoinByCode() {
@@ -231,12 +242,12 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         style={styles.teamCard}
         activeOpacity={0.7}
         onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
-        onLongPress={() => handleUnfollowTeam(item)}
+        onLongPress={() => handleRemoveTeam(item)}
       >
         {/* Unfollow button */}
         <TouchableOpacity
           style={styles.unfollowBtn}
-          onPress={() => handleUnfollowTeam(item)}
+          onPress={() => handleRemoveTeam(item)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
         >
@@ -332,7 +343,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               onPress={async () => {
                 try {
                   await Share.share({
-                    message: `You're invited to coach ${item.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the team code when prompted: ${item.invite_code}`,
+                    message: `You're invited to coach ${item.name} on Ultimate Hockey Tournaments!\n\nCoach code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the coach code when prompted: ${item.invite_code}`,
                   });
                 } catch {}
               }}
@@ -342,13 +353,14 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               <Text style={styles.cardActionText}>Invite Coaches</Text>
             </TouchableOpacity>
           ) : null}
-          {item.invite_code ? (
+          {(item.parent_invite_code || item.invite_code) ? (
             <TouchableOpacity
               style={styles.cardActionBtn}
               onPress={async () => {
+                const familyCode = item.parent_invite_code || item.invite_code;
                 try {
                   await Share.share({
-                    message: `Follow ${item.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the team code when prompted: ${item.invite_code}\n\nYou'll see all upcoming events, schedules, and scores!`,
+                    message: `Follow ${item.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
                   });
                 } catch {}
               }}

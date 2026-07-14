@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getFollowedTeams, getScorekeeperEvents, unfollowTeam } from '../services/api';
+import { getFollowedTeams, getScorekeeperEvents, unfollowTeam, leaveTeam } from '../services/api';
 import { getUser, authFetch, getActiveRole, User } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
 
@@ -240,30 +240,40 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const isParent = activeRole === 'parent';
   const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRole);
 
-  function handleUnfollowTeam(team: FollowedTeam) {
-    Alert.alert(
-      'Unfollow Team',
-      `Are you sure you want to unfollow ${team.team_name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unfollow',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const teamId = team.team_id || team.id;
+  function handleRemoveTeam(team: FollowedTeam) {
+    const isOwn = !!team.isOwnTeam;
+    const actionLabel = isOwn ? 'Leave Team' : 'Unfollow Team';
+    const confirmLabel = isOwn ? 'Leave' : 'Unfollow';
+    const prompt = isOwn
+      ? `Are you sure you want to leave ${team.team_name}? You will lose coach access.`
+      : `Are you sure you want to unfollow ${team.team_name}?`;
+
+    Alert.alert(actionLabel, prompt, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: confirmLabel,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const teamId = team.team_id || team.id;
+            if (isOwn) {
+              const result = await leaveTeam(teamId);
+              if (result.success === false) {
+                Alert.alert('Cannot Leave', result.error || 'Unable to leave this team.');
+                return;
+              }
+            } else {
               await unfollowTeam(teamId);
-              setTeams((prev) => prev.filter((t) => (t.team_id || t.id) !== teamId));
-              // Refresh data to update upcoming events too
-              lastLoadRef.current = 0;
-              loadData(true);
-            } catch {
-              Alert.alert('Error', 'Failed to unfollow team. Please try again.');
             }
-          },
+            setTeams((prev) => prev.filter((t) => (t.team_id || t.id) !== teamId));
+            lastLoadRef.current = 0;
+            loadData(true);
+          } catch {
+            Alert.alert('Error', `Failed to ${isOwn ? 'leave' : 'unfollow'} team. Please try again.`);
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   // --------------- Hero Banner ---------------
@@ -496,10 +506,10 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                         ) : null}
                         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
                       </TouchableOpacity>
-                      {!team.isOwnTeam && (
+                      {(
                         <TouchableOpacity
                           style={styles.unfollowBtn}
-                          onPress={() => handleUnfollowTeam(team)}
+                          onPress={() => handleRemoveTeam(team)}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
                           <Ionicons name="close-circle" size={22} color="#8e919e" />

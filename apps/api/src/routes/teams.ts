@@ -1705,6 +1705,17 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
   const randBytes = crypto.getRandomValues(new Uint8Array(6));
   for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
 
+  // Generate a separate parent invite code (6 chars, different from coach code)
+  let parentInviteCode = '';
+  const parentRandBytes = crypto.getRandomValues(new Uint8Array(6));
+  for (let i = 0; i < 6; i++) parentInviteCode += codeChars[parentRandBytes[i] % codeChars.length];
+  // Ensure parent code differs from coach code
+  if (parentInviteCode === inviteCode) {
+    const extraBytes = crypto.getRandomValues(new Uint8Array(6));
+    parentInviteCode = '';
+    for (let i = 0; i < 6; i++) parentInviteCode += codeChars[extraBytes[i] % codeChars.length];
+  }
+
   // Generate a roster share token (URL-safe, 12 chars) for parent/player claim link
   const tokenChars = 'abcdefghijkmnpqrstuvwxyz23456789';
   let rosterShareToken = '';
@@ -1723,8 +1734,8 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
       usa_hockey_team_id, usa_hockey_roster_url, city, state,
       website, hometown_league, team_type, season_record,
       head_coach_name, head_coach_email, head_coach_phone,
-      manager_name, manager_email, manager_phone, created_by, invite_code, roster_share_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      manager_name, manager_email, manager_phone, created_by, invite_code, parent_invite_code, roster_share_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, data.organizationId || null, data.name, data.ageGroup,
     data.divisionLevel || null, data.usaHockeyTeamId || null,
@@ -1733,7 +1744,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
     data.teamType || null, data.seasonRecord || null,
     data.headCoachName || null, data.headCoachEmail || null, data.headCoachPhone || null,
     data.managerName || null, data.managerEmail || null, data.managerPhone || null,
-    createdByUserId, inviteCode, rosterShareToken
+    createdByUserId, inviteCode, parentInviteCode, rosterShareToken
   ).run();
 
   // Link creator as a team_member
@@ -1794,7 +1805,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -1861,7 +1872,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -2387,12 +2398,19 @@ teamRoutes.post('/join', authMiddleware, zValidator('json', joinTeamSchema), asy
   const db = c.env.DB;
   const code = inviteCode.toUpperCase().trim();
 
-  // Find the team with this invite code
+  // Find the team with this coach invite code (NOT parent code)
   const team = await db.prepare(`
     SELECT id, name, age_group, invite_code FROM teams WHERE invite_code = ? AND is_active = 1
   `).bind(code).first<{ id: string; name: string; age_group: string; invite_code: string }>();
 
   if (!team) {
+    // Check if they used a parent code by mistake
+    const parentMatch = await db.prepare(`
+      SELECT id, name FROM teams WHERE parent_invite_code = ? AND is_active = 1
+    `).bind(code).first();
+    if (parentMatch) {
+      return c.json({ success: false, error: 'This is a parent/family code. To join as a coach, ask the team admin for the coach invite code.' }, 400);
+    }
     return c.json({ success: false, error: 'Invalid invite code. Please check the code and try again.' }, 404);
   }
 
@@ -2451,6 +2469,34 @@ teamRoutes.post('/join', authMiddleware, zValidator('json', joinTeamSchema), asy
     data: { teamId: team.id, teamName: team.name, ageGroup: team.age_group, role },
     message: `You've joined ${team.name} as ${role}!`,
   });
+});
+
+// ==================
+// LEAVE TEAM — remove user from all associations (follows, coaches, managers, members)
+// ==================
+teamRoutes.delete('/:teamId/leave', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const teamId = c.req.param('teamId');
+
+  // Check if user created this team — can't leave your own team
+  const team = await db.prepare(`SELECT id, name, created_by FROM teams WHERE id = ? AND is_active = 1`).bind(teamId).first<{ id: string; name: string; created_by: string }>();
+  if (!team) {
+    return c.json({ success: false, error: 'Team not found' }, 404);
+  }
+  if (team.created_by === user.id) {
+    return c.json({ success: false, error: 'You cannot leave a team you created. Transfer ownership first.' }, 400);
+  }
+
+  // Remove from all association tables
+  await db.batch([
+    db.prepare(`DELETE FROM user_follows WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_coaches WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_managers WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_members WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+  ]);
+
+  return c.json({ success: true, message: `You have left ${team.name}.` });
 });
 
 // ==================
@@ -2540,18 +2586,18 @@ teamRoutes.get('/:id/invite-code', authMiddleware, async (c) => {
 
   // Verify user has access to this team
   const access = await db.prepare(`
-    SELECT t.invite_code FROM teams t
+    SELECT t.invite_code, t.parent_invite_code FROM teams t
     LEFT JOIN team_members tmem ON tmem.team_id = t.id AND tmem.user_id = ?
     LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
     LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
     WHERE t.id = ? AND (t.created_by = ? OR tmem.user_id IS NOT NULL OR tc.user_id IS NOT NULL OR tm.user_id IS NOT NULL)
-  `).bind(user.id, user.id, user.id, teamId, user.id).first<{ invite_code: string }>();
+  `).bind(user.id, user.id, user.id, teamId, user.id).first<{ invite_code: string; parent_invite_code: string }>();
 
   if (!access) {
     return c.json({ success: false, error: 'Team not found or access denied' }, 404);
   }
 
-  return c.json({ success: true, data: { inviteCode: access.invite_code } });
+  return c.json({ success: true, data: { inviteCode: access.invite_code, parentInviteCode: access.parent_invite_code } });
 });
 
 // ==================
@@ -2561,10 +2607,17 @@ teamRoutes.post('/admin/backfill-invite-codes', authMiddleware, requireRole('adm
   const db = c.env.DB;
   const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  const teams = await db.prepare(`SELECT id FROM teams WHERE (invite_code IS NULL OR invite_code = '') AND is_active = 1 LIMIT 100`).all<{ id: string }>();
-  let updated = 0;
+  // Ensure parent_invite_code column exists
+  try {
+    await db.prepare(`ALTER TABLE teams ADD COLUMN parent_invite_code TEXT`).run();
+  } catch (e: any) {
+    // Column already exists — expected
+  }
 
-  for (const team of teams.results || []) {
+  // Backfill coach invite codes
+  const teamsNoCode = await db.prepare(`SELECT id FROM teams WHERE (invite_code IS NULL OR invite_code = '') AND is_active = 1 LIMIT 100`).all<{ id: string }>();
+  let updated = 0;
+  for (const team of teamsNoCode.results || []) {
     let code = '';
     const randBytes = crypto.getRandomValues(new Uint8Array(6));
     for (let i = 0; i < 6; i++) code += codeChars[randBytes[i] % codeChars.length];
@@ -2572,7 +2625,24 @@ teamRoutes.post('/admin/backfill-invite-codes', authMiddleware, requireRole('adm
     updated++;
   }
 
-  return c.json({ success: true, updated });
+  // Backfill parent invite codes
+  const teamsNoParentCode = await db.prepare(`SELECT id, invite_code FROM teams WHERE (parent_invite_code IS NULL OR parent_invite_code = '') AND is_active = 1 LIMIT 500`).all<{ id: string; invite_code: string }>();
+  let parentUpdated = 0;
+  for (const team of teamsNoParentCode.results || []) {
+    let parentCode = '';
+    const randBytes = crypto.getRandomValues(new Uint8Array(6));
+    for (let i = 0; i < 6; i++) parentCode += codeChars[randBytes[i] % codeChars.length];
+    // Ensure different from coach code
+    if (parentCode === team.invite_code) {
+      const extraBytes = crypto.getRandomValues(new Uint8Array(6));
+      parentCode = '';
+      for (let i = 0; i < 6; i++) parentCode += codeChars[extraBytes[i] % codeChars.length];
+    }
+    await db.prepare(`UPDATE teams SET parent_invite_code = ? WHERE id = ?`).bind(parentCode, team.id).run();
+    parentUpdated++;
+  }
+
+  return c.json({ success: true, updated, parentUpdated });
 });
 
 // ==================

@@ -2557,7 +2557,7 @@ eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
-              <img src="https://api.ultimatetournaments.com/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
+              <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="margin-bottom: 16px;">
               <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">Hotels Now Available!</h1>
               <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">Book your team's hotel for the tournament</p>
             </td>

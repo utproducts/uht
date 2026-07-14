@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useState, useRef } from 'react';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
-import { registerForPushNotifications, refreshBadgeCount, addNotificationListener } from '../services/notifications';
+import { registerForPushNotifications, refreshBadgeCount, addNotificationListener, addResponseListener } from '../services/notifications';
 
 // Screens
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -30,6 +30,7 @@ import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
 import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
 import ScoreGameScreen from '../screens/ScoreGameScreen';
 import DirectorGamesScreen from '../screens/DirectorGamesScreen';
+import RewardRevealScreen from '../screens/RewardRevealScreen';
 
 const Stack = createNativeStackNavigator();
 const MenuStack = createNativeStackNavigator();
@@ -169,6 +170,7 @@ function MainTabs() {
 export default function AppNavigator() {
   const [checking, setChecking] = useState(true);
   const [initialRoute, setInitialRoute] = useState<string>('Welcome');
+  const navigationRef = useRef<NavigationContainerRef<any>>(null);
 
   useEffect(() => {
     (async () => {
@@ -189,7 +191,19 @@ export default function AppNavigator() {
       refreshBadgeCount();
     });
 
-    return () => sub.remove();
+    // Handle push notification taps
+    const responseSub = addResponseListener((response: any) => {
+      const data = response.notification?.request?.content?.data;
+      if (data?.type === 'meeting_reward') {
+        // Navigate to the reward reveal screen
+        navigationRef.current?.navigate('RewardReveal' as never);
+      }
+    });
+
+    return () => {
+      sub.remove();
+      responseSub.remove();
+    };
   }, []);
 
   if (checking) {
@@ -201,7 +215,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{ headerShown: false }}
@@ -212,6 +226,14 @@ export default function AppNavigator() {
         <Stack.Screen name="CoachOnboarding" component={CoachOnboardingScreen} />
         <Stack.Screen name="FollowTeams" component={FollowTeamsScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="RewardReveal"
+          component={RewardRevealScreen}
+          options={{
+            presentation: 'fullScreenModal',
+            animation: 'fade',
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

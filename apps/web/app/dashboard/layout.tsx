@@ -26,6 +26,7 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Registrations', href: '/admin/registrations' },
     { name: 'Schedule Builder', href: '/admin/schedule' },
     { name: 'Financials', href: '/admin/financials' },
+    { name: 'Shop', href: '/admin/shop' },
     { name: 'Referees', href: '/admin/referees' },
     { name: 'Communications', href: '/admin/comms' },
     { name: 'Email Campaigns', href: '/admin/email' },
@@ -33,6 +34,8 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Hotels', href: '/admin/hotels' },
     { name: 'Venues', href: '/admin/venues' },
     { name: 'Sponsors', href: '/admin/sponsors' },
+    { name: 'Notifications', href: '/admin/notifications' },
+    { name: 'RSVPs', href: '/admin/rsvps' },
     { name: 'FAQs', href: '/admin/faqs' },
     { name: 'Book Ice', href: '/admin/ice' },
     { name: 'Settings', href: '/admin/settings' },
@@ -119,7 +122,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 hidden md:block">
+        <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0 hidden md:block">
           <p className="px-3 mb-3 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">{nav.label}</p>
           <nav className="space-y-0.5">
             {nav.items.map((item) => {
@@ -129,9 +132,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   key={item.name}
                   href={item.href}
                   className={
-                    "block px-3 py-2.5 rounded-xl text-sm transition-all " +
+                    "block px-3 py-2 rounded-lg text-sm transition-colors " +
                     (isActive
-                      ? "bg-[#f0f7ff] text-[#003e79] font-semibold shadow-sm"
+                      ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
                       : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
                   }
                 >

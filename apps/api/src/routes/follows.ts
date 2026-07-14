@@ -144,10 +144,10 @@ followRoutes.post('/by-code', authMiddleware, zValidator('json', followByCodeSch
   const { inviteCode } = c.req.valid('json');
   const code = inviteCode.toUpperCase().trim();
 
-  // Find team by invite code
+  // Find team by parent invite code OR coach invite code (parents can use either)
   const team = await db.prepare(
-    `SELECT id, name, age_group FROM teams WHERE invite_code = ? AND is_active = 1`
-  ).bind(code).first<{ id: string; name: string; age_group: string }>();
+    `SELECT id, name, age_group FROM teams WHERE (parent_invite_code = ? OR invite_code = ?) AND is_active = 1`
+  ).bind(code, code).first<{ id: string; name: string; age_group: string }>();
 
   if (!team) {
     return c.json({ success: false, error: 'Invalid team code. Please check and try again.' }, 404);
