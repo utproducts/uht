@@ -1439,107 +1439,8 @@ export default function CreateTeamScreen({
             </>
           ) : null}
 
-          {/* 5. Existing Team Review (show after age group selected, BEFORE team name) */}
-          {ageGroup && selectedOrgId && !reviewedExistingTeams ? (
-            <>
-              <View style={styles.sectionDivider} />
-              <View style={reviewStyles.reviewSection}>
-                <Ionicons name="search" size={24} color={colors.navy} />
-                <Text style={reviewStyles.reviewTitle}>Check for Existing Teams</Text>
-                <Text style={reviewStyles.reviewDesc}>
-                  Before creating a new team, let's make sure your team doesn't already exist for {selectedOrgName} — {ageGroup}{divisionLevel ? ` — ${divisionLevel}` : ''}.
-                </Text>
-                <TouchableOpacity
-                  style={reviewStyles.reviewButton}
-                  onPress={loadExistingTeams}
-                  disabled={loadingExistingTeams}
-                  activeOpacity={0.8}
-                >
-                  {loadingExistingTeams ? (
-                    <ActivityIndicator color={colors.white} size="small" />
-                  ) : (
-                    <>
-                      <Ionicons name="people-outline" size={18} color={colors.white} />
-                      <Text style={reviewStyles.reviewButtonText}>Show Existing Teams</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                {/* Existing teams list */}
-                {hasSearchedTeams && existingTeams.length > 0 ? (
-                  <View style={reviewStyles.teamsList}>
-                    <Text style={reviewStyles.teamsListTitle}>
-                      {existingTeams.length} team{existingTeams.length !== 1 ? 's' : ''} found
-                    </Text>
-                    {existingTeams.map((team: any) => (
-                      <View key={team.id} style={reviewStyles.teamCard}>
-                        <View style={reviewStyles.teamCardTop}>
-                          <Ionicons name="people" size={20} color={colors.navy} />
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <Text style={reviewStyles.teamCardName}>{team.name}</Text>
-                            <Text style={reviewStyles.teamCardMeta}>
-                              {team.age_group}{team.division_level ? ` · ${team.division_level}` : ''}
-                              {team.player_count ? ` · ${team.player_count} players` : ''}
-                            </Text>
-                            {team.head_coach_name ? (
-                              <Text style={reviewStyles.teamCardCoach}>Coach: {team.head_coach_name}</Text>
-                            ) : null}
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={reviewStyles.joinTeamBtn}
-                          onPress={() => {
-                            setDuplicateTeam({
-                              id: team.id,
-                              name: team.name,
-                              ageGroup: team.age_group,
-                              city: team.city,
-                              state: team.state,
-                              inviteCode: team.invite_code,
-                              headCoachName: team.head_coach_name,
-                              playerCount: team.player_count,
-                            });
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="log-in-outline" size={16} color={colors.navy} />
-                          <Text style={reviewStyles.joinTeamBtnText}>This Is My Team</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-
-                    <TouchableOpacity
-                      style={reviewStyles.notListedBtn}
-                      onPress={() => setReviewedExistingTeams(true)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="add-circle-outline" size={20} color={colors.cyan} />
-                      <Text style={reviewStyles.notListedBtnText}>My team is not listed — create new</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-
-                {/* No existing teams found */}
-                {hasSearchedTeams && existingTeams.length === 0 ? (
-                  <View style={reviewStyles.noTeamsFound}>
-                    <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-                    <Text style={reviewStyles.noTeamsText}>No existing teams found. You're clear to create!</Text>
-                    <TouchableOpacity
-                      style={reviewStyles.continueBtn}
-                      onPress={() => setReviewedExistingTeams(true)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={reviewStyles.continueBtnText}>Continue</Text>
-                      <Ionicons name="arrow-forward" size={18} color={colors.white} />
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              </View>
-            </>
-          ) : null}
-
-          {/* 6. Team Name (show after reviewed existing teams) */}
-          {reviewedExistingTeams && selectedOrgId ? (
+          {/* 5. Team Name (show after age group selected) */}
+          {ageGroup && selectedOrgId ? (
             <>
               <View style={styles.sectionDivider} />
               <Text style={styles.label}>Team Name *</Text>
@@ -1554,8 +1455,8 @@ export default function CreateTeamScreen({
             </>
           ) : null}
 
-          {/* Coach Info Section (show after reviewed existing teams) */}
-          {reviewedExistingTeams && selectedOrgId ? (
+          {/* Coach Info Section */}
+          {ageGroup && selectedOrgId ? (
             <>
               <View style={styles.sectionDivider} />
               <Text style={styles.sectionTitle}>Head Coach Info</Text>
@@ -1643,87 +1544,92 @@ export default function CreateTeamScreen({
         )}
       {showOrgPicker && (
         <View style={styles.pickerOverlay}>
-          <View style={[styles.pickerContainer, { maxHeight: '85%' }]}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select Organization</Text>
-              <TouchableOpacity onPress={() => { setShowOrgPicker(false); setOrgSearchQuery(''); }}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            {/* Live search bar */}
-            <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radii.sm, paddingHorizontal: spacing.md, height: 44 }}>
-                <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
-                <TextInput
-                  style={{ flex: 1, fontSize: 16, color: colors.text, padding: 0 }}
-                  value={orgSearchQuery}
-                  onChangeText={setOrgSearchQuery}
-                  placeholder="Search organizations..."
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoFocus
-                />
-                {orgSearchQuery.length > 0 ? (
-                  <TouchableOpacity onPress={() => setOrgSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ) : null}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ flex: 1, justifyContent: 'flex-end' }}
+          >
+            <View style={[styles.pickerContainer, { maxHeight: '85%' }]}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Select Organization</Text>
+                <TouchableOpacity onPress={() => { setShowOrgPicker(false); setOrgSearchQuery(''); }}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
               </View>
-            </View>
-            {loadingOrgs ? (
-              <View style={{ padding: spacing.xxl, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={colors.navy} />
-                <Text style={{ marginTop: spacing.md, color: colors.textMuted }}>Searching...</Text>
-              </View>
-            ) : (
-              <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
-                {organizations.length === 0 ? (
-                  <Text style={{ padding: spacing.lg, textAlign: 'center', color: colors.textMuted }}>
-                    {orgSearchQuery.trim() ? 'No organizations found. Try a different search.' : 'No organizations found.'}
-                  </Text>
-                ) : (
-                  organizations.map((org: any) => (
-                    <TouchableOpacity
-                      key={org.id}
-                      style={[
-                        styles.pickerItem,
-                        selectedOrgId === org.id && styles.pickerItemSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedOrgId(org.id);
-                        setSelectedOrgName(org.name);
-                        setSelectedOrgLogoUrl(org.logo_url || null);
-                        setShowOrgPicker(false);
-                        setOrgSearchQuery('');
-                      }}
-                    >
-                      {org.logo_url ? (
-                        <Image source={{ uri: org.logo_url }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: spacing.md }} />
-                      ) : (
-                        <View style={{ width: 36, height: 36, borderRadius: 18, marginRight: spacing.md, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="shield-outline" size={18} color={colors.textMuted} />
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.pickerItemText, selectedOrgId === org.id && styles.pickerItemTextSelected]}>
-                          {org.name}
-                        </Text>
-                        {org.city ? (
-                          <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
-                            {org.city}, {org.state}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {selectedOrgId === org.id && (
-                        <Ionicons name="checkmark" size={20} color={colors.cyan} />
-                      )}
+              {/* Live search bar */}
+              <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radii.sm, paddingHorizontal: spacing.md, height: 44 }}>
+                  <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: colors.text, padding: 0 }}
+                    value={orgSearchQuery}
+                    onChangeText={setOrgSearchQuery}
+                    placeholder="Search organizations..."
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoFocus
+                  />
+                  {orgSearchQuery.length > 0 ? (
+                    <TouchableOpacity onPress={() => setOrgSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="close-circle" size={20} color={colors.textMuted} />
                     </TouchableOpacity>
-                  ))
-                )}
-              </ScrollView>
-            )}
-          </View>
+                  ) : null}
+                </View>
+              </View>
+              {loadingOrgs ? (
+                <View style={{ padding: spacing.xxl, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color={colors.navy} />
+                  <Text style={{ marginTop: spacing.md, color: colors.textMuted }}>Searching...</Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
+                  {organizations.length === 0 ? (
+                    <Text style={{ padding: spacing.lg, textAlign: 'center', color: colors.textMuted }}>
+                      {orgSearchQuery.trim() ? 'No organizations found. Try a different search.' : 'No organizations found.'}
+                    </Text>
+                  ) : (
+                    organizations.map((org: any) => (
+                      <TouchableOpacity
+                        key={org.id}
+                        style={[
+                          styles.pickerItem,
+                          selectedOrgId === org.id && styles.pickerItemSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedOrgId(org.id);
+                          setSelectedOrgName(org.name);
+                          setSelectedOrgLogoUrl(org.logo_url || null);
+                          setShowOrgPicker(false);
+                          setOrgSearchQuery('');
+                        }}
+                      >
+                        {org.logo_url ? (
+                          <Image source={{ uri: org.logo_url }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: spacing.md }} />
+                        ) : (
+                          <View style={{ width: 36, height: 36, borderRadius: 18, marginRight: spacing.md, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="shield-outline" size={18} color={colors.textMuted} />
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.pickerItemText, selectedOrgId === org.id && styles.pickerItemTextSelected]}>
+                            {org.name}
+                          </Text>
+                          {org.city ? (
+                            <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
+                              {org.city}, {org.state}
+                            </Text>
+                          ) : null}
+                        </View>
+                        {selectedOrgId === org.id && (
+                          <Ionicons name="checkmark" size={20} color={colors.cyan} />
+                        )}
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          </KeyboardAvoidingView>
         </View>
       )}
     </View>
