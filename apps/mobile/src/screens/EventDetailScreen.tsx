@@ -324,11 +324,14 @@ export default function EventDetailScreen({
   function formatDateRangeShort(startDate?: string, endDate?: string): string {
     if (!startDate) return 'Dates TBD';
     try {
-      const start = new Date(startDate);
+      // Append T00:00:00 to prevent UTC timezone shift (bare date strings parse as UTC)
+      const startStr2 = startDate.includes('T') ? startDate : startDate + 'T00:00:00';
+      const start = new Date(startStr2);
       const shortOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
       const startStr = start.toLocaleDateString('en-US', shortOpts);
       if (!endDate) return startStr;
-      const end = new Date(endDate);
+      const endStr2 = endDate.includes('T') ? endDate : endDate + 'T00:00:00';
+      const end = new Date(endStr2);
       const yearOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
       const endStr = end.toLocaleDateString('en-US', yearOpts);
       return `${startStr} - ${endStr}`;

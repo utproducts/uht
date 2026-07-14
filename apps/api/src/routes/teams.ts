@@ -1668,34 +1668,9 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Duplicate team prevention — check for existing teams with same name + age group
-  if (!data.skipDuplicateCheck) {
-    const existing = await db.prepare(`
-      SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code,
-        t.head_coach_name, t.head_coach_email
-      FROM teams t
-      WHERE LOWER(t.name) = LOWER(?) AND LOWER(t.age_group) = LOWER(?)
-      AND t.is_active = 1
-      LIMIT 1
-    `).bind(data.name.trim(), data.ageGroup.trim()).first();
-
-    if (existing) {
-      return c.json({
-        success: false,
-        error: 'duplicate_team',
-        message: `A team named "${(existing as any).name}" already exists for ${(existing as any).age_group}. You may want to join the existing team instead of creating a new one.`,
-        existingTeam: {
-          id: (existing as any).id,
-          name: (existing as any).name,
-          ageGroup: (existing as any).age_group,
-          city: (existing as any).city,
-          state: (existing as any).state,
-          inviteCode: (existing as any).invite_code,
-          headCoachName: (existing as any).head_coach_name,
-        },
-      }, 409);
-    }
-  }
+  // Duplicate team prevention — DISABLED for launch (was blocking coaches from creating teams)
+  // Teams with same name + age group are allowed; coaches know their own team names
+  // TODO: Re-enable as a non-blocking warning after launch
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
@@ -1774,16 +1749,12 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
       const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(coachEmail).first<{ id: string }>();
 
       if (existingUser) {
-        // Auto-link them as a team member
-        const mId = crypto.randomUUID().replace(/-/g, '');
-        await db.prepare(`
-          INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
-          VALUES (?, ?, ?, 'coach', 'active', 'auto_linked')
-        `).bind(mId, teamId, existingUser.id).run();
-        // Also legacy table
-        const lcId = crypto.randomUUID().replace(/-/g, '');
-        await db.prepare(`INSERT OR IGNORE INTO team_coaches (id, team_id, user_id) VALUES (?, ?, ?)`).bind(lcId, teamId, existingUser.id).run();
-      } else {
+        // DISABLED for launch — auto-linking adds teams to other users' accounts without consent
+        // They can join via invite code instead
+        console.log(`Skipping auto-link for existing coach user ${existingUser.id} — they can join via invite code`);
+      }
+      // Always create invite (whether user exists or not)
+      {
         // Create invite record
         const invId = crypto.randomUUID().replace(/-/g, '');
         await db.prepare(`
@@ -1845,14 +1816,11 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
       const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(mgrEmail).first<{ id: string }>();
 
       if (existingUser) {
-        const mId = crypto.randomUUID().replace(/-/g, '');
-        await db.prepare(`
-          INSERT OR IGNORE INTO team_members (id, team_id, user_id, role, status, joined_via)
-          VALUES (?, ?, ?, 'manager', 'active', 'auto_linked')
-        `).bind(mId, teamId, existingUser.id).run();
-        const lmId = crypto.randomUUID().replace(/-/g, '');
-        await db.prepare(`INSERT OR IGNORE INTO team_managers (id, team_id, user_id) VALUES (?, ?, ?)`).bind(lmId, teamId, existingUser.id).run();
-      } else {
+        // DISABLED for launch — auto-linking adds teams to other users' accounts without consent
+        console.log(`Skipping auto-link for existing manager user ${existingUser.id} — they can join via invite code`);
+      }
+      // Always create invite (whether user exists or not)
+      {
         const invId = crypto.randomUUID().replace(/-/g, '');
         await db.prepare(`
           INSERT OR IGNORE INTO team_invites (id, team_id, email, phone, invited_role, invite_code, status, invited_by)
@@ -2479,21 +2447,18 @@ teamRoutes.delete('/:teamId/leave', authMiddleware, async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param('teamId');
 
-  // Check if user created this team — can't leave your own team
   const team = await db.prepare(`SELECT id, name, created_by FROM teams WHERE id = ? AND is_active = 1`).bind(teamId).first<{ id: string; name: string; created_by: string }>();
   if (!team) {
     return c.json({ success: false, error: 'Team not found' }, 404);
   }
-  if (team.created_by === user.id) {
-    return c.json({ success: false, error: 'You cannot leave a team you created. Transfer ownership first.' }, 400);
-  }
 
-  // Remove from all association tables
+  // Remove from ALL association tables AND clear created_by
   await db.batch([
     db.prepare(`DELETE FROM user_follows WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
     db.prepare(`DELETE FROM team_coaches WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
     db.prepare(`DELETE FROM team_managers WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
     db.prepare(`DELETE FROM team_members WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`UPDATE teams SET created_by = NULL WHERE id = ? AND created_by = ?`).bind(teamId, user.id),
   ]);
 
   return c.json({ success: true, message: `You have left ${team.name}.` });

@@ -124,9 +124,14 @@ followRoutes.delete('/:teamId', authMiddleware, async (c) => {
   const user = c.get('user') as { id: string };
   const teamId = c.req.param('teamId');
 
-  await db.prepare(
-    `DELETE FROM user_follows WHERE user_id = ? AND team_id = ?`
-  ).bind(user.id, teamId).run();
+  // Remove from ALL relationship tables AND clear created_by — user wants this team GONE
+  await db.batch([
+    db.prepare(`DELETE FROM user_follows WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_coaches WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_managers WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_members WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`UPDATE teams SET created_by = NULL WHERE id = ? AND created_by = ?`).bind(teamId, user.id),
+  ]);
 
   return c.json({ success: true, message: 'Unfollowed successfully' });
 });

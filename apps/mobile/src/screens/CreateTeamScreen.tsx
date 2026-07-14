@@ -208,12 +208,25 @@ export default function CreateTeamScreen({
     })();
   }, [state]);
 
-  // Reset existing teams review when selections change
+  // Reset existing teams review when org changes
   useEffect(() => {
     setExistingTeams([]);
     setReviewedExistingTeams(false);
     setHasSearchedTeams(false);
-  }, [selectedOrgId, ageGroup, divisionLevel]);
+  }, [selectedOrgId]);
+
+  // Auto-search for existing teams when age group is selected
+  useEffect(() => {
+    if (selectedOrgId && ageGroup) {
+      setReviewedExistingTeams(false);
+      setHasSearchedTeams(false);
+      loadExistingTeams();
+    } else {
+      setExistingTeams([]);
+      setReviewedExistingTeams(false);
+      setHasSearchedTeams(false);
+    }
+  }, [selectedOrgId, ageGroup]);
 
   // Fetch existing teams for review when age group is selected (and optionally division)
   async function loadExistingTeams() {
@@ -1418,8 +1431,127 @@ export default function CreateTeamScreen({
             </>
           ) : null}
 
-          {/* 4. Division Level (only show after age group is selected) */}
-          {ageGroup ? (
+          {/* 4. Existing Teams Review (auto-shows after age group selection) */}
+          {ageGroup && selectedOrgId && !reviewedExistingTeams ? (
+            <View style={{ marginTop: spacing.lg }}>
+              {loadingExistingTeams ? (
+                <View style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
+                  <ActivityIndicator size="large" color={colors.navy} />
+                  <Text style={{ marginTop: spacing.md, color: colors.textMuted, fontSize: 15 }}>
+                    Checking for existing teams...
+                  </Text>
+                </View>
+              ) : hasSearchedTeams && existingTeams.length > 0 ? (
+                <>
+                  <View style={{ backgroundColor: '#FFF9E6', borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.md }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm }}>
+                      <Ionicons name="people" size={22} color="#D97706" />
+                      <Text style={{ fontSize: 17, ...fonts.bold, color: colors.text, marginLeft: spacing.sm }}>
+                        Existing Teams Found
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+                      We found {existingTeams.length} team{existingTeams.length !== 1 ? 's' : ''} matching your selection. Is yours listed below?
+                    </Text>
+                  </View>
+
+                  {existingTeams.map((t: any) => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        backgroundColor: colors.card, borderRadius: radii.md,
+                        padding: spacing.md, marginBottom: spacing.sm,
+                        borderWidth: 1, borderColor: colors.border,
+                      }}
+                      onPress={() => {
+                        // Join this team via invite code or follow
+                        if (t.parent_invite_code || t.invite_code) {
+                          Alert.alert(
+                            'Join Team',
+                            `Join ${t.name}?`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Join', onPress: async () => {
+                                  try {
+                                    const code = t.parent_invite_code || t.invite_code;
+                                    const res = await authFetch('/api/follows/by-code', {
+                                      method: 'POST',
+                                      body: JSON.stringify({ inviteCode: code }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      Alert.alert('Joined!', `You've joined ${t.name}.`, [
+                                        { text: 'OK', onPress: () => navigation.goBack() },
+                                      ]);
+                                    } else {
+                                      Alert.alert('Error', data.error || 'Could not join team');
+                                    }
+                                  } catch {
+                                    Alert.alert('Error', 'Network error. Please try again.');
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        } else {
+                          Alert.alert('Contact Coach', `Contact the coach of ${t.name} for a team code to join.`);
+                        }
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {t.logo_url ? (
+                        <Image source={{ uri: t.logo_url }} style={{ width: 44, height: 44, borderRadius: 22, marginRight: spacing.md }} />
+                      ) : (
+                        <View style={{ width: 44, height: 44, borderRadius: 22, marginRight: spacing.md, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="people" size={20} color={colors.textMuted} />
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, ...fonts.semibold, color: colors.text }}>{t.name}</Text>
+                        <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>
+                          {t.age_group}{t.division_level ? ` · ${t.division_level}` : ''}
+                        </Text>
+                        {t.head_coach_name ? (
+                          <Text style={{ fontSize: 13, color: colors.textMuted }}>Coach: {t.head_coach_name}</Text>
+                        ) : null}
+                      </View>
+                      <View style={{ backgroundColor: colors.navy, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.sm }}>
+                        <Text style={{ color: colors.white, fontSize: 13, ...fonts.semibold }}>Select</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                      paddingVertical: spacing.lg, marginTop: spacing.sm,
+                      backgroundColor: colors.card, borderRadius: radii.md,
+                      borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+                    }}
+                    onPress={() => setReviewedExistingTeams(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add-circle-outline" size={20} color={colors.navy} />
+                    <Text style={{ fontSize: 15, ...fonts.semibold, color: colors.navy, marginLeft: spacing.sm }}>
+                      None of These Are My Team
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : hasSearchedTeams && existingTeams.length === 0 ? (
+                // No existing teams found — auto-proceed
+                (() => {
+                  // Use a timeout to avoid setState during render
+                  setTimeout(() => setReviewedExistingTeams(true), 0);
+                  return null;
+                })()
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* 4b. Division Level (only show after existing team review passed) */}
+          {ageGroup && reviewedExistingTeams ? (
             <>
               <Text style={styles.label}>Division Level</Text>
               <TouchableOpacity
@@ -1439,8 +1571,8 @@ export default function CreateTeamScreen({
             </>
           ) : null}
 
-          {/* 5. Team Name (show after age group selected) */}
-          {ageGroup && selectedOrgId ? (
+          {/* 5. Team Name (show after existing team review passed) */}
+          {ageGroup && selectedOrgId && reviewedExistingTeams ? (
             <>
               <View style={styles.sectionDivider} />
               <Text style={styles.label}>Team Name *</Text>
@@ -1456,7 +1588,7 @@ export default function CreateTeamScreen({
           ) : null}
 
           {/* Coach Info Section */}
-          {ageGroup && selectedOrgId ? (
+          {ageGroup && selectedOrgId && reviewedExistingTeams ? (
             <>
               <View style={styles.sectionDivider} />
               <Text style={styles.sectionTitle}>Head Coach Info</Text>
@@ -1544,11 +1676,8 @@ export default function CreateTeamScreen({
         )}
       {showOrgPicker && (
         <View style={styles.pickerOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ flex: 1, justifyContent: 'flex-end' }}
-          >
-            <View style={[styles.pickerContainer, { maxHeight: '85%' }]}>
+          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+            <View style={[styles.pickerContainer, { maxHeight: '80%' }]}>
               <View style={styles.pickerHeader}>
                 <Text style={styles.pickerTitle}>Select Organization</Text>
                 <TouchableOpacity onPress={() => { setShowOrgPicker(false); setOrgSearchQuery(''); }}>
@@ -1567,7 +1696,6 @@ export default function CreateTeamScreen({
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    autoFocus
                   />
                   {orgSearchQuery.length > 0 ? (
                     <TouchableOpacity onPress={() => setOrgSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -1629,7 +1757,7 @@ export default function CreateTeamScreen({
                 </ScrollView>
               )}
             </View>
-          </KeyboardAvoidingView>
+          </View>
         </View>
       )}
     </View>
