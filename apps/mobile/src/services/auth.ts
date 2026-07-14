@@ -108,7 +108,8 @@ export async function signup(data: {
       await setUser(user);
       return { success: true, token: json.data.token, user };
     }
-    return { success: false, error: json.error || 'Registration failed' };
+    const errorMsg = typeof json.error === 'string' ? json.error : 'Registration failed';
+    return { success: false, error: errorMsg };
   } catch (e: any) {
     return { success: false, error: e.message || 'Network error' };
   }
@@ -134,7 +135,8 @@ export async function login(email: string, password: string): Promise<{ success:
       await setUser(user);
       return { success: true, token: json.data.token, user };
     }
-    return { success: false, error: json.error || 'Login failed' };
+    const errorMsg = typeof json.error === 'string' ? json.error : 'Invalid email or password.';
+    return { success: false, error: errorMsg };
   } catch (e: any) {
     return { success: false, error: e.message || 'Network error' };
   }

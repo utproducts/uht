@@ -258,6 +258,115 @@ app.post('/api/meeting-reward/send', async (c) => {
   return c.json({ success: true, data: { codes_created: codesCreated, pushes_sent: pushesSent, total_rsvps: rsvpList.length } });
 });
 
+// Send gifts to any audience with custom amounts
+app.post('/api/gift/send', async (c) => {
+  const body = await c.req.json() as {
+    sendKey?: string;
+    audience?: 'all_users' | 'coaches' | 'parents' | 'custom';
+    customEmails?: string[];
+    amount?: number;
+    title?: string;
+    message?: string;
+  };
+  if (body.sendKey !== 'uht-coaches-2026') return c.json({ error: 'Unauthorized' }, 401);
+
+  const db = c.env.DB;
+  const amount = body.amount || 50;
+  const giftTitle = body.title || 'You Got a Gift!';
+  const giftMessage = body.message || `You just received a $${amount} discount for your next UHT tournament! Tap to unwrap your reward.`;
+
+  // Build target email list based on audience
+  let targetEmails: { email: string; name: string | null }[] = [];
+
+  if (body.audience === 'custom' && body.customEmails?.length) {
+    // Custom email list
+    for (const email of body.customEmails) {
+      const user = await db.prepare('SELECT first_name, last_name FROM users WHERE LOWER(email) = LOWER(?)').bind(email.trim()).first() as any;
+      targetEmails.push({ email: email.trim().toLowerCase(), name: user ? `${user.first_name} ${user.last_name}`.trim() : null });
+    }
+  } else if (body.audience === 'coaches') {
+    const rows = await db.prepare("SELECT DISTINCT u.email, u.first_name, u.last_name FROM users u JOIN user_roles ur ON u.id = ur.user_id WHERE ur.role IN ('coach', 'manager')").all();
+    targetEmails = (rows.results || []).map((r: any) => ({ email: r.email.toLowerCase(), name: `${r.first_name} ${r.last_name}`.trim() }));
+  } else if (body.audience === 'parents') {
+    const rows = await db.prepare("SELECT DISTINCT u.email, u.first_name, u.last_name FROM users u JOIN user_roles ur ON u.id = ur.user_id WHERE ur.role = 'parent'").all();
+    targetEmails = (rows.results || []).map((r: any) => ({ email: r.email.toLowerCase(), name: `${r.first_name} ${r.last_name}`.trim() }));
+  } else {
+    // all_users — everyone with an account
+    const rows = await db.prepare('SELECT email, first_name, last_name FROM users').all();
+    targetEmails = (rows.results || []).map((r: any) => ({ email: r.email.toLowerCase(), name: `${r.first_name} ${r.last_name}`.trim() }));
+  }
+
+  if (targetEmails.length === 0) return c.json({ success: true, data: { codes_created: 0, pushes_sent: 0 } });
+
+  let codesCreated = 0;
+  const processedEmails: string[] = [];
+
+  for (const target of targetEmails) {
+    // Check if code already exists for this email (skip duplicates)
+    const existing = await db.prepare('SELECT id FROM meeting_rewards WHERE email = ? AND amount = ? AND redeemed = 0').bind(target.email, amount).first();
+    if (existing) { processedEmails.push(target.email); continue; }
+
+    // Generate unique code
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = 'UHT-';
+    for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+    await db.prepare(
+      'INSERT INTO meeting_rewards (email, name, code, amount) VALUES (?, ?, ?, ?)'
+    ).bind(target.email, target.name, code, amount).run();
+    codesCreated++;
+    processedEmails.push(target.email);
+  }
+
+  // Send push notifications to all targeted users
+  let pushesSent = 0;
+  if (processedEmails.length > 0) {
+    const placeholders = processedEmails.map(() => '?').join(',');
+    const tokenResult = await db.prepare(
+      'SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt JOIN users u ON u.id = pt.user_id WHERE LOWER(u.email) IN (' + placeholders + ')'
+    ).bind(...processedEmails).all();
+
+    const tokens = (tokenResult.results || []).map((r: any) => r.token as string);
+    const userIds = [...new Set((tokenResult.results || []).map((r: any) => r.user_id as string))];
+
+    if (tokens.length > 0) {
+      const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+      const messages = tokens.map((token: string) => ({
+        to: token,
+        sound: 'default',
+        title: giftTitle,
+        body: giftMessage,
+        data: { type: 'meeting_reward' },
+      }));
+
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < messages.length; i += BATCH_SIZE) {
+        const batch = messages.slice(i, i + BATCH_SIZE);
+        try {
+          const res = await fetch(EXPO_PUSH_URL, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(batch),
+          });
+          if (res.ok) pushesSent += batch.length;
+        } catch (e) { console.error('Push send failed:', e); }
+      }
+
+      // Create user notifications
+      for (const userId of userIds) {
+        const nId = crypto.randomUUID().replace(/-/g, '');
+        try {
+          await db.prepare(
+            "INSERT INTO user_notifications (id, user_id, title, body, type, data) VALUES (?, ?, ?, ?, ?, ?)"
+          ).bind(nId, userId, giftTitle, giftMessage, 'meeting_reward', JSON.stringify({ type: 'meeting_reward' })).run();
+        } catch (e) { /* ignore */ }
+      }
+    }
+  }
+
+  return c.json({ success: true, data: { codes_created: codesCreated, pushes_sent: pushesSent, total_targeted: targetEmails.length, amount } });
+});
+
 // Get reward code for current user's email
 app.get('/api/meeting-reward/my-code', async (c) => {
   const emailParam = c.req.query('email');

@@ -8,6 +8,7 @@ import {
   Dimensions,
   Share,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -207,7 +208,11 @@ export default function RewardRevealScreen({ navigation }: any) {
           <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
         <View style={styles.center}>
-          <Text style={{ fontSize: 48, marginBottom: 16 }}>🎁</Text>
+          <Image
+            source={require('../../assets/gift-box.png')}
+            style={{ width: 80, height: 80, marginBottom: 16 }}
+            resizeMode="contain"
+          />
           <Text style={styles.noRewardTitle}>No Reward Found</Text>
           <Text style={styles.noRewardText}>
             Make sure you RSVP'd for the Coach/Manager Meeting with the same email you used to sign up for the app.
@@ -276,7 +281,11 @@ export default function RewardRevealScreen({ navigation }: any) {
                     },
                   ]}
                 />
-                <Text style={styles.giftIcon}>🎁</Text>
+                <Image
+                  source={require('../../assets/gift-box.png')}
+                  style={styles.giftImage}
+                  resizeMode="contain"
+                />
                 <Text style={styles.tapText}>TAP TO UNWRAP</Text>
               </TouchableOpacity>
             </Animated.View>
@@ -375,9 +384,9 @@ const styles = StyleSheet.create({
     top: -20,
     left: -30,
   },
-  giftIcon: {
-    fontSize: 120,
-    textAlign: 'center',
+  giftImage: {
+    width: 160,
+    height: 160,
   },
   tapText: {
     color: '#FFD700',

@@ -92,7 +92,10 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
-      // Skip if loaded recently (pull-to-refresh always refetches)
+      // Re-read active role every time screen gains focus (role may have changed on Menu)
+      getActiveRole().then(r => { if (r) setActiveRoleState(r); });
+      getUser().then(u => setCurrentUser(u));
+      // Skip team fetch if loaded recently (pull-to-refresh always refetches)
       if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
         return;
       }
