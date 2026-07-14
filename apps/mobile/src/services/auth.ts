@@ -106,6 +106,9 @@ export async function signup(data: {
         roles: json.data.user?.roles || ['parent'],
       };
       await setUser(user);
+      // Store active role so role-gated screens work immediately after signup
+      const signupRole = data.role || 'parent';
+      await setActiveRole(signupRole);
       return { success: true, token: json.data.token, user };
     }
     const errorMsg = typeof json.error === 'string' ? json.error : 'Registration failed';
@@ -133,6 +136,11 @@ export async function login(email: string, password: string): Promise<{ success:
         roles: json.data.user?.roles || [],
       };
       await setUser(user);
+      // Set active role on login if not already stored
+      const existing = await getActiveRole();
+      if (!existing && user.roles.length > 0) {
+        await setActiveRole(user.roles[0]);
+      }
       return { success: true, token: json.data.token, user };
     }
     const errorMsg = typeof json.error === 'string' ? json.error : 'Invalid email or password.';
