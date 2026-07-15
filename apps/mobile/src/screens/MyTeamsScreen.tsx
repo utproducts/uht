@@ -237,26 +237,23 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   }
 
   function renderTeamCard({ item }: { item: Team }) {
-    return (
-      <TouchableOpacity
-        style={styles.teamCard}
-        activeOpacity={0.7}
-        onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
-        onLongPress={() => handleRemoveTeam(item)}
-      >
-        {/* Unfollow button */}
-        <TouchableOpacity
-          style={styles.unfollowBtn}
-          onPress={() => handleRemoveTeam(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="close-circle" size={22} color="#8e919e" />
-        </TouchableOpacity>
+    const familyCode = item.parent_invite_code || item.invite_code;
 
-        {/* Logo + Edit Pencil */}
-        <View style={styles.logoSection}>
-          <View style={styles.logoContainer}>
+    return (
+      <View style={styles.teamRow}>
+        {/* Main row — tap to view team detail */}
+        <TouchableOpacity
+          style={styles.teamRowMain}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
+        >
+          {/* Logo */}
+          <TouchableOpacity
+            style={styles.logoContainer}
+            activeOpacity={isCoach ? 0.7 : 1}
+            onPress={isCoach ? () => handleLogoUpload(item) : undefined}
+            disabled={!isCoach || uploadingTeamId === item.id}
+          >
             {item.logo_url ? (
               <Image source={{ uri: item.logo_url }} style={styles.teamLogo} />
             ) : (
@@ -264,82 +261,58 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
             )}
             {uploadingTeamId === item.id && (
               <View style={styles.logoOverlay}>
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color={colors.white} size="small" />
               </View>
             )}
+          </TouchableOpacity>
+
+          {/* Info */}
+          <View style={styles.teamInfo}>
+            <Text style={styles.teamName} numberOfLines={1}>{item.name}</Text>
+            <View style={styles.badgeRow}>
+              <View style={styles.ageGroupBadge}>
+                <Text style={styles.ageGroupText}>{item.age_group}</Text>
+              </View>
+              {item.division_level ? (
+                <View style={styles.divisionBadge}>
+                  <Text style={styles.divisionBadgeText}>{item.division_level}</Text>
+                </View>
+              ) : null}
+              {isCoach && (
+                <Text style={styles.rosterCount}>
+                  {(item.player_count || 0) > 0 ? `${item.player_count} players` : 'No roster'}
+                </Text>
+              )}
+            </View>
+            {item.city ? (
+              <Text style={styles.metaText} numberOfLines={1}>
+                {item.city}{item.state ? `, ${item.state}` : ''}{item.organization_name ? ` • ${item.organization_name}` : ''}
+              </Text>
+            ) : item.organization_name ? (
+              <Text style={styles.metaText} numberOfLines={1}>{item.organization_name}</Text>
+            ) : null}
           </View>
+
+          {/* Chevron */}
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        {/* Quick actions row */}
+        <View style={styles.actionRow}>
           {isCoach && (
             <TouchableOpacity
-              style={styles.editPencil}
-              onPress={() => handleLogoUpload(item)}
+              style={styles.actionBtn}
               activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              disabled={uploadingTeamId === item.id}
+              onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, showRoster: true } as never)}
             >
-              <Ionicons name="pencil" size={14} color={colors.white} />
+              <Ionicons name="people-outline" size={15} color={colors.navy} />
+              <Text style={styles.actionBtnText}>Roster</Text>
             </TouchableOpacity>
           )}
-        </View>
-
-        {/* Age Group + Division Pills */}
-        <View style={styles.badgeRow}>
-          <View style={styles.ageGroupBadge}>
-            <Text style={styles.ageGroupText}>{item.age_group}</Text>
-          </View>
-          {item.division_level ? (
-            <View style={styles.divisionBadge}>
-              <Text style={styles.divisionBadgeText}>{item.division_level}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Team Name */}
-        <Text style={styles.teamName}>{item.name}</Text>
-
-        {/* Location + Org */}
-        {(item.city || item.organization_name) ? (
-          <View style={styles.metaSection}>
-            {item.city ? (
-              <View style={styles.metaRow}>
-                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.metaText}>{item.city}{item.state ? `, ${item.state}` : ''}</Text>
-              </View>
-            ) : null}
-            {item.organization_name ? (
-              <View style={styles.metaRow}>
-                <Ionicons name="business-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.metaText}>{item.organization_name}</Text>
-              </View>
-            ) : null}
-            {item.head_coach_name ? (
-              <View style={styles.metaRow}>
-                <Ionicons name="person-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.metaText}>Coach {item.head_coach_name}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* Roster management for coaches */}
-        {isCoach && (
-          <TouchableOpacity
-            style={[styles.addRosterBtn, item.player_count > 0 && styles.manageRosterBtn]}
-            onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, showRoster: true } as never)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name={item.player_count > 0 ? "people-outline" : "document-text-outline"} size={16} color={item.player_count > 0 ? colors.cyan : "#D97706"} />
-            <Text style={[styles.addRosterText, item.player_count > 0 && styles.manageRosterText]}>
-              {item.player_count > 0 ? `Roster (${item.player_count})` : 'Add Roster'}
-            </Text>
-            <Ionicons name="chevron-forward" size={14} color={item.player_count > 0 ? colors.cyan : "#D97706"} />
-          </TouchableOpacity>
-        )}
-
-        {/* Bottom actions row — different for coach vs parent */}
-        <View style={styles.cardActions}>
           {isCoach && item.invite_code ? (
             <TouchableOpacity
-              style={styles.cardActionBtn}
+              style={styles.actionBtn}
+              activeOpacity={0.7}
               onPress={async () => {
                 try {
                   await Share.share({
@@ -347,31 +320,37 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
                   });
                 } catch {}
               }}
-              activeOpacity={0.7}
             >
-              <Ionicons name="clipboard-outline" size={16} color={colors.navy} />
-              <Text style={styles.cardActionText}>Invite Coaches</Text>
+              <Ionicons name="person-add-outline" size={15} color={colors.navy} />
+              <Text style={styles.actionBtnText}>Invite Coaches</Text>
             </TouchableOpacity>
           ) : null}
-          {(item.parent_invite_code || item.invite_code) ? (
+          {familyCode ? (
             <TouchableOpacity
-              style={styles.cardActionBtn}
+              style={styles.actionBtn}
+              activeOpacity={0.7}
               onPress={async () => {
-                const familyCode = item.parent_invite_code || item.invite_code;
                 try {
                   await Share.share({
                     message: `Follow ${item.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
                   });
                 } catch {}
               }}
-              activeOpacity={0.7}
             >
-              <Ionicons name="people-outline" size={16} color={colors.navy} />
-              <Text style={styles.cardActionText}>{isParent ? 'Invite Family' : 'Invite Families'}</Text>
+              <Ionicons name="share-outline" size={15} color={colors.navy} />
+              <Text style={styles.actionBtnText}>{isParent ? 'Invite Family' : 'Invite Parents'}</Text>
             </TouchableOpacity>
           ) : null}
+          <TouchableOpacity
+            style={styles.actionBtn}
+            activeOpacity={0.7}
+            onPress={() => handleRemoveTeam(item)}
+          >
+            <Ionicons name="close-circle-outline" size={15} color="#8e919e" />
+            <Text style={[styles.actionBtnText, { color: '#8e919e' }]}>{isCoach ? 'Leave' : 'Unfollow'}</Text>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -571,48 +550,40 @@ const styles = StyleSheet.create({
     ...fonts.semibold,
   },
 
-  // Team card
-  teamCard: {
+  // Team list row
+  teamRow: {
     backgroundColor: colors.card,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
+    overflow: 'hidden' as const,
+  },
+  teamRowMain: {
+    flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    position: 'relative' as const,
-  },
-  unfollowBtn: {
-    position: 'absolute' as const,
-    top: spacing.xs,
-    right: spacing.xs,
-    padding: 4,
-    zIndex: 5,
-  },
-  logoSection: {
-    position: 'relative' as const,
-    marginBottom: spacing.md,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   logoContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.bg,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderStyle: 'dashed' as any,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     overflow: 'hidden' as const,
   },
   teamLogo: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   teamLogoFallback: {
-    width: 48,
-    height: 48,
+    width: 26,
+    height: 26,
   },
   logoOverlay: {
     position: 'absolute' as const,
@@ -620,119 +591,79 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
   },
-  editPencil: {
-    position: 'absolute' as const,
-    bottom: 0,
-    right: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.navy,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    borderWidth: 2,
-    borderColor: colors.card,
+  teamInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  teamName: {
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.bold,
   },
   badgeRow: {
     flexDirection: 'row' as const,
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    alignItems: 'center' as const,
+    gap: spacing.xs,
   },
   ageGroupBadge: {
     backgroundColor: colors.cyan,
-    borderRadius: radii.xs,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   ageGroupText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 10,
     ...fonts.bold,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
   },
   divisionBadge: {
     backgroundColor: colors.navy,
-    borderRadius: radii.xs,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.xs,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   divisionBadgeText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 10,
     ...fonts.bold,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
   },
-  teamName: {
-    fontSize: 20,
-    color: colors.text,
-    ...fonts.bold,
-    textAlign: 'center' as const,
-    marginBottom: spacing.sm,
-  },
-  metaSection: {
-    alignSelf: 'stretch' as const,
-    gap: spacing.xs + 2,
-    marginBottom: spacing.md,
-  },
-  metaRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: spacing.xs,
+  rosterCount: {
+    fontSize: 11,
+    color: colors.textMuted,
+    ...fonts.regular,
+    marginLeft: 2,
   },
   metaText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     ...fonts.regular,
   },
-  addRosterBtn: {
+  // Quick actions row
+  actionRow: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    alignSelf: 'stretch' as const,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 8,
-    gap: 6,
-  },
-  manageRosterBtn: {
-    backgroundColor: 'rgba(0, 204, 255, 0.08)',
-  },
-  manageRosterText: {
-    color: colors.cyan,
-  },
-  addRosterText: {
-    fontSize: 13,
-    color: '#D97706',
-    ...fonts.semibold,
-    flex: 1,
-  },
-  cardActions: {
-    flexDirection: 'row' as const,
-    alignSelf: 'stretch' as const,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: spacing.md,
-    marginTop: spacing.xs,
+    backgroundColor: colors.bg,
   },
-  cardActionBtn: {
+  actionBtn: {
     flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    gap: spacing.xs,
-    paddingVertical: spacing.xs,
+    gap: 4,
+    paddingVertical: 8,
   },
-  cardActionText: {
-    fontSize: 14,
+  actionBtnText: {
+    fontSize: 11,
     color: colors.navy,
     ...fonts.semibold,
   },

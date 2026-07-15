@@ -1115,6 +1115,7 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
 // Get teams for current user (coach/manager/org)
 // ==================
 teamRoutes.get('/my-teams', authMiddleware, async (c) => {
+  try {
   const user = c.get('user');
   const db = c.env.DB;
 
@@ -1134,7 +1135,7 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     LEFT JOIN user_follows uf ON uf.team_id = t.id AND uf.user_id = ?
     WHERE t.is_active = 1 AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR uf.id IS NOT NULL)
     ORDER BY t.age_group ASC, t.name ASC
-  `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
+  `).bind(user.id, user.id, user.id, user.id, user.id).all();
 
   // Enrich each team with its registered events (from both tables)
   const teams = result.results || [];
@@ -1227,6 +1228,9 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
   }
 
   return c.json({ success: true, data: teams });
+  } catch (err: any) {
+    return c.json({ error: 'my-teams failed', detail: err?.message || String(err) }, 500);
+  }
 });
 
 // ==================

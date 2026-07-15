@@ -15,7 +15,7 @@ import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as Calendar from 'expo-calendar';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { clearAuth, getUser, authFetch, User, getActiveRole, setActiveRole, ROLE_LABELS, ROLE_ICONS } from '../services/auth';
+import { clearAuth, getUser, authFetch, User, getActiveRole, setActiveRole } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface MenuGridItem {
@@ -42,6 +42,7 @@ interface ShareTeam {
   name: string;
   age_group: string;
   invite_code?: string;
+  parent_invite_code?: string;
   roster_share_token?: string;
   coaches?: { id: string }[];
   managers?: { id: string }[];
@@ -109,11 +110,6 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   const hasAdminRole = currentUser?.roles?.some(r =>
     ['admin', 'tournament_director', 'director'].includes(r)
   ) || false;
-
-  async function handleSwitchRole(role: string) {
-    setActiveRoleState(role);
-    await setActiveRole(role);
-  }
 
   function handleLogOut() {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -352,6 +348,15 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     } catch {}
   }
 
+  async function handleShareParentCode(team: ShareTeam) {
+    if (!team.parent_invite_code) return;
+    try {
+      await Share.share({
+        message: `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nTeam Code: ${team.parent_invite_code}\n\nDownload the UHT app and use this code to follow the team and get live scores, schedules, and updates.`,
+      });
+    } catch {}
+  }
+
   async function handleShareRosterLink(team: ShareTeam) {
     if (!team.roster_share_token) return;
     try {
@@ -371,50 +376,6 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     return false;
   }
 
-  function renderRoleSwitcher() {
-    const roles = currentUser?.roles || [];
-    // Dedupe and normalize role names (tournament_director → director)
-    const uniqueRoles = [...new Set(roles.map(r => r === 'tournament_director' ? 'director' : r))];
-    if (uniqueRoles.length <= 1) return null;
-
-    const effectiveActive = activeRole === 'tournament_director' ? 'director' : activeRole;
-
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>SWITCH ROLE</Text>
-        <View style={styles.roleContainer}>
-          {uniqueRoles.map((role) => {
-            const isActive = role === effectiveActive;
-            const label = ROLE_LABELS[role] || role.charAt(0).toUpperCase() + role.slice(1);
-            const iconName = ROLE_ICONS[role] || 'person';
-            return (
-              <TouchableOpacity
-                key={role}
-                style={[styles.roleCard, isActive && styles.roleCardActive]}
-                onPress={() => handleSwitchRole(role)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={iconName as any}
-                  size={20}
-                  color={isActive ? colors.white : colors.navy}
-                />
-                <Text style={[styles.roleLabel, isActive && styles.roleLabelActive]} numberOfLines={1}>
-                  {label}
-                </Text>
-                {isActive && (
-                  <View style={styles.roleCheck}>
-                    <Ionicons name="checkmark-circle" size={16} color={colors.white} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-    );
-  }
-
   function renderShareSection() {
     if (myTeams.length === 0 && !loadingTeams) return null;
 
@@ -430,9 +391,10 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
           myTeams.map((team) => {
             const teamIsCoach = isTeamCoach(team);
             const hasInvite = !!team.invite_code;
-            const hasRoster = !!team.roster_share_token;
+            const hasParentInvite = !!team.parent_invite_code;
 
-            if (!hasInvite) return null;
+            // Need at least one invite code to show
+            if (!hasInvite && !hasParentInvite) return null;
 
             return (
               <View key={team.id} style={styles.shareCard}>
@@ -446,6 +408,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 
                 {/* Share buttons */}
                 <View style={styles.shareButtonsRow}>
+                  {/* Coaches/managers see both invite buttons */}
                   {teamIsCoach && hasInvite ? (
                     <TouchableOpacity
                       style={styles.shareButton}
@@ -457,7 +420,19 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
                     </TouchableOpacity>
                   ) : null}
 
-{/* Send Roster Link hidden for now */}
+                  {/* Coaches AND parents/fans can share parent invite code */}
+                  {hasParentInvite ? (
+                    <TouchableOpacity
+                      style={[styles.shareButton, styles.shareButtonParent]}
+                      activeOpacity={0.7}
+                      onPress={() => handleShareParentCode(team)}
+                    >
+                      <Ionicons name="people-outline" size={18} color={colors.white} />
+                      <Text style={styles.shareButtonText}>
+                        {teamIsCoach ? 'Invite Parents' : 'Invite Friends & Family'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
             );
@@ -563,7 +538,6 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderRoleSwitcher()}
         {renderShareSection()}
         {renderGridSection('MANAGE', MANAGE_ITEMS)}
         {renderGridSection('BROWSE', BROWSE_ITEMS)}
@@ -606,39 +580,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.xs,
     paddingHorizontal: 2,
-  },
-
-  // Role switcher
-  roleContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  roleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radii.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.md,
-    gap: 6,
-  },
-  roleCardActive: {
-    backgroundColor: colors.navy,
-    borderColor: colors.navy,
-  },
-  roleLabel: {
-    fontSize: 13,
-    color: colors.navy,
-    ...fonts.semibold,
-  },
-  roleLabelActive: {
-    color: colors.white,
-  },
-  roleCheck: {
-    marginLeft: 2,
   },
 
   // Grid cards — compact 3-column layout
@@ -777,6 +718,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.sm,
     gap: 6,
+  },
+  shareButtonParent: {
+    backgroundColor: '#5856D6',
   },
   shareButtonRoster: {
     backgroundColor: colors.cyan,

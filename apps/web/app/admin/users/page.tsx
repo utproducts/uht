@@ -6,6 +6,14 @@ const API_BASE = 'https://uht.chad-157.workers.dev/api/users';
 
 const ROLES = ['admin', 'director', 'organization', 'coach', 'manager', 'parent', 'scorekeeper', 'referee'];
 
+function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === '1') return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  return phone; // return as-is if not 10/11 digits
+}
+
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-red-50 text-red-700',
   director: 'bg-purple-50 text-purple-700',
@@ -580,7 +588,7 @@ export default function AdminUsersPage() {
                         <div>
                           <h3 className="font-semibold text-[#1d1d1f]">{user.firstName} {user.lastName}</h3>
                           <p className="text-sm text-[#6e6e73]">{user.email}</p>
-                          {user.phone && <p className="text-xs text-[#86868b]">{user.phone}</p>}
+                          {user.phone && <p className="text-xs text-[#86868b]">{formatPhone(user.phone)}</p>}
                         </div>
                       </div>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${
@@ -697,7 +705,7 @@ function UserRow({ user, isExpanded, sourceInfo, onToggleExpand, onEdit, onToggl
         </td>
         <td className="px-5 py-3.5">
           <div className="text-sm text-[#3d3d3d]">{user.email}</div>
-          {user.phone && <div className="text-xs text-[#86868b] mt-0.5">{user.phone}</div>}
+          {user.phone && <div className="text-xs text-[#86868b] mt-0.5">{formatPhone(user.phone)}</div>}
         </td>
         <td className="px-5 py-3.5">
           <div className="flex flex-wrap gap-1">

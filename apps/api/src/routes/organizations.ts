@@ -372,6 +372,7 @@ organizationRoutes.get('/admin/requests', async (c) => {
 // Admin: Approve an organization request
 // ==================
 organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRole('admin'), async (c) => {
+  try {
   const requestId = c.req.param('id');
   const db = c.env.DB;
   const body = await c.req.json<{ adminNotes?: string }>().catch(() => ({} as { adminNotes?: string }));
@@ -388,12 +389,33 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
     return c.json({ error: `Request already ${request.status}` }, 400);
   }
 
+  // Determine owner: use requesting user if they have an account, otherwise the approving admin
+  const admin = c.get('user') as any;
+  let ownerId: string | null = null;
+
+  // Try requesting user first
+  if (request.requested_by_user_id) {
+    const reqUser = await db.prepare('SELECT id FROM users WHERE id = ?').bind(request.requested_by_user_id).first<any>();
+    if (reqUser) ownerId = reqUser.id;
+  }
+  if (!ownerId && request.requested_by_email) {
+    const emailUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(request.requested_by_email).first<any>();
+    if (emailUser) ownerId = emailUser.id;
+  }
+  // Try the logged-in admin
+  if (!ownerId && admin?.id) {
+    const adminUser = await db.prepare('SELECT id FROM users WHERE id = ?').bind(admin.id).first<any>();
+    if (adminUser) ownerId = adminUser.id;
+  }
+  // Final fallback: use Chad's known-good ID
+  if (!ownerId) ownerId = 'chad-owner-001';
+
   // Create the organization
   const orgId = crypto.randomUUID().replace(/-/g, '');
   await db.prepare(`
     INSERT INTO organizations (id, name, city, state, owner_id, is_active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 'system_migration_user', 1, datetime('now'), datetime('now'))
-  `).bind(orgId, request.name, request.city || null, request.state || null).run();
+    VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+  `).bind(orgId, request.name, request.city || null, request.state || null, ownerId).run();
 
   // Update the request
   await db.prepare(`
@@ -424,6 +446,9 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
   } catch {}
 
   return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: 'Approve failed', detail: err?.message || String(err) }, 500);
+  }
 });
 
 // ==================

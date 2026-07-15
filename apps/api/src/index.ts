@@ -744,6 +744,153 @@ app.post('/api/coaches-meeting/send-reminder', async (c) => {
   return c.json({ success: true, data: { sent, failed, total: emails.length } });
 });
 
+// Send $50 reward code emails to RSVP'd coaches
+app.post('/api/coaches-meeting/send-rewards', async (c) => {
+  const body = await c.req.json() as { sendKey?: string };
+
+  if (body.sendKey !== 'uht-coaches-2026') {
+    return c.json({ error: 'Invalid send key' }, 403);
+  }
+
+  const db = c.env.DB;
+  const env = c.env;
+
+  // Get all rewards that haven't been emailed yet (push_sent = 0)
+  const rewards = await db.prepare(
+    "SELECT id, email, name, code, amount FROM meeting_rewards WHERE push_sent = 0"
+  ).all<any>();
+
+  const recipients = (rewards.results || []).filter((r: any) => r.email && r.code);
+
+  if (recipients.length === 0) {
+    return c.json({ success: false, error: 'No unsent rewards found' }, 400);
+  }
+
+  function buildRewardEmail(name: string, code: string, amount: number): string {
+    const firstName = (name || '').split(' ')[0] || 'Coach';
+    // Title-case the first name
+    const displayName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;"><tr><td align="center" style="padding:20px 0;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+
+<tr><td style="background:linear-gradient(135deg,#003e79 0%,#005599 50%,#0077cc 100%);padding:32px 24px;text-align:center;">
+  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;" />
+  <h1 style="color:#ffffff;font-size:26px;margin:0;font-weight:800;letter-spacing:-0.5px;">Thank You for Attending!</h1>
+  <p style="color:#8bb8e8;font-size:15px;margin:8px 0 0;">Coaches Meeting &mdash; July 2026</p>
+</td></tr>
+
+<tr><td style="padding:32px 28px;">
+  <p style="color:#1d1d1f;font-size:17px;line-height:1.6;margin:0 0 20px;">
+    Hey ${displayName},
+  </p>
+  <p style="color:#1d1d1f;font-size:16px;line-height:1.7;margin:0 0 24px;">
+    Thanks for joining our coaches meeting! As a thank you, here's your exclusive <strong>$${amount} off</strong> discount code for any upcoming Ultimate Hockey Tournament registration.
+  </p>
+
+  <div style="background:linear-gradient(135deg,#f0f7ff,#e8f4fd);border-radius:16px;padding:28px;margin-bottom:28px;text-align:center;border:2px solid #003e79;">
+    <p style="color:#6e6e73;font-size:13px;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Your Discount Code</p>
+    <p style="color:#003e79;font-size:36px;font-weight:900;margin:0 0 8px;letter-spacing:3px;font-family:'Courier New',monospace;">${code}</p>
+    <p style="color:#003e79;font-size:20px;font-weight:700;margin:0;">$${amount} OFF</p>
+  </div>
+
+  <p style="color:#1d1d1f;font-size:16px;line-height:1.7;margin:0 0 24px;">
+    Apply this code during registration on our website to save $${amount} on your next tournament entry.
+  </p>
+
+  <div style="text-align:center;margin:28px 0;">
+    <a href="https://ultimatetournaments.com/events" style="display:inline-block;background-color:#003e79;color:#ffffff;padding:16px 40px;border-radius:28px;text-decoration:none;font-size:16px;font-weight:bold;">Browse Upcoming Events</a>
+  </div>
+
+  <div style="background-color:#f5f5f7;border-radius:12px;padding:16px 20px;margin-top:20px;">
+    <p style="color:#6e6e73;font-size:13px;line-height:1.6;margin:0;">
+      <strong>How to use:</strong> Enter your code at checkout when registering your team on
+      <a href="https://ultimatetournaments.com" style="color:#003e79;text-decoration:none;font-weight:600;">ultimatetournaments.com</a>.
+      One code per registration. Code does not expire.
+    </p>
+  </div>
+</td></tr>
+
+<tr><td style="background-color:#f5f5f7;padding:20px 24px;text-align:center;">
+  <p style="color:#86868b;font-size:12px;margin:0 0 6px;">
+    Ultimate Hockey Tournaments<br/>
+    <a href="https://ultimatetournaments.com" style="color:#003e79;text-decoration:none;">ultimatetournaments.com</a>
+  </p>
+</td></tr>
+
+</table></td></tr></table></body></html>`;
+  }
+
+  let sent = 0;
+  let failed = 0;
+  const batchSize = 10; // Smaller batches since each email is personalized
+
+  for (let i = 0; i < recipients.length; i += batchSize) {
+    const batch = recipients.slice(i, i + batchSize);
+    const batchPayload = batch.map((r: any) => ({
+      from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+      to: [r.email],
+      subject: `Your $${r.amount} Reward Code from UHT`,
+      html: buildRewardEmail(r.name, r.code, r.amount),
+    }));
+
+    try {
+      const response = await fetch('https://api.resend.com/emails/batch', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + env.RESEND_API,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(batchPayload),
+      });
+
+      if (response.ok) {
+        sent += batch.length;
+        // Mark these as sent
+        for (const r of batch) {
+          await db.prepare(
+            "UPDATE meeting_rewards SET push_sent = 1, push_sent_at = datetime('now') WHERE id = ?"
+          ).bind(r.id).run().catch(() => {});
+        }
+      } else {
+        const errText = await response.text().catch(() => '');
+        console.error('Resend batch error:', errText);
+        // Try individual sends
+        for (const r of batch) {
+          try {
+            const singleRes = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Bearer ' + env.RESEND_API,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+                to: [r.email],
+                subject: `Your $${r.amount} Reward Code from UHT`,
+                html: buildRewardEmail(r.name, r.code, r.amount),
+              }),
+            });
+            if (singleRes.ok) {
+              sent++;
+              await db.prepare(
+                "UPDATE meeting_rewards SET push_sent = 1, push_sent_at = datetime('now') WHERE id = ?"
+              ).bind(r.id).run().catch(() => {});
+            } else failed++;
+          } catch {
+            failed++;
+          }
+        }
+      }
+    } catch {
+      failed += batch.length;
+    }
+  }
+
+  return c.json({ success: true, data: { sent, failed, total: recipients.length } });
+});
+
 // Image upload to R2
 app.post('/api/upload/image', async (c) => {
   const formData = await c.req.formData();

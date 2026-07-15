@@ -73,11 +73,15 @@ pushRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zVali
   const { team_id, title, body, data } = c.req.valid('json');
 
   const result = await db.prepare(`
-    SELECT pt.token, pt.user_id
+    SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
-    JOIN user_follows uf ON uf.user_id = pt.user_id
-    WHERE uf.team_id = ?
-  `).bind(team_id).all();
+    WHERE pt.user_id IN (
+      SELECT user_id FROM user_follows WHERE team_id = ?
+      UNION SELECT user_id FROM team_coaches WHERE team_id = ?
+      UNION SELECT user_id FROM team_managers WHERE team_id = ?
+      UNION SELECT user_id FROM team_members WHERE team_id = ? AND status = 'active'
+    )
+  `).bind(team_id, team_id, team_id, team_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
   const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
@@ -123,10 +127,13 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
   const result = await db.prepare(`
     SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
-    JOIN user_follows uf ON uf.user_id = pt.user_id
-    JOIN event_registrations er ON er.team_id = uf.team_id
-    WHERE er.event_id = ?
-  `).bind(event_id).all();
+    WHERE pt.user_id IN (
+      SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ?
+      UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ?
+      UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ?
+      UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND tmem.status = 'active'
+    )
+  `).bind(event_id, event_id, event_id, event_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
   const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
@@ -168,14 +175,17 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
   const user = c.get('user') as { id: string };
   const { event_id, event_division_id, title, body, data } = c.req.valid('json');
 
-  // Get all push tokens for users following teams in this division
+  // Get all push tokens for users following/coaching/managing teams in this division
   const result = await db.prepare(`
     SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
-    JOIN user_follows uf ON uf.user_id = pt.user_id
-    JOIN event_registrations er ON er.team_id = uf.team_id
-    WHERE er.event_id = ? AND er.event_division_id = ?
-  `).bind(event_id, event_division_id).all();
+    WHERE pt.user_id IN (
+      SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+      UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+      UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+      UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND er.event_division_id = ? AND tmem.status = 'active'
+    )
+  `).bind(event_id, event_division_id, event_id, event_division_id, event_id, event_division_id, event_id, event_division_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
   const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
@@ -288,16 +298,17 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   if (game.home_team_id) teamIds.push(game.home_team_id);
   if (game.away_team_id) teamIds.push(game.away_team_id);
 
-  // Also check notes field for team names (mock data uses notes)
-  // Find followers of teams registered for the event in the game's division
+  // Find followers/coaches/managers of teams registered for the event in the game's division
   const result = await db.prepare(`
     SELECT DISTINCT pt.token, pt.user_id
     FROM push_tokens pt
-    JOIN user_follows uf ON uf.user_id = pt.user_id
-    JOIN event_registrations er ON er.team_id = uf.team_id
-    WHERE er.event_id = ?
-    AND er.event_division_id = ?
-  `).bind(game.event_id, game.event_division_id).all();
+    WHERE pt.user_id IN (
+      SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+      UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+      UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+      UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND er.event_division_id = ? AND tmem.status = 'active'
+    )
+  `).bind(game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id).all();
 
   const tokens = (result.results || []).map((r: any) => r.token as string);
   const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
@@ -450,14 +461,17 @@ pushRoutes.post('/check-locker-room-alerts', async (c) => {
   const gamesNotified: number[] = [];
 
   for (const game of (games.results || []) as any[]) {
-    // Get push tokens for all followers of teams in this division
+    // Get push tokens for all followers/coaches/managers of teams in this division
     const tokenResult = await db.prepare(`
       SELECT DISTINCT pt.token, pt.user_id
       FROM push_tokens pt
-      JOIN user_follows uf ON uf.user_id = pt.user_id
-      JOIN event_registrations er ON er.team_id = uf.team_id
-      WHERE er.event_id = ? AND er.event_division_id = ?
-    `).bind(game.event_id, game.event_division_id).all();
+      WHERE pt.user_id IN (
+        SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+        UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+        UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ? AND er.event_division_id = ?
+        UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND er.event_division_id = ? AND tmem.status = 'active'
+      )
+    `).bind(game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id).all();
 
     const tokens = (tokenResult.results || []).map((r: any) => r.token as string);
     const autoUserIds = [...new Set((tokenResult.results || []).map((r: any) => r.user_id as string))];

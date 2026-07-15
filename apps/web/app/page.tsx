@@ -345,21 +345,59 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Real app screenshots */}
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto sm:overflow-visible pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory sm:snap-none sm:grid sm:grid-cols-5" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+              {/* Real app screenshots — overlapping cascade (desktop) */}
+              <div className="hidden sm:block relative mx-auto" style={{ maxWidth: '900px', height: 'clamp(320px, 38vw, 480px)' }}>
                 {[
-                  { src: '/app-screen-1.png', alt: 'Events — browse upcoming tournaments' },
-                  { src: '/app-screen-2.png', alt: 'Game Center — live scores and standings' },
-                  { src: '/app-screen-3.png', alt: 'Lodging — exclusive tournament hotel rates' },
-                  { src: '/app-screen-4.png', alt: 'Venues — rink details and directions' },
-                  { src: '/app-screen-5.png', alt: 'My Teams — manage your teams and rosters' },
+                  { src: '/app-phone-home.jpg', alt: 'Home — your teams and upcoming events', label: 'Home' },
+                  { src: '/app-phone-events.jpg', alt: 'Events — browse upcoming tournaments', label: 'Events' },
+                  { src: '/app-phone-scores.jpg', alt: 'Game Center — live scores and standings', label: 'Scores' },
+                  { src: '/app-phone-teams.jpg', alt: 'My Teams — manage your teams and rosters', label: 'My Teams' },
+                  { src: '/app-phone-lodging.jpg', alt: 'Lodging — exclusive tournament hotel rates', label: 'Lodging' },
+                  { src: '/app-phone-menu.jpg', alt: 'Menu — share, manage, and shop', label: 'Menu' },
+                ].map((screen, i) => {
+                  const total = 6;
+                  const center = (total - 1) / 2;
+                  const offset = i - center;
+                  const leftPct = 8 + (i * 14.5);
+                  const rotate = offset * 4;
+                  const translateY = Math.abs(offset) * 12;
+                  const z = total - Math.abs(Math.round(offset));
+                  return (
+                    <div
+                      key={i}
+                      className="absolute bottom-0 transition-all duration-500 hover:scale-110 hover:!z-50 group cursor-pointer"
+                      style={{
+                        left: `${leftPct}%`,
+                        width: 'clamp(120px, 16vw, 190px)',
+                        transform: `rotate(${rotate}deg) translateY(${translateY}px)`,
+                        zIndex: z,
+                        filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.5))',
+                      }}
+                    >
+                      <img
+                        src={screen.src}
+                        alt={screen.alt}
+                        className="w-full h-auto rounded-[clamp(12px,2.2vw,24px)]"
+                      />
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-[#00ccff] text-[#001d3d] text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-lg">
+                        {screen.label}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Mobile horizontal scroll fallback */}
+              <div className="sm:hidden flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 snap-x snap-mandatory mt-4" style={{ scrollbarWidth: 'none' }}>
+                {[
+                  { src: '/app-phone-home.jpg', alt: 'Home' },
+                  { src: '/app-phone-events.jpg', alt: 'Events' },
+                  { src: '/app-phone-scores.jpg', alt: 'Scores' },
+                  { src: '/app-phone-teams.jpg', alt: 'My Teams' },
+                  { src: '/app-phone-lodging.jpg', alt: 'Lodging' },
+                  { src: '/app-phone-menu.jpg', alt: 'Menu' },
                 ].map((screen, i) => (
-                  <div key={i} className="flex-shrink-0 w-[200px] sm:w-auto snap-center" style={{ filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.5)) drop-shadow(0 0 30px rgba(255, 255, 255, 0.2))' }}>
-                    <img
-                      src={screen.src}
-                      alt={screen.alt}
-                      className="w-full h-auto rounded-t-xl"
-                    />
+                  <div key={i} className="flex-shrink-0 w-[180px] snap-center" style={{ filter: 'drop-shadow(0 12px 30px rgba(0,0,0,0.5))' }}>
+                    <img src={screen.src} alt={screen.alt} className="w-full h-auto rounded-[16px]" />
                   </div>
                 ))}
               </div>

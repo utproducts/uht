@@ -1,7 +1,9 @@
 'use client';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import RoleSwitcher from '../components/RoleSwitcher';
+
+const ADMIN_ROLES = ['admin', 'director'];
 
 function readUserName(): string {
   if (typeof window === 'undefined') return '';
@@ -13,6 +15,20 @@ function readUserName(): string {
     }
   } catch {}
   return '';
+}
+
+function checkAdminAccess(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const token = localStorage.getItem('uht_token');
+    if (!token) return false;
+    const stored = localStorage.getItem('uht_user');
+    if (!stored) return false;
+    const u = JSON.parse(stored);
+    const roles: string[] = u.roles || [];
+    return roles.some((r: string) => ADMIN_ROLES.includes(r));
+  } catch {}
+  return false;
 }
 
 const ADMIN_NAV = [
@@ -42,7 +58,9 @@ const ADMIN_NAV = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [userName, setUserName] = useState(readUserName);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
   const refreshName = useCallback(() => setUserName(readUserName()), []);
 
@@ -51,6 +69,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     refreshName();
     return () => window.removeEventListener('storage', refreshName);
   }, [refreshName]);
+
+  useEffect(() => {
+    const allowed = checkAdminAccess();
+    setHasAccess(allowed);
+    if (!allowed) {
+      const token = localStorage.getItem('uht_token');
+      if (!token) {
+        window.location.href = '/login?redirect=' + encodeURIComponent(pathname);
+      } else {
+        window.location.href = '/dashboard';
+      }
+    }
+  }, [pathname, router]);
+
+  if (hasAccess === null) {
+    return <div className="min-h-screen bg-[#fafafa] flex items-center justify-center"><div className="text-[#86868b]">Loading...</div></div>;
+  }
+  if (!hasAccess) {
+    return <div className="min-h-screen bg-[#fafafa] flex items-center justify-center"><div className="text-[#86868b]">Redirecting...</div></div>;
+  }
 
   return (
     <div className="min-h-screen bg-[#fafafa]">

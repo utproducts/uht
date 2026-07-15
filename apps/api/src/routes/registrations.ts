@@ -154,6 +154,8 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
     SELECT r.*,
       t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
+      t.head_coach_name, t.head_coach_email, t.head_coach_phone,
+      t.manager_name, t.manager_email, t.manager_phone,
       ed.age_group as division_age_group, ed.division_level,
       u.first_name as registered_by_first, u.last_name as registered_by_last, u.email as registered_by_email, u.phone as registered_by_phone,
       e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
@@ -180,7 +182,9 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
   let q2 = `
     SELECT er.*,
       er.team_name, er.age_group as team_age_group,
-      NULL as team_city, NULL as team_state, NULL as team_logo_url,
+      ct.city as team_city, ct.state as team_state, ct.logo_url as team_logo_url,
+      ct.head_coach_name, ct.head_coach_email, ct.head_coach_phone,
+      ct.manager_name, ct.manager_email, ct.manager_phone,
       COALESCE(ced.age_group, er.age_group) as division_age_group,
       COALESCE(ced.division_level, er.division) as division_level,
       er.manager_first_name as registered_by_first, er.manager_last_name as registered_by_last,
@@ -189,6 +193,7 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
       'consumer' as _source
     FROM event_registrations er
     LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
+    LEFT JOIN teams ct ON ct.id = er.team_id
     JOIN events e ON e.id = er.event_id
     WHERE 1=1
   `;
@@ -240,6 +245,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     SELECT r.*,
       t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
+      t.head_coach_name, t.head_coach_email, t.head_coach_phone,
+      t.manager_name, t.manager_email, t.manager_phone,
       ed.age_group as division_age_group, ed.division_level,
       u.first_name as registered_by_first, u.last_name as registered_by_last, u.email as registered_by_email, u.phone as registered_by_phone,
       (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = r.id) as roster_count,
@@ -276,9 +283,11 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     SELECT er.*,
       er.team_name as team_name,
       er.age_group as team_age_group,
-      NULL as team_city,
-      NULL as team_state,
-      NULL as team_logo_url,
+      ct2.city as team_city,
+      ct2.state as team_state,
+      ct2.logo_url as team_logo_url,
+      ct2.head_coach_name, ct2.head_coach_email, ct2.head_coach_phone,
+      ct2.manager_name, ct2.manager_email, ct2.manager_phone,
       COALESCE(ced.age_group, er.age_group) as division_age_group,
       COALESCE(ced.division_level, er.division) as division_level,
       er.manager_first_name as registered_by_first,
@@ -292,6 +301,7 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
       'consumer' as _source
     FROM event_registrations er
     LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
+    LEFT JOIN teams ct2 ON ct2.id = er.team_id
     LEFT JOIN event_hotels ch1 ON ch1.id = er.hotel_choice_1
     LEFT JOIN event_hotels ch2 ON ch2.id = er.hotel_choice_2
     LEFT JOIN event_hotels ch3 ON ch3.id = er.hotel_choice_3
@@ -592,33 +602,40 @@ registrationRoutes.delete('/:id', authMiddleware, requireRole('admin', 'director
   const user = c.get('user');
   const db = c.env.DB;
 
-  // Check both tables
-  let tableName = 'registrations';
-  let reg = await db.prepare('SELECT id, event_id FROM registrations WHERE id = ?').bind(regId).first<any>();
-  if (!reg) {
-    reg = await db.prepare('SELECT id, event_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
-    if (reg) tableName = 'event_registrations';
-    else return c.json({ success: false, error: 'Registration not found' }, 404);
+  try {
+    // Check both tables
+    let tableName = 'registrations';
+    let reg = await db.prepare('SELECT id, event_id FROM registrations WHERE id = ?').bind(regId).first<any>();
+    if (!reg) {
+      reg = await db.prepare('SELECT id, event_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+      if (reg) tableName = 'event_registrations';
+      else return c.json({ success: false, error: 'Registration not found' }, 404);
+    }
+
+    // Delete all related records first to avoid FK constraints
+    await db.prepare('DELETE FROM discount_codes WHERE registration_id = ?').bind(regId).run().catch(() => {});
+    await db.prepare('DELETE FROM special_requests WHERE registration_id = ?').bind(regId).run().catch(() => {});
+    await db.prepare('DELETE FROM registration_rosters WHERE registration_id = ?').bind(regId).run().catch(() => {});
+
+    // Delete the registration
+    await db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(regId).run();
+
+    // Audit log
+    await db.prepare(`
+      INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, 'registration.deleted', 'registration', ?, ?)
+    `).bind(
+      crypto.randomUUID().replace(/-/g, ''),
+      user.id,
+      regId,
+      JSON.stringify({ source: tableName === 'event_registrations' ? 'consumer' : 'normalized' })
+    ).run();
+
+    return c.json({ success: true, message: 'Registration deleted' });
+  } catch (err: any) {
+    console.error('Delete registration error:', err);
+    return c.json({ success: false, error: err.message || 'Failed to delete registration' }, 500);
   }
-
-  // Delete related discount codes
-  await db.prepare('DELETE FROM discount_codes WHERE registration_id = ?').bind(regId).run().catch(() => {});
-
-  // Delete the registration
-  await db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(regId).run();
-
-  // Audit log
-  await db.prepare(`
-    INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
-    VALUES (?, ?, 'registration.deleted', 'registration', ?, ?)
-  `).bind(
-    crypto.randomUUID().replace(/-/g, ''),
-    user.id,
-    regId,
-    JSON.stringify({ source: tableName === 'event_registrations' ? 'consumer' : 'normalized' })
-  ).run();
-
-  return c.json({ success: true, message: 'Registration deleted' });
 });
 
 // ==================
