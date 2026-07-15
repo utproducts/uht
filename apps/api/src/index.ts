@@ -615,6 +615,135 @@ app.post('/api/coaches-meeting/send', async (c) => {
   return c.json({ success: true, data: { sent, failed, total: emails.length } });
 });
 
+// Coaches meeting REMINDER email (20-min warning with Zoom link)
+app.post('/api/coaches-meeting/send-reminder', async (c) => {
+  const body = await c.req.json() as { sendKey?: string; subject?: string; message?: string };
+
+  if (body.sendKey !== 'uht-coaches-2026') {
+    return c.json({ error: 'Invalid send key' }, 403);
+  }
+
+  const db = c.env.DB;
+  const env = c.env;
+
+  // Get all RSVP emails with attending = 'yes'
+  const rsvps = await db.prepare(
+    "SELECT DISTINCT LOWER(TRIM(email)) as email, name FROM rsvps WHERE attending = 'yes' AND email IS NOT NULL AND email != ''"
+  ).all<any>();
+
+  const recipients = (rsvps.results || []).filter((r: any) => r.email);
+
+  if (recipients.length === 0) {
+    return c.json({ success: false, error: 'No RSVP recipients found' }, 400);
+  }
+
+  const subject = body.subject || "Reminder: UHT Coaches Meeting Starts Soon!";
+  const customMessage = body.message || "The meeting starts in 20 minutes!";
+
+  const emailHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafafa;"><tr><td align="center" style="padding:20px 0;">
+<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+
+<tr><td style="background-color:#003e79;padding:28px 24px;text-align:center;">
+  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;" />
+  <h1 style="color:#ffffff;font-size:22px;margin:0;font-weight:800;">Meeting Reminder</h1>
+  <p style="color:#8bb8e8;font-size:14px;margin:6px 0 0;">Coach/Manager Meeting &mdash; Tonight!</p>
+</td></tr>
+
+<tr><td style="padding:32px 28px;">
+  <p style="color:#1d1d1f;font-size:18px;line-height:1.6;margin:0 0 20px;font-weight:600;">
+    ${customMessage}
+  </p>
+
+  <div style="background-color:#f0f7ff;border-radius:12px;padding:20px;margin-bottom:24px;border-left:4px solid #003e79;">
+    <table cellpadding="0" cellspacing="0" width="100%">
+      <tr>
+        <td style="padding:4px 0;color:#6e6e73;font-size:13px;width:80px;">When</td>
+        <td style="padding:4px 0;color:#1d1d1f;font-size:15px;font-weight:600;">Tonight at 7:30 PM CT</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 0;color:#6e6e73;font-size:13px;">Duration</td>
+        <td style="padding:4px 0;color:#1d1d1f;font-size:15px;font-weight:600;">15 minutes</td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="text-align:center;margin:28px 0;">
+    <a href="https://us02web.zoom.us/j/83708005862?pwd=VDFhs7aLiyR0hcnSIWDWDtJuTVNljB.1" style="display:inline-block;background-color:#2D8CFF;color:#ffffff;padding:18px 48px;border-radius:28px;text-decoration:none;font-size:18px;font-weight:bold;letter-spacing:0.3px;">Join Zoom Meeting</a>
+  </div>
+
+  <p style="color:#6e6e73;font-size:13px;line-height:1.6;margin:16px 0 0;text-align:center;">
+    Or copy this link: <a href="https://us02web.zoom.us/j/83708005862?pwd=VDFhs7aLiyR0hcnSIWDWDtJuTVNljB.1" style="color:#003e79;">https://us02web.zoom.us/j/83708005862</a>
+  </p>
+</td></tr>
+
+<tr><td style="background-color:#f5f5f7;padding:20px 24px;text-align:center;">
+  <p style="color:#86868b;font-size:12px;margin:0 0 6px;">
+    Ultimate Hockey Tournaments<br/>
+    <a href="https://ultimatetournaments.com" style="color:#003e79;text-decoration:none;">ultimatetournaments.com</a>
+  </p>
+</td></tr>
+
+</table></td></tr></table></body></html>`;
+
+  let sent = 0;
+  let failed = 0;
+  const emails = recipients.map((r: any) => r.email);
+  const batchSize = 50;
+
+  for (let i = 0; i < emails.length; i += batchSize) {
+    const batch = emails.slice(i, i + batchSize);
+    const batchPayload = batch.map((email: string) => ({
+      from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+      to: [email],
+      subject: subject,
+      html: emailHtml,
+    }));
+
+    try {
+      const response = await fetch('https://api.resend.com/emails/batch', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + env.RESEND_API,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(batchPayload),
+      });
+
+      if (response.ok) {
+        sent += batch.length;
+      } else {
+        for (const email of batch) {
+          try {
+            const singleRes = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Bearer ' + env.RESEND_API,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+                to: [email],
+                subject: subject,
+                html: emailHtml,
+              }),
+            });
+            if (singleRes.ok) sent++;
+            else failed++;
+          } catch {
+            failed++;
+          }
+        }
+      }
+    } catch {
+      failed += batch.length;
+    }
+  }
+
+  return c.json({ success: true, data: { sent, failed, total: emails.length } });
+});
+
 // Image upload to R2
 app.post('/api/upload/image', async (c) => {
   const formData = await c.req.formData();

@@ -432,7 +432,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
             const hasInvite = !!team.invite_code;
             const hasRoster = !!team.roster_share_token;
 
-            if (!hasInvite && !hasRoster) return null;
+            if (!hasInvite) return null;
 
             return (
               <View key={team.id} style={styles.shareCard}>
@@ -457,18 +457,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
                     </TouchableOpacity>
                   ) : null}
 
-                  {hasRoster ? (
-                    <TouchableOpacity
-                      style={[styles.shareButton, styles.shareButtonRoster]}
-                      activeOpacity={0.7}
-                      onPress={() => handleShareRosterLink(team)}
-                    >
-                      <Ionicons name="link-outline" size={18} color={colors.white} />
-                      <Text style={styles.shareButtonText}>
-                        {teamIsCoach ? 'Send Roster Link' : 'Share with Team'}
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
+{/* Send Roster Link hidden for now */}
                 </View>
               </View>
             );
