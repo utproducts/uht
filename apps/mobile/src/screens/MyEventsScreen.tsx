@@ -15,7 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, authFetch, getActiveRole, setActiveRole, refreshUser, User } from '../services/auth';
+import { getUser, authFetch, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount } from '../services/auth';
 import { getFollowedTeams } from '../services/api';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
@@ -180,6 +180,39 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
     await setActiveRole(role);
   }
 
+  function handleAddRole() {
+    const selfAddableRoles = [
+      { key: 'coach', label: 'Coach' },
+      { key: 'parent', label: 'Parent / Fan' },
+      { key: 'referee', label: 'Referee' },
+      { key: 'scorekeeper', label: 'Scorekeeper' },
+    ];
+    const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
+    if (available.length === 0) {
+      Alert.alert('All Roles Added', 'You already have all available roles.');
+      return;
+    }
+    Alert.alert(
+      'Add a Role',
+      'Select a role to add to your account:',
+      [
+        ...available.map(r => ({
+          text: r.label,
+          onPress: async () => {
+            const result = await addRoleToAccount(r.key);
+            if (result.success && result.roles) {
+              setUserRoles(result.roles);
+              Alert.alert('Role Added', `${r.label} has been added to your account.`);
+            } else {
+              Alert.alert('Error', result.error || 'Failed to add role.');
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  }
+
   function renderPaymentBadge(status: string) {
     let label = '';
     let style: any = {};
@@ -296,6 +329,7 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
         activeRole={activeRole}
         userRoles={userRoles}
         onSwitchRole={handleSwitchRole}
+        onAddRole={handleAddRole}
       />
       <View style={styles.titleRow}>
         <Text style={styles.title}>My events</Text>

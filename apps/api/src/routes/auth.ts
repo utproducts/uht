@@ -620,6 +620,47 @@ authRoutes.post('/admin-pin', rateLimit(10, 60_000), zValidator('json', adminPin
 });
 
 // ==================
+// SELF-ADD ROLE
+// ==================
+const addRoleSchema = z.object({
+  role: z.enum(['coach', 'parent', 'referee', 'scorekeeper']),
+});
+
+authRoutes.post('/add-role', authMiddleware, zValidator('json', addRoleSchema), async (c) => {
+  const user = (c as any).get('user');
+  const { role } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    // Check if user already has this role
+    const existing = await db.prepare('SELECT id FROM user_roles WHERE user_id = ? AND role = ?')
+      .bind(user.id, role).first();
+
+    if (existing) {
+      // Already has role — just return current roles
+      const allRoles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+        .bind(user.id).all();
+      const roles = allRoles.results.map((r: any) => r.role);
+      return c.json({ success: true, roles });
+    }
+
+    // Insert new role
+    const newId = crypto.randomUUID();
+    await db.prepare('INSERT INTO user_roles (id, user_id, role, created_at) VALUES (?, ?, ?, datetime("now"))')
+      .bind(newId, user.id, role).run();
+
+    // Return all current roles
+    const allRoles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+      .bind(user.id).all();
+    const roles = allRoles.results.map((r: any) => r.role);
+
+    return c.json({ success: true, roles });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to add role' }, 500);
+  }
+});
+
+// ==================
 // SET ADMIN PIN
 // ==================
 const setPinSchema = z.object({

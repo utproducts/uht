@@ -11,11 +11,12 @@ import {
   Image,
   Share,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, getActiveRole, setActiveRole, refreshUser } from '../services/auth';
+import { getUser, getActiveRole, setActiveRole, refreshUser, addRoleToAccount } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
@@ -152,6 +153,39 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
     await setActiveRole(role);
   }
 
+  function handleAddRole() {
+    const selfAddableRoles = [
+      { key: 'coach', label: 'Coach' },
+      { key: 'parent', label: 'Parent / Fan' },
+      { key: 'referee', label: 'Referee' },
+      { key: 'scorekeeper', label: 'Scorekeeper' },
+    ];
+    const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
+    if (available.length === 0) {
+      Alert.alert('All Roles Added', 'You already have all available roles.');
+      return;
+    }
+    Alert.alert(
+      'Add a Role',
+      'Select a role to add to your account:',
+      [
+        ...available.map(r => ({
+          text: r.label,
+          onPress: async () => {
+            const result = await addRoleToAccount(r.key);
+            if (result.success && result.roles) {
+              setUserRoles(result.roles);
+              Alert.alert('Role Added', `${r.label} has been added to your account.`);
+            } else {
+              Alert.alert('Error', result.error || 'Failed to add role.');
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  }
+
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -257,7 +291,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
           unreadCount={unreadCount}
           hasMultipleRoles={userRoles.length > 1}
         />
-        <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
+        <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} onAddRole={handleAddRole} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>

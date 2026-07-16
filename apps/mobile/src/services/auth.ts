@@ -179,6 +179,27 @@ export async function login(email: string, password: string): Promise<{ success:
   }
 }
 
+export async function addRoleToAccount(role: string): Promise<{ success: boolean; roles?: string[]; error?: string }> {
+  try {
+    const res = await authFetch('/api/auth/add-role', {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+    const json = await res.json();
+    if (json.success && json.roles) {
+      // Update stored user with new roles
+      const user = await getUser();
+      if (user) {
+        user.roles = json.roles;
+        await setUser(user);
+      }
+    }
+    return json;
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getToken();
   const isFormData = options.body instanceof FormData;

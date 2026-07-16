@@ -671,6 +671,16 @@ function CoachDash() {
                                 }`}>
                                   {evt.status || 'registered'}
                                 </span>
+                                {evt.reg_id && evt.payment_status !== 'paid' && (
+                                  <div className="flex items-center gap-1 ml-2">
+                                    <button
+                                      onClick={() => copyToClipboard(`https://ultimatetournaments.com/pay?reg=${evt.reg_id}`, `pay-${evt.reg_id}`)}
+                                      className="text-[10px] font-semibold text-[#003e79] bg-[#e6f0fa] hover:bg-[#d0e4f5] px-2 py-0.5 rounded-full transition-colors"
+                                    >
+                                      {copied === `pay-${evt.reg_id}` ? 'Copied!' : 'Payment Link'}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                               {evt.hotel_name && (
                                 <div className="mt-2 bg-white rounded-lg px-3 py-2 border border-[#e0ecf7]">
