@@ -363,11 +363,12 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     } catch {}
   }
 
-  async function handleShareRosterLink(team: ShareTeam) {
-    if (!team.roster_share_token) return;
+  async function handleShareWithParents(team: ShareTeam) {
+    const code = team.parent_invite_code || team.invite_code;
+    if (!code) return;
     try {
       await Share.share({
-        message: `You're invited to join ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nClaim your player's spot on the roster:\nhttps://ultimatetournaments.com/roster/${team.roster_share_token}`,
+        message: `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`,
       });
     } catch {}
   }

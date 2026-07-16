@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import DirectorDash from './DirectorDash';
 import OrgDashboard from './OrgDashboard';
 
@@ -485,8 +486,9 @@ function CoachDash() {
         <div className="space-y-4">
           {teams.map((team: any) => {
             const isExpanded = expandedTeam === team.id;
-            const rosterLink = team.roster_share_token
-              ? `${typeof window !== 'undefined' ? window.location.origin : ''}/roster/claim?token=${team.roster_share_token}`
+            const parentShareCode = team.parent_invite_code || team.invite_code || null;
+            const parentShareMsg = parentShareCode
+              ? `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${parentShareCode}\n\nhttps://apps.apple.com/app/id6786085393`
               : null;
             return (
               <div key={team.id} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] transition-all">
@@ -529,25 +531,25 @@ function CoachDash() {
                     <span className="text-xs font-semibold text-[#003e79]">Register Event</span>
                   </a>
 
-                  {/* 3. Roster Invite Link */}
+                  {/* 3. Share with Parents */}
                   <button
-                    onClick={() => rosterLink && copyToClipboard(rosterLink, `roster-${team.id}`)}
+                    onClick={() => parentShareMsg && copyToClipboard(parentShareMsg, `parent-${team.id}`)}
                     className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group disabled:opacity-40"
-                    disabled={!rosterLink}>
-                    <span className="text-xl group-hover:scale-110 transition-transform">🔗</span>
+                    disabled={!parentShareMsg}>
+                    <span className="text-xl group-hover:scale-110 transition-transform">📱</span>
                     <span className="text-xs font-semibold text-[#003e79]">
-                      {copied === `roster-${team.id}` ? '✓ Copied!' : 'Roster Link'}
+                      {copied === `parent-${team.id}` ? '✓ Copied!' : 'Share with Parents'}
                     </span>
                   </button>
 
-                  {/* 4. Team Code */}
+                  {/* 4. Coach Code */}
                   <button
                     onClick={() => team.invite_code && copyToClipboard(team.invite_code, `code-${team.id}`)}
                     className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group disabled:opacity-40"
                     disabled={!team.invite_code}>
                     <span className="text-xl group-hover:scale-110 transition-transform">🔑</span>
                     <span className="text-xs font-semibold text-[#003e79]">
-                      {copied === `code-${team.id}` ? '✓ Copied!' : 'Team Code'}
+                      {copied === `code-${team.id}` ? '✓ Copied!' : 'Coach Code'}
                     </span>
                   </button>
                 </div>
@@ -621,24 +623,13 @@ function CoachDash() {
                       </div>
                     </div>
 
-                    {/* Parent Claim Status */}
-                    {(team.total_players || 0) > 0 && (
+                    {/* Share with Parents */}
+                    {parentShareCode && (
                       <div className="border-t border-[#e8e8ed] pt-3">
-                        <h4 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Parent Registration</h4>
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 bg-[#f5f5f7] rounded-lg h-3 overflow-hidden">
-                            <div className="bg-green-500 h-full rounded-lg transition-all"
-                              style={{ width: `${Math.round(((team.claimed_players || 0) / (team.total_players || 1)) * 100)}%` }} />
-                          </div>
-                          <span className="text-xs font-semibold text-[#1d1d1f] whitespace-nowrap">
-                            {team.claimed_players || 0} / {team.total_players || 0} claimed
-                          </span>
-                        </div>
-                        {(team.claimed_players || 0) < (team.total_players || 0) && (
-                          <p className="text-xs text-[#86868b] mt-1.5">
-                            {(team.total_players || 0) - (team.claimed_players || 0)} parent{(team.total_players || 0) - (team.claimed_players || 0) !== 1 ? 's' : ''} still need to register. Share the roster link above!
-                          </p>
-                        )}
+                        <h4 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Share with Parents</h4>
+                        <p className="text-xs text-[#86868b]">
+                          Parents can download the UHT app and use team code <span className="font-mono font-semibold text-[#003e79]">{parentShareCode}</span> to follow the team and get live scores, schedules, and updates.
+                        </p>
                       </div>
                     )}
 
@@ -658,12 +649,12 @@ function CoachDash() {
                           {team.registered_events.map((evt: any) => (
                             <div key={evt.id || evt.event_id} className="bg-[#f5f5f7] rounded-lg px-3 py-2">
                               <div className="flex items-center justify-between">
-                                <div>
+                                <a href={`/dashboard/coach/events/?id=${evt.event_id || evt.id}`} className="hover:underline">
                                   <span className="text-sm font-medium text-[#1d1d1f]">{evt.event_name || evt.name}</span>
                                   {evt.event_date && (
                                     <span className="text-xs text-[#86868b] ml-2">{evt.event_date}</span>
                                   )}
-                                </div>
+                                </a>
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                                   evt.status === 'confirmed' ? 'bg-green-100 text-green-700' :
                                   evt.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
@@ -933,10 +924,14 @@ function ParentDash() {
       <div className="space-y-6">
         <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 text-center">
           <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">{'🏒'}</div>
-          <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">No Players Claimed Yet</h3>
+          <h3 className="text-lg font-bold text-[#1d1d1f] mb-2">No Teams Followed Yet</h3>
           <p className="text-sm text-[#6e6e73] max-w-md mx-auto">
-            Ask your coach for the team roster link. You can claim your child and get set up for tournament updates.
+            Download the UHT app and enter your team code to follow your child&apos;s team. You&apos;ll get live scores, schedules, and updates automatically.
           </p>
+          <a href="https://apps.apple.com/app/id6786085393" target="_blank" rel="noopener noreferrer"
+            className="inline-block mt-4 px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
+            Download the App
+          </a>
         </div>
       </div>
     );

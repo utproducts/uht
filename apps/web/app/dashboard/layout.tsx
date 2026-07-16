@@ -42,6 +42,7 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Registrations', href: '/admin/registrations' },
     { name: 'Schedule Builder', href: '/admin/schedule' },
     { name: 'Financials', href: '/admin/financials' },
+    { name: 'Coupon Codes', href: '/admin/coupons' },
     { name: 'Shop', href: '/admin/shop' },
     { name: 'Referees', href: '/admin/referees' },
     { name: 'Communications', href: '/admin/comms' },
@@ -71,14 +72,12 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Roster', href: '/dashboard/coach/roster' },
     { name: 'Events', href: '/dashboard/coach/events' },
     { name: 'Schedule', href: '/dashboard/coach/schedule' },
-    { name: 'Coupon Codes', href: '/dashboard/coach/coupons' },
   ]},
   manager: { label: 'Manager', items: [
     { name: 'My Teams', href: '/dashboard/manager/teams' },
     { name: 'Roster', href: '/dashboard/manager/roster' },
     { name: 'Events', href: '/dashboard/manager/events' },
     { name: 'Schedule', href: '/dashboard/manager/schedule' },
-    { name: 'Coupon Codes', href: '/dashboard/manager/coupons' },
   ]},
   parent: { label: 'Parent / Player', items: [
     { name: 'Overview', href: '/dashboard/parent' },
@@ -166,6 +165,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <a
                   key={item.name}
                   href={item.href}
+                  onClick={(e) => {
+                    // Force reload when clicking the same page link
+                    if (pathname === item.href || pathname.startsWith(item.href + '/')) {
+                      e.preventDefault();
+                      window.location.href = item.href;
+                    }
+                  }}
                   className={
                     "block px-3 py-2 rounded-lg text-sm transition-colors " +
                     (isActive
@@ -186,6 +192,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const isActive = pathname === item.href || (item.href !== `/dashboard/${roleKey}` && pathname.startsWith(item.href));
             return (
               <a key={item.name} href={item.href}
+                onClick={(e) => {
+                  if (pathname === item.href || pathname.startsWith(item.href + '/')) {
+                    e.preventDefault();
+                    window.location.href = item.href;
+                  }
+                }}
                 className={"flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors " +
                   (isActive ? "text-[#003e79] font-semibold" : "text-[#86868b]")}>
                 {item.name.replace('My ', '').replace('Coupon Codes', 'Coupons')}

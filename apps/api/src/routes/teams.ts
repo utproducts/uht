@@ -1727,10 +1727,17 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
     createdByUserId, inviteCode, parentInviteCode, rosterShareToken
   ).run();
 
-  // Link creator as a team_member
+  // Link creator as coach + manager + team_member
   if (createdByUserId) {
     try {
-      // Legacy junction table
+      // Add to team_coaches so team shows in /my-teams coach query
+      const coachLinkId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT OR IGNORE INTO team_coaches (team_id, user_id, role)
+        VALUES (?, ?, 'head_coach')
+      `).bind(teamId, createdByUserId).run();
+
+      // Legacy junction table (team_managers)
       const linkId = crypto.randomUUID().replace(/-/g, '');
       await db.prepare(`
         INSERT INTO team_managers (id, team_id, user_id)

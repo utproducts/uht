@@ -2385,23 +2385,84 @@ eventRoutes.post('/validate-discount-code', async (c) => {
     'SELECT id, code, team_name, team_id, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE code = ?'
   ).bind(code.trim().toUpperCase()).first<any>();
 
-  if (!dc) {
-    return c.json({ success: false, error: 'Invalid discount code' }, 404);
-  }
-  if (dc.is_used) {
-    return c.json({ success: false, error: 'This code has already been used' }, 400);
+  if (dc) {
+    if (dc.is_used) {
+      return c.json({ success: false, error: 'This code has already been used' }, 400);
+    }
+    return c.json({
+      success: true,
+      data: {
+        code_id: dc.id,
+        code: dc.code,
+        team_name: dc.team_name,
+        discount_local_cents: dc.discount_local_cents,
+        discount_hotel_cents: dc.discount_hotel_cents,
+      },
+    });
   }
 
-  return c.json({
-    success: true,
-    data: {
-      code_id: dc.id,
-      code: dc.code,
-      team_name: dc.team_name,
-      discount_local_cents: dc.discount_local_cents,
-      discount_hotel_cents: dc.discount_hotel_cents,
-    },
-  });
+  // Fallback: check admin coupon_codes table
+  try {
+    const coupon = await db.prepare(
+      'SELECT * FROM coupon_codes WHERE UPPER(code) = UPPER(?)'
+    ).bind(code.trim()).first<any>();
+
+    if (coupon) {
+      if (!coupon.is_active) {
+        return c.json({ success: false, error: 'This coupon code is no longer active' }, 400);
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        return c.json({ success: false, error: 'This coupon code has expired' }, 400);
+      }
+      if (coupon.max_uses !== null && coupon.current_uses >= coupon.max_uses) {
+        return c.json({ success: false, error: 'This coupon code has reached its usage limit' }, 400);
+      }
+
+      // For fixed: discount_amount is in cents
+      // For percent: pass 0 as cents, frontend will calculate from percentage
+      const fixedCents = coupon.discount_type === 'fixed' ? coupon.discount_amount : 0;
+
+      return c.json({
+        success: true,
+        data: {
+          code_id: coupon.id,
+          code: coupon.code,
+          type: 'coupon',
+          discount_type: coupon.discount_type,
+          discount_amount: coupon.discount_amount,
+          discount_local_cents: fixedCents,
+          discount_hotel_cents: fixedCents,
+        },
+      });
+    }
+  } catch {}
+
+  // Fallback: check meeting_rewards table
+  try {
+    const reward = await db.prepare(
+      'SELECT id, code, amount, redeemed FROM meeting_rewards WHERE UPPER(code) = UPPER(?)'
+    ).bind(code.trim()).first<any>();
+
+    if (reward) {
+      if (reward.redeemed === 1) {
+        return c.json({ success: false, error: 'This code has already been used' }, 400);
+      }
+      const rewardCents = (reward.amount || 0) * 100;
+      return c.json({
+        success: true,
+        data: {
+          code_id: reward.id,
+          code: reward.code,
+          type: 'meeting_reward',
+          amount: reward.amount,
+          discount_local_cents: rewardCents,
+          discount_hotel_cents: rewardCents,
+        },
+      });
+    }
+  } catch {}
+
+  return c.json({ success: false, error: 'Invalid discount code' }, 404);
 });
 
 // ==================

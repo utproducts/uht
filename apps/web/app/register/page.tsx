@@ -141,7 +141,7 @@ export default function RegisterPage() {
 
   // Discount code
   const [discountCode, setDiscountCode] = useState('');
-  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name?: string; code_id?: string; type?: string; amount?: number } | null>(null);
+  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name?: string; code_id?: string; type?: string; amount?: number; discount_type?: string; discount_amount?: number } | null>(null);
   const [validatingCode, setValidatingCode] = useState(false);
   const [discountError, setDiscountError] = useState('');
   const [discountExpanded, setDiscountExpanded] = useState(false);
@@ -768,7 +768,11 @@ export default function RegisterPage() {
   const totalPriceCents = teamsToPrice.reduce((sum, t) => sum + getTeamPrice(t), 0);
   // Calculate discount based on hotel selection
   const discountAmountCents = discountValidation ? (() => {
-    // Check if any team selected "Local Team"
+    // Percentage coupon: calculate from total price
+    if (discountValidation.discount_type === 'percent' && discountValidation.discount_amount) {
+      return Math.round(totalPriceCents * discountValidation.discount_amount / 100);
+    }
+    // Fixed amount coupons and other discount codes
     const anyLocal = multiTeamMode
       ? Object.values(teamLocalFlags).some(v => v)
       : isLocalTeam;
@@ -1507,12 +1511,16 @@ export default function RegisterPage() {
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                       <p className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                        {isLocalTeam || Object.values(teamLocalFlags).some(v => v)
-                          ? `$${(discountValidation.discount_local_cents / 100).toFixed(0)} discount applied!`
-                          : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`
+                        {discountValidation.discount_type === 'percent'
+                          ? `${discountValidation.discount_amount}% discount applied!`
+                          : (isLocalTeam || Object.values(teamLocalFlags).some(v => v)
+                            ? `$${(discountValidation.discount_local_cents / 100).toFixed(0)} discount applied!`
+                            : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`)
                         }
                       </p>
-                      <p className="text-xs text-emerald-600 mt-1">Code for {discountValidation.team_name}</p>
+                      {discountValidation.team_name && (
+                        <p className="text-xs text-emerald-600 mt-1">Code for {discountValidation.team_name}</p>
+                      )}
                     </div>
                   )}
                 </div>

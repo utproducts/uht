@@ -27,7 +27,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   signup: { label: 'Self Signup', color: 'bg-blue-50 text-blue-600' },
-  roster_claim: { label: 'Roster Claim', color: 'bg-green-50 text-green-600' },
+  roster_claim: { label: 'App Invite', color: 'bg-green-50 text-green-600' },
   invite: { label: 'Invited', color: 'bg-purple-50 text-purple-600' },
   admin: { label: 'Admin Created', color: 'bg-gray-100 text-gray-600' },
 };
@@ -522,7 +522,7 @@ export default function AdminUsersPage() {
             className="px-3 py-2.5 border border-[#e0e0e5] rounded-xl text-sm bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none">
             <option value="all">All Sources</option>
             <option value="signup">Self Signup</option>
-            <option value="roster_claim">Roster Claim</option>
+            <option value="roster_claim">App Invite</option>
             <option value="invite">Invited</option>
           </select>
         </div>

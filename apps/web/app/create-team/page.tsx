@@ -537,33 +537,33 @@ export default function CreateTeamPage() {
               </div>
             )}
 
-            {!isEditMode && rosterShareToken && (
+            {!isEditMode && createdInviteCode && (
               <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden mb-5">
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-5 py-3">
                   <p className="text-white font-semibold text-sm flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
-                    Parent Registration Link
+                    Share with Parents
                   </p>
                 </div>
                 <div className="p-5">
                   <p className="text-sm text-[#6e6e73] mb-3">
-                    Share this link with parents. They&apos;ll find their player, register, and get tournament notifications automatically.
+                    Share this with parents so they can download the app, enter the team code, and get live scores, schedules, and updates.
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 bg-[#f5f5f7] rounded-xl px-4 py-2.5 border border-[#e8e8ed] text-xs font-mono text-[#1d1d1f] truncate select-all">
-                      {typeof window !== 'undefined' ? `${window.location.origin}/roster/claim?t=${rosterShareToken}` : ''}
+                      Team Code: {createdInviteCode}
                     </div>
                     <button onClick={() => {
-                      const url = `${window.location.origin}/roster/claim?t=${rosterShareToken}`;
-                      navigator.clipboard.writeText(url);
+                      const msg = `Follow ${teamDisplayName} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${createdInviteCode}\n\nhttps://apps.apple.com/app/id6786085393`;
+                      navigator.clipboard.writeText(msg);
                       setRosterLinkCopied(true);
                       setTimeout(() => setRosterLinkCopied(false), 2500);
                     }}
                       className={"px-4 py-2.5 rounded-xl text-sm font-semibold transition shrink-0 " +
                         (rosterLinkCopied ? "bg-green-100 text-green-700" : "bg-green-600 text-white hover:bg-green-700")}>
-                      {rosterLinkCopied ? 'Copied!' : 'Copy'}
+                      {rosterLinkCopied ? 'Copied!' : 'Copy Message'}
                     </button>
                   </div>
                 </div>
@@ -1392,8 +1392,8 @@ export default function CreateTeamPage() {
                   </div>
                 )}
 
-                {/* Shareable roster link for parents — only show when players exist */}
-                {rosterShareToken && rosterPlayers.length > 0 && (
+                {/* Share with parents — only show when players exist */}
+                {createdInviteCode && rosterPlayers.length > 0 && (
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-2xl p-5 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
                       <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shrink-0">
@@ -1403,27 +1403,27 @@ export default function CreateTeamPage() {
                       </div>
                       <div>
                         <h3 className="text-base font-bold text-green-900 flex items-center gap-2">
-                          Now Share This Link with Parents!
+                          Now Share with Parents!
                           <span className="bg-green-200 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Important</span>
                         </h3>
                         <p className="text-sm text-green-800 mt-1.5 leading-relaxed">
-                          Send this to your team parents (group chat, email, etc.). They&apos;ll find their child, claim them, and get tournament notifications automatically.
+                          Send this to your team parents (group chat, email, etc.). They&apos;ll download the app, enter the team code, and get live scores, schedules, and updates automatically.
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-white rounded-xl px-4 py-3 border border-green-200 text-sm text-[#1d1d1f] font-mono truncate select-all">
-                        {typeof window !== 'undefined' ? `${window.location.origin}/roster/claim?t=${rosterShareToken}` : ''}
+                        Team Code: {createdInviteCode}
                       </div>
                       <button onClick={() => {
-                        const url = `${window.location.origin}/roster/claim?t=${rosterShareToken}`;
-                        navigator.clipboard.writeText(url);
+                        const msg = `Follow ${teamDisplayName} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${createdInviteCode}\n\nhttps://apps.apple.com/app/id6786085393`;
+                        navigator.clipboard.writeText(msg);
                         setRosterLinkCopied(true);
                         setTimeout(() => setRosterLinkCopied(false), 2500);
                       }}
                         className={"px-5 py-3 rounded-xl text-sm font-bold transition shrink-0 " +
                           (rosterLinkCopied ? "bg-green-100 text-green-700 border-2 border-green-300" : "bg-green-600 text-white hover:bg-green-700 shadow-sm")}>
-                        {rosterLinkCopied ? 'Copied!' : 'Copy Link'}
+                        {rosterLinkCopied ? 'Copied!' : 'Copy Message'}
                       </button>
                     </div>
                   </div>

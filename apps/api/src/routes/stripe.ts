@@ -174,28 +174,71 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     descriptions.push(`${teamName}${data.paymentChoice === 'pay_deposit' ? ' (Deposit)' : ''}`);
   }
 
-  // Apply discount code if provided (single-use reward codes)
+  // Apply discount code if provided (reward codes OR coupon codes)
   let discountCents = 0;
   let discountCode = '';
   if (data.discountCode) {
+    const codeTrimmed = data.discountCode.trim();
+
+    // 1) Check meeting_rewards table first (single-use reward codes)
     const reward = await db.prepare(
       'SELECT id, code, amount, redeemed FROM meeting_rewards WHERE UPPER(code) = UPPER(?)'
-    ).bind(data.discountCode.trim()).first() as any;
+    ).bind(codeTrimmed).first() as any;
 
-    if (!reward) {
-      return c.json({ success: false, error: 'Invalid discount code' }, 400);
+    if (reward) {
+      if (reward.redeemed === 1) {
+        return c.json({ success: false, error: 'This code has already been used' }, 409);
+      }
+      discountCents = (reward.amount || 0) * 100; // amount is in dollars, convert to cents
+      discountCode = reward.code;
+      // Mark as redeemed immediately to prevent double-use
+      await db.prepare(
+        "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
+      ).bind(data.email, reward.id).run();
+    } else {
+      // 2) Check coupon_codes table (admin-created coupon codes)
+      const coupon = await db.prepare(
+        'SELECT * FROM coupon_codes WHERE UPPER(code) = UPPER(?)'
+      ).bind(codeTrimmed).first() as any;
+
+      if (!coupon) {
+        return c.json({ success: false, error: 'Invalid discount code' }, 400);
+      }
+      if (!coupon.is_active) {
+        return c.json({ success: false, error: 'This coupon code is no longer active' }, 400);
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        return c.json({ success: false, error: 'This coupon code has expired' }, 400);
+      }
+      if (coupon.max_uses !== null && coupon.current_uses >= coupon.max_uses) {
+        return c.json({ success: false, error: 'This coupon code has reached its usage limit' }, 400);
+      }
+      // Check event restriction — get the event ID from registrations
+      if (coupon.event_id) {
+        // Look up the event for these registrations
+        const regCheck = await db.prepare(
+          'SELECT event_id FROM event_registrations WHERE id = ?'
+        ).bind(data.registrationIds[0]).first() as any;
+        const regEventId = regCheck?.event_id;
+        if (regEventId && coupon.event_id !== regEventId) {
+          return c.json({ success: false, error: 'This coupon code is not valid for this event' }, 400);
+        }
+      }
+
+      // Calculate discount
+      if (coupon.discount_type === 'percent') {
+        discountCents = Math.round(totalCents * (coupon.discount_amount / 100));
+      } else {
+        // Fixed amount — discount_amount is stored in cents
+        discountCents = coupon.discount_amount;
+      }
+      discountCode = coupon.code;
+
+      // Increment usage counter
+      await db.prepare(
+        'UPDATE coupon_codes SET current_uses = current_uses + 1 WHERE id = ?'
+      ).bind(coupon.id).run();
     }
-    if (reward.redeemed === 1) {
-      return c.json({ success: false, error: 'This code has already been used' }, 409);
-    }
-
-    discountCents = (reward.amount || 0) * 100; // amount is in dollars, convert to cents
-    discountCode = reward.code;
-
-    // Mark as redeemed immediately to prevent double-use
-    await db.prepare(
-      "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
-    ).bind(data.email, reward.id).run();
   }
 
   totalCents = Math.max(0, totalCents - discountCents);

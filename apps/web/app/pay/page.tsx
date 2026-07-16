@@ -42,6 +42,7 @@ export default function PayPage() {
   const [stripeElements, setStripeElements] = useState<any>(null);
   const [paying, setPaying] = useState(false);
   const [paymentIntentId, setPaymentIntentId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const paymentElementRef = useRef<HTMLDivElement>(null);
 
   // Load registration data from URL params
@@ -92,12 +93,10 @@ export default function PayPage() {
 
   // Mount Stripe Elements when card step is reached
   useEffect(() => {
-    if (step !== 'card' || !stripeInstance || !paymentElementRef.current) return;
-    // clientSecret set during createPaymentIntent — stored in data attribute
-    const clientSecret = paymentElementRef.current.dataset.clientSecret;
-    if (!clientSecret) return;
+    if (step !== 'card' || !stripeInstance || !paymentElementRef.current || !clientSecret) return;
 
     const timer = setTimeout(() => {
+      if (!paymentElementRef.current) return;
       const elements = stripeInstance.elements({
         clientSecret,
         appearance: { theme: 'stripe', variables: { colorPrimary: '#003e79' } },
@@ -107,7 +106,7 @@ export default function PayPage() {
       setStripeElements(elements);
     }, 150);
     return () => clearTimeout(timer);
-  }, [step, stripeInstance]);
+  }, [step, stripeInstance, clientSecret]);
 
   const formatPrice = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}`;
   const formatDate = (dateStr: string) => {
@@ -156,11 +155,7 @@ export default function PayPage() {
 
       setTotalCents(data.data.totalCents);
       setPaymentIntentId(data.data.paymentIntentId);
-
-      // Store clientSecret on the DOM element for the useEffect
-      if (paymentElementRef.current) {
-        paymentElementRef.current.dataset.clientSecret = data.data.clientSecret;
-      }
+      setClientSecret(data.data.clientSecret);
       setStep('card');
       setPaying(false);
     } catch {

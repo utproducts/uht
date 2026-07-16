@@ -41,6 +41,7 @@ const ADMIN_NAV = [
   { name: 'Registrations', href: '/admin/registrations' },
   { name: 'Schedule Builder', href: '/admin/schedule' },
   { name: 'Financials', href: '/admin/financials' },
+  { name: 'Coupon Codes', href: '/admin/coupons' },
   { name: 'Shop', href: '/admin/shop' },
   { name: 'Referees', href: '/admin/referees' },
   { name: 'Communications', href: '/admin/comms' },

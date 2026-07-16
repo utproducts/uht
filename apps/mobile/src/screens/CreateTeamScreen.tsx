@@ -787,12 +787,8 @@ export default function CreateTeamScreen({
   async function shareInvite(type: 'players' | 'coaches') {
     if (!createdTeam) return;
     if (type === 'players') {
-      const rosterUrl = createdTeam.rosterShareToken
-        ? `https://ultimatetournaments.com/roster/${createdTeam.rosterShareToken}`
-        : null;
-      const message = rosterUrl
-        ? `You've been invited to join ${createdTeam.name} on UHT! Claim your spot:\n${rosterUrl}`
-        : `You've been invited to join ${createdTeam.name} on Ultimate Hockey Tournaments! Download the UHT app to get started.`;
+      const code = createdTeam.parentInviteCode || createdTeam.inviteCode || '';
+      const message = `Follow ${createdTeam.name} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`;
       try { await Share.share({ message }); } catch {}
     } else {
       const code = createdTeam.inviteCode || '';
@@ -1279,10 +1275,10 @@ export default function CreateTeamScreen({
           <View style={styles.inviteCard}>
             <View style={styles.inviteCardHeader}>
               <Ionicons name="people-outline" size={24} color={colors.navy} />
-              <Text style={styles.inviteCardTitle}>Invite Players & Parents</Text>
+              <Text style={styles.inviteCardTitle}>Share with Parents</Text>
             </View>
             <Text style={styles.inviteCardDesc}>
-              Share a link so parents can claim their player on the roster.
+              Share with parents so they can follow the team and get live scores, schedules, and updates.
             </Text>
             <TouchableOpacity
               style={styles.inviteShareBtn}
@@ -1290,7 +1286,7 @@ export default function CreateTeamScreen({
               activeOpacity={0.8}
             >
               <Ionicons name="share-outline" size={18} color={colors.white} />
-              <Text style={styles.inviteShareBtnText}>Share Roster Link</Text>
+              <Text style={styles.inviteShareBtnText}>Share with Parents</Text>
             </TouchableOpacity>
           </View>
 

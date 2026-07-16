@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import SubPageContent from './SubPageContent';
 
 export function generateStaticParams() {
@@ -20,5 +21,9 @@ export function generateStaticParams() {
 }
 
 export default function DashboardSubPage() {
-  return <SubPageContent />;
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-500">Loading...</div>}>
+      <SubPageContent />
+    </Suspense>
+  );
 }
