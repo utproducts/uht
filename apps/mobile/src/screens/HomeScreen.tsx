@@ -158,7 +158,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <Ionicons name="people" size={24} color="#185FA5" />
             </View>
             <Text style={styles.qaLabel}>My teams</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -170,7 +169,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <Ionicons name="search" size={24} color="#854F0B" />
             </View>
             <Text style={styles.qaLabel}>Find events</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -182,7 +180,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <Ionicons name="calendar" size={24} color="#3B6D11" />
             </View>
             <Text style={styles.qaLabel}>My events</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -194,7 +191,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <Ionicons name="cart" size={24} color="#534AB7" />
             </View>
             <Text style={styles.qaLabel}>Shop</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
       </ScrollView>

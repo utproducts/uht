@@ -739,11 +739,15 @@ export default function RegisterPage() {
     }
   };
 
-  // Advance from payment → submit registration directly
+  // Advance from payment → submit registration + create payment intent
   const handlePaymentContinue = async () => {
     if (!paymentChoice) return;
-    // All payment choices go to the checkout/confirmation step
-    setStep('card_form');
+    if (paymentChoice === 'pay_later') {
+      setStep('card_form');
+    } else {
+      // pay_now and pay_deposit need to create the registration + payment intent first
+      await submitRegistration();
+    }
   };
 
   // Compute pricing — per-team based on division pricing
