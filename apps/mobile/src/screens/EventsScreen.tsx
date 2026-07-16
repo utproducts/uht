@@ -15,7 +15,10 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import ScreenHeader from '../components/ScreenHeader';
+import { getUser, getActiveRole, setActiveRole } from '../services/auth';
+import { refreshBadgeCount } from '../services/notifications';
+import AppHeader from '../components/AppHeader';
+import RoleBar from '../components/RoleBar';
 import { getEvents } from '../services/api';
 
 interface UHTEvent {
@@ -90,6 +93,9 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
   const [activeTab, setActiveTab] = useState<TabKey>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState<string>('All');
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [activeRole, setActiveRoleState] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const lastLoadRef = React.useRef<number>(0);
   const STALE_MS = 60000; // 60 seconds — events change rarely
@@ -116,12 +122,34 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
+      // Load user/role data
+      (async () => {
+        try {
+          const [user, badgeCount] = await Promise.all([
+            getUser(),
+            refreshBadgeCount().catch(() => 0),
+          ]);
+          setUnreadCount(badgeCount as number);
+          if (user?.roles) setUserRoles(user.roles);
+          const savedRole = await getActiveRole();
+          if (savedRole && user?.roles?.includes(savedRole)) {
+            setActiveRoleState(savedRole);
+          } else if (user?.roles?.length) {
+            setActiveRoleState(user.roles[0]);
+          }
+        } catch {}
+      })();
       if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
         return;
       }
       loadEvents();
     }, [loadEvents]),
   );
+
+  async function handleSwitchRole(role: string) {
+    setActiveRoleState(role);
+    await setActiveRole(role);
+  }
 
   const today = useMemo(() => {
     const d = new Date();
@@ -223,7 +251,12 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Events" />
+        <AppHeader
+          onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+          unreadCount={unreadCount}
+          hasMultipleRoles={userRoles.length > 1}
+        />
+        <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
@@ -233,7 +266,12 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Events" />
+      <AppHeader
+        onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+        unreadCount={unreadCount}
+        hasMultipleRoles={userRoles.length > 1}
+      />
+      <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
 
       {/* Tab bar */}
       <View style={styles.tabBar}>

@@ -16,7 +16,9 @@ import Constants from 'expo-constants';
 import * as Calendar from 'expo-calendar';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { clearAuth, getUser, authFetch, User, getActiveRole, setActiveRole } from '../services/auth';
-import ScreenHeader from '../components/ScreenHeader';
+import { refreshBadgeCount } from '../services/notifications';
+import AppHeader from '../components/AppHeader';
+import RoleBar from '../components/RoleBar';
 
 interface MenuGridItem {
   label: string;
@@ -55,6 +57,8 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   const [myTeams, setMyTeams] = useState<ShareTeam[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [activeRole, setActiveRoleState] = useState<string>('');
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const lastLoadRef = React.useRef<number>(0);
   const STALE_MS = 30000; // 30 seconds
@@ -64,16 +68,17 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       const user = await getUser();
       setCurrentUser(user);
       if (user) {
+        if (user.roles) setUserRoles(user.roles);
         const saved = await getActiveRole();
         if (saved && user.roles?.includes(saved)) {
           setActiveRoleState(saved);
         } else {
-          // Default to first role
           const defaultRole = user.roles?.[0] || 'parent';
           setActiveRoleState(defaultRole);
           await setActiveRole(defaultRole);
         }
       }
+      refreshBadgeCount().then(c => setUnreadCount(c as number)).catch(() => {});
     })();
   }, []);
 
@@ -166,14 +171,13 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     },
   ];
 
-  const BROWSE_ITEMS: MenuGridItem[] = [
-    { label: 'Events', icon: 'calendar-outline', onPress: () => navigation.navigate('Events') },
-    { label: 'Teams', icon: 'search-outline', onPress: () => navigation.navigate('My Teams') },
-  ];
-
-  const SHOP_ITEMS: MenuGridItem[] = [
-    { label: 'Champions Locker', icon: 'trophy-outline', onPress: () => navigation.navigate('Shop') },
-    { label: 'Merch', icon: 'shirt-outline', onPress: () => navigation.navigate('Shop') },
+  const SHOP_LIST_ITEMS: MenuListItem[] = [
+    {
+      label: 'Champions Locker',
+      icon: 'cart-outline',
+      subtitle: 'Gear, merch, and more',
+      onPress: () => navigation.navigate('Shop'),
+    },
   ];
 
   async function handleCalendarSync() {
@@ -531,17 +535,26 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     );
   }
 
+  async function handleSwitchRole(role: string) {
+    setActiveRoleState(role);
+    await setActiveRole(role);
+  }
+
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Menu" />
+      <AppHeader
+        onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+        unreadCount={unreadCount}
+        hasMultipleRoles={userRoles.length > 1}
+      />
+      <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {renderListSection('SHOP', SHOP_LIST_ITEMS)}
         {renderShareSection()}
         {renderGridSection('MANAGE', MANAGE_ITEMS)}
-        {renderGridSection('BROWSE', BROWSE_ITEMS)}
-        {renderGridSection('SHOP', SHOP_ITEMS)}
         {renderListSection('YOUR ACCOUNT', ACCOUNT_ITEMS)}
         {renderListSection('SUPPORT', SUPPORT_ITEMS)}
         {renderListSection('LEGAL', LEGAL_ITEMS)}

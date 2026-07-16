@@ -23,7 +23,10 @@ import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, getToken, getActiveRole, User } from '../services/auth';
 import { API_URL } from '../constants/api';
 import { unfollowTeam, leaveTeam } from '../services/api';
-import ScreenHeader from '../components/ScreenHeader';
+import AppHeader from '../components/AppHeader';
+import RoleBar from '../components/RoleBar';
+import { refreshBadgeCount } from '../services/notifications';
+import { setActiveRole } from '../services/auth';
 
 interface Team {
   id: string;
@@ -51,6 +54,8 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const [joinCode, setJoinCode] = useState('');
   const [joiningByCode, setJoiningByCode] = useState(false);
   const [activeRoleState, setActiveRoleState] = useState<string>('');
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Use activeRole for role-gating instead of raw roles array
   const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRoleState);
@@ -60,8 +65,12 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const STALE_MS = 30000; // 30 seconds
 
   useEffect(() => {
-    getUser().then(u => setCurrentUser(u));
+    getUser().then(u => {
+      setCurrentUser(u);
+      if (u?.roles) setUserRoles(u.roles);
+    });
     getActiveRole().then(r => { if (r) setActiveRoleState(r); });
+    refreshBadgeCount().then(c => setUnreadCount(c as number)).catch(() => {});
   }, []);
 
   const fetchTeams = useCallback(async (isRefresh = false) => {
@@ -93,9 +102,13 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
-      // Re-read active role every time screen gains focus (role may have changed on Menu)
+      // Re-read active role every time screen gains focus (role may have changed)
       getActiveRole().then(r => { if (r) setActiveRoleState(r); });
-      getUser().then(u => setCurrentUser(u));
+      getUser().then(u => {
+        setCurrentUser(u);
+        if (u?.roles) setUserRoles(u.roles);
+      });
+      refreshBadgeCount().then(c => setUnreadCount(c as number)).catch(() => {});
       // Skip team fetch if loaded recently (pull-to-refresh always refetches)
       if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
         return;
@@ -432,13 +445,20 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     );
   }
 
+  async function handleSwitchRole(role: string) {
+    setActiveRoleState(role);
+    await setActiveRole(role);
+  }
+
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScreenHeader
-          title="My Teams"
-          rightAction={renderHeaderRight()}
+        <AppHeader
+          onNotificationPress={() => navigation.navigate('NotificationsInbox')}
+          unreadCount={unreadCount}
+          hasMultipleRoles={userRoles.length > 1}
         />
+        <RoleBar activeRole={activeRoleState} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
@@ -451,10 +471,18 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScreenHeader
-        title="My Teams"
-        rightAction={renderHeaderRight()}
+      <AppHeader
+        onNotificationPress={() => navigation.navigate('NotificationsInbox')}
+        unreadCount={unreadCount}
+        hasMultipleRoles={userRoles.length > 1}
       />
+      <RoleBar activeRole={activeRoleState} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
+
+      {/* Title row with create button */}
+      <View style={styles.titleRow}>
+        <Text style={styles.titleText}>My teams</Text>
+        {renderHeaderRight()}
+      </View>
 
       {/* Team code input — always visible above the list */}
       <View style={styles.teamCodeBar}>
@@ -533,12 +561,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  // Title row
+  titleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  titleText: {
+    fontSize: 20,
+    color: colors.text,
+    ...fonts.bold,
+  },
+
   // Header right button
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.white,
+    backgroundColor: colors.navy,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
@@ -546,7 +588,7 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: colors.white,
-    fontSize: 14,
+    fontSize: 13,
     ...fonts.semibold,
   },
 

@@ -17,6 +17,7 @@ import HomeScreen from '../screens/HomeScreen';
 import EventsScreen from '../screens/EventsScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
 import MyTeamsScreen from '../screens/MyTeamsScreen';
+import MyEventsScreen from '../screens/MyEventsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import MenuScreen from '../screens/MenuScreen';
 import CreateTeamScreen from '../screens/CreateTeamScreen';
@@ -36,11 +37,12 @@ const Stack = createNativeStackNavigator();
 const MenuStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// New 5-tab icon map: Home, My Teams, My Events, Find Events, Menu
 const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Home: { active: 'home', inactive: 'home-outline' },
-  Events: { active: 'calendar', inactive: 'calendar-outline' },
   'My Teams': { active: 'people', inactive: 'people-outline' },
-  Shop: { active: 'cart', inactive: 'cart-outline' },
+  'My Events': { active: 'calendar', inactive: 'calendar-outline' },
+  'Find Events': { active: 'search', inactive: 'search-outline' },
   Menu: { active: 'menu', inactive: 'menu-outline' },
 };
 
@@ -48,44 +50,22 @@ function MenuStackNavigator() {
   return (
     <MenuStack.Navigator screenOptions={{ headerShown: false }}>
       <MenuStack.Screen name="MenuHome" component={MenuScreen} />
-      <MenuStack.Screen
-        name="Scorekeeper"
-        component={ScorekeeperScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
-      <MenuStack.Screen
-        name="AccountSettings"
-        component={AccountSettingsScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
-      <MenuStack.Screen
-        name="NotificationSettings"
-        component={NotificationSettingsScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
-      <MenuStack.Screen
-        name="AdminRegistrations"
-        component={AdminRegistrationsScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
-      <MenuStack.Screen
-        name="ScoreGame"
-        component={ScoreGameScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
-      <MenuStack.Screen
-        name="DirectorGames"
-        component={DirectorGamesScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
+      <MenuStack.Screen name="Scorekeeper" component={ScorekeeperScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="AccountSettings" component={AccountSettingsScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="NotificationSettings" component={NotificationSettingsScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="AdminRegistrations" component={AdminRegistrationsScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="ScoreGame" component={ScoreGameScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="DirectorGames" component={DirectorGamesScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="Shop" component={ShopScreen} options={{ animation: 'slide_from_right' }} />
     </MenuStack.Navigator>
   );
 }
 
 // Stack navigators for each tab so detail screens keep the tab bar visible
 const HomeStackNav = createNativeStackNavigator();
-const EventsStackNav = createNativeStackNavigator();
 const MyTeamsStackNav = createNativeStackNavigator();
+const MyEventsStackNav = createNativeStackNavigator();
+const FindEventsStackNav = createNativeStackNavigator();
 
 function HomeStackNavigator() {
   return (
@@ -99,16 +79,6 @@ function HomeStackNavigator() {
   );
 }
 
-function EventsStackNavigator() {
-  return (
-    <EventsStackNav.Navigator screenOptions={{ headerShown: false }}>
-      <EventsStackNav.Screen name="EventsList" component={EventsScreen} />
-      <EventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
-      <EventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
-    </EventsStackNav.Navigator>
-  );
-}
-
 function MyTeamsStackNavigator() {
   return (
     <MyTeamsStackNav.Navigator screenOptions={{ headerShown: false }}>
@@ -118,6 +88,27 @@ function MyTeamsStackNavigator() {
       <MyTeamsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
     </MyTeamsStackNav.Navigator>
+  );
+}
+
+function MyEventsStackNavigator() {
+  return (
+    <MyEventsStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <MyEventsStackNav.Screen name="MyEventsList" component={MyEventsScreen} />
+      <MyEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <MyEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+      <MyEventsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
+    </MyEventsStackNav.Navigator>
+  );
+}
+
+function FindEventsStackNavigator() {
+  return (
+    <FindEventsStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <FindEventsStackNav.Screen name="EventsList" component={EventsScreen} />
+      <FindEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <FindEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+    </FindEventsStackNav.Navigator>
   );
 }
 
@@ -145,9 +136,9 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeStackNavigator} />
-      <Tab.Screen name="Events" component={EventsStackNavigator} />
       <Tab.Screen name="My Teams" component={MyTeamsStackNavigator} />
-      <Tab.Screen name="Shop" component={ShopScreen} />
+      <Tab.Screen name="My Events" component={MyEventsStackNavigator} />
+      <Tab.Screen name="Find Events" component={FindEventsStackNavigator} />
       <Tab.Screen
         name="Menu"
         component={MenuStackNavigator}
@@ -179,23 +170,19 @@ export default function AppNavigator() {
         if (token) {
           setInitialRoute('Main');
           registerForPushNotifications();
-          // Set initial badge count from server
           refreshBadgeCount();
         }
       } catch {}
       setChecking(false);
     })();
 
-    // When a push comes in while app is open, refresh badge count
     const sub = addNotificationListener(() => {
       refreshBadgeCount();
     });
 
-    // Handle push notification taps
     const responseSub = addResponseListener((response: any) => {
       const data = response.notification?.request?.content?.data;
       if (data?.type === 'meeting_reward') {
-        // Navigate to the reward reveal screen
         navigationRef.current?.navigate('RewardReveal' as never);
       }
     });
@@ -261,7 +248,7 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
   },
