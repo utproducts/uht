@@ -8,9 +8,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Share,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getUser, authFetch, getActiveRole, setActiveRole, User } from '../services/auth';
 import { getFollowedTeams } from '../services/api';
@@ -30,6 +33,7 @@ interface MyEvent {
   teamNames: string[];
   paymentStatus: 'paid' | 'deposit' | 'due' | 'unknown';
   divisionName?: string;
+  regIds: string[];
 }
 
 function formatDateRange(startDate: string, endDate: string): string {
@@ -72,6 +76,7 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
 
       const eventMap = new Map<string, MyEvent>();
       const eventTeamNames = new Map<string, Set<string>>();
+      const eventRegIds = new Map<string, Set<string>>();
 
       // Process owned teams
       const myTeamsJson = myTeamsRes as { success: boolean; data?: any[] };
@@ -103,10 +108,15 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
                 teamNames: [],
                 paymentStatus,
                 divisionName: re.division_name,
+                regIds: [],
               });
               eventTeamNames.set(re.event_id, new Set());
+              eventRegIds.set(re.event_id, new Set());
             }
             if (teamName) eventTeamNames.get(re.event_id)!.add(teamName);
+            // Track registration IDs for payment links
+            const regId = re.reg_id || re.id;
+            if (regId) eventRegIds.get(re.event_id)!.add(String(regId));
           }
         }
       }
@@ -129,18 +139,22 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
               logo_url: re.logo_url,
               teamNames: [],
               paymentStatus: 'unknown',
+              regIds: [],
             });
             eventTeamNames.set(re.event_id, new Set());
+            eventRegIds.set(re.event_id, new Set());
             if (teamName) eventTeamNames.get(re.event_id)!.add(teamName);
           }
         }
       }
 
-      // Merge team names
+      // Merge team names and reg IDs
       const allEvents: MyEvent[] = [];
       for (const [eventId, event] of eventMap) {
         const names = eventTeamNames.get(eventId);
         event.teamNames = names ? Array.from(names) : [];
+        const rIds = eventRegIds.get(eventId);
+        event.regIds = rIds ? Array.from(rIds) : [];
         allEvents.push(event);
       }
 
@@ -191,35 +205,81 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
     );
   }
 
+  async function handleSharePaymentLink(item: MyEvent) {
+    if (!item.regIds.length) return;
+    const payUrl = `https://ultimatetournaments.com/pay?reg=${item.regIds.join(',')}`;
+    try {
+      await Share.share({
+        message: `Pay for ${item.teamNames.join(', ')} at ${item.name}:\n${payUrl}`,
+        url: payUrl,
+      });
+    } catch {
+      // Fallback: copy to clipboard
+      await Clipboard.setStringAsync(payUrl);
+      Alert.alert('Copied!', 'Payment link copied to clipboard.');
+    }
+  }
+
+  async function handleCopyPaymentLink(item: MyEvent) {
+    if (!item.regIds.length) return;
+    const payUrl = `https://ultimatetournaments.com/pay?reg=${item.regIds.join(',')}`;
+    await Clipboard.setStringAsync(payUrl);
+    Alert.alert('Copied!', 'Payment link copied to clipboard.');
+  }
+
+  const isPaymentRole = ['coach', 'manager', 'org_admin', 'admin'].includes(activeRole);
+
   function renderEvent({ item }: { item: MyEvent }) {
+    const showPayLink = isPaymentRole && item.regIds.length > 0 && (item.paymentStatus === 'due' || item.paymentStatus === 'deposit');
     return (
-      <TouchableOpacity
-        style={styles.eventRow}
-        onPress={() => navigation.navigate('EventDetail', { eventId: item.id, slug: item.slug })}
-        activeOpacity={0.7}
-      >
-        <View style={styles.eventLogo}>
-          {item.logo_url ? (
-            <Image source={{ uri: item.logo_url }} style={styles.eventLogoImg} />
-          ) : (
-            <Ionicons name="trophy" size={20} color="#854F0B" />
-          )}
-        </View>
-        <View style={styles.eventInfo}>
-          <Text style={styles.eventName} numberOfLines={1}>{item.name}</Text>
-          <Text style={styles.eventDate}>
-            {formatDateRange(item.start_date, item.end_date)}
-            {item.city ? ` · ${item.city}, ${item.state || ''}` : ''}
-          </Text>
-          {item.teamNames.length > 0 && (
-            <Text style={styles.eventTeams} numberOfLines={1}>
-              {item.teamNames.join(', ')}
+      <View style={styles.eventCard}>
+        <TouchableOpacity
+          style={styles.eventRow}
+          onPress={() => navigation.navigate('EventDetail', { eventId: item.id, slug: item.slug })}
+          activeOpacity={0.7}
+        >
+          <View style={styles.eventLogo}>
+            {item.logo_url ? (
+              <Image source={{ uri: item.logo_url }} style={styles.eventLogoImg} />
+            ) : (
+              <Ionicons name="trophy" size={20} color="#854F0B" />
+            )}
+          </View>
+          <View style={styles.eventInfo}>
+            <Text style={styles.eventName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.eventDate}>
+              {formatDateRange(item.start_date, item.end_date)}
+              {item.city ? ` · ${item.city}, ${item.state || ''}` : ''}
             </Text>
-          )}
-        </View>
-        {renderPaymentBadge(item.paymentStatus)}
-        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={{ marginLeft: 6 }} />
-      </TouchableOpacity>
+            {item.teamNames.length > 0 && (
+              <Text style={styles.eventTeams} numberOfLines={1}>
+                {item.teamNames.join(', ')}
+              </Text>
+            )}
+          </View>
+          {renderPaymentBadge(item.paymentStatus)}
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={{ marginLeft: 6 }} />
+        </TouchableOpacity>
+        {showPayLink && (
+          <View style={styles.payLinkRow}>
+            <TouchableOpacity
+              style={styles.payLinkBtn}
+              onPress={() => handleCopyPaymentLink(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="copy-outline" size={14} color={colors.navy} />
+              <Text style={styles.payLinkText}>Copy payment link</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.payShareBtn}
+              onPress={() => handleSharePaymentLink(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="share-outline" size={14} color={colors.navy} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     );
   }
 
@@ -295,15 +355,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: 20,
   },
-  eventRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  eventCard: {
     backgroundColor: colors.card,
     borderRadius: radii.sm,
-    padding: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
   },
   eventLogo: {
     width: 40,
@@ -388,5 +451,28 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 15,
     fontWeight: '600',
+  },
+  payLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  payLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  payLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.navy,
+  },
+  payShareBtn: {
+    padding: 6,
   },
 });

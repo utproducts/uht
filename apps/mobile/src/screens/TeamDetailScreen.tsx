@@ -15,8 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 // Logo upload uses React Native's built-in FormData with { uri, type, name }
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { authFetch, getToken } from '../services/auth';
+import { authFetch, getToken, getActiveRole } from '../services/auth';
 import { API_URL } from '../constants/api';
+import { unfollowTeam, leaveTeam } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface TeamDetail {
@@ -31,6 +32,7 @@ interface TeamDetail {
   head_coach_email?: string;
   head_coach_phone?: string;
   invite_code?: string;
+  parent_invite_code?: string;
   roster_share_token?: string;
   logo_url?: string;
 }
@@ -57,8 +59,11 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   const [events, setEvents] = useState<TeamEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [activeRole, setActiveRoleState] = useState<string>('');
   const scrollViewRef = useRef<ScrollView>(null);
   const rosterYRef = useRef<number>(0);
+
+  const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRole);
 
   const loadTeam = useCallback(async () => {
     setLoading(true);
@@ -90,6 +95,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   useFocusEffect(
     useCallback(() => {
       loadTeam();
+      getActiveRole().then(r => { if (r) setActiveRoleState(r); });
     }, [loadTeam]),
   );
 
@@ -112,12 +118,45 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   }
 
   async function shareInviteFamilies() {
-    if (!team?.invite_code) return;
+    const familyCode = team?.parent_invite_code || team?.invite_code;
+    if (!familyCode) return;
     try {
       await Share.share({
-        message: `Follow ${team.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${team.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the team code when prompted: ${team.invite_code}\n\nYou'll see all upcoming events, schedules, and scores!`,
+        message: `Follow ${team!.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
       });
     } catch {}
+  }
+
+  function handleLeaveTeam() {
+    const actionLabel = isCoach ? 'Leave Team' : 'Unfollow Team';
+    const confirmLabel = isCoach ? 'Leave' : 'Unfollow';
+    const prompt = isCoach
+      ? `Are you sure you want to leave ${team?.name || teamName}? You will lose coach access to this team.`
+      : `Are you sure you want to unfollow ${team?.name || teamName}?`;
+
+    Alert.alert(actionLabel, prompt, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: confirmLabel,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (isCoach) {
+              const result = await leaveTeam(teamId);
+              if (result.success === false) {
+                Alert.alert('Cannot Leave', result.error || 'Unable to leave this team.');
+                return;
+              }
+            } else {
+              await unfollowTeam(teamId);
+            }
+            navigation.goBack();
+          } catch {
+            Alert.alert('Error', `Failed to ${isCoach ? 'leave' : 'unfollow'} team. Please try again.`);
+          }
+        },
+      },
+    ]);
   }
 
   async function handleLogoUpload() {
@@ -249,19 +288,25 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
 
         {/* Quick Actions */}
         <View style={styles.actionsRow}>
-          {team?.invite_code ? (
+          {isCoach && team?.invite_code ? (
             <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteCoaches}>
-              <Ionicons name="clipboard-outline" size={18} color={colors.navy} />
+              <Ionicons name="person-add-outline" size={18} color={colors.navy} />
               <Text style={styles.actionBtnText}>Invite Coaches</Text>
             </TouchableOpacity>
           ) : null}
-          {team?.invite_code ? (
+          {(team?.parent_invite_code || team?.invite_code) ? (
             <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteFamilies}>
               <Ionicons name="people-outline" size={18} color={colors.navy} />
               <Text style={styles.actionBtnText}>Invite Families</Text>
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {/* Leave / Unfollow */}
+        <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.7} onPress={handleLeaveTeam}>
+          <Ionicons name="exit-outline" size={18} color="#A32D2D" />
+          <Text style={styles.leaveBtnText}>{isCoach ? 'Leave Team' : 'Unfollow Team'}</Text>
+        </TouchableOpacity>
 
         {/* Roster */}
         <View style={styles.section} onLayout={(e) => { rosterYRef.current = e.nativeEvent.layout.y; }}>
@@ -622,6 +667,23 @@ const styles = StyleSheet.create({
   addPlayersBtnText: {
     fontSize: 14,
     color: colors.white,
+    ...fonts.semibold,
+  },
+  leaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5F5',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#FCEBEB',
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  leaveBtnText: {
+    fontSize: 14,
+    color: '#A32D2D',
     ...fonts.semibold,
   },
 });

@@ -250,8 +250,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   }
 
   function renderTeamCard({ item }: { item: Team }) {
-    const familyCode = item.parent_invite_code || item.invite_code;
-
     return (
       <View style={styles.teamRow}>
         {/* Main row — tap to view team detail */}
@@ -310,59 +308,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </TouchableOpacity>
 
-        {/* Quick actions row */}
-        <View style={styles.actionRow}>
-          {isCoach && (
-            <TouchableOpacity
-              style={styles.actionBtn}
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name, showRoster: true } as never)}
-            >
-              <Ionicons name="people-outline" size={15} color={colors.navy} />
-              <Text style={styles.actionBtnText}>Roster</Text>
-            </TouchableOpacity>
-          )}
-          {isCoach && item.invite_code ? (
-            <TouchableOpacity
-              style={styles.actionBtn}
-              activeOpacity={0.7}
-              onPress={async () => {
-                try {
-                  await Share.share({
-                    message: `You're invited to coach ${item.name} on Ultimate Hockey Tournaments!\n\nCoach code: ${item.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the coach code when prompted: ${item.invite_code}`,
-                  });
-                } catch {}
-              }}
-            >
-              <Ionicons name="person-add-outline" size={15} color={colors.navy} />
-              <Text style={styles.actionBtnText}>Invite Coaches</Text>
-            </TouchableOpacity>
-          ) : null}
-          {familyCode ? (
-            <TouchableOpacity
-              style={styles.actionBtn}
-              activeOpacity={0.7}
-              onPress={async () => {
-                try {
-                  await Share.share({
-                    message: `Follow ${item.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
-                  });
-                } catch {}
-              }}
-            >
-              <Ionicons name="share-outline" size={15} color={colors.navy} />
-              <Text style={styles.actionBtnText}>{isParent ? 'Invite Family' : 'Invite Parents'}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity
-            style={styles.actionBtn}
-            activeOpacity={0.7}
-            onPress={() => handleRemoveTeam(item)}
-          >
-            <Ionicons name="close-circle-outline" size={15} color="#8e919e" />
-            <Text style={[styles.actionBtnText, { color: '#8e919e' }]}>{isCoach ? 'Leave' : 'Unfollow'}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Actions moved to TeamDetailScreen — clean card view */}
       </View>
     );
   }

@@ -874,6 +874,50 @@ emailRoutes.post('/webhooks/sendgrid', async (c) => {
   return c.json({ success: true });
 });
 
+// ==================
+// Unsubscribe — no auth required (clicked from email links)
+// ==================
+emailRoutes.get('/unsubscribe', async (c) => {
+  const email = c.req.query('email');
+  if (!email) return c.json({ success: false, error: 'Email required' }, 400);
+
+  const db = c.env.DB;
+  const normalized = email.toLowerCase().trim();
+
+  // Check current subscription status
+  const contact = await db.prepare('SELECT id, is_subscribed_email FROM contacts WHERE LOWER(email) = ?').bind(normalized).first<any>();
+  const elc = await db.prepare('SELECT id, is_active FROM email_list_contacts WHERE LOWER(email) = ?').bind(normalized).first<any>();
+
+  return c.json({
+    success: true,
+    data: {
+      email: normalized,
+      found: !!(contact || elc),
+      already_unsubscribed: (contact && contact.is_subscribed_email === 0) || (elc && elc.is_active === 0),
+    },
+  });
+});
+
+emailRoutes.post('/unsubscribe', async (c) => {
+  const body = await c.req.json<{ email: string }>();
+  if (!body.email) return c.json({ success: false, error: 'Email required' }, 400);
+
+  const db = c.env.DB;
+  const normalized = body.email.toLowerCase().trim();
+
+  // Unsubscribe from contacts table
+  await db.prepare(
+    "UPDATE contacts SET is_subscribed_email = 0, updated_at = datetime('now') WHERE LOWER(email) = ?"
+  ).bind(normalized).run();
+
+  // Unsubscribe from email_list_contacts table
+  await db.prepare(
+    'UPDATE email_list_contacts SET is_active = 0 WHERE LOWER(email) = ?'
+  ).bind(normalized).run();
+
+  return c.json({ success: true, message: 'Successfully unsubscribed' });
+});
+
 // ==========================================
 // HELPER FUNCTIONS
 // ==========================================
@@ -936,6 +980,7 @@ function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionI
         '' as event_name
       FROM contacts c
       WHERE c.source = 'legacy_team' AND c.email IS NOT NULL AND c.email != ''
+        AND c.is_subscribed_email = 1
       ORDER BY c.last_name, c.first_name
     `;
     return { query, params: [] };
@@ -1093,7 +1138,8 @@ const EMAIL_FOOTER = `
     <a href="https://ultimatetournaments.com" style="color:#003e79;">ultimatetournaments.com</a>
   </p>
   <p style="color:#aeaeb2;font-size:11px;margin:0;">
-    You received this email because you are part of our tournament community.
+    You received this email because you are part of our tournament community.<br/>
+    <a href="https://ultimatetournaments.com/unsubscribe" style="color:#aeaeb2;text-decoration:underline;">Unsubscribe</a>
   </p>
 </div>`;
 

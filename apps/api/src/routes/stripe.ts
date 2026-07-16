@@ -29,6 +29,83 @@ async function stripeGet(path: string, secretKey: string) {
 }
 
 // ==================
+// PAYMENT INFO LOOKUP (no auth — accessed via shared payment links)
+// ==================
+stripeRoutes.get('/payment-info', async (c) => {
+  const idsParam = c.req.query('ids');
+  if (!idsParam) return c.json({ success: false, error: 'ids parameter required' }, 400);
+
+  const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean);
+  if (ids.length === 0 || ids.length > 20) {
+    return c.json({ success: false, error: 'Provide 1-20 registration IDs' }, 400);
+  }
+
+  const db = c.env.DB;
+  const registrations: any[] = [];
+
+  for (const regId of ids) {
+    // Try event_registrations first
+    let reg = await db.prepare(`
+      SELECT er.id, er.team_id, er.event_id, er.status, er.payment_status,
+             er.event_division_id, er.age_group,
+             e.name as event_name, e.slug, e.city, e.state, e.start_date, e.end_date,
+             e.price_cents as event_price_cents, e.deposit_cents,
+             ed.price_cents as division_price_cents, ed.age_group as div_age_group,
+             t.name as team_name, t.head_coach_name, t.head_coach_email
+      FROM event_registrations er
+      JOIN events e ON e.id = er.event_id
+      LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+      LEFT JOIN teams t ON t.id = er.team_id
+      WHERE er.id = ?
+    `).bind(regId).first<any>();
+
+    if (!reg) {
+      reg = await db.prepare(`
+        SELECT r.id, r.team_id, r.event_id, r.status, r.payment_status,
+               r.event_division_id, r.amount_cents,
+               e.name as event_name, e.slug, e.city, e.state, e.start_date, e.end_date,
+               e.price_cents as event_price_cents, e.deposit_cents,
+               ed.price_cents as division_price_cents, ed.age_group as div_age_group,
+               t.name as team_name, t.head_coach_name, t.head_coach_email
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+        LEFT JOIN teams t ON t.id = r.team_id
+        WHERE r.id = ?
+      `).bind(regId).first<any>();
+    }
+
+    if (!reg) continue;
+
+    const priceCents = reg.division_price_cents || reg.amount_cents || reg.event_price_cents || 0;
+    const depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
+
+    registrations.push({
+      id: reg.id,
+      team_name: reg.team_name || 'Unknown Team',
+      age_group: reg.div_age_group || reg.age_group || '',
+      event_name: reg.event_name,
+      event_slug: reg.slug,
+      event_city: reg.city,
+      event_state: reg.state,
+      start_date: reg.start_date,
+      end_date: reg.end_date,
+      status: reg.status,
+      payment_status: reg.payment_status,
+      price_cents: priceCents,
+      deposit_cents: depositCents,
+      already_paid: reg.payment_status === 'paid',
+    });
+  }
+
+  if (registrations.length === 0) {
+    return c.json({ success: false, error: 'No registrations found' }, 404);
+  }
+
+  return c.json({ success: true, data: { registrations } });
+});
+
+// ==================
 // CREATE PAYMENT INTENT (for embedded Stripe Elements)
 // ==================
 const paymentIntentSchema = z.object({
