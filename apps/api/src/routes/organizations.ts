@@ -338,6 +338,25 @@ organizationRoutes.post('/requests', async (c) => {
     return c.json({ error: 'Email is required' }, 400);
   }
 
+  // Auto-create table if it doesn't exist
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS organization_requests (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      city TEXT,
+      state TEXT,
+      requested_by_email TEXT NOT NULL,
+      requested_by_name TEXT,
+      requested_by_user_id TEXT,
+      status TEXT DEFAULT 'pending',
+      admin_notes TEXT,
+      created_org_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      reviewed_at TEXT,
+      reviewed_by TEXT
+    )
+  `).run();
+
   const id = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
@@ -360,6 +379,18 @@ organizationRoutes.post('/requests', async (c) => {
 // ==================
 organizationRoutes.get('/admin/requests', async (c) => {
   const db = c.env.DB;
+
+  // Auto-create table if it doesn't exist
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS organization_requests (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, city TEXT, state TEXT,
+        requested_by_email TEXT NOT NULL, requested_by_name TEXT, requested_by_user_id TEXT,
+        status TEXT DEFAULT 'pending', admin_notes TEXT, created_org_id TEXT,
+        created_at TEXT DEFAULT (datetime('now')), reviewed_at TEXT, reviewed_by TEXT
+      )
+    `).run();
+  } catch (_) {}
 
   const result = await db.prepare(`
     SELECT * FROM organization_requests ORDER BY created_at DESC

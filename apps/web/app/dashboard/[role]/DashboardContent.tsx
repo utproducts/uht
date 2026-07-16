@@ -684,7 +684,7 @@ function CoachDash() {
                                     <p className="text-[11px] text-[#6e6e73] mb-1">{evt.hotel_rate}</p>
                                   )}
                                   {evt.hotel_price_per_night && !evt.hotel_rate && (
-                                    <p className="text-[11px] text-[#6e6e73] mb-1">${evt.hotel_price_per_night}/night</p>
+                                    <p className="text-[11px] text-[#6e6e73] mb-1">${Math.round(evt.hotel_price_per_night / 100)}/night</p>
                                   )}
                                   {evt.hotel_booking_code && (
                                     <p className="text-[11px] text-[#6e6e73] mb-1">Booking Code: <strong>{evt.hotel_booking_code}</strong></p>

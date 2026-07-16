@@ -20,7 +20,7 @@ interface Rate {
 }
 
 const AGE_GROUPS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', '16U', '18U', 'High School', 'Adult'];
-const CURRENT_SEASON = '2025/2026';
+const CURRENT_SEASON = '2026/2027';
 
 // ──────────────────────────────────────
 // STATUS BADGES
@@ -330,8 +330,8 @@ export default function RefereesPage() {
                 <div>
                   <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1">Season</label>
                   <select value={addRateSeason} onChange={e => setAddRateSeason(e.target.value)} className={inputCls}>
-                    <option value="2025/2026">2025/2026</option>
-                    <option value="2024/2025">2024/2025</option>
+                    <option value="2026/2027">2026/2027</option>
+                    <option value="2027/2028">2027/2028</option>
                   </select>
                 </div>
                 <button onClick={handleAddRate} disabled={!addRateDollars || savingRate} className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-lg text-sm transition disabled:opacity-50 h-[38px]">

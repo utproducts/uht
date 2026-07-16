@@ -159,12 +159,18 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
       ed.age_group as division_age_group, ed.division_level,
       u.first_name as registered_by_first, u.last_name as registered_by_last, u.email as registered_by_email, u.phone as registered_by_phone,
       e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
+      h1.hotel_name as hotel_choice_1_name, h1.id as hotel_choice_1_id,
+      h2.hotel_name as hotel_choice_2_name, h2.id as hotel_choice_2_id,
+      h3.hotel_name as hotel_choice_3_name, h3.id as hotel_choice_3_id,
       'normalized' as _source
     FROM registrations r
     JOIN teams t ON t.id = r.team_id
     JOIN event_divisions ed ON ed.id = r.event_division_id
     JOIN users u ON u.id = r.registered_by
     JOIN events e ON e.id = r.event_id
+    LEFT JOIN event_hotels h1 ON h1.id = r.hotel_choice_1
+    LEFT JOIN event_hotels h2 ON h2.id = r.hotel_choice_2
+    LEFT JOIN event_hotels h3 ON h3.id = r.hotel_choice_3
     WHERE 1=1
   `;
   const p1: string[] = [];
@@ -190,11 +196,17 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
       er.manager_first_name as registered_by_first, er.manager_last_name as registered_by_last,
       er.email1 as registered_by_email, er.phone as registered_by_phone,
       e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
+      ch1.hotel_name as hotel_choice_1_name, ch1.id as hotel_choice_1_id,
+      ch2.hotel_name as hotel_choice_2_name, ch2.id as hotel_choice_2_id,
+      ch3.hotel_name as hotel_choice_3_name, ch3.id as hotel_choice_3_id,
       'consumer' as _source
     FROM event_registrations er
     LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
     LEFT JOIN teams ct ON ct.id = er.team_id
     JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_hotels ch1 ON ch1.id = er.hotel_choice_1
+    LEFT JOIN event_hotels ch2 ON ch2.id = er.hotel_choice_2
+    LEFT JOIN event_hotels ch3 ON ch3.id = er.hotel_choice_3
     WHERE 1=1
   `;
   const p2: string[] = [];
@@ -379,23 +391,42 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
   // For consumer registrations, build a pseudo-team object from the registration data
   let team: any = null;
   if (isConsumer) {
+    // Try to get team state from linked team if team_id exists
+    let teamState: string | null = null;
+    let teamCity: string | null = null;
+    let coachPhone: string | null = null;
+    if (reg.team_id) {
+      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone FROM teams WHERE id = ?')
+        .bind(reg.team_id).first<any>();
+      if (linkedTeam) {
+        teamState = linkedTeam.state;
+        teamCity = linkedTeam.city;
+        coachPhone = linkedTeam.head_coach_phone;
+      }
+    }
     team = {
       name: reg.team_name,
       age_group: reg.age_group,
-      city: null,
-      state: null,
+      city: teamCity,
+      state: teamState,
       head_coach_name: [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ') || null,
       head_coach_email: reg.email1,
+      head_coach_phone: coachPhone || reg.phone || null,
     };
   } else {
     team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone FROM teams WHERE id = ?')
       .bind(reg.team_id).first<any>();
   }
 
-  // Non-local teams require hotel selection (skip for consumer regs without location data)
-  if (!isConsumer) {
+  // Check if event has hotels configured
+  const eventHotels = await db.prepare('SELECT COUNT(*) as cnt FROM event_hotels WHERE event_id = ?')
+    .bind(reg.event_id).first<any>();
+  const hasHotels = eventHotels && eventHotels.cnt > 0;
+
+  // Non-local teams require hotel selection (applies to all registration types)
+  if (hasHotels && !body.hotelId) {
     const isLocal = team && event && team.state && event.state && team.state.toUpperCase() === event.state.toUpperCase();
-    if (!isLocal && !body.hotelId) {
+    if (!isLocal) {
       return c.json({ success: false, error: 'Hotel selection required for non-local teams', requiresHotel: true }, 400);
     }
   }
@@ -463,6 +494,10 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         } else if (reg.paid_cents && reg.paid_cents > 0) {
           paymentStatus = 'partial';
         }
+      } else {
+        // Consumer registrations use payment_status field
+        if (reg.payment_status === 'paid') paymentStatus = 'paid';
+        else if (reg.payment_status === 'partial') paymentStatus = 'partial';
       }
 
       // Fetch admin-customized template overrides from DB

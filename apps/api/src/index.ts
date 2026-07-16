@@ -962,6 +962,19 @@ app.get('/api/assets/team-logos/:filename', async (c) => {
   return new Response(object.body, { headers });
 });
 
+// Serve videos from R2
+app.get('/api/assets/videos/:filename', async (c) => {
+  const filename = c.req.param('filename');
+  const object = await c.env.STORAGE.get(`videos/${filename}`);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'video/mp4');
+  headers.set('Cache-Control', 'public, max-age=31536000');
+  headers.set('Accept-Ranges', 'bytes');
+  return new Response(object.body, { headers });
+});
+
 // Serve org logos from R2
 app.get('/api/assets/org-logos/:filename', async (c) => {
   const filename = c.req.param('filename');

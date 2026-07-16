@@ -1022,7 +1022,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
               className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
               <option value="">Not assigned</option>
               {eventHotels.map(h => (
-                <option key={h.id} value={h.id}>{h.hotel_name}{h.price_per_night ? ` ($${h.price_per_night}/night)` : ''}</option>
+                <option key={h.id} value={h.id}>{h.hotel_name}{h.price_per_night ? ` ($${Math.round(h.price_per_night / 100)}/night)` : ''}</option>
               ))}
             </select>
           </div>
@@ -1149,9 +1149,19 @@ export default function AdminRegistrationsPage() {
       });
       const json = await res.json() as any;
       if (!json.success && json.requiresHotel) {
-        alert('This team is non-local and requires a hotel assignment. Please add hotels to this event first (Events → Hotels tab).');
+        // Open hotel picker for this registration
+        const reg = registrations.find(r => r.id === regId);
+        if (reg) {
+          await loadEventContext(reg.event_id);
+          setHotelModalReg(reg);
+        } else {
+          alert('This team is non-local and requires a hotel assignment.');
+        }
         setApproving(false);
         return;
+      }
+      if (json.success && json.email_sent === false) {
+        alert('Team approved, but the acceptance email could not be sent. Please verify the contact email.');
       }
       setHotelModalReg(null);
       loadAllRegistrations();
@@ -1492,7 +1502,7 @@ export default function AdminRegistrationsPage() {
                         </div>
                         {h.address && <p className="text-xs text-[#86868b] mt-0.5">{h.address}{h.city ? `, ${h.city}` : ''}{h.state ? `, ${h.state}` : ''}</p>}
                         <div className="flex gap-3 mt-1">
-                          {h.price_per_night && <span className="text-xs font-semibold text-[#003e79]">${h.price_per_night}/night</span>}
+                          {h.price_per_night && <span className="text-xs font-semibold text-[#003e79]">${Math.round(h.price_per_night / 100)}/night</span>}
                           {h.booking_code && <span className="text-xs text-[#86868b]">Code: {h.booking_code}</span>}
                         </div>
                       </div>

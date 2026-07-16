@@ -199,7 +199,17 @@ export default function AdminRegistrationsScreen({ navigation }: { navigation: a
             return e;
           }));
         }
-        Alert.alert('Approved', 'Team has been approved and notified via email.');
+        const emailMsg = json.email_sent
+          ? 'Team has been approved and notified via email.'
+          : 'Team has been approved. Note: acceptance email could not be sent — please verify the contact email.';
+        Alert.alert('Approved', emailMsg);
+      } else if (json.requiresHotel) {
+        // API says hotel selection required — open hotel picker
+        setApprovingRegId(regId);
+        if (selectedEvent) await loadHotels(selectedEvent.id);
+        setHotelModal(true);
+        setProcessing(null);
+        return;
       } else {
         Alert.alert('Error', json.error || 'Failed to approve registration');
       }
