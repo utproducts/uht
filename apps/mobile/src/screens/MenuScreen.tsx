@@ -15,7 +15,7 @@ import { CommonActions, useFocusEffect } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as Calendar from 'expo-calendar';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { clearAuth, getUser, authFetch, User, getActiveRole, setActiveRole } from '../services/auth';
+import { clearAuth, getUser, authFetch, User, getActiveRole, setActiveRole, refreshUser } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
@@ -65,7 +65,9 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 
   useEffect(() => {
     (async () => {
-      const user = await getUser();
+      // Refresh user from API to get latest roles, fall back to stored
+      const freshUser = await refreshUser().catch(() => null);
+      const user = freshUser || await getUser();
       setCurrentUser(user);
       if (user) {
         if (user.roles) setUserRoles(user.roles);

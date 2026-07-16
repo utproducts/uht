@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, getActiveRole, setActiveRole, User } from '../services/auth';
+import { getUser, getActiveRole, setActiveRole, refreshUser, User } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
@@ -32,11 +32,15 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
-      const [user, badgeCount] = await Promise.all([
-        getUser(),
+      // Always try to refresh user from API to get latest roles
+      const [freshUser, badgeCount] = await Promise.all([
+        refreshUser().catch(() => null),
         refreshBadgeCount().catch(() => 0),
       ]);
       setUnreadCount(badgeCount as number);
+
+      // Use fresh API data if available, fall back to stored
+      const user = freshUser || await getUser();
 
       if (user?.name) setUserName(user.name);
       if (user?.roles) setUserRoles(user.roles);

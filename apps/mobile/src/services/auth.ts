@@ -71,6 +71,35 @@ export async function clearAuth(): Promise<void> {
   await SecureStore.deleteItemAsync(ACTIVE_ROLE_KEY);
 }
 
+/**
+ * Refresh user data from the API (fetches /auth/me) and update SecureStore.
+ * Returns the updated User or null if not authenticated.
+ */
+export async function refreshUser(): Promise<User | null> {
+  try {
+    const token = await getToken();
+    if (!token) return null;
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.success || !json.data) return null;
+    const d = json.data;
+    const user: User = {
+      id: d.id,
+      name: `${d.first_name || ''} ${d.last_name || ''}`.trim() || d.email,
+      email: d.email,
+      phone: d.phone || '',
+      roles: d.roles || [],
+    };
+    await setUser(user);
+    return user;
+  } catch {
+    return null;
+  }
+}
+
 export async function signup(data: {
   name: string;
   email: string;

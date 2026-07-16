@@ -15,7 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, authFetch, getActiveRole, setActiveRole, User } from '../services/auth';
+import { getUser, authFetch, getActiveRole, setActiveRole, refreshUser, User } from '../services/auth';
 import { getFollowedTeams } from '../services/api';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
@@ -57,13 +57,14 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
   const loadData = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [user, myTeamsRes, followedTeams, badgeCount] = await Promise.all([
-        getUser(),
+      const [freshUser, myTeamsRes, followedTeams, badgeCount] = await Promise.all([
+        refreshUser().catch(() => null),
         authFetch('/api/teams/my-teams').then(r => r.json()).catch(() => ({ success: false })),
         getFollowedTeams().catch(() => []),
         refreshBadgeCount().catch(() => 0),
       ]);
 
+      const user = freshUser || await getUser();
       setUnreadCount(badgeCount as number);
       if (user?.roles) setUserRoles(user.roles);
 

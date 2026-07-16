@@ -26,7 +26,7 @@ import { unfollowTeam, leaveTeam } from '../services/api';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
 import { refreshBadgeCount } from '../services/notifications';
-import { setActiveRole } from '../services/auth';
+import { setActiveRole, refreshUser } from '../services/auth';
 
 interface Team {
   id: string;
@@ -65,10 +65,11 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
   const STALE_MS = 30000; // 30 seconds
 
   useEffect(() => {
-    getUser().then(u => {
+    // Refresh user from API for latest roles, fall back to stored
+    refreshUser().then(u => u || getUser()).then(u => {
       setCurrentUser(u);
       if (u?.roles) setUserRoles(u.roles);
-    });
+    }).catch(() => {});
     getActiveRole().then(r => { if (r) setActiveRoleState(r); });
     refreshBadgeCount().then(c => setUnreadCount(c as number)).catch(() => {});
   }, []);
@@ -104,10 +105,11 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     useCallback(() => {
       // Re-read active role every time screen gains focus (role may have changed)
       getActiveRole().then(r => { if (r) setActiveRoleState(r); });
-      getUser().then(u => {
+      // Refresh user from API for latest roles
+      refreshUser().then(u => u || getUser()).then(u => {
         setCurrentUser(u);
         if (u?.roles) setUserRoles(u.roles);
-      });
+      }).catch(() => {});
       refreshBadgeCount().then(c => setUnreadCount(c as number)).catch(() => {});
       // Skip team fetch if loaded recently (pull-to-refresh always refetches)
       if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {

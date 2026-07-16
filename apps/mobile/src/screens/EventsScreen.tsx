@@ -15,7 +15,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, getActiveRole, setActiveRole } from '../services/auth';
+import { getUser, getActiveRole, setActiveRole, refreshUser } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
@@ -122,13 +122,14 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
-      // Load user/role data
+      // Load user/role data — refresh from API for latest roles
       (async () => {
         try {
-          const [user, badgeCount] = await Promise.all([
-            getUser(),
+          const [freshUser, badgeCount] = await Promise.all([
+            refreshUser().catch(() => null),
             refreshBadgeCount().catch(() => 0),
           ]);
+          const user = freshUser || await getUser();
           setUnreadCount(badgeCount as number);
           if (user?.roles) setUserRoles(user.roles);
           const savedRole = await getActiveRole();
