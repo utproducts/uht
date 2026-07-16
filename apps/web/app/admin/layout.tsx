@@ -98,14 +98,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
           <span className="text-white font-semibold">Ultimate Tournaments</span>
         </a>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {userName && (
-            <span className="text-white text-sm font-medium">
+            <span className="text-white text-sm font-medium hidden sm:inline">
               Hi, {userName}
             </span>
           )}
-          <span className="text-white/40 text-xs hidden sm:inline">|</span>
-          <span className="text-white/60 text-sm font-medium hidden sm:inline">Admin</span>
+          <span className="text-white/30 hidden sm:inline">|</span>
+          <RoleSwitcher />
+          <span className="text-white/30 hidden sm:inline">|</span>
           <button onClick={() => { localStorage.removeItem('uht_token'); localStorage.removeItem('uht_user'); localStorage.removeItem('uht_role'); window.location.href = '/login'; }} className="text-white/60 text-sm hover:text-white transition-colors font-medium">Sign out</button>
         </div>
       </header>
@@ -138,7 +139,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Main content */}
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
-      <RoleSwitcher />
     </div>
   );
 }
