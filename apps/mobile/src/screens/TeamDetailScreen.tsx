@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,17 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Share,
+  Image,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+// Logo upload uses React Native's built-in FormData with { uri, type, name }
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { authFetch } from '../services/auth';
+import { authFetch, getToken, getActiveRole } from '../services/auth';
+import { API_URL } from '../constants/api';
+import { unfollowTeam, leaveTeam } from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface TeamDetail {
@@ -26,7 +32,9 @@ interface TeamDetail {
   head_coach_email?: string;
   head_coach_phone?: string;
   invite_code?: string;
+  parent_invite_code?: string;
   roster_share_token?: string;
+  logo_url?: string;
 }
 
 interface RosterPlayer {
@@ -45,11 +53,17 @@ interface TeamEvent {
 }
 
 export default function TeamDetailScreen({ route, navigation }: { route: any; navigation: any }) {
-  const { teamId, teamName } = route.params || {};
+  const { teamId, teamName, showRoster } = route.params || {};
   const [team, setTeam] = useState<TeamDetail | null>(null);
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [activeRole, setActiveRoleState] = useState<string>('');
+  const scrollViewRef = useRef<ScrollView>(null);
+  const rosterYRef = useRef<number>(0);
+
+  const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRole);
 
   const loadTeam = useCallback(async () => {
     setLoading(true);
@@ -81,25 +95,114 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   useFocusEffect(
     useCallback(() => {
       loadTeam();
+      getActiveRole().then(r => { if (r) setActiveRoleState(r); });
     }, [loadTeam]),
   );
 
-  async function shareInviteCode() {
+  // Auto-scroll to roster section when navigated with showRoster
+  useEffect(() => {
+    if (showRoster && !loading && rosterYRef.current > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: rosterYRef.current - 20, animated: true });
+      }, 300);
+    }
+  }, [showRoster, loading]);
+
+  async function shareInviteCoaches() {
     if (!team?.invite_code) return;
     try {
       await Share.share({
-        message: `Join ${team.name} on UHT!\n\nTeam code: ${team.invite_code}\n\nDownload the UHT app and use this code to join.`,
+        message: `You're invited to coach ${team.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${team.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the team code when prompted: ${team.invite_code}`,
       });
     } catch {}
   }
 
-  async function shareRosterLink() {
-    if (!team?.roster_share_token) return;
+  async function shareInviteFamilies() {
+    const familyCode = team?.parent_invite_code || team?.invite_code;
+    if (!familyCode) return;
     try {
       await Share.share({
-        message: `You've been invited to join ${team.name} on UHT! Claim your spot:\nhttps://ultimatetournaments.com/roster/${team.roster_share_token}`,
+        message: `Follow ${team!.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
       });
     } catch {}
+  }
+
+  function handleLeaveTeam() {
+    const actionLabel = isCoach ? 'Leave Team' : 'Unfollow Team';
+    const confirmLabel = isCoach ? 'Leave' : 'Unfollow';
+    const prompt = isCoach
+      ? `Are you sure you want to leave ${team?.name || teamName}? You will lose coach access to this team.`
+      : `Are you sure you want to unfollow ${team?.name || teamName}?`;
+
+    Alert.alert(actionLabel, prompt, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: confirmLabel,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (isCoach) {
+              const result = await leaveTeam(teamId);
+              if (result.success === false) {
+                Alert.alert('Cannot Leave', result.error || 'Unable to leave this team.');
+                return;
+              }
+            } else {
+              await unfollowTeam(teamId);
+            }
+            navigation.goBack();
+          } catch {
+            Alert.alert('Error', `Failed to ${isCoach ? 'leave' : 'unfollow'} team. Please try again.`);
+          }
+        },
+      },
+    ]);
+  }
+
+  async function handleLogoUpload() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Error', 'Could not read image data');
+        return;
+      }
+      setUploading(true);
+
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const token = await getToken();
+
+      const uploadResult = await fetch(`${API_URL}/api/teams/${teamId}/logo-base64`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ data: asset.base64, mimeType }),
+      });
+
+      const json = await uploadResult.json() as any;
+      if (json.success) {
+        setTeam((prev) => prev ? { ...prev, logo_url: json.data.logo_url } : prev);
+        Alert.alert('Logo Updated', 'Your team logo has been uploaded.');
+      } else {
+        Alert.alert('Error', json.error || 'Failed to upload logo');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   }
 
   if (loading) {
@@ -119,9 +222,33 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
     <View style={styles.container}>
       <ScreenHeader title={displayTeam.name || 'Team'} showBack onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Team Info Card */}
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Team Logo + Info Card */}
         <View style={styles.infoCard}>
+          <TouchableOpacity
+            style={styles.logoContainer}
+            activeOpacity={0.7}
+            onPress={handleLogoUpload}
+            disabled={uploading}
+          >
+            {team?.logo_url ? (
+              <Image source={{ uri: team.logo_url }} style={styles.teamLogo} resizeMode="cover" />
+            ) : (
+              <View style={styles.logoPlaceholder}>
+                <Ionicons name="camera-outline" size={28} color={colors.textMuted} />
+              </View>
+            )}
+            {uploading ? (
+              <View style={styles.logoOverlay}>
+                <ActivityIndicator color={colors.white} />
+              </View>
+            ) : (
+              <View style={styles.logoEditBadge}>
+                <Ionicons name="pencil" size={12} color={colors.white} />
+              </View>
+            )}
+          </TouchableOpacity>
+
           {displayTeam.age_group ? (
             <View style={styles.badgeRow}>
               <View style={styles.ageGroupBadge}>
@@ -161,24 +288,38 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
 
         {/* Quick Actions */}
         <View style={styles.actionsRow}>
-          {team?.invite_code ? (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteCode}>
-              <Ionicons name="key-outline" size={18} color={colors.navy} />
-              <Text style={styles.actionBtnText}>Share Code</Text>
+          {isCoach && team?.invite_code ? (
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteCoaches}>
+              <Ionicons name="person-add-outline" size={18} color={colors.navy} />
+              <Text style={styles.actionBtnText}>Invite Coaches</Text>
             </TouchableOpacity>
           ) : null}
-          {team?.roster_share_token ? (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareRosterLink}>
-              <Ionicons name="link-outline" size={18} color={colors.navy} />
-              <Text style={styles.actionBtnText}>Roster Link</Text>
+          {(team?.parent_invite_code || team?.invite_code) ? (
+            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7} onPress={shareInviteFamilies}>
+              <Ionicons name="people-outline" size={18} color={colors.navy} />
+              <Text style={styles.actionBtnText}>Invite Families</Text>
             </TouchableOpacity>
           ) : null}
         </View>
 
+        {/* Leave / Unfollow */}
+        <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.7} onPress={handleLeaveTeam}>
+          <Ionicons name="exit-outline" size={18} color="#A32D2D" />
+          <Text style={styles.leaveBtnText}>{isCoach ? 'Leave Team' : 'Unfollow Team'}</Text>
+        </TouchableOpacity>
+
         {/* Roster */}
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={(e) => { rosterYRef.current = e.nativeEvent.layout.y; }}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Roster ({roster.length})</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('CreateTeam', { editRosterTeamId: teamId, editRosterTeamName: team?.name || teamName })}
+              style={styles.manageRosterBtn}
+            >
+              <Ionicons name="add-circle-outline" size={16} color={colors.cyan} />
+              <Text style={styles.manageRosterText}>{roster.length > 0 ? 'Add More' : 'Add Players'}</Text>
+            </TouchableOpacity>
           </View>
           {roster.length > 0 ? (
             roster.map((player) => (
@@ -186,12 +327,44 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
                 <Text style={styles.jerseyNumber}>
                   {player.jersey_number || '--'}
                 </Text>
-                <Text style={styles.playerName}>
+                <Text style={styles.playerName} numberOfLines={1}>
                   {player.first_name} {player.last_name}
                 </Text>
                 {player.position ? (
                   <Text style={styles.playerPosition}>{player.position}</Text>
                 ) : null}
+                <TouchableOpacity
+                  style={styles.removePlayerBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => {
+                    Alert.alert(
+                      'Remove Player',
+                      `Remove ${player.first_name} ${player.last_name} from the roster?`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              const res = await authFetch(`/api/teams/${teamId}/players/${player.id}`, { method: 'DELETE' });
+                              const json = await res.json() as any;
+                              if (json.success) {
+                                setRoster((prev) => prev.filter((p) => p.id !== player.id));
+                              } else {
+                                Alert.alert('Error', json.error || 'Failed to remove player');
+                              }
+                            } catch {
+                              Alert.alert('Error', 'Failed to remove player');
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#8e919e" />
+                </TouchableOpacity>
               </View>
             ))
           ) : (
@@ -266,11 +439,58 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    alignItems: 'center',
+  },
+  logoContainer: {
+    position: 'relative',
+    marginBottom: spacing.md,
+  },
+  teamLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.bg,
+  },
+  logoPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.bg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.navy,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.card,
   },
   badgeRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginBottom: spacing.md,
+    alignSelf: 'flex-start',
   },
   ageGroupBadge: {
     backgroundColor: colors.cyan,
@@ -290,6 +510,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.sm,
+    alignSelf: 'flex-start',
   },
   locationText: {
     fontSize: 15,
@@ -301,6 +522,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.sm,
+    alignSelf: 'flex-start',
   },
   detailText: {
     fontSize: 15,
@@ -382,6 +604,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     ...fonts.regular,
+    marginRight: spacing.sm,
+  },
+  removePlayerBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  manageRosterBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  manageRosterText: {
+    fontSize: 13,
+    color: colors.cyan,
+    ...fonts.semibold,
   },
 
   // Events
@@ -416,5 +653,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     ...fonts.regular,
+  },
+  addPlayersBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.navy,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 6,
+    marginTop: 4,
+  },
+  addPlayersBtnText: {
+    fontSize: 14,
+    color: colors.white,
+    ...fonts.semibold,
+  },
+  leaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5F5',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#FCEBEB',
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  leaveBtnText: {
+    fontSize: 14,
+    color: '#A32D2D',
+    ...fonts.semibold,
   },
 });

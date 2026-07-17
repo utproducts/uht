@@ -174,7 +174,9 @@ hotelRoutes.post('/master/:id/image', authMiddleware, requireRole('admin'), asyn
   const arrayBuffer = await file.arrayBuffer();
   await storage.put(key, arrayBuffer, { httpMetadata: { contentType: file.type } });
 
-  const imageUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
+  const cacheBust = Date.now();
+  const imageUrl = `${apiBase}/api/assets/${key}?v=${cacheBust}`;
 
   try { await db.prepare("ALTER TABLE master_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
   await db.prepare("UPDATE master_hotels SET image_url = ?, updated_at = datetime('now') WHERE id = ?")

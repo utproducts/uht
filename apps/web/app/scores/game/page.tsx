@@ -130,7 +130,7 @@ function GameSheetInner() {
             <div><span className="font-semibold text-[#86868b]">Rink</span> {g.rink_name || g.venue_name}</div>
           </div>
           <div className="px-4 py-2 bg-[#fafafa] border-b border-[#e8e8ed] grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-[#6e6e73]">
-            <div><span className="font-semibold text-[#86868b]">Division</span> {g.age_group} {g.division_level}</div>
+            <div><span className="font-semibold text-[#86868b]">Division</span> {[g.age_group, g.division_level].filter(Boolean).join(' ')}</div>
             <div><span className="font-semibold text-[#86868b]">Type</span> {g.game_type?.charAt(0).toUpperCase() + g.game_type?.slice(1)} {g.pool_name ? `— ${g.pool_name}` : ''}</div>
             <div><span className="font-semibold text-[#86868b]">Period</span> {g.period_length_minutes || 12} min</div>
             {g.scorekeeper_name && <div><span className="font-semibold text-[#86868b]">Scorekeeper</span> {g.scorekeeper_name}</div>}
@@ -377,7 +377,7 @@ function GameSheetInner() {
             Ultimate Hockey Tournaments — Official Score Sheet
           </p>
           <p className="text-[10px] text-[#86868b] mt-1">
-            Game #{g.game_number} • {g.age_group} {g.division_level} • {formatDate(g.start_time)}
+            Game #{g.game_number} • {[g.age_group, g.division_level].filter(Boolean).join(' ')} • {formatDate(g.start_time)}
           </p>
         </div>
       </div>

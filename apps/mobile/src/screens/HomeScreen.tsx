@@ -3,121 +3,60 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
-  ActivityIndicator,
+  ScrollView,
   RefreshControl,
   Image,
+  ImageBackground,
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getFollowedTeams, getEvents, getScorekeeperEvents } from '../services/api';
-import { getUser, authFetch, User } from '../services/auth';
+import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount } from '../services/auth';
+import { refreshBadgeCount } from '../services/notifications';
+import AppHeader from '../components/AppHeader';
+import RoleBar from '../components/RoleBar';
 
-interface FollowedTeam {
-  id: string;
-  team_id: string;
-  team_name: string;
-  org_name?: string;
-  age_group?: string;
-  next_event_name?: string;
-  next_event_date?: string;
-}
-
-interface Event {
-  id: string;
-  name: string;
-  slug: string;
-  city?: string;
-  state?: string;
-  start_date: string;
-  end_date: string;
-  logo_url?: string;
-}
-
-function formatDateRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate + 'T00:00:00');
-  const end = new Date(endDate + 'T00:00:00');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  if (start.getMonth() === end.getMonth()) {
-    return `${months[start.getMonth()]} ${start.getDate()} - ${end.getDate()}`;
-  }
-  return `${months[start.getMonth()]} ${start.getDate()} - ${months[end.getMonth()]} ${end.getDate()}`;
-}
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const [userName, setUserName] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
-  const [teams, setTeams] = useState<FollowedTeam[]>([]);
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
-  const [scoringEvents, setScoringEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeRole, setActiveRoleState] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const loadData = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
     try {
-      const [teamData, eventData, user] = await Promise.all([
-        getFollowedTeams().catch(() => []),
-        getEvents(),
-        getUser(),
+      // Always try to refresh user from API to get latest roles
+      const [freshUser, badgeCount] = await Promise.all([
+        refreshUser().catch(() => null),
+        refreshBadgeCount().catch(() => 0),
       ]);
+      setUnreadCount(badgeCount as number);
+
+      // Use fresh API data if available, fall back to stored
+      const user = freshUser || await getUser();
+
       if (user?.name) setUserName(user.name);
       if (user?.roles) setUserRoles(user.roles);
 
-      // If user is a scorekeeper, fetch their assignments
-      if (user?.roles?.includes('scorekeeper')) {
-        try {
-          const skEvents = await getScorekeeperEvents();
-          setScoringEvents(skEvents as any[]);
-        } catch {}
+      const savedRole = await getActiveRole();
+      if (savedRole && user?.roles?.includes(savedRole)) {
+        setActiveRoleState(savedRole);
+      } else if (user?.roles?.length) {
+        setActiveRoleState(user.roles[0]);
       }
-
-      // Also fetch "my teams" (teams where user is coach/manager/creator)
-      let myTeamsData: FollowedTeam[] = [];
-      try {
-        const res = await authFetch('/api/teams/my-teams');
-        const json = await res.json() as { success: boolean; data?: any[] };
-        if (json.success && Array.isArray(json.data)) {
-          myTeamsData = json.data.map((t: any) => ({
-            id: t.id,
-            team_id: t.id,
-            team_name: t.name,
-            org_name: t.organization_name,
-            age_group: t.age_group,
-          }));
-        }
-      } catch {}
-
-      // Merge followed teams and my teams, dedup by team_id
-      const allTeams = [...(teamData || []), ...myTeamsData];
-      const seen = new Set<string>();
-      const uniqueTeams = allTeams.filter((t: FollowedTeam) => {
-        const key = t.team_id || t.id;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      setTeams(uniqueTeams);
-      // Show only upcoming events (next 3)
-      const today = new Date().toISOString().split('T')[0];
-      const upcoming = (eventData as Event[])
-        .filter((e: Event) => e.end_date >= today)
-        .sort((a: Event, b: Event) => a.start_date.localeCompare(b.start_date))
-        .slice(0, 3);
-      setUpcomingEvents(upcoming);
     } catch {}
-    setLoading(false);
     setRefreshing(false);
   }, []);
 
   useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [loadData])
+    useCallback(() => { loadData(); }, [loadData])
   );
 
   function onRefresh() {
@@ -125,571 +64,222 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     loadData(true);
   }
 
+  async function handleSwitchRole(role: string) {
+    setActiveRoleState(role);
+    await setActiveRole(role);
+  }
+
+  function handleAddRole() {
+    const selfAddableRoles = [
+      { key: 'coach', label: 'Coach' },
+      { key: 'parent', label: 'Parent / Fan' },
+      { key: 'referee', label: 'Referee' },
+      { key: 'scorekeeper', label: 'Scorekeeper' },
+    ];
+    const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
+    if (available.length === 0) {
+      Alert.alert('All Roles Added', 'You already have all available roles.');
+      return;
+    }
+    Alert.alert(
+      'Add a Role',
+      'Select a role to add to your account:',
+      [
+        ...available.map(r => ({
+          text: r.label,
+          onPress: async () => {
+            const result = await addRoleToAccount(r.key);
+            if (result.success && result.roles) {
+              setUserRoles(result.roles);
+              Alert.alert('Role Added', `${r.label} has been added to your account.`);
+            } else {
+              Alert.alert('Error', result.error || 'Failed to add role.');
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  }
+
   const firstName = userName ? userName.split(' ')[0] : '';
 
-  // --------------- Hero Banner ---------------
-  function HeroBanner() {
-    return (
-      <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
-        {/* Background diagonal accent stripes */}
-        <View style={styles.heroAccent1} />
-        <View style={styles.heroAccent2} />
-        <View style={styles.heroAccent3} />
+  return (
+    <View style={styles.screen}>
+      <AppHeader
+        onNotificationPress={() => navigation.navigate('NotificationsInbox')}
+        onRolePress={() => {}}
+        unreadCount={unreadCount}
+        hasMultipleRoles={userRoles.length > 1}
+      />
+      <RoleBar
+        activeRole={activeRole}
+        userRoles={userRoles}
+        onSwitchRole={handleSwitchRole}
+        onAddRole={handleAddRole}
+      />
 
-        {/* Bottom cyan edge stripe */}
-        <View style={styles.heroCyanStripe} />
-
-        {/* Content */}
-        <View style={styles.heroContent}>
-          <View style={styles.heroLeft}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.navy]} />
+        }
+      >
+        {/* Hero greeting */}
+        <ImageBackground
+          source={require('../../assets/hero-rink.jpg')}
+          style={styles.hero}
+          resizeMode="cover"
+        >
+          <View style={styles.heroOverlay} />
+          <View style={styles.heroContent}>
             <Image
               source={require('../../assets/uht-logo.png')}
-              style={styles.heroLogoImage}
+              style={styles.heroLogo}
               resizeMode="contain"
             />
+            <Text style={styles.heroSeason}>2026-27 SEASON</Text>
             <Text style={styles.heroGreeting}>
-              {firstName ? `Welcome, ${firstName}!` : 'Welcome!'}
+              {firstName ? `Welcome back, ${firstName}` : 'Welcome'}
             </Text>
+            <Text style={styles.heroSubtext}>What would you like to do?</Text>
           </View>
+        </ImageBackground>
+
+        {/* Quick Access Grid */}
+        <View style={styles.qaGrid}>
           <TouchableOpacity
-            style={styles.heroSettingsBtn}
-            onPress={() => navigation.navigate('Menu' as never)}
+            style={styles.qaCard}
+            onPress={() => navigation.navigate('My Teams')}
             activeOpacity={0.7}
           >
-            <Ionicons name="settings-outline" size={24} color={colors.white} />
+            <View style={[styles.qaIconCircle, { backgroundColor: '#E6F1FB' }]}>
+              <Ionicons name="people" size={24} color="#185FA5" />
+            </View>
+            <Text style={styles.qaLabel}>My teams</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.qaCard}
+            onPress={() => navigation.navigate('Find Events' as never)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.qaIconCircle, { backgroundColor: '#FAEEDA' }]}>
+              <Ionicons name="search" size={24} color="#854F0B" />
+            </View>
+            <Text style={styles.qaLabel}>Find events</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.qaCard}
+            onPress={() => navigation.navigate('My Events' as never)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.qaIconCircle, { backgroundColor: '#EAF3DE' }]}>
+              <Ionicons name="calendar" size={24} color="#3B6D11" />
+            </View>
+            <Text style={styles.qaLabel}>My events</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.qaCard}
+            onPress={() => navigation.navigate('Menu', { screen: 'Shop' })}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.qaIconCircle, { backgroundColor: '#EEEDFE' }]}>
+              <Ionicons name="cart" size={24} color="#534AB7" />
+            </View>
+            <Text style={styles.qaLabel}>Shop</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    );
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <HeroBanner />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.navy} />
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <HeroBanner />
-      <FlatList
-        data={[]}
-        renderItem={() => null}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.navy} />
-        }
-        contentContainerStyle={styles.scrollContent}
-        ListHeaderComponent={
-          <>
-            {/* Quick Actions */}
-            <View style={styles.quickActions}>
-              <TouchableOpacity
-                style={styles.quickAction}
-                onPress={() => navigation.navigate('Events' as never)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickIconWrap, { backgroundColor: colors.highlight }]}>
-                  <Ionicons name="calendar" size={22} color={colors.navy} />
-                </View>
-                <Text style={styles.quickLabel}>Events</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickAction}
-                onPress={() => navigation.navigate('My Teams')}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickIconWrap, { backgroundColor: '#e6f9ff' }]}>
-                  <Ionicons name="people" size={22} color={colors.cyan} />
-                </View>
-                <Text style={styles.quickLabel}>My Teams</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickAction}
-                onPress={() => navigation.navigate('Shop' as never)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickIconWrap, { backgroundColor: '#fff3e0' }]}>
-                  <Ionicons name="trophy" size={22} color={colors.warning} />
-                </View>
-                <Text style={styles.quickLabel}>Shop</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Followed Teams */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <View style={styles.sectionAccent} />
-                  <Text style={styles.sectionTitle}>Your Teams</Text>
-                </View>
-                <TouchableOpacity onPress={() => navigation.navigate('My Teams')}>
-                  <Text style={styles.seeAll}>See All</Text>
-                </TouchableOpacity>
-              </View>
-              {teams.length === 0 ? (
-                <TouchableOpacity
-                  style={styles.emptyCard}
-                  onPress={() => navigation.navigate('FollowTeams')}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.emptyIconWrap}>
-                    <Ionicons name="add-circle-outline" size={36} color={colors.cyan} />
-                  </View>
-                  <Text style={styles.emptyTitle}>Follow a Team</Text>
-                  <Text style={styles.emptyText}>
-                    Stay updated on schedules, scores, and standings by following your favorite teams
-                  </Text>
-                  <View style={styles.emptyActionRow}>
-                    <Text style={styles.emptyActionText}>Find Teams</Text>
-                    <Ionicons name="arrow-forward" size={16} color={colors.cyan} />
-                  </View>
-                </TouchableOpacity>
-              ) : (
-                teams.slice(0, 4).map((team) => (
-                  <TouchableOpacity
-                    key={team.id}
-                    style={styles.teamCard}
-                    activeOpacity={0.7}
-                    onPress={() => navigation.navigate('My Teams')}
-                  >
-                    <View style={styles.teamAvatar}>
-                      <Text style={styles.teamAvatarText}>
-                        {(team.team_name || '?')[0].toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.teamInfo}>
-                      <Text style={styles.teamName}>{team.team_name}</Text>
-                      {team.org_name ? (
-                        <Text style={styles.teamOrg}>{team.org_name}</Text>
-                      ) : null}
-                      {team.age_group ? (
-                        <View style={styles.ageBadge}>
-                          <Text style={styles.ageBadgeText}>{team.age_group}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ))
-              )}
-            </View>
-
-            {/* Scorekeeper Assignments (only for scorekeeper role) */}
-            {userRoles.includes('scorekeeper') && scoringEvents.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionTitleRow}>
-                    <View style={[styles.sectionAccent, { backgroundColor: '#34c759' }]} />
-                    <Text style={styles.sectionTitle}>My Scoring</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => navigation.navigate('Scorekeeper')}>
-                    <Text style={styles.seeAll}>View All</Text>
-                  </TouchableOpacity>
-                </View>
-                {scoringEvents.slice(0, 2).map((event: any) => (
-                  <TouchableOpacity
-                    key={event.id}
-                    style={styles.teamCard}
-                    activeOpacity={0.7}
-                    onPress={() => navigation.navigate('Scorekeeper')}
-                  >
-                    <View style={[styles.teamAvatar, { backgroundColor: '#34c759' }]}>
-                      <Ionicons name="clipboard" size={18} color={colors.white} />
-                    </View>
-                    <View style={styles.teamInfo}>
-                      <Text style={styles.teamName} numberOfLines={1}>{event.name}</Text>
-                      <Text style={styles.teamOrg}>{event.game_count} games assigned</Text>
-                      {event.active_games > 0 && (
-                        <View style={[styles.ageBadge, { backgroundColor: '#e8f5e9' }]}>
-                          <Text style={[styles.ageBadgeText, { color: '#2e7d32' }]}>{event.active_games} active</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Upcoming Events */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <View style={styles.sectionAccent} />
-                  <Text style={styles.sectionTitle}>My Upcoming Events</Text>
-                </View>
-                <TouchableOpacity onPress={() => navigation.navigate('Events' as never)}>
-                  <Text style={styles.seeAll}>See All</Text>
-                </TouchableOpacity>
-              </View>
-              {upcomingEvents.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <View style={styles.emptyIconWrap}>
-                    <Ionicons name="calendar-outline" size={36} color={colors.textMuted} />
-                  </View>
-                  <Text style={styles.emptyTitle}>No Upcoming Events</Text>
-                  <Text style={styles.emptyText}>
-                    Check back soon for upcoming UHT events
-                  </Text>
-                </View>
-              ) : (
-                upcomingEvents.map((event) => (
-                  <TouchableOpacity
-                    key={event.id}
-                    style={styles.eventCard}
-                    onPress={() => navigation.navigate('EventDetail', { eventId: event.id, eventName: event.name, event: event })}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.eventLogo}>
-                      {event.logo_url ? (
-                        <Image source={{ uri: event.logo_url }} style={styles.eventLogoImg} />
-                      ) : (
-                        <Text style={styles.eventLogoText}>UHT</Text>
-                      )}
-                    </View>
-                    <View style={styles.eventInfo}>
-                      <Text style={styles.eventName} numberOfLines={2}>{event.name}</Text>
-                      <View style={styles.eventMetaRow}>
-                        <Ionicons name="calendar-outline" size={13} color={colors.cyan} style={{ marginRight: 4 }} />
-                        <Text style={styles.eventMeta}>
-                          {formatDateRange(event.start_date, event.end_date)}
-                        </Text>
-                      </View>
-                      {event.city ? (
-                        <View style={styles.eventMetaRow}>
-                          <Ionicons name="location-outline" size={13} color={colors.cyan} style={{ marginRight: 4 }} />
-                          <Text style={styles.eventMeta}>
-                            {event.city}{event.state ? `, ${event.state}` : ''}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-                  </TouchableOpacity>
-                ))
-              )}
-            </View>
-          </>
-        }
-      />
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-  center: {
+  body: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  scrollContent: {
-    paddingBottom: spacing.xxxl,
+  bodyContent: {
+    paddingBottom: 24,
   },
-
-  // ==================
-  // Hero Banner
-  // ==================
+  // Hero
   hero: {
-    backgroundColor: colors.navy,
-    paddingBottom: spacing.xxl,
-    overflow: 'hidden',
+    width: SCREEN_WIDTH,
+    paddingTop: 24,
+    paddingBottom: 32,
   },
-  heroAccent1: {
-    position: 'absolute',
-    top: -30,
-    right: -20,
-    width: 180,
-    height: '180%',
-    backgroundColor: colors.cyan,
-    opacity: 0.08,
-    transform: [{ rotate: '-18deg' }],
-  },
-  heroAccent2: {
-    position: 'absolute',
-    top: -10,
-    right: 40,
-    width: 100,
-    height: '160%',
-    backgroundColor: colors.cyan,
-    opacity: 0.06,
-    transform: [{ rotate: '-18deg' }],
-  },
-  heroAccent3: {
+  heroOverlay: {
     position: 'absolute',
     top: 0,
-    left: -60,
-    width: 120,
-    height: '150%',
-    backgroundColor: colors.white,
-    opacity: 0.03,
-    transform: [{ rotate: '-18deg' }],
-  },
-  heroCyanStripe: {
-    position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    height: 3,
-    backgroundColor: colors.cyan,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 30, 60, 0.75)',
   },
   heroContent: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
+    position: 'relative',
   },
-  heroLeft: {
-    flex: 1,
+  heroLogo: {
+    width: 80,
+    height: 80,
+    marginBottom: 8,
   },
-  heroLogoImage: {
-    width: 120,
-    height: 48,
+  heroSeason: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.cyan,
+    letterSpacing: 1.5,
     marginBottom: 4,
   },
   heroGreeting: {
-    fontSize: 16,
-    color: colors.cyanLight,
-    ...fonts.medium,
-    opacity: 0.9,
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.white,
+    textAlign: 'center',
   },
-  heroSettingsBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  heroSubtext: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 4,
   },
-
-  // ==================
-  // Quick Actions
-  // ==================
-  quickActions: {
+  // Quick Access Grid
+  qaGrid: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
     gap: spacing.md,
   },
-  quickAction: {
-    flex: 1,
+  qaCard: {
+    width: (SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2,
     backgroundColor: colors.card,
     borderRadius: radii.md,
     padding: spacing.lg,
-    alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+    alignItems: 'center',
+    gap: 8,
   },
-  quickIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  qaIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  quickLabel: {
-    fontSize: 13,
-    color: colors.text,
-    ...fonts.semibold,
-  },
-
-  // ==================
-  // Sections
-  // ==================
-  section: {
-    paddingHorizontal: spacing.xl,
-    marginBottom: spacing.xl,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sectionAccent: {
-    width: 4,
-    height: 20,
-    backgroundColor: colors.cyan,
-    borderRadius: 2,
-    marginRight: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    color: colors.text,
-    ...fonts.bold,
-  },
-  seeAll: {
-    fontSize: 14,
-    color: colors.cyan,
-    ...fonts.semibold,
-  },
-
-  // ==================
-  // Empty State
-  // ==================
-  emptyCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.xxl,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  emptyIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.highlight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    color: colors.text,
-    ...fonts.semibold,
-    marginTop: spacing.xs,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    marginTop: spacing.xs,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  emptyActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    gap: 6,
-  },
-  emptyActionText: {
-    fontSize: 14,
-    color: colors.cyan,
-    ...fonts.semibold,
-  },
-
-  // ==================
-  // Team Cards
-  // ==================
-  teamCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  teamAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.navy,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  teamAvatarText: {
-    fontSize: 18,
-    color: colors.white,
-    ...fonts.bold,
-  },
-  teamInfo: {
-    flex: 1,
-  },
-  teamName: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.semibold,
-  },
-  teamOrg: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    ...fonts.regular,
-    marginTop: 2,
-  },
-  ageBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.highlight,
-    borderRadius: radii.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginTop: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.cyan,
-  },
-  ageBadgeText: {
-    fontSize: 11,
-    color: colors.cyanDark,
-    ...fonts.semibold,
-  },
-
-  // ==================
-  // Event Cards
-  // ==================
-  eventCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: radii.sm,
-    backgroundColor: colors.navy,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-    overflow: 'hidden',
-  },
-  eventLogoImg: {
-    width: 50,
-    height: 50,
-    borderRadius: radii.sm,
-  },
-  eventLogoText: {
-    fontSize: 12,
-    color: colors.white,
-    ...fonts.bold,
-  },
-  eventInfo: {
-    flex: 1,
-  },
-  eventName: {
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.semibold,
     marginBottom: 4,
   },
-  eventMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  eventMeta: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    ...fonts.regular,
+  qaLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
   },
 });

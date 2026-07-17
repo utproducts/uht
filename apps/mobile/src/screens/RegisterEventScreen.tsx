@@ -12,8 +12,10 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useStripe } from '@stripe/stripe-react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch, getUser, User } from '../services/auth';
+import { API_URL } from '../constants/api';
 import ScreenHeader from '../components/ScreenHeader';
 
 interface Team {
@@ -36,10 +38,11 @@ interface Hotel {
   image_url?: string;
 }
 
-type Step = 'team' | 'hotels' | 'confirm' | 'submitting' | 'done';
+type Step = 'team' | 'hotels' | 'payment' | 'confirm' | 'submitting' | 'processing_payment' | 'done';
 
 export default function RegisterEventScreen({ route, navigation }: { route: any; navigation: any }) {
   const { eventId, eventName, eventSlug } = route.params || {};
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [step, setStep] = useState<Step>('team');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -48,8 +51,10 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
   const [teams, setTeams] = useState<Team[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [multiTeamMode, setMultiTeamMode] = useState(false);
+  const [selectedTeams, setSelectedTeams] = useState<Team[]>([]);
 
-  // Hotels
+  // Hotels — per-team in multi mode
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [hotelChoice1, setHotelChoice1] = useState<string | null>(null);
@@ -57,12 +62,26 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
   const [hotelChoice3, setHotelChoice3] = useState<string | null>(null);
   const [isLocal, setIsLocal] = useState(false);
   const [needsHotel, setNeedsHotel] = useState(false);
+  const [teamHotelPicks, setTeamHotelPicks] = useState<Record<string, [string | null, string | null, string | null]>>({});
+  const [teamLocalFlags, setTeamLocalFlags] = useState<Record<string, boolean>>({});
+  const [teamNeedsHotelFlags, setTeamNeedsHotelFlags] = useState<Record<string, boolean>>({});
+  const [activeHotelTeamIdx, setActiveHotelTeamIdx] = useState(0);
+
+  // Payment
+  const [paymentChoice, setPaymentChoice] = useState<'pay_now' | 'pay_deposit' | 'pay_later'>('pay_now');
+  const [eventPriceCents, setEventPriceCents] = useState<number>(0);
+  const [teamPriceCents, setTeamPriceCents] = useState<Record<string, number>>({});
+  const [loadingPrice, setLoadingPrice] = useState(false);
+
+  // Flat deposit: $350 per team
+  const DEPOSIT_PER_TEAM_CENTS = 35000;
 
   // Discount
   const [discountCode, setDiscountCode] = useState('');
 
   // Result
   const [registrationResult, setRegistrationResult] = useState<any>(null);
+  const [registrationIds, setRegistrationIds] = useState<string[]>([]);
 
   useEffect(() => {
     getUser().then(u => setCurrentUser(u));
@@ -96,60 +115,225 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     setLoadingHotels(false);
   }, [eventId]);
 
+  // Load event pricing (divisions + event-level price) for all selected teams
+  const loadEventPricing = useCallback(async () => {
+    setLoadingPrice(true);
+    try {
+      const divRes = await authFetch(`/api/events/event-divisions/${eventId}`);
+      const divJson = await divRes.json() as any;
+      if (divJson.success && Array.isArray(divJson.data)) {
+        const divisions = divJson.data;
+        const teamsToPrice = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
+        const prices: Record<string, number> = {};
+        let fallbackPrice = 0;
+        const anyPrice = divisions.find((d: any) => d.price_cents > 0);
+        if (anyPrice) fallbackPrice = anyPrice.price_cents;
+
+        for (const team of teamsToPrice) {
+          const teamAg = team.age_group?.toLowerCase().trim() || '';
+          let matchedPrice = 0;
+          let bestLen = 0;
+          for (const div of divisions) {
+            const divAg = (div.age_group || '').toLowerCase().trim();
+            if (teamAg === divAg && div.price_cents > 0) {
+              matchedPrice = div.price_cents;
+              break;
+            }
+            if (teamAg.startsWith(divAg) && divAg.length > bestLen && div.price_cents > 0) {
+              matchedPrice = div.price_cents;
+              bestLen = divAg.length;
+            }
+          }
+          prices[team.id] = matchedPrice > 0 ? matchedPrice : fallbackPrice;
+        }
+        setTeamPriceCents(prices);
+        // Total price for display
+        const total = Object.values(prices).reduce((s, p) => s + p, 0);
+        setEventPriceCents(total);
+      }
+    } catch {}
+    setLoadingPrice(false);
+  }, [eventId, selectedTeam, selectedTeams, multiTeamMode]);
+
   function selectTeam(team: Team) {
     setSelectedTeam(team);
   }
 
+  function toggleTeam(team: Team) {
+    setSelectedTeams(prev => {
+      const exists = prev.some(t => t.id === team.id);
+      if (exists) return prev.filter(t => t.id !== team.id);
+      return [...prev, team];
+    });
+  }
+
+  // Which teams are we registering?
+  const teamsToRegister = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
+  const numTeams = teamsToRegister.length;
+  const totalDepositCents = DEPOSIT_PER_TEAM_CENTS * numTeams;
+
   function goToHotels() {
-    if (!selectedTeam) return;
+    if (multiTeamMode ? selectedTeams.length === 0 : !selectedTeam) return;
+    setActiveHotelTeamIdx(0);
     setStep('hotels');
     loadHotels();
+  }
+
+  function goToPayment() {
+    setStep('payment');
+    loadEventPricing();
   }
 
   function goToConfirm() {
     setStep('confirm');
   }
 
+  // Hotel helpers for multi-team mode
+  function getActiveTeamHotels(): [string | null, string | null, string | null] {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      return teamHotelPicks[teamId] || [null, null, null];
+    }
+    return [hotelChoice1, hotelChoice2, hotelChoice3];
+  }
+
+  function setActiveTeamHotel(slot: 0 | 1 | 2, value: string | null) {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      setTeamHotelPicks(prev => {
+        const current = prev[teamId] || [null, null, null];
+        const updated: [string | null, string | null, string | null] = [...current] as any;
+        updated[slot] = value;
+        return { ...prev, [teamId]: updated };
+      });
+    } else {
+      if (slot === 0) setHotelChoice1(value);
+      else if (slot === 1) setHotelChoice2(value);
+      else setHotelChoice3(value);
+    }
+  }
+
+  function getActiveTeamIsLocal(): boolean {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      return teamLocalFlags[selectedTeams[activeHotelTeamIdx]?.id] || false;
+    }
+    return isLocal;
+  }
+
+  function setActiveTeamIsLocal(val: boolean) {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      setTeamLocalFlags(prev => ({ ...prev, [teamId]: val }));
+      if (val) {
+        setTeamHotelPicks(prev => ({ ...prev, [teamId]: [null, null, null] }));
+      }
+    } else {
+      setIsLocal(val);
+      if (val) {
+        setHotelChoice1(null);
+        setHotelChoice2(null);
+        setHotelChoice3(null);
+      }
+    }
+  }
+
+  function getActiveTeamNeedsHotel(): boolean {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      return teamNeedsHotelFlags[selectedTeams[activeHotelTeamIdx]?.id] || false;
+    }
+    return needsHotel;
+  }
+
+  function setActiveTeamNeedsHotel(val: boolean) {
+    if (multiTeamMode && selectedTeams.length > 0) {
+      const teamId = selectedTeams[activeHotelTeamIdx]?.id;
+      setTeamNeedsHotelFlags(prev => ({ ...prev, [teamId]: val }));
+      if (val) setTeamLocalFlags(prev => ({ ...prev, [teamId]: false }));
+    } else {
+      setNeedsHotel(val);
+      if (val) setIsLocal(false);
+    }
+  }
+
+  function allTeamsHaveHotelSelection(): boolean {
+    if (!multiTeamMode || selectedTeams.length <= 1) {
+      return isLocal || !!hotelChoice1 || needsHotel;
+    }
+    return selectedTeams.every(t =>
+      teamLocalFlags[t.id] || teamNeedsHotelFlags[t.id] || !!(teamHotelPicks[t.id] && teamHotelPicks[t.id][0])
+    );
+  }
+
   async function submitRegistration() {
-    if (!selectedTeam || !currentUser) return;
+    if (teamsToRegister.length === 0 || !currentUser) return;
+
+    // If registration already exists (user cancelled payment and came back), skip re-registration
+    if (registrationIds.length > 0) {
+      if (paymentChoice !== 'pay_later') {
+        await processPayment(registrationIds);
+      } else {
+        setStep('done');
+      }
+      return;
+    }
+
     setStep('submitting');
 
     try {
-      const body: any = {
-        eventId,
-        teamId: selectedTeam.id,
-        teamName: selectedTeam.name,
-        ageGroup: selectedTeam.age_group,
-        division: selectedTeam.division_level || '',
-        email: currentUser.email,
-        headCoachName: selectedTeam.head_coach_name || currentUser.name,
-        paymentChoice: 'pay_later',
-      };
+      const allRegIds: string[] = [];
+      let lastResult: any = null;
 
-      if (hotels.length > 0) {
-        if (isLocal) {
-          // No hotel choices needed
+      for (const team of teamsToRegister) {
+        const body: any = {
+          eventId,
+          teamId: team.id,
+          teamName: team.name,
+          ageGroup: team.age_group,
+          division: team.division_level || '',
+          email: currentUser.email,
+          headCoachName: team.head_coach_name || currentUser.name,
+          paymentChoice: paymentChoice, // Send actual choice so API sets correct initial status
+        };
+
+        // Hotel choices — per-team in multi mode, scalar in single mode
+        if (hotels.length > 0) {
+          const teamIsLocal = multiTeamMode ? teamLocalFlags[team.id] : isLocal;
+          if (!teamIsLocal) {
+            const picks = multiTeamMode ? (teamHotelPicks[team.id] || [null, null, null]) : [hotelChoice1, hotelChoice2, hotelChoice3];
+            if (picks[0]) body.hotelChoice1 = picks[0];
+            if (picks[1]) body.hotelChoice2 = picks[1];
+            if (picks[2]) body.hotelChoice3 = picks[2];
+          }
         } else {
-          if (hotelChoice1) body.hotelChoice1 = hotelChoice1;
-          if (hotelChoice2) body.hotelChoice2 = hotelChoice2;
-          if (hotelChoice3) body.hotelChoice3 = hotelChoice3;
+          const teamNeedsHotel = multiTeamMode ? teamNeedsHotelFlags[team.id] : needsHotel;
+          body.needsHotel = teamNeedsHotel;
         }
-      } else {
-        body.needsHotel = needsHotel;
+
+        const res = await authFetch('/api/events/register', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        const json = await res.json() as any;
+
+        if (json.success) {
+          const regId = json.data?.primaryRegistrationId || json.data?.registrationId || json.data?.id;
+          if (regId) allRegIds.push(regId);
+          lastResult = json.data;
+        } else {
+          Alert.alert('Registration Failed', `${team.name}: ${json.error || 'Something went wrong.'}`);
+          setStep('confirm');
+          return;
+        }
       }
 
-      const res = await authFetch('/api/events/register', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      const json = await res.json() as any;
+      setRegistrationIds(allRegIds);
+      setRegistrationResult(lastResult);
 
-      if (json.success) {
-        setRegistrationResult(json.data);
-        setStep('done');
+      // If user chose to pay now or deposit, proceed to Stripe payment
+      if (paymentChoice !== 'pay_later' && allRegIds.length > 0) {
+        await processPayment(allRegIds);
       } else {
-        Alert.alert('Registration Failed', json.error || 'Something went wrong. Please try again.');
-        setStep('confirm');
+        setStep('done');
       }
     } catch (err: any) {
       Alert.alert('Error', 'Network error. Please check your connection and try again.');
@@ -157,16 +341,112 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     }
   }
 
+  async function processPayment(regIds: string[]) {
+    if (teamsToRegister.length === 0 || !currentUser) return;
+    setStep('processing_payment');
+
+    try {
+      // 1. Create PaymentIntent on server with ALL registration IDs
+      const piRes = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          registrationIds: regIds,
+          paymentChoice: paymentChoice === 'pay_deposit' ? 'pay_deposit' : 'pay_now',
+          email: currentUser.email,
+          eventName: eventName || 'Tournament',
+          teamNames: teamsToRegister.map(t => t.name),
+          ...(discountCode.trim() ? { discountCode: discountCode.trim().toUpperCase() } : {}),
+        }),
+      });
+      const piJson = await piRes.json() as any;
+
+      if (!piJson.success) {
+        Alert.alert('Payment Error', piJson.error || 'Could not set up payment. Your registration has been saved — you can pay later.');
+        setStep('done');
+        return;
+      }
+
+      // If discount covered the full amount, skip Stripe entirely
+      if (piJson.data?.fullyDiscounted) {
+        setRegistrationResult({
+          discountCode: discountCode.trim().toUpperCase(),
+          discountAmount: piJson.data.discountApplied ? piJson.data.discountApplied / 100 : 0,
+          message: 'Your discount code covered the full registration!',
+        });
+        setStep('done');
+        return;
+      }
+
+      const { clientSecret, totalCents } = piJson.data;
+
+      // 2. Initialize Payment Sheet
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: 'Ultimate Hockey Tournaments',
+        applePay: {
+          merchantCountryCode: 'US',
+        },
+        defaultBillingDetails: {
+          email: currentUser.email,
+        },
+        style: 'automatic',
+      });
+
+      if (initError) {
+        console.error('Payment sheet init error:', initError);
+        Alert.alert('Payment Error', 'Could not set up payment. Your registration has been saved — you can pay later.');
+        setStep('done');
+        return;
+      }
+
+      // 3. Present Payment Sheet (Apple Pay will show at top if configured)
+      const { error: presentError } = await presentPaymentSheet();
+
+      if (presentError) {
+        if (presentError.code === 'Canceled') {
+          setStep('payment');
+          return;
+        }
+        Alert.alert('Payment Failed', presentError.message || 'Payment could not be processed. You can try a different payment option.', [
+          { text: 'Back to Options', onPress: () => setStep('payment') },
+        ]);
+        return;
+      }
+
+      // 4. Confirm payment on backend
+      const confirmRes = await fetch(`${API_URL}/api/stripe/confirm-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentIntentId: piJson.data.paymentIntentId }),
+      });
+      const confirmJson = await confirmRes.json() as any;
+
+      if (confirmJson.success && confirmJson.data?.paid) {
+        setRegistrationResult((prev: any) => ({ ...prev, paid: true, amountCents: totalCents }));
+      }
+
+      setStep('done');
+    } catch (err: any) {
+      console.error('Payment processing error:', err);
+      Alert.alert('Payment Error', 'Something went wrong. Your registration has been saved — you can pay later.');
+      setStep('done');
+    }
+  }
+
   // ------ STEP RENDERS ------
 
   function renderStepIndicator() {
-    const steps = hotels.length > 0 || step === 'hotels'
-      ? ['Select Team', 'Hotel Pref', 'Confirm']
-      : ['Select Team', 'Confirm'];
-    const currentIndex = step === 'team' ? 0
-      : step === 'hotels' ? 1
-      : step === 'confirm' || step === 'submitting' ? (hotels.length > 0 ? 2 : 1)
-      : steps.length - 1;
+    const steps = ['Team', 'Hotels', 'Payment', 'Confirm'];
+    const stepMap: Record<string, number> = {
+      team: 0,
+      hotels: 1,
+      payment: 2,
+      confirm: 3,
+      submitting: 3,
+      processing_payment: 3,
+    };
+    const currentIndex = stepMap[step] ?? 3;
 
     return (
       <View style={styles.stepIndicator}>
@@ -224,25 +504,65 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       );
     }
 
+    const canContinue = multiTeamMode ? selectedTeams.length > 0 : !!selectedTeam;
+
     return (
       <View style={{ flex: 1 }}>
-        <Text style={styles.stepTitle}>Select Your Team</Text>
-        <Text style={styles.stepSubtitle}>Choose which team to register for {eventName}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.stepTitle}>Select Your Team{multiTeamMode ? 's' : ''}</Text>
+          {teams.length > 1 && (
+            <TouchableOpacity
+              style={{
+                backgroundColor: multiTeamMode ? colors.cyan : '#e8eef7',
+                borderRadius: 16,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+              }}
+              activeOpacity={0.7}
+              onPress={() => {
+                setMultiTeamMode(!multiTeamMode);
+                setSelectedTeams([]);
+                setSelectedTeam(null);
+              }}
+            >
+              <Text style={{
+                fontSize: 12,
+                color: multiTeamMode ? colors.white : colors.navy,
+                ...fonts.semibold,
+              }}>
+                {multiTeamMode ? 'Multi ON' : 'Multi-Team'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={styles.stepSubtitle}>
+          {multiTeamMode
+            ? 'Select all teams to register in one checkout'
+            : `Choose which team to register for ${eventName}`}
+        </Text>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
           {teams.map(team => {
-            const isSelected = selectedTeam?.id === team.id;
+            const isSelected = multiTeamMode
+              ? selectedTeams.some(t => t.id === team.id)
+              : selectedTeam?.id === team.id;
             return (
               <TouchableOpacity
                 key={team.id}
                 style={[styles.teamOption, isSelected && styles.teamOptionSelected]}
                 activeOpacity={0.7}
-                onPress={() => selectTeam(team)}
+                onPress={() => multiTeamMode ? toggleTeam(team) : selectTeam(team)}
               >
                 <View style={styles.teamOptionLeft}>
-                  <View style={styles.radioOuter}>
-                    {isSelected && <View style={styles.radioInner} />}
-                  </View>
+                  {multiTeamMode ? (
+                    <View style={[styles.checkboxOuter, isSelected && styles.checkboxChecked]}>
+                      {isSelected && <Ionicons name="checkmark" size={14} color={colors.white} />}
+                    </View>
+                  ) : (
+                    <View style={styles.radioOuter}>
+                      {isSelected && <View style={styles.radioInner} />}
+                    </View>
+                  )}
                 </View>
                 <View style={styles.teamOptionContent}>
                   <View style={styles.teamBadgeRow}>
@@ -268,16 +588,26 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
               </TouchableOpacity>
             );
           })}
+
+          {multiTeamMode && selectedTeams.length > 0 && (
+            <View style={{ backgroundColor: '#f0f4ff', borderRadius: 8, padding: 12, marginTop: 4 }}>
+              <Text style={{ fontSize: 13, color: colors.navy, ...fonts.medium }}>
+                Registering {selectedTeams.length} team{selectedTeams.length > 1 ? 's' : ''}: {selectedTeams.map(t => t.name).join(', ')}
+              </Text>
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.bottomBar}>
           <TouchableOpacity
-            style={[styles.primaryBtn, !selectedTeam && styles.primaryBtnDisabled]}
+            style={[styles.primaryBtn, !canContinue && styles.primaryBtnDisabled]}
             activeOpacity={0.7}
             onPress={goToHotels}
-            disabled={!selectedTeam}
+            disabled={!canContinue}
           >
-            <Text style={styles.primaryBtnText}>Continue</Text>
+            <Text style={styles.primaryBtnText}>
+              Continue{multiTeamMode && selectedTeams.length > 1 ? ` (${selectedTeams.length} teams)` : ''}
+            </Text>
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </TouchableOpacity>
         </View>
@@ -295,6 +625,14 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       );
     }
 
+    const activeTeamIsLocal = getActiveTeamIsLocal();
+    const activeTeamNeedsHotel = getActiveTeamNeedsHotel();
+    const activeHotels = getActiveTeamHotels();
+    const selectedIds = activeHotels.filter(Boolean) as string[];
+    const canContinueHotels = allTeamsHaveHotelSelection();
+    const showMultiTeamTabs = multiTeamMode && selectedTeams.length > 1;
+    const activeTeam = showMultiTeamTabs ? selectedTeams[activeHotelTeamIdx] : null;
+
     // No hotels configured for this event
     if (hotels.length === 0) {
       return (
@@ -302,14 +640,34 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
           <Text style={styles.stepTitle}>Hotel Preference</Text>
           <Text style={styles.stepSubtitle}>Hotels haven't been configured yet for this event</Text>
 
+          {showMultiTeamTabs && (
+            <View style={styles.teamTabBar}>
+              {selectedTeams.map((team, idx) => {
+                const done = teamLocalFlags[team.id] || teamNeedsHotelFlags[team.id];
+                return (
+                  <TouchableOpacity
+                    key={team.id}
+                    style={[styles.teamTab, idx === activeHotelTeamIdx && styles.teamTabActive]}
+                    onPress={() => setActiveHotelTeamIdx(idx)}
+                  >
+                    {done && <Ionicons name="checkmark-circle" size={14} color={colors.cyan} style={{ marginRight: 4 }} />}
+                    <Text style={[styles.teamTabText, idx === activeHotelTeamIdx && styles.teamTabTextActive]} numberOfLines={1}>
+                      {team.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
             <TouchableOpacity
-              style={[styles.hotelOption, needsHotel && styles.hotelOptionSelected]}
+              style={[styles.hotelOption, activeTeamNeedsHotel && styles.hotelOptionSelected]}
               activeOpacity={0.7}
-              onPress={() => { setNeedsHotel(true); setIsLocal(false); }}
+              onPress={() => { setActiveTeamNeedsHotel(true); setActiveTeamIsLocal(false); }}
             >
               <View style={styles.radioOuter}>
-                {needsHotel && <View style={styles.radioInner} />}
+                {activeTeamNeedsHotel && <View style={styles.radioInner} />}
               </View>
               <View style={{ flex: 1, marginLeft: spacing.md }}>
                 <Text style={styles.hotelOptionTitle}>We'll Need a Hotel</Text>
@@ -320,12 +678,12 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.hotelOption, isLocal && styles.hotelOptionSelected]}
+              style={[styles.hotelOption, activeTeamIsLocal && styles.hotelOptionSelected]}
               activeOpacity={0.7}
-              onPress={() => { setIsLocal(true); setNeedsHotel(false); }}
+              onPress={() => { setActiveTeamIsLocal(true); setActiveTeamNeedsHotel(false); }}
             >
               <View style={styles.radioOuter}>
-                {isLocal && <View style={styles.radioInner} />}
+                {activeTeamIsLocal && <View style={styles.radioInner} />}
               </View>
               <View style={{ flex: 1, marginLeft: spacing.md }}>
                 <Text style={styles.hotelOptionTitle}>We're a Local Team</Text>
@@ -341,46 +699,74 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
               <Ionicons name="arrow-back" size={18} color={colors.navy} />
               <Text style={styles.secondaryBtnText}>Back</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.primaryBtn, { flex: 1 }, !(needsHotel || isLocal) && styles.primaryBtnDisabled]}
-              activeOpacity={0.7}
-              onPress={goToConfirm}
-              disabled={!(needsHotel || isLocal)}
-            >
-              <Text style={styles.primaryBtnText}>Continue</Text>
-              <Ionicons name="arrow-forward" size={18} color={colors.white} />
-            </TouchableOpacity>
+            {showMultiTeamTabs && activeHotelTeamIdx < selectedTeams.length - 1 ? (
+              <TouchableOpacity
+                style={[styles.primaryBtn, { flex: 1 }, !(activeTeamNeedsHotel || activeTeamIsLocal) && styles.primaryBtnDisabled]}
+                activeOpacity={0.7}
+                onPress={() => setActiveHotelTeamIdx(activeHotelTeamIdx + 1)}
+                disabled={!(activeTeamNeedsHotel || activeTeamIsLocal)}
+              >
+                <Text style={styles.primaryBtnText}>Next Team</Text>
+                <Ionicons name="arrow-forward" size={18} color={colors.white} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.primaryBtn, { flex: 1 }, !canContinueHotels && styles.primaryBtnDisabled]}
+                activeOpacity={0.7}
+                onPress={goToPayment}
+                disabled={!canContinueHotels}
+              >
+                <Text style={styles.primaryBtnText}>Continue</Text>
+                <Ionicons name="arrow-forward" size={18} color={colors.white} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       );
     }
 
     // Hotels are available — pick top 3
-    const selectedIds = [hotelChoice1, hotelChoice2, hotelChoice3].filter(Boolean);
 
     return (
       <View style={{ flex: 1 }}>
         <Text style={styles.stepTitle}>Hotel Preference</Text>
         <Text style={styles.stepSubtitle}>
-          Select your top 3 choices in order of preference, or choose Local Team
+          {showMultiTeamTabs
+            ? `Select hotels for each team (${activeHotelTeamIdx + 1} of ${selectedTeams.length})`
+            : 'Select your top 3 choices in order of preference, or choose Local Team'}
         </Text>
+
+        {showMultiTeamTabs && (
+          <View style={styles.teamTabBar}>
+            {selectedTeams.map((team, idx) => {
+              const done = teamLocalFlags[team.id] || !!(teamHotelPicks[team.id] && teamHotelPicks[team.id][0]);
+              return (
+                <TouchableOpacity
+                  key={team.id}
+                  style={[styles.teamTab, idx === activeHotelTeamIdx && styles.teamTabActive]}
+                  onPress={() => setActiveHotelTeamIdx(idx)}
+                >
+                  {done && <Ionicons name="checkmark-circle" size={14} color={colors.cyan} style={{ marginRight: 4 }} />}
+                  <Text style={[styles.teamTabText, idx === activeHotelTeamIdx && styles.teamTabTextActive]} numberOfLines={1}>
+                    {team.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
           {/* Local team option */}
           <TouchableOpacity
-            style={[styles.hotelOption, isLocal && styles.hotelOptionSelected]}
+            style={[styles.hotelOption, activeTeamIsLocal && styles.hotelOptionSelected]}
             activeOpacity={0.7}
             onPress={() => {
-              setIsLocal(!isLocal);
-              if (!isLocal) {
-                setHotelChoice1(null);
-                setHotelChoice2(null);
-                setHotelChoice3(null);
-              }
+              setActiveTeamIsLocal(!activeTeamIsLocal);
             }}
           >
             <View style={styles.radioOuter}>
-              {isLocal && <View style={styles.radioInner} />}
+              {activeTeamIsLocal && <View style={styles.radioInner} />}
             </View>
             <View style={{ flex: 1, marginLeft: spacing.md }}>
               <Text style={styles.hotelOptionTitle}>We're a Local Team</Text>
@@ -388,7 +774,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             </View>
           </TouchableOpacity>
 
-          {!isLocal && (
+          {!activeTeamIsLocal && (
             <>
               <Text style={styles.hotelSectionLabel}>Available Hotels</Text>
               {hotels.map(hotel => {
@@ -403,23 +789,23 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
                     activeOpacity={0.7}
                     onPress={() => {
                       if (isChosen) {
-                        // Remove this choice and shift others up
-                        if (hotelChoice1 === hotel.id) {
-                          setHotelChoice1(hotelChoice2);
-                          setHotelChoice2(hotelChoice3);
-                          setHotelChoice3(null);
-                        } else if (hotelChoice2 === hotel.id) {
-                          setHotelChoice2(hotelChoice3);
-                          setHotelChoice3(null);
+                        // Remove and shift up
+                        const picks = [...activeHotels] as [string | null, string | null, string | null];
+                        if (picks[0] === hotel.id) {
+                          picks[0] = picks[1]; picks[1] = picks[2]; picks[2] = null;
+                        } else if (picks[1] === hotel.id) {
+                          picks[1] = picks[2]; picks[2] = null;
                         } else {
-                          setHotelChoice3(null);
+                          picks[2] = null;
                         }
+                        setActiveTeamHotel(0, picks[0]);
+                        setActiveTeamHotel(1, picks[1]);
+                        setActiveTeamHotel(2, picks[2]);
                       } else {
-                        // Add as next choice
-                        if (!hotelChoice1) setHotelChoice1(hotel.id);
-                        else if (!hotelChoice2) setHotelChoice2(hotel.id);
-                        else if (!hotelChoice3) setHotelChoice3(hotel.id);
-                        // Already have 3
+                        // Add as next
+                        if (!activeHotels[0]) setActiveTeamHotel(0, hotel.id);
+                        else if (!activeHotels[1]) setActiveTeamHotel(1, hotel.id);
+                        else if (!activeHotels[2]) setActiveTeamHotel(2, hotel.id);
                       }
                     }}
                   >
@@ -453,13 +839,143 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             <Ionicons name="arrow-back" size={18} color={colors.navy} />
             <Text style={styles.secondaryBtnText}>Back</Text>
           </TouchableOpacity>
+          {showMultiTeamTabs && activeHotelTeamIdx < selectedTeams.length - 1 ? (
+            <TouchableOpacity
+              style={[styles.primaryBtn, { flex: 1 }, !(activeTeamIsLocal || activeHotels[0]) && styles.primaryBtnDisabled]}
+              activeOpacity={0.7}
+              onPress={() => setActiveHotelTeamIdx(activeHotelTeamIdx + 1)}
+              disabled={!(activeTeamIsLocal || activeHotels[0])}
+            >
+              <Text style={styles.primaryBtnText}>Next Team</Text>
+              <Ionicons name="arrow-forward" size={18} color={colors.white} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.primaryBtn, { flex: 1 }, !canContinueHotels && styles.primaryBtnDisabled]}
+              activeOpacity={0.7}
+              onPress={goToPayment}
+              disabled={!canContinueHotels}
+            >
+              <Text style={styles.primaryBtnText}>Continue</Text>
+              <Ionicons name="arrow-forward" size={18} color={colors.white} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  function renderPaymentStep() {
+    const formatPrice = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    const fullPrice = eventPriceCents > 0 ? formatPrice(eventPriceCents) : '';
+    const depositStr = formatPrice(totalDepositCents);
+    const perTeamLabel = numTeams > 1 ? ` ($350 x ${numTeams} teams)` : '';
+
+    const paymentOptions: { value: 'pay_now' | 'pay_deposit' | 'pay_later'; title: string; subtitle: string; icon: string; priceLabel?: string }[] = [
+      {
+        value: 'pay_now',
+        title: 'Pay in Full',
+        subtitle: fullPrice
+          ? `Pay ${fullPrice} now with Apple Pay or card`
+          : 'Pay the full registration fee now with Apple Pay or card',
+        icon: 'card-outline',
+        priceLabel: fullPrice || undefined,
+      },
+      {
+        value: 'pay_deposit',
+        title: 'Pay Deposit',
+        subtitle: `Pay ${depositStr} deposit now${perTeamLabel}, remaining balance due later`,
+        icon: 'wallet-outline',
+        priceLabel: depositStr,
+      },
+      {
+        value: 'pay_later',
+        title: 'Pay Later',
+        subtitle: fullPrice
+          ? `Register now, pay ${fullPrice} after approval`
+          : 'Register now and receive an invoice after approval',
+        icon: 'time-outline',
+      },
+    ];
+
+    return (
+      <View style={{ flex: 1 }}>
+        <Text style={styles.stepTitle}>Payment Option</Text>
+        <Text style={styles.stepSubtitle}>Choose how you'd like to pay for registration</Text>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+          {paymentOptions.map(opt => {
+            const isSelected = paymentChoice === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.paymentOption, isSelected && styles.paymentOptionSelected]}
+                activeOpacity={0.7}
+                onPress={() => setPaymentChoice(opt.value)}
+              >
+                <View style={styles.paymentOptionLeft}>
+                  <View style={[styles.paymentIconWrap, isSelected && styles.paymentIconWrapActive]}>
+                    <Ionicons
+                      name={opt.icon as any}
+                      size={24}
+                      color={isSelected ? colors.white : colors.navy}
+                    />
+                  </View>
+                </View>
+                <View style={styles.paymentOptionContent}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[styles.paymentOptionTitle, isSelected && styles.paymentOptionTitleActive]}>
+                      {opt.title}
+                    </Text>
+                    {opt.priceLabel ? (
+                      <Text style={[styles.paymentPriceLabel, isSelected && styles.paymentPriceLabelActive]}>
+                        {opt.priceLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.paymentOptionSubtitle}>{opt.subtitle}</Text>
+                </View>
+                <View style={styles.radioOuter}>
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {paymentChoice !== 'pay_later' && (
+            <View style={styles.applePayNote}>
+              <Ionicons name="logo-apple" size={20} color={colors.text} />
+              <Text style={styles.applePayNoteText}>
+                Apple Pay, credit card, and debit card accepted
+              </Text>
+            </View>
+          )}
+
+          {/* Discount Code */}
+          <View style={styles.discountSection}>
+            <Text style={styles.discountLabel}>Have a Discount Code?</Text>
+            <TextInput
+              style={styles.discountInput}
+              placeholder="Enter code (optional)"
+              placeholderTextColor={colors.textMuted}
+              value={discountCode}
+              onChangeText={setDiscountCode}
+              autoCapitalize="characters"
+            />
+          </View>
+        </ScrollView>
+
+        <View style={styles.bottomBar}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('hotels')}>
+            <Ionicons name="arrow-back" size={18} color={colors.navy} />
+            <Text style={styles.secondaryBtnText}>Back</Text>
+          </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.primaryBtn, { flex: 1 }, !(isLocal || hotelChoice1) && styles.primaryBtnDisabled]}
+            style={[styles.primaryBtn, { flex: 1 }]}
             activeOpacity={0.7}
             onPress={goToConfirm}
-            disabled={!(isLocal || hotelChoice1)}
           >
-            <Text style={styles.primaryBtnText}>Continue</Text>
+            <Text style={styles.primaryBtnText}>Review & Submit</Text>
             <Ionicons name="arrow-forward" size={18} color={colors.white} />
           </TouchableOpacity>
         </View>
@@ -473,6 +989,13 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       return hotels.find(h => h.id === id)?.hotel_name || id;
     };
 
+    const fmtCents = (c: number) => `$${(c / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    const paymentLabel = paymentChoice === 'pay_now'
+      ? `Pay in Full${eventPriceCents > 0 ? ` — ${fmtCents(eventPriceCents)}` : ''}`
+      : paymentChoice === 'pay_deposit'
+      ? `Pay Deposit — ${fmtCents(totalDepositCents)}`
+      : 'Pay Later';
+
     return (
       <View style={{ flex: 1 }}>
         <Text style={styles.stepTitle}>Confirm Registration</Text>
@@ -485,77 +1008,92 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             <Text style={styles.confirmValue}>{eventName}</Text>
           </View>
 
-          {/* Team */}
+          {/* Team(s) */}
           <View style={styles.confirmCard}>
-            <Text style={styles.confirmLabel}>Team</Text>
-            <Text style={styles.confirmValue}>{selectedTeam?.name}</Text>
-            <View style={styles.confirmBadgeRow}>
-              <View style={styles.ageBadge}>
-                <Text style={styles.ageBadgeText}>{selectedTeam?.age_group}</Text>
-              </View>
-              {selectedTeam?.division_level ? (
-                <View style={[styles.ageBadge, { backgroundColor: colors.navy }]}>
-                  <Text style={styles.ageBadgeText}>{selectedTeam.division_level}</Text>
+            <Text style={styles.confirmLabel}>Team{numTeams > 1 ? 's' : ''}</Text>
+            {teamsToRegister.map(team => (
+              <View key={team.id} style={{ marginBottom: numTeams > 1 ? spacing.sm : 0 }}>
+                <Text style={styles.confirmValue}>{team.name}</Text>
+                <View style={[styles.confirmBadgeRow, { marginBottom: 2 }]}>
+                  <View style={styles.ageBadge}>
+                    <Text style={styles.ageBadgeText}>{team.age_group}</Text>
+                  </View>
+                  {team.division_level ? (
+                    <View style={[styles.ageBadge, { backgroundColor: colors.navy }]}>
+                      <Text style={styles.ageBadgeText}>{team.division_level}</Text>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
-            </View>
+              </View>
+            ))}
           </View>
 
           {/* Contact */}
           <View style={styles.confirmCard}>
             <Text style={styles.confirmLabel}>Contact Email</Text>
             <Text style={styles.confirmValue}>{currentUser?.email}</Text>
-            {selectedTeam?.head_coach_name ? (
-              <>
-                <Text style={[styles.confirmLabel, { marginTop: spacing.md }]}>Head Coach</Text>
-                <Text style={styles.confirmValue}>{selectedTeam.head_coach_name}</Text>
-              </>
-            ) : null}
           </View>
 
-          {/* Hotels */}
-          {(hotels.length > 0 || needsHotel) ? (
-            <View style={styles.confirmCard}>
-              <Text style={styles.confirmLabel}>Hotel Preference</Text>
-              {isLocal ? (
-                <Text style={styles.confirmValue}>Local Team — No hotel needed</Text>
-              ) : needsHotel ? (
-                <Text style={styles.confirmValue}>Will need a hotel (to be notified)</Text>
-              ) : (
-                <>
-                  {hotelChoice1 ? <Text style={styles.confirmValue}>1st Choice: {hotelName(hotelChoice1)}</Text> : null}
-                  {hotelChoice2 ? <Text style={styles.confirmValue}>2nd Choice: {hotelName(hotelChoice2)}</Text> : null}
-                  {hotelChoice3 ? <Text style={styles.confirmValue}>3rd Choice: {hotelName(hotelChoice3)}</Text> : null}
-                </>
-              )}
-            </View>
-          ) : null}
+          {/* Hotels — per team in multi mode */}
+          {teamsToRegister.map(team => {
+            const tIsLocal = multiTeamMode ? teamLocalFlags[team.id] : isLocal;
+            const tNeedsHotel = multiTeamMode ? teamNeedsHotelFlags[team.id] : needsHotel;
+            const tPicks = multiTeamMode ? (teamHotelPicks[team.id] || [null, null, null]) : [hotelChoice1, hotelChoice2, hotelChoice3];
+            const hasHotelInfo = hotels.length > 0 || tNeedsHotel || tIsLocal;
+            if (!hasHotelInfo) return null;
+            return (
+              <View key={team.id} style={styles.confirmCard}>
+                <Text style={styles.confirmLabel}>
+                  Hotel{numTeams > 1 ? ` — ${team.name}` : ' Preference'}
+                </Text>
+                {tIsLocal ? (
+                  <Text style={styles.confirmValue}>Local Team — No hotel needed</Text>
+                ) : tNeedsHotel ? (
+                  <Text style={styles.confirmValue}>Will need a hotel (to be notified)</Text>
+                ) : (
+                  <>
+                    {tPicks[0] ? <Text style={styles.confirmValue}>1st Choice: {hotelName(tPicks[0])}</Text> : null}
+                    {tPicks[1] ? <Text style={styles.confirmValue}>2nd Choice: {hotelName(tPicks[1])}</Text> : null}
+                    {tPicks[2] ? <Text style={styles.confirmValue}>3rd Choice: {hotelName(tPicks[2])}</Text> : null}
+                  </>
+                )}
+              </View>
+            );
+          })}
 
           {/* Payment */}
           <View style={styles.confirmCard}>
             <Text style={styles.confirmLabel}>Payment</Text>
-            <Text style={styles.confirmValue}>Pay Later</Text>
-            <Text style={styles.confirmNote}>
-              You'll receive an invoice and payment instructions after your registration is approved.
-            </Text>
+            <View style={styles.paymentConfirmRow}>
+              <Ionicons
+                name={paymentChoice === 'pay_now' ? 'card-outline' : paymentChoice === 'pay_deposit' ? 'wallet-outline' : 'time-outline'}
+                size={18}
+                color={colors.navy}
+              />
+              <Text style={[styles.confirmValue, { marginLeft: spacing.sm }]}>{paymentLabel}</Text>
+            </View>
+            {paymentChoice !== 'pay_later' && (
+              <Text style={styles.confirmNote}>
+                You'll be prompted to pay with Apple Pay or card after submitting.
+              </Text>
+            )}
+            {paymentChoice === 'pay_later' && (
+              <Text style={styles.confirmNote}>
+                You'll receive an invoice and payment instructions after your registration is approved.
+              </Text>
+            )}
           </View>
 
-          {/* Discount Code */}
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmLabel}>Have a Discount Code?</Text>
-            <TextInput
-              style={styles.discountInput}
-              placeholder="Enter code (optional)"
-              placeholderTextColor={colors.textMuted}
-              value={discountCode}
-              onChangeText={setDiscountCode}
-              autoCapitalize="characters"
-            />
-          </View>
+          {discountCode ? (
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmLabel}>Discount Code</Text>
+              <Text style={styles.confirmValue}>{discountCode}</Text>
+            </View>
+          ) : null}
         </ScrollView>
 
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep(hotels.length > 0 ? 'hotels' : 'team')}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('payment')}>
             <Ionicons name="arrow-back" size={18} color={colors.navy} />
             <Text style={styles.secondaryBtnText}>Back</Text>
           </TouchableOpacity>
@@ -565,7 +1103,9 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
             onPress={submitRegistration}
           >
             <Ionicons name="checkmark-circle" size={20} color={colors.white} />
-            <Text style={styles.primaryBtnText}>Register Now</Text>
+            <Text style={styles.primaryBtnText}>
+              {paymentChoice !== 'pay_later' ? 'Register & Pay' : 'Register Now'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -581,7 +1121,21 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
     );
   }
 
+  function renderProcessingPayment() {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.cyan} />
+        <Text style={styles.loadingText}>Setting up payment...</Text>
+        <Text style={[styles.loadingText, { fontSize: 13, marginTop: spacing.sm }]}>
+          The payment sheet will appear shortly
+        </Text>
+      </View>
+    );
+  }
+
   function renderDone() {
+    const didPay = registrationResult?.paid;
+
     return (
       <View style={styles.doneContainer}>
         <View style={styles.doneIconWrap}>
@@ -589,7 +1143,9 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
         </View>
         <Text style={styles.doneTitle}>You're Registered!</Text>
         <Text style={styles.doneSubtitle}>
-          {selectedTeam?.name} has been registered for {eventName}
+          {numTeams > 1
+            ? `${numTeams} teams have been registered for ${eventName}`
+            : `${teamsToRegister[0]?.name || 'Your team'} has been registered for ${eventName}`}
         </Text>
 
         <View style={styles.doneCard}>
@@ -606,12 +1162,21 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
               You'll receive a confirmation email at {currentUser?.email}
             </Text>
           </View>
-          <View style={styles.doneStep}>
-            <View style={styles.doneStepDot} />
-            <Text style={styles.doneStepText}>
-              Payment instructions will be sent once approved
-            </Text>
-          </View>
+          {didPay ? (
+            <View style={styles.doneStep}>
+              <View style={[styles.doneStepDot, { backgroundColor: '#22c55e' }]} />
+              <Text style={[styles.doneStepText, { color: '#22c55e', fontWeight: '600' }]}>
+                Payment received — ${((registrationResult.amountCents || 0) / 100).toFixed(2)}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.doneStep}>
+              <View style={styles.doneStepDot} />
+              <Text style={styles.doneStepText}>
+                Payment instructions will be sent once approved
+              </Text>
+            </View>
+          )}
         </View>
 
         {registrationResult?.discountCode ? (
@@ -661,7 +1226,7 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
         }}
       />
 
-      {step !== 'done' && step !== 'submitting' && (
+      {!['done', 'submitting', 'processing_payment'].includes(step) && (
         <View style={styles.stepIndicatorWrap}>
           {renderStepIndicator()}
         </View>
@@ -670,8 +1235,10 @@ export default function RegisterEventScreen({ route, navigation }: { route: any;
       <View style={styles.content}>
         {step === 'team' && renderTeamStep()}
         {step === 'hotels' && renderHotelsStep()}
+        {step === 'payment' && renderPaymentStep()}
         {step === 'confirm' && renderConfirmStep()}
         {step === 'submitting' && renderSubmitting()}
+        {step === 'processing_payment' && renderProcessingPayment()}
         {step === 'done' && renderDone()}
       </View>
     </KeyboardAvoidingView>
@@ -735,7 +1302,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   stepLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
     ...fonts.medium,
     marginLeft: spacing.xs,
@@ -746,10 +1313,10 @@ const styles = StyleSheet.create({
     ...fonts.semibold,
   },
   stepLine: {
-    width: 24,
+    width: 20,
     height: 2,
     backgroundColor: colors.border,
-    marginHorizontal: spacing.xs,
+    marginHorizontal: 2,
   },
   stepLineActive: {
     backgroundColor: colors.navy,
@@ -827,6 +1394,52 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navy,
   },
 
+  // Checkbox (multi-team mode)
+  checkboxOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
+  },
+
+  // Team tabs (multi-team hotel selection)
+  teamTabBar: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  teamTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#e8eef7',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  teamTabActive: {
+    backgroundColor: '#f0f4ff',
+    borderColor: colors.navy,
+  },
+  teamTabText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    ...fonts.medium,
+  },
+  teamTabTextActive: {
+    color: colors.navy,
+    ...fonts.semibold,
+  },
+
   // Age badge
   ageBadge: {
     backgroundColor: colors.cyan,
@@ -891,6 +1504,87 @@ const styles = StyleSheet.create({
     ...fonts.bold,
   },
 
+  // Payment options
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  paymentOptionSelected: {
+    borderColor: colors.navy,
+    backgroundColor: '#f0f4ff',
+  },
+  paymentOptionLeft: {
+    marginRight: spacing.md,
+  },
+  paymentIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#e8eef7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentIconWrapActive: {
+    backgroundColor: colors.navy,
+  },
+  paymentOptionContent: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  paymentOptionTitle: {
+    fontSize: 16,
+    color: colors.text,
+    ...fonts.semibold,
+    marginBottom: 2,
+  },
+  paymentOptionTitleActive: {
+    color: colors.navy,
+  },
+  paymentOptionSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...fonts.regular,
+    lineHeight: 18,
+  },
+  paymentPriceLabel: {
+    fontSize: 18,
+    color: colors.text,
+    ...fonts.bold,
+  },
+  paymentPriceLabelActive: {
+    color: colors.navy,
+  },
+  applePayNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#f0f4ff',
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+  },
+  applePayNoteText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    ...fonts.medium,
+    flex: 1,
+  },
+  discountSection: {
+    marginTop: spacing.lg,
+  },
+  discountLabel: {
+    fontSize: 14,
+    color: colors.text,
+    ...fonts.semibold,
+    marginBottom: spacing.sm,
+  },
+
   // Confirm
   confirmCard: {
     backgroundColor: colors.card,
@@ -925,6 +1619,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     lineHeight: 18,
   },
+  paymentConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   discountInput: {
     backgroundColor: colors.bg,
     borderRadius: radii.sm,
@@ -935,7 +1633,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
     ...fonts.medium,
-    marginTop: spacing.sm,
   },
 
   // Buttons

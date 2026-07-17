@@ -449,8 +449,8 @@ export default function TeamsPage() {
             className="px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm bg-white focus:border-[#003e79] outline-none"
           >
             <option value="">All Seasons</option>
-            <option value="2025-2026">2025-2026</option>
             <option value="2026-2027">2026-2027</option>
+            <option value="2027-2028">2027-2028</option>
             <option value="none">No Season Set</option>
           </select>
 

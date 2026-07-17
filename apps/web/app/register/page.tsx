@@ -90,6 +90,9 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Redirect to create-team if no event param
+  const [redirectToCreateTeam, setRedirectToCreateTeam] = useState(false);
+
   // Auth
   const [auth, setAuth] = useState<{ token: string; user: any } | null>(null);
 
@@ -138,7 +141,7 @@ export default function RegisterPage() {
 
   // Discount code
   const [discountCode, setDiscountCode] = useState('');
-  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name: string; code_id: string } | null>(null);
+  const [discountValidation, setDiscountValidation] = useState<{ valid: boolean; discount_local_cents: number; discount_hotel_cents: number; team_name?: string; code_id?: string; type?: string; amount?: number; discount_type?: string; discount_amount?: number } | null>(null);
   const [validatingCode, setValidatingCode] = useState(false);
   const [discountError, setDiscountError] = useState('');
   const [discountExpanded, setDiscountExpanded] = useState(false);
@@ -188,6 +191,13 @@ export default function RegisterPage() {
         }
       }
       if (!ev) {
+        // No event param — redirect to create-team page
+        const params = new URLSearchParams(window.location.search);
+        if (!params.get('event') && !params.get('eventId')) {
+          setRedirectToCreateTeam(true);
+          setLoading(false);
+          return;
+        }
         setError('Event not found. Please go back and try again.');
       }
       setEvent(ev);
@@ -543,13 +553,14 @@ export default function RegisterPage() {
     setLoadingUpsell(false);
   };
 
-  // Validate discount code
+  // Validate discount code (checks event discount codes AND meeting reward codes)
   const validateDiscountCode = async () => {
     if (!discountCode.trim()) return;
     setValidatingCode(true);
     setDiscountError('');
     try {
       const teamId = multiTeamMode ? selectedTeams[0]?.id : selectedTeam?.id;
+      // Try event-specific discount codes first
       const res = await fetch(`${API}/events/validate-discount-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -559,24 +570,18 @@ export default function RegisterPage() {
       if (json.success) {
         setDiscountValidation({ valid: true, ...json.data });
       } else {
-        // Fall back to meeting reward codes (UHT-XXXXXX, dollar amounts)
+        // Fallback: try meeting reward code validation
         try {
-          const mrRes = await fetch(`${API}/meeting-reward/validate`, {
+          const rewardRes = await fetch(`${API}/api/meeting-reward/validate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code: discountCode.trim().toUpperCase() }),
           });
-          const mrJson = await mrRes.json() as any;
-          if (mrJson.success && mrJson.data?.valid) {
-            setDiscountValidation({
-              valid: true,
-              type: 'meeting_reward',
-              amount: mrJson.data.amount,
-              discount_hotel_cents: mrJson.data.amount * 100,
-              discount_local_cents: mrJson.data.amount * 100,
-            } as any);
+          const rewardJson = await rewardRes.json() as any;
+          if (rewardJson.success && rewardJson.data?.valid) {
+            setDiscountValidation({ valid: true, type: 'meeting_reward', amount: rewardJson.data.amount, discount_hotel_cents: rewardJson.data.amount * 100, discount_local_cents: rewardJson.data.amount * 100 });
           } else {
-            setDiscountError(mrJson.error || json.error || 'Invalid code');
+            setDiscountError(rewardJson.error || json.error || 'Invalid code');
             setDiscountValidation(null);
           }
         } catch {
@@ -670,6 +675,7 @@ export default function RegisterPage() {
           const stripeJson = await stripeRes.json() as any;
 
           if (stripeJson.success && stripeJson.data?.fullyDiscounted) {
+            // Discount covered the full amount — no payment needed
             setRegResult({
               ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
               discountCode: discountCode.trim().toUpperCase(),
@@ -679,9 +685,7 @@ export default function RegisterPage() {
             loadUpsellEvents();
             setStep('confirmed');
             return;
-          }
-
-          if (stripeJson.success && stripeJson.data?.clientSecret) {
+          } else if (stripeJson.success && stripeJson.data?.clientSecret) {
             setClientSecret(stripeJson.data.clientSecret);
             setPaymentIntentId(stripeJson.data.paymentIntentId);
             setPaymentAmountCents(stripeJson.data.totalCents || 0);
@@ -718,13 +722,10 @@ export default function RegisterPage() {
         try {
           const primaryRegId = results[0]?.primaryRegistrationId || results[0]?.allRegistrationIds?.[0];
           if (primaryRegId) {
-            const redeemUrl = (discountValidation as any).type === 'meeting_reward'
-              ? `${API}/meeting-reward/redeem`
-              : `${API}/events/redeem-discount-code`;
-            await fetch(redeemUrl, {
+            await fetch(`${API}/events/redeem-discount-code`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: discountCode.trim().toUpperCase(), registrationId: primaryRegId, eventId: event.id }),
+              body: JSON.stringify({ code: discountCode.trim().toUpperCase(), registrationId: primaryRegId }),
             });
           }
         } catch (redeemErr) {
@@ -738,11 +739,15 @@ export default function RegisterPage() {
     }
   };
 
-  // Advance from payment → submit registration directly
+  // Advance from payment → submit registration + create payment intent
   const handlePaymentContinue = async () => {
     if (!paymentChoice) return;
-    // All payment choices go to the checkout/confirmation step
-    setStep('card_form');
+    if (paymentChoice === 'pay_later') {
+      setStep('card_form');
+    } else {
+      // pay_now and pay_deposit need to create the registration + payment intent first
+      await submitRegistration();
+    }
   };
 
   // Compute pricing — per-team based on division pricing
@@ -763,19 +768,20 @@ export default function RegisterPage() {
   const totalPriceCents = teamsToPrice.reduce((sum, t) => sum + getTeamPrice(t), 0);
   // Calculate discount based on hotel selection
   const discountAmountCents = discountValidation ? (() => {
-    // Percent-type codes discount the whole total
-    if ((discountValidation as any).discount_type === 'percent' && (discountValidation as any).discount_amount) {
-      return Math.round(totalPriceCents * (discountValidation as any).discount_amount / 100);
+    // Percentage coupon: calculate from total price
+    if (discountValidation.discount_type === 'percent' && discountValidation.discount_amount) {
+      return Math.round(totalPriceCents * discountValidation.discount_amount / 100);
     }
-    // Check if any team selected "Local Team"
+    // Fixed amount coupons and other discount codes
     const anyLocal = multiTeamMode
       ? Object.values(teamLocalFlags).some(v => v)
       : isLocalTeam;
     return anyLocal ? discountValidation.discount_local_cents : discountValidation.discount_hotel_cents;
   })() : 0;
   const basePriceCents = Math.max(0, totalPriceCents - discountAmountCents);
-  // Deposit is a flat $350 per team
-  const depositCents = 35000 * Math.max(teamsToPrice.length, 1);
+  // Flat $350 deposit per team
+  const DEPOSIT_PER_TEAM_CENTS = 35000;
+  const depositCents = DEPOSIT_PER_TEAM_CENTS * Math.max(teamsToPrice.length, 1);
   // Step names
   const stepNames = ['Team', 'Hotels', 'Payment', 'Checkout'];
   const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'card_form' || step === 'confirmed' || step === 'submitting' ? 3 : 0;
@@ -786,6 +792,20 @@ export default function RegisterPage() {
         <div className="text-center">
           <div className="w-10 h-10 border-3 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-[#6e6e73]">Loading event...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (redirectToCreateTeam) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/create-team';
+    }
+    return (
+      <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-3 border-[#00ccff] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[#6e6e73]">Redirecting to team registration...</p>
         </div>
       </div>
     );
@@ -1491,11 +1511,11 @@ export default function RegisterPage() {
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                       <p className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                        {(discountValidation as any).discount_type === 'percent'
-                          ? `${(discountValidation as any).discount_amount}% discount applied!`
-                          : isLocalTeam || Object.values(teamLocalFlags).some(v => v)
+                        {discountValidation.discount_type === 'percent'
+                          ? `${discountValidation.discount_amount}% discount applied!`
+                          : (isLocalTeam || Object.values(teamLocalFlags).some(v => v)
                             ? `$${(discountValidation.discount_local_cents / 100).toFixed(0)} discount applied!`
-                            : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`
+                            : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`)
                         }
                       </p>
                       {discountValidation.team_name && (

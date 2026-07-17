@@ -801,7 +801,7 @@ emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), z
 function buildMagicLinkHtml(recipientName: string, loginUrl: string, fields: Record<string, string>): string {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-      <img src="https://uht-web.pages.dev/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+      <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
       <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${recipientName},</h2>
       <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
         ${fields.body_text || 'Click the button below to sign in to your Ultimate Tournaments account. This link expires in 15 minutes.'}
@@ -812,6 +812,11 @@ function buildMagicLinkHtml(recipientName: string, loginUrl: string, fields: Rec
       <p style="color: #aeaeb2; font-size: 13px; margin-top: 32px;">
         ${fields.footer_text || "If you didn't request this link, you can safely ignore this email."}
       </p>
+      <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+        <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+        <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+        <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+      </div>
     </div>`;
 }
 
@@ -867,6 +872,50 @@ emailRoutes.post('/webhooks/resend', async (c) => {
 // Legacy SendGrid webhook route (kept for any in-flight webhooks)
 emailRoutes.post('/webhooks/sendgrid', async (c) => {
   return c.json({ success: true });
+});
+
+// ==================
+// Unsubscribe — no auth required (clicked from email links)
+// ==================
+emailRoutes.get('/unsubscribe', async (c) => {
+  const email = c.req.query('email');
+  if (!email) return c.json({ success: false, error: 'Email required' }, 400);
+
+  const db = c.env.DB;
+  const normalized = email.toLowerCase().trim();
+
+  // Check current subscription status
+  const contact = await db.prepare('SELECT id, is_subscribed_email FROM contacts WHERE LOWER(email) = ?').bind(normalized).first<any>();
+  const elc = await db.prepare('SELECT id, is_active FROM email_list_contacts WHERE LOWER(email) = ?').bind(normalized).first<any>();
+
+  return c.json({
+    success: true,
+    data: {
+      email: normalized,
+      found: !!(contact || elc),
+      already_unsubscribed: (contact && contact.is_subscribed_email === 0) || (elc && elc.is_active === 0),
+    },
+  });
+});
+
+emailRoutes.post('/unsubscribe', async (c) => {
+  const body = await c.req.json<{ email: string }>();
+  if (!body.email) return c.json({ success: false, error: 'Email required' }, 400);
+
+  const db = c.env.DB;
+  const normalized = body.email.toLowerCase().trim();
+
+  // Unsubscribe from contacts table
+  await db.prepare(
+    "UPDATE contacts SET is_subscribed_email = 0, updated_at = datetime('now') WHERE LOWER(email) = ?"
+  ).bind(normalized).run();
+
+  // Unsubscribe from email_list_contacts table
+  await db.prepare(
+    'UPDATE email_list_contacts SET is_active = 0 WHERE LOWER(email) = ?'
+  ).bind(normalized).run();
+
+  return c.json({ success: true, message: 'Successfully unsubscribed' });
 });
 
 // ==========================================
@@ -931,6 +980,7 @@ function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionI
         '' as event_name
       FROM contacts c
       WHERE c.source = 'legacy_team' AND c.email IS NOT NULL AND c.email != ''
+        AND c.is_subscribed_email = 1
       ORDER BY c.last_name, c.first_name
     `;
     return { query, params: [] };
@@ -1088,7 +1138,8 @@ const EMAIL_FOOTER = `
     <a href="https://ultimatetournaments.com" style="color:#003e79;">ultimatetournaments.com</a>
   </p>
   <p style="color:#aeaeb2;font-size:11px;margin:0;">
-    You received this email because you are part of our tournament community.
+    You received this email because you are part of our tournament community.<br/>
+    <a href="https://ultimatetournaments.com/unsubscribe" style="color:#aeaeb2;text-decoration:underline;">Unsubscribe</a>
   </p>
 </div>`;
 

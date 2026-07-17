@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { sendApprovalEmail } from '../lib/approval-email';
+import { sendHotelConfirmationEmail } from '../lib/hotel-confirmation-email';
 import { getResolvedFields } from '../lib/template-overrides';
 
 export const registrationRoutes = new Hono<{ Bindings: Env }>();
@@ -153,15 +154,23 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
     SELECT r.*,
       t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
+      t.head_coach_name, t.head_coach_email, t.head_coach_phone,
+      t.manager_name, t.manager_email, t.manager_phone,
       ed.age_group as division_age_group, ed.division_level,
       u.first_name as registered_by_first, u.last_name as registered_by_last, u.email as registered_by_email, u.phone as registered_by_phone,
       e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
+      h1.hotel_name as hotel_choice_1_name, h1.id as hotel_choice_1_id,
+      h2.hotel_name as hotel_choice_2_name, h2.id as hotel_choice_2_id,
+      h3.hotel_name as hotel_choice_3_name, h3.id as hotel_choice_3_id,
       'normalized' as _source
     FROM registrations r
     JOIN teams t ON t.id = r.team_id
     JOIN event_divisions ed ON ed.id = r.event_division_id
     JOIN users u ON u.id = r.registered_by
     JOIN events e ON e.id = r.event_id
+    LEFT JOIN event_hotels h1 ON h1.id = r.hotel_choice_1
+    LEFT JOIN event_hotels h2 ON h2.id = r.hotel_choice_2
+    LEFT JOIN event_hotels h3 ON h3.id = r.hotel_choice_3
     WHERE 1=1
   `;
   const p1: string[] = [];
@@ -179,16 +188,25 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
   let q2 = `
     SELECT er.*,
       er.team_name, er.age_group as team_age_group,
-      NULL as team_city, NULL as team_state, NULL as team_logo_url,
+      ct.city as team_city, ct.state as team_state, ct.logo_url as team_logo_url,
+      ct.head_coach_name, ct.head_coach_email, ct.head_coach_phone,
+      ct.manager_name, ct.manager_email, ct.manager_phone,
       COALESCE(ced.age_group, er.age_group) as division_age_group,
       COALESCE(ced.division_level, er.division) as division_level,
       er.manager_first_name as registered_by_first, er.manager_last_name as registered_by_last,
       er.email1 as registered_by_email, er.phone as registered_by_phone,
       e.name as event_name, e.city as event_city, e.state as event_state, e.start_date as event_start_date,
+      ch1.hotel_name as hotel_choice_1_name, ch1.id as hotel_choice_1_id,
+      ch2.hotel_name as hotel_choice_2_name, ch2.id as hotel_choice_2_id,
+      ch3.hotel_name as hotel_choice_3_name, ch3.id as hotel_choice_3_id,
       'consumer' as _source
     FROM event_registrations er
     LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
+    LEFT JOIN teams ct ON ct.id = er.team_id
     JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_hotels ch1 ON ch1.id = er.hotel_choice_1
+    LEFT JOIN event_hotels ch2 ON ch2.id = er.hotel_choice_2
+    LEFT JOIN event_hotels ch3 ON ch3.id = er.hotel_choice_3
     WHERE 1=1
   `;
   const p2: string[] = [];
@@ -239,6 +257,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     SELECT r.*,
       t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
+      t.head_coach_name, t.head_coach_email, t.head_coach_phone,
+      t.manager_name, t.manager_email, t.manager_phone,
       ed.age_group as division_age_group, ed.division_level,
       u.first_name as registered_by_first, u.last_name as registered_by_last, u.email as registered_by_email, u.phone as registered_by_phone,
       (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = r.id) as roster_count,
@@ -275,9 +295,11 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     SELECT er.*,
       er.team_name as team_name,
       er.age_group as team_age_group,
-      NULL as team_city,
-      NULL as team_state,
-      NULL as team_logo_url,
+      ct2.city as team_city,
+      ct2.state as team_state,
+      ct2.logo_url as team_logo_url,
+      ct2.head_coach_name, ct2.head_coach_email, ct2.head_coach_phone,
+      ct2.manager_name, ct2.manager_email, ct2.manager_phone,
       COALESCE(ced.age_group, er.age_group) as division_age_group,
       COALESCE(ced.division_level, er.division) as division_level,
       er.manager_first_name as registered_by_first,
@@ -291,6 +313,7 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
       'consumer' as _source
     FROM event_registrations er
     LEFT JOIN event_divisions ced ON ced.id = er.event_division_id
+    LEFT JOIN teams ct2 ON ct2.id = er.team_id
     LEFT JOIN event_hotels ch1 ON ch1.id = er.hotel_choice_1
     LEFT JOIN event_hotels ch2 ON ch2.id = er.hotel_choice_2
     LEFT JOIN event_hotels ch3 ON ch3.id = er.hotel_choice_3
@@ -368,23 +391,42 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
   // For consumer registrations, build a pseudo-team object from the registration data
   let team: any = null;
   if (isConsumer) {
+    // Try to get team state from linked team if team_id exists
+    let teamState: string | null = null;
+    let teamCity: string | null = null;
+    let coachPhone: string | null = null;
+    if (reg.team_id) {
+      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone FROM teams WHERE id = ?')
+        .bind(reg.team_id).first<any>();
+      if (linkedTeam) {
+        teamState = linkedTeam.state;
+        teamCity = linkedTeam.city;
+        coachPhone = linkedTeam.head_coach_phone;
+      }
+    }
     team = {
       name: reg.team_name,
       age_group: reg.age_group,
-      city: null,
-      state: null,
+      city: teamCity,
+      state: teamState,
       head_coach_name: [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ') || null,
       head_coach_email: reg.email1,
+      head_coach_phone: coachPhone || reg.phone || null,
     };
   } else {
-    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email FROM teams WHERE id = ?')
+    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone FROM teams WHERE id = ?')
       .bind(reg.team_id).first<any>();
   }
 
-  // Non-local teams require hotel selection (skip for consumer regs without location data)
-  if (!isConsumer) {
+  // Check if event has hotels configured
+  const eventHotels = await db.prepare('SELECT COUNT(*) as cnt FROM event_hotels WHERE event_id = ?')
+    .bind(reg.event_id).first<any>();
+  const hasHotels = eventHotels && eventHotels.cnt > 0;
+
+  // Non-local teams require hotel selection (applies to all registration types)
+  if (hasHotels && !body.hotelId) {
     const isLocal = team && event && team.state && event.state && team.state.toUpperCase() === event.state.toUpperCase();
-    if (!isLocal && !body.hotelId) {
+    if (!isLocal) {
       return c.json({ success: false, error: 'Hotel selection required for non-local teams', requiresHotel: true }, 400);
     }
   }
@@ -452,6 +494,10 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         } else if (reg.paid_cents && reg.paid_cents > 0) {
           paymentStatus = 'partial';
         }
+      } else {
+        // Consumer registrations use payment_status field
+        if (reg.payment_status === 'paid') paymentStatus = 'paid';
+        else if (reg.payment_status === 'partial') paymentStatus = 'partial';
       }
 
       // Fetch admin-customized template overrides from DB
@@ -488,7 +534,67 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     console.error('Approval email error:', err);
   }
 
-  return c.json({ success: true, message: 'Registration approved', email_sent: emailSent });
+  // Send hotel confirmation email to hotel contact
+  let hotelEmailSent = false;
+  if (hotelInfo && hotelInfo.contact_email) {
+    try {
+      // Get manager info (for consumer regs, use the registration fields)
+      let managerName = '';
+      let managerEmail = '';
+      let managerPhone = '';
+      if (isConsumer) {
+        managerName = [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ');
+        managerEmail = reg.email2 || '';
+        managerPhone = reg.phone2 || '';
+      } else {
+        // Look up team managers
+        try {
+          const mgrRow = await db.prepare(`
+            SELECT u.first_name, u.last_name, u.email, u.phone
+            FROM users u JOIN team_managers tm ON tm.user_id = u.id
+            WHERE tm.team_id = ? LIMIT 1
+          `).bind(reg.team_id).first<any>();
+          if (mgrRow) {
+            managerName = [mgrRow.first_name, mgrRow.last_name].filter(Boolean).join(' ');
+            managerEmail = mgrRow.email || '';
+            managerPhone = mgrRow.phone || '';
+          }
+        } catch {}
+      }
+
+      const startDate = new Date(event.start_date + 'T12:00:00');
+      const hotelEventDate = startDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+
+      let divisionInfo2: any = null;
+      if (!isConsumer && reg.event_division_id) {
+        divisionInfo2 = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?')
+          .bind(reg.event_division_id).first<any>();
+      }
+
+      const hotelResult = await sendHotelConfirmationEmail(c.env, {
+        hotelContactEmail: hotelInfo.contact_email,
+        hotelContactName: hotelInfo.contact_name || '',
+        hotelName: hotelInfo.hotel_name,
+        teamName: team.name,
+        ageGroup: divisionInfo2?.age_group || reg.age_group || team.age_group || '',
+        division: divisionInfo2?.division_level || reg.division || undefined,
+        eventName: event.name,
+        eventDate: hotelEventDate,
+        eventCity: `${event.city}, ${event.state}`,
+        coachName: team.head_coach_name || '',
+        coachEmail: team.head_coach_email || '',
+        coachPhone: team.head_coach_phone || '',
+        managerName,
+        managerEmail,
+        managerPhone,
+      });
+      hotelEmailSent = hotelResult.success;
+    } catch (err: any) {
+      console.error('Hotel confirmation email error:', err);
+    }
+  }
+
+  return c.json({ success: true, message: 'Registration approved', email_sent: emailSent, hotel_email_sent: hotelEmailSent });
 });
 
 // ==================
@@ -531,33 +637,40 @@ registrationRoutes.delete('/:id', authMiddleware, requireRole('admin', 'director
   const user = c.get('user');
   const db = c.env.DB;
 
-  // Check both tables
-  let tableName = 'registrations';
-  let reg = await db.prepare('SELECT id, event_id FROM registrations WHERE id = ?').bind(regId).first<any>();
-  if (!reg) {
-    reg = await db.prepare('SELECT id, event_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
-    if (reg) tableName = 'event_registrations';
-    else return c.json({ success: false, error: 'Registration not found' }, 404);
+  try {
+    // Check both tables
+    let tableName = 'registrations';
+    let reg = await db.prepare('SELECT id, event_id FROM registrations WHERE id = ?').bind(regId).first<any>();
+    if (!reg) {
+      reg = await db.prepare('SELECT id, event_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+      if (reg) tableName = 'event_registrations';
+      else return c.json({ success: false, error: 'Registration not found' }, 404);
+    }
+
+    // Delete all related records first to avoid FK constraints
+    await db.prepare('DELETE FROM discount_codes WHERE registration_id = ?').bind(regId).run().catch(() => {});
+    await db.prepare('DELETE FROM special_requests WHERE registration_id = ?').bind(regId).run().catch(() => {});
+    await db.prepare('DELETE FROM registration_rosters WHERE registration_id = ?').bind(regId).run().catch(() => {});
+
+    // Delete the registration
+    await db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(regId).run();
+
+    // Audit log
+    await db.prepare(`
+      INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, 'registration.deleted', 'registration', ?, ?)
+    `).bind(
+      crypto.randomUUID().replace(/-/g, ''),
+      user.id,
+      regId,
+      JSON.stringify({ source: tableName === 'event_registrations' ? 'consumer' : 'normalized' })
+    ).run();
+
+    return c.json({ success: true, message: 'Registration deleted' });
+  } catch (err: any) {
+    console.error('Delete registration error:', err);
+    return c.json({ success: false, error: err.message || 'Failed to delete registration' }, 500);
   }
-
-  // Delete related discount codes
-  await db.prepare('DELETE FROM discount_codes WHERE registration_id = ?').bind(regId).run().catch(() => {});
-
-  // Delete the registration
-  await db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(regId).run();
-
-  // Audit log
-  await db.prepare(`
-    INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
-    VALUES (?, ?, 'registration.deleted', 'registration', ?, ?)
-  `).bind(
-    crypto.randomUUID().replace(/-/g, ''),
-    user.id,
-    regId,
-    JSON.stringify({ source: tableName === 'event_registrations' ? 'consumer' : 'normalized' })
-  ).run();
-
-  return c.json({ success: true, message: 'Registration deleted' });
 });
 
 // ==================

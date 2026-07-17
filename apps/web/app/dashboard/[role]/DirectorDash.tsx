@@ -389,7 +389,7 @@ export default function DirectorDash() {
                                       Game #{game.game_number} · {formatTime(game.start_time)}
                                     </div>
                                     <div className="text-xs text-[#6e6e73]">
-                                      {game.age_group} · {game.pool_name || game.division_level}
+                                      {[game.age_group, game.pool_name || game.division_level].filter(Boolean).join(' · ')}
                                     </div>
                                   </div>
                                   <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${colors.badge} text-slate-700`}>

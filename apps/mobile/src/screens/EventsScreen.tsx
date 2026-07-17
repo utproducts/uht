@@ -11,11 +11,15 @@ import {
   Image,
   Share,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import ScreenHeader from '../components/ScreenHeader';
+import { getUser, getActiveRole, setActiveRole, refreshUser, addRoleToAccount } from '../services/auth';
+import { refreshBadgeCount } from '../services/notifications';
+import AppHeader from '../components/AppHeader';
+import RoleBar from '../components/RoleBar';
 import { getEvents } from '../services/api';
 
 interface UHTEvent {
@@ -45,12 +49,22 @@ const STATE_ABBREV_TO_NAME: Record<string, string> = {
   VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
 };
 
+// Reverse map: full name → abbreviation
+const STATE_NAME_TO_ABBREV: Record<string, string> = {};
+for (const [abbrev, name] of Object.entries(STATE_ABBREV_TO_NAME)) {
+  STATE_NAME_TO_ABBREV[name.toUpperCase()] = abbrev;
+}
+
 function normalizeState(raw: string): string {
   const trimmed = raw.trim();
   const upper = trimmed.toUpperCase();
-  // If it's a 2-letter abbreviation, convert to full name
+  // If it's already a 2-letter abbreviation, return it
   if (upper.length === 2 && STATE_ABBREV_TO_NAME[upper]) {
-    return STATE_ABBREV_TO_NAME[upper];
+    return upper;
+  }
+  // If it's a full state name, convert to abbreviation
+  if (STATE_NAME_TO_ABBREV[upper]) {
+    return STATE_NAME_TO_ABBREV[upper];
   }
   // Otherwise return as-is with title case
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
@@ -80,6 +94,12 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
   const [activeTab, setActiveTab] = useState<TabKey>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedState, setSelectedState] = useState<string>('All');
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [activeRole, setActiveRoleState] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const lastLoadRef = React.useRef<number>(0);
+  const STALE_MS = 60000; // 60 seconds — events change rarely
 
   const loadEvents = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -92,6 +112,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         return dateA - dateB;
       });
       setAllEvents(sorted);
+      lastLoadRef.current = Date.now();
     } catch {
       setError('Failed to load events. Pull to refresh.');
     } finally {
@@ -102,9 +123,68 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
 
   useFocusEffect(
     useCallback(() => {
+      // Load user/role data — refresh from API for latest roles
+      (async () => {
+        try {
+          const [freshUser, badgeCount] = await Promise.all([
+            refreshUser().catch(() => null),
+            refreshBadgeCount().catch(() => 0),
+          ]);
+          const user = freshUser || await getUser();
+          setUnreadCount(badgeCount as number);
+          if (user?.roles) setUserRoles(user.roles);
+          const savedRole = await getActiveRole();
+          if (savedRole && user?.roles?.includes(savedRole)) {
+            setActiveRoleState(savedRole);
+          } else if (user?.roles?.length) {
+            setActiveRoleState(user.roles[0]);
+          }
+        } catch {}
+      })();
+      if (lastLoadRef.current && Date.now() - lastLoadRef.current < STALE_MS) {
+        return;
+      }
       loadEvents();
     }, [loadEvents]),
   );
+
+  async function handleSwitchRole(role: string) {
+    setActiveRoleState(role);
+    await setActiveRole(role);
+  }
+
+  function handleAddRole() {
+    const selfAddableRoles = [
+      { key: 'coach', label: 'Coach' },
+      { key: 'parent', label: 'Parent / Fan' },
+      { key: 'referee', label: 'Referee' },
+      { key: 'scorekeeper', label: 'Scorekeeper' },
+    ];
+    const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
+    if (available.length === 0) {
+      Alert.alert('All Roles Added', 'You already have all available roles.');
+      return;
+    }
+    Alert.alert(
+      'Add a Role',
+      'Select a role to add to your account:',
+      [
+        ...available.map(r => ({
+          text: r.label,
+          onPress: async () => {
+            const result = await addRoleToAccount(r.key);
+            if (result.success && result.roles) {
+              setUserRoles(result.roles);
+              Alert.alert('Role Added', `${r.label} has been added to your account.`);
+            } else {
+              Alert.alert('Error', result.error || 'Failed to add role.');
+            }
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]
+    );
+  }
 
   const today = useMemo(() => {
     const d = new Date();
@@ -170,7 +250,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         <Image
           source={{ uri: event.logo_url }}
           style={styles.eventLogo}
-          resizeMode="cover"
+          resizeMode="contain"
         />
       );
     }
@@ -206,7 +286,12 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ScreenHeader title="Events" />
+        <AppHeader
+          onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+          unreadCount={unreadCount}
+          hasMultipleRoles={userRoles.length > 1}
+        />
+        <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} onAddRole={handleAddRole} />
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
@@ -216,7 +301,12 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Events" />
+      <AppHeader
+        onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+        unreadCount={unreadCount}
+        hasMultipleRoles={userRoles.length > 1}
+      />
+      <RoleBar activeRole={activeRole} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
 
       {/* Tab bar */}
       <View style={styles.tabBar}>

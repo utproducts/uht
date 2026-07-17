@@ -31,3 +31,9 @@ bucket_name = "uht-assets"
 [vars]
 ENVIRONMENT = "production"
 CORS_ORIGIN = "*"
+SITE_URL = "https://ultimatetournaments.com"
+API_URL = "https://uht.chad-157.workers.dev"
+
+routes = [
+  { pattern = "api.ultimatetournaments.com", custom_domain = true }
+]

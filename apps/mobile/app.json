@@ -2,7 +2,7 @@
   "expo": {
     "name": "UHT",
     "slug": "uht",
-    "version": "1.0.0",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -46,7 +46,27 @@
         }
       ],
       "expo-notifications",
-      "expo-updates"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "UHT needs photo access to upload your team logo",
+          "cameraPermission": "UHT needs camera access to take a photo for your team logo"
+        }
+      ],
+      "expo-updates",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "UHT needs calendar access to sync your tournament schedule"
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.ultimatetournaments.uht",
+          "enableApplePay": true
+        }
+      ]
     ],
     "extra": {
       "eas": {

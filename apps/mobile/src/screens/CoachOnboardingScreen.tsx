@@ -34,7 +34,7 @@ export default function CoachOnboardingScreen({ navigation }: { navigation: any 
     try {
       const res = await authFetch('/api/teams/join', {
         method: 'POST',
-        body: JSON.stringify({ code: trimmed }),
+        body: JSON.stringify({ inviteCode: trimmed }),
       });
       const json = await res.json();
       if (json.success) {

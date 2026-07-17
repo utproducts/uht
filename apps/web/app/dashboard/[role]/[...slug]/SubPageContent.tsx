@@ -1,7 +1,9 @@
 'use client';
 
 import { useParams, useSearchParams } from 'next/navigation';
-import { Suspense, useState, useEffect, useCallback } from 'react';
+// NOTE: useSearchParams is only used inside EventsWithSearchParams (isolated in its own Suspense)
+// to prevent blocking other pages like teams from rendering
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import RosterImport from '../../../components/RosterImport';
 import { OrgTeams, OrgCoaches, OrgRosters, OrgEvents } from './OrgPages';
 
@@ -23,7 +25,7 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinMsg, setJoinMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [parentCodeCopied, setParentCodeCopied] = useState<string | null>(null);
+  const [rosterLinkCopied, setRosterLinkCopied] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -317,15 +319,15 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                   {(team.parent_invite_code || team.invite_code) && (
                     <button onClick={() => {
                       const code = team.parent_invite_code || team.invite_code;
-                      const message = `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`;
-                      navigator.clipboard.writeText(message);
-                      setParentCodeCopied(team.id);
-                      setTimeout(() => setParentCodeCopied(null), 2500);
+                      const msg = `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`;
+                      navigator.clipboard.writeText(msg);
+                      setRosterLinkCopied(team.id);
+                      setTimeout(() => setRosterLinkCopied(null), 2500);
                     }}
                       className={"flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition " +
-                        (parentCodeCopied === team.id ? "bg-green-100 text-green-700 border border-green-300" : "bg-green-50 border border-green-200 text-green-700 hover:bg-green-100")}>
+                        (rosterLinkCopied === team.id ? "bg-green-100 text-green-700 border border-green-300" : "bg-green-50 border border-green-200 text-green-700 hover:bg-green-100")}>
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                      {parentCodeCopied === team.id ? 'Copied!' : `Parent Code: ${team.parent_invite_code || team.invite_code}`}
+                      {rosterLinkCopied === team.id ? 'Copied!' : `Parent Code: ${team.parent_invite_code || team.invite_code}`}
                     </button>
                   )}
                 </div>
@@ -456,365 +458,6 @@ function RoleEvents({ role }: { role: string }) {
         </div>
       )}
     </div>
-  );
-}
-
-// ==================
-// Coach/Manager: Event Detail (/dashboard/<role>/events/?id=<eventId>)
-// ==================
-function RoleEventDetail({ eventId, role }: { eventId: string; role: string }) {
-  const [event, setEvent] = useState<any>(null);
-  const [myTeams, setMyTeams] = useState<any[]>([]);
-  const [games, setGames] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  const formatCents = (cents: number) =>
-    '$' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
-  const formatGameTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) +
-      ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  };
-
-  const copyText = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const headers = getAuthHeaders();
-        const [eventRes, teamsRes] = await Promise.all([
-          fetch(`${API}/api/events/${eventId}`),
-          fetch(`${API}/api/teams/my-teams`, { headers }),
-        ]);
-        const eventJson = await eventRes.json() as any;
-        const teamsJson = await teamsRes.json() as any;
-        const eventData = (eventJson.success && eventJson.data) || eventJson;
-        setEvent(eventData);
-        const registeredTeams = ((teamsJson.success && teamsJson.data) || []).filter((t: any) =>
-          t.registered_events?.some((re: any) => re.event_id === eventId || re.id === eventId)
-        );
-        setMyTeams(registeredTeams);
-        if (eventData.schedule_published && registeredTeams.length > 0) {
-          try {
-            const schedRes = await fetch(`${API}/api/events/${eventId}/schedule?team_id=${registeredTeams[0].id}`, { headers });
-            const schedJson = await schedRes.json() as any;
-            if (schedJson.success) setGames(schedJson.data || schedJson.games || []);
-            else if (Array.isArray(schedJson)) setGames(schedJson);
-          } catch {}
-        }
-      } catch {
-        setError('Failed to load event details. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [eventId]);
-
-  if (loading) return <div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>;
-
-  if (error || !event) {
-    return (
-      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-12 text-center">
-        <h2 className="text-lg font-semibold text-[#1d1d1f] mb-2">Unable to load event</h2>
-        <p className="text-sm text-[#6e6e73]">{error || 'Event not found.'}</p>
-        <a href={`/dashboard/${role}/events`} className="inline-block mt-4 px-5 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
-          Back to Events
-        </a>
-      </div>
-    );
-  }
-
-  const formatDateRange = (start: string, end: string) => {
-    if (!start || !end) return '';
-    const s = new Date(start + 'T12:00:00');
-    const e = new Date(end + 'T12:00:00');
-    const startMonth = s.toLocaleDateString('en-US', { month: 'short' });
-    const endMonth = e.toLocaleDateString('en-US', { month: 'short' });
-    const startDay = s.getDate();
-    const endDay = e.getDate();
-    const year = e.getFullYear();
-    return startMonth === endMonth
-      ? `${startMonth} ${startDay} – ${endDay}, ${year}`
-      : `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${year}`;
-  };
-
-  // Pair each of my registered teams with its registration + division for this event
-  const teamRegs = myTeams.map((team: any) => {
-    const reg = team.registered_events?.find((re: any) => re.event_id === eventId || re.id === eventId) || {};
-    const division = event.divisions?.find((d: any) => d.id === reg.division_id)
-      || event.divisions?.find((d: any) => d.age_group === team.age_group && d.level === team.division_level);
-    return { team, reg, division };
-  });
-
-  return (
-    <div className="space-y-6">
-      {/* Event header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-6">
-        <div className="flex items-center gap-4">
-          <a href={`/dashboard/${role}/events`} className="shrink-0 w-9 h-9 rounded-full bg-[#f5f5f7] flex items-center justify-center hover:bg-[#e8e8ed] transition">
-            <svg className="w-5 h-5 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-          </a>
-          {event.logo_url ? (
-            <img src={event.logo_url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
-          ) : (
-            <div className="w-14 h-14 rounded-xl bg-[#003e79] flex items-center justify-center text-white font-bold text-xl shrink-0">
-              {(event.name || '?')[0]}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-[#1d1d1f] truncate">{event.name}</h1>
-            <p className="text-sm text-[#6e6e73] mt-0.5">
-              {formatDateRange(event.start_date, event.end_date)}
-              {event.city && ` · ${event.city}, ${event.state}`}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Registration Status */}
-      {teamRegs.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
-          <div className="px-6 py-4 border-b border-[#e8e8ed]">
-            <h2 className="text-base font-bold text-[#1d1d1f]">Registration Status</h2>
-          </div>
-          <div className="divide-y divide-[#f0f0f2]">
-            {teamRegs.map(({ team, reg, division }) => (
-              <div key={team.id} className="px-6 py-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-[#1d1d1f]">{team.name}</h3>
-                  <span className={'px-3 py-1 rounded-full text-xs font-semibold ' +
-                    (reg.status === 'confirmed' || reg.status === 'approved'
-                      ? 'bg-green-50 text-green-700 border border-green-200'
-                      : reg.status === 'pending'
-                        ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                        : 'bg-blue-50 text-blue-700 border border-blue-200')}>
-                    {(reg.status || 'registered').charAt(0).toUpperCase() + (reg.status || 'registered').slice(1)}
-                  </span>
-                </div>
-                {(division || team.age_group) && (
-                  <p className="text-sm text-[#6e6e73] mb-3">
-                    {division ? `${division.age_group} ${division.level || ''}`.trim() : `${team.age_group} ${team.division_level || ''}`.trim()}
-                  </p>
-                )}
-                <div className="mt-2">
-                  {reg.payment_status === 'paid' ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-green-50 text-green-700 border border-green-200">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                      Paid
-                    </span>
-                  ) : reg.payment_status === 'deposit' ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
-                      Deposit Paid
-                    </span>
-                  ) : (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        <span className="text-sm font-semibold text-red-700">Awaiting Payment</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <a href={`https://ultimatetournaments.com/pay?reg=${reg.reg_id || reg.id}`}
-                          className="flex-1 text-center px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition shadow-sm">
-                          Pay Now
-                        </a>
-                        <button onClick={() => copyText(`https://ultimatetournaments.com/pay?reg=${reg.reg_id || reg.id}`, `pay-${team.id}`)}
-                          className="px-4 py-2.5 rounded-xl bg-white text-[#003e79] text-sm font-semibold border border-[#003e79] hover:bg-[#f0f7ff] transition">
-                          {copiedKey === `pay-${team.id}` ? 'Copied!' : 'Copy Payment Link'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Hotel Assignment */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#e8e8ed]">
-          <h2 className="text-base font-bold text-[#1d1d1f]">Hotel Assignment</h2>
-        </div>
-        <div className="px-6 py-4">
-          {(() => {
-            const withHotel = teamRegs.find(({ reg }) => reg.hotel_name || reg.hotel_id);
-            const hotelReg = withHotel?.reg;
-            return hotelReg?.hotel_name ? (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                  <h3 className="font-semibold text-[#1d1d1f]">{hotelReg.hotel_name}</h3>
-                </div>
-                {hotelReg.hotel_address && <p className="text-sm text-[#6e6e73] mb-1">{hotelReg.hotel_address}</p>}
-                {hotelReg.hotel_rate && <p className="text-sm text-[#6e6e73] mb-1">{hotelReg.hotel_rate}</p>}
-                {hotelReg.hotel_price_per_night && !hotelReg.hotel_rate && (
-                  <p className="text-sm text-[#6e6e73] mb-1">{formatCents(hotelReg.hotel_price_per_night)}/night</p>
-                )}
-                {hotelReg.hotel_booking_code && (
-                  <p className="text-sm text-[#6e6e73] mb-2">Booking Code: <span className="font-mono font-semibold text-[#003e79]">{hotelReg.hotel_booking_code}</span></p>
-                )}
-                {hotelReg.hotel_booking_url && (
-                  <a href={hotelReg.hotel_booking_url} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
-                    Book Your Room
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                  </a>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 text-[#86868b]">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p className="text-sm">Hotel assignment pending. You will be notified when your hotel is assigned.</p>
-              </div>
-            );
-          })()}
-        </div>
-      </div>
-
-      {/* Venues & Rinks */}
-      {event.venues && event.venues.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
-          <div className="px-6 py-4 border-b border-[#e8e8ed]">
-            <h2 className="text-base font-bold text-[#1d1d1f]">Venues & Rinks</h2>
-          </div>
-          <div className="divide-y divide-[#f0f0f2]">
-            {event.venues.map((venue: any, vi: number) => {
-              const fullAddress = [venue.address, venue.city, venue.state, venue.zip].filter(Boolean).join(', ');
-              return (
-                <div key={venue.id || vi} className="px-6 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold text-[#1d1d1f]">{venue.name}</h3>
-                      {fullAddress && <p className="text-sm text-[#6e6e73] mt-0.5">{fullAddress}</p>}
-                      {venue.rinks && venue.rinks.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {venue.rinks.map((rink: any, ri: number) => (
-                            <span key={rink.id || ri} className="px-2.5 py-1 rounded-lg bg-[#f5f5f7] text-xs font-medium text-[#1d1d1f]">{rink.name}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {fullAddress && (
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`} target="_blank" rel="noopener noreferrer"
-                        className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#f5f5f7] text-xs font-semibold text-[#003e79] hover:bg-[#e8e8ed] transition">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        Directions
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Schedule */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#e8e8ed]">
-          <h2 className="text-base font-bold text-[#1d1d1f]">Schedule</h2>
-        </div>
-        <div className="px-6 py-4">
-          {event.schedule_published && games.length > 0 ? (
-            <div className="overflow-x-auto -mx-6">
-              <table className="w-full text-sm">
-                <thead className="bg-[#fafafa] text-left text-[#6e6e73]">
-                  <tr>
-                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Date / Time</th>
-                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Opponent</th>
-                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Rink</th>
-                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#f0f0f2]">
-                  {games.map((game: any, gi: number) => {
-                    const isMyTeam = (teamId: string) => myTeams.some(t => t.id === teamId);
-                    const opponent = isMyTeam(game.home_team_id) ? game.away_team_name : game.home_team_name;
-                    const homeAway = isMyTeam(game.home_team_id) ? 'vs' : '@';
-                    const hasScore = game.home_score !== null && game.home_score !== undefined;
-                    let score = '--';
-                    if (hasScore) {
-                      const myScore = isMyTeam(game.home_team_id) ? game.home_score : game.away_score;
-                      const theirScore = isMyTeam(game.home_team_id) ? game.away_score : game.home_score;
-                      score = `${myScore} - ${theirScore}`;
-                    }
-                    return (
-                      <tr key={game.id || gi} className="hover:bg-[#fafafa] transition-colors">
-                        <td className="px-6 py-3 text-[#1d1d1f] whitespace-nowrap">{game.start_time ? formatGameTime(game.start_time) : game.date || '--'}</td>
-                        <td className="px-6 py-3 text-[#1d1d1f]"><span className="text-[#86868b] mr-1">{homeAway}</span> {opponent || 'TBD'}</td>
-                        <td className="px-6 py-3 text-[#6e6e73]">{game.rink_name || game.rink || '--'}</td>
-                        <td className="px-6 py-3 text-[#1d1d1f] font-medium">{score}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 text-[#86868b]">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-              <p className="text-sm">Schedule will be released before the event.</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Quick Links */}
-      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#e8e8ed]">
-          <h2 className="text-base font-bold text-[#1d1d1f]">Quick Links</h2>
-        </div>
-        <div className="px-6 py-4 flex flex-wrap gap-3">
-          {event.slug && (
-            <a href={`/events/${event.slug}`}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] hover:bg-[#e8e8ed] transition">
-              <svg className="w-4 h-4 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" /><path strokeLinecap="round" strokeLinejoin="round" d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" /></svg>
-              Event Page
-            </a>
-          )}
-          <a href={`/register?event=${eventId}`}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] hover:bg-[#e8e8ed] transition">
-            <svg className="w-4 h-4 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            Register Another Team
-          </a>
-          {myTeams.some((t: any) => t.parent_share_code) && (
-            <button onClick={() => {
-              const shareCode = myTeams.find((t: any) => t.parent_share_code)?.parent_share_code;
-              if (shareCode) copyText(shareCode, 'parent-share');
-            }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] hover:bg-[#e8e8ed] transition">
-              <svg className="w-4 h-4 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" /></svg>
-              {copiedKey === 'parent-share' ? 'Code Copied!' : 'Share with Parents'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Reads ?id= to switch between the events list and the event detail view.
-// useSearchParams suspends under static export, so this stays isolated inside
-// the Suspense boundary provided by RoleEventsPage below.
-function RoleEventsRouter({ role }: { role: string }) {
-  const eventId = useSearchParams().get('id');
-  return eventId ? <RoleEventDetail eventId={eventId} role={role} /> : <RoleEvents role={role} />;
-}
-
-function RoleEventsPage({ role }: { role: string }) {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>}>
-      <RoleEventsRouter role={role} />
-    </Suspense>
   );
 }
 
@@ -1453,6 +1096,428 @@ function MyCouponCodes() {
 }
 
 // ==================
+// Coach/Manager: Event Detail
+// ==================
+function CoachEventDetail({ eventId, role }: { eventId: string; role: string }) {
+  const [event, setEvent] = useState<any>(null);
+  const [myTeams, setMyTeams] = useState<any[]>([]);
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  const formatDateRange = (start: string, end: string) => {
+    if (!start || !end) return '';
+    const s = new Date(start + 'T12:00:00');
+    const e = new Date(end + 'T12:00:00');
+    const sMonth = s.toLocaleDateString('en-US', { month: 'short' });
+    const eMonth = e.toLocaleDateString('en-US', { month: 'short' });
+    const sDay = s.getDate();
+    const eDay = e.getDate();
+    const year = e.getFullYear();
+    if (sMonth === eMonth) return `${sMonth} ${sDay} – ${eDay}, ${year}`;
+    return `${sMonth} ${sDay} – ${eMonth} ${eDay}, ${year}`;
+  };
+
+  const formatCurrency = (cents: number) => {
+    return '$' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+
+  const formatGameTime = (datetime: string) => {
+    const d = new Date(datetime);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) +
+      ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedLink(key);
+    setTimeout(() => setCopiedLink(null), 2000);
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const headers = getAuthHeaders();
+
+        // Fetch event detail and my teams in parallel
+        const [eventRes, teamsRes] = await Promise.all([
+          fetch(`${API}/api/events/${eventId}`),
+          fetch(`${API}/api/teams/my-teams`, { headers }),
+        ]);
+
+        const eventJson = await eventRes.json();
+        const teamsJson = await teamsRes.json();
+
+        const eventData = eventJson.success ? (eventJson.data || eventJson) : eventJson;
+        setEvent(eventData);
+
+        // Filter teams that are registered for this event
+        const allTeams = teamsJson.success ? (teamsJson.data || []) : [];
+        const registeredTeams = allTeams.filter((t: any) =>
+          t.registered_events?.some((re: any) => re.event_id === eventId || re.id === eventId)
+        );
+        setMyTeams(registeredTeams);
+
+        // Fetch schedule if published
+        if (eventData.schedule_published && registeredTeams.length > 0) {
+          try {
+            const schedRes = await fetch(
+              `${API}/api/events/${eventId}/schedule?team_id=${registeredTeams[0].id}`,
+              { headers }
+            );
+            const schedJson = await schedRes.json();
+            if (schedJson.success) setSchedule(schedJson.data || schedJson.games || []);
+            else if (Array.isArray(schedJson)) setSchedule(schedJson);
+          } catch {}
+        }
+      } catch (err) {
+        setError('Failed to load event details. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [eventId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-12 text-center">
+        <h2 className="text-lg font-semibold text-[#1d1d1f] mb-2">Unable to load event</h2>
+        <p className="text-sm text-[#6e6e73]">{error || 'Event not found.'}</p>
+        <a href={`/dashboard/${role}/events`} className="inline-block mt-4 px-5 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
+          Back to Events
+        </a>
+      </div>
+    );
+  }
+
+  // Build registration info per team
+  const teamRegistrations = myTeams.map((team: any) => {
+    const reg = team.registered_events?.find((re: any) => re.event_id === eventId || re.id === eventId) || {};
+    // Try to match division info
+    const division = event.divisions?.find((d: any) => d.id === reg.division_id) ||
+      event.divisions?.find((d: any) => d.age_group === team.age_group && d.level === team.division_level);
+    return { team, reg, division };
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header Banner */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-6">
+        <div className="flex items-center gap-4">
+          <a href={`/dashboard/${role}/events`} className="shrink-0 w-9 h-9 rounded-full bg-[#f5f5f7] flex items-center justify-center hover:bg-[#e8e8ed] transition">
+            <svg className="w-5 h-5 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </a>
+          {event.logo_url ? (
+            <img src={event.logo_url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
+          ) : (
+            <div className="w-14 h-14 rounded-xl bg-[#003e79] flex items-center justify-center text-white font-bold text-xl shrink-0">
+              {(event.name || '?')[0]}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-[#1d1d1f] truncate">{event.name}</h1>
+            <p className="text-sm text-[#6e6e73] mt-0.5">
+              {formatDateRange(event.start_date, event.end_date)}
+              {event.city && ` · ${event.city}, ${event.state}`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Registration Status */}
+      {teamRegistrations.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#e8e8ed]">
+            <h2 className="text-base font-bold text-[#1d1d1f]">Registration Status</h2>
+          </div>
+          <div className="divide-y divide-[#f0f0f2]">
+            {teamRegistrations.map(({ team, reg, division }: any) => (
+              <div key={team.id} className="px-6 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-[#1d1d1f]">{team.name}</h3>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    reg.status === 'confirmed' || reg.status === 'approved' ? 'bg-green-50 text-green-700 border border-green-200' :
+                    reg.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                    'bg-blue-50 text-blue-700 border border-blue-200'
+                  }`}>
+                    {(reg.status || 'registered').charAt(0).toUpperCase() + (reg.status || 'registered').slice(1)}
+                  </span>
+                </div>
+
+                {/* Division / Age Group */}
+                {(division || team.age_group) && (
+                  <p className="text-sm text-[#6e6e73] mb-3">
+                    {division ? `${division.age_group} ${division.level || ''}`.trim() : `${team.age_group} ${team.division_level || ''}`.trim()}
+                  </p>
+                )}
+
+                {/* Payment Status */}
+                <div className="mt-2">
+                  {reg.payment_status === 'paid' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-green-50 text-green-700 border border-green-200">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Paid
+                    </span>
+                  ) : reg.payment_status === 'deposit' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+                      </svg>
+                      Deposit Paid
+                    </span>
+                  ) : (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-semibold text-red-700">Awaiting Payment</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <a
+                          href={`https://ultimatetournaments.com/pay?reg=${reg.reg_id || reg.id}`}
+                          className="flex-1 text-center px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition shadow-sm"
+                        >
+                          Pay Now
+                        </a>
+                        <button
+                          onClick={() => copyToClipboard(`https://ultimatetournaments.com/pay?reg=${reg.reg_id || reg.id}`, `pay-${team.id}`)}
+                          className="px-4 py-2.5 rounded-xl bg-white text-[#003e79] text-sm font-semibold border border-[#003e79] hover:bg-[#f0f7ff] transition"
+                        >
+                          {copiedLink === `pay-${team.id}` ? 'Copied!' : 'Copy Payment Link'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Hotel Assignment */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#e8e8ed]">
+          <h2 className="text-base font-bold text-[#1d1d1f]">Hotel Assignment</h2>
+        </div>
+        <div className="px-6 py-4">
+          {(() => {
+            // Look for hotel info from team registrations or event hotels
+            const hotelReg = teamRegistrations.find(({ reg }: any) => reg.hotel_name || reg.hotel_id);
+            const hotel = hotelReg?.reg;
+            if (hotel?.hotel_name) {
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <h3 className="font-semibold text-[#1d1d1f]">{hotel.hotel_name}</h3>
+                  </div>
+                  {hotel.hotel_address && <p className="text-sm text-[#6e6e73] mb-1">{hotel.hotel_address}</p>}
+                  {hotel.hotel_rate && <p className="text-sm text-[#6e6e73] mb-1">{hotel.hotel_rate}</p>}
+                  {hotel.hotel_price_per_night && !hotel.hotel_rate && (
+                    <p className="text-sm text-[#6e6e73] mb-1">{formatCurrency(hotel.hotel_price_per_night)}/night</p>
+                  )}
+                  {hotel.hotel_booking_code && (
+                    <p className="text-sm text-[#6e6e73] mb-2">
+                      Booking Code: <span className="font-mono font-semibold text-[#003e79]">{hotel.hotel_booking_code}</span>
+                    </p>
+                  )}
+                  {hotel.hotel_booking_url && (
+                    <a
+                      href={hotel.hotel_booking_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition"
+                    >
+                      Book Your Room
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div className="flex items-center gap-3 text-[#86868b]">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm">Hotel assignment pending. You will be notified when your hotel is assigned.</p>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Venues & Rinks */}
+      {event.venues && event.venues.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#e8e8ed]">
+            <h2 className="text-base font-bold text-[#1d1d1f]">Venues & Rinks</h2>
+          </div>
+          <div className="divide-y divide-[#f0f0f2]">
+            {event.venues.map((venue: any, i: number) => {
+              const fullAddress = [venue.address, venue.city, venue.state, venue.zip].filter(Boolean).join(', ');
+              return (
+                <div key={venue.id || i} className="px-6 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-[#1d1d1f]">{venue.name}</h3>
+                      {fullAddress && <p className="text-sm text-[#6e6e73] mt-0.5">{fullAddress}</p>}
+                      {venue.rinks && venue.rinks.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {venue.rinks.map((rink: any, j: number) => (
+                            <span key={rink.id || j} className="px-2.5 py-1 rounded-lg bg-[#f5f5f7] text-xs font-medium text-[#1d1d1f]">
+                              {rink.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {fullAddress && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#f5f5f7] text-xs font-semibold text-[#003e79] hover:bg-[#e8e8ed] transition"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Directions
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Schedule */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#e8e8ed]">
+          <h2 className="text-base font-bold text-[#1d1d1f]">Schedule</h2>
+        </div>
+        <div className="px-6 py-4">
+          {event.schedule_published && schedule.length > 0 ? (
+            <div className="overflow-x-auto -mx-6">
+              <table className="w-full text-sm">
+                <thead className="bg-[#fafafa] text-left text-[#6e6e73]">
+                  <tr>
+                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Date / Time</th>
+                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Opponent</th>
+                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Rink</th>
+                    <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f0f0f2]">
+                  {schedule.map((game: any, i: number) => {
+                    const isMyTeam = (id: string) => myTeams.some(t => t.id === id);
+                    const opponent = isMyTeam(game.home_team_id) ? game.away_team_name : game.home_team_name;
+                    const homeAway = isMyTeam(game.home_team_id) ? 'vs' : '@';
+                    const hasScore = game.home_score !== null && game.home_score !== undefined;
+                    let scoreDisplay = '--';
+                    if (hasScore) {
+                      const myScore = isMyTeam(game.home_team_id) ? game.home_score : game.away_score;
+                      const oppScore = isMyTeam(game.home_team_id) ? game.away_score : game.home_score;
+                      scoreDisplay = `${myScore} - ${oppScore}`;
+                    }
+                    return (
+                      <tr key={game.id || i} className="hover:bg-[#fafafa] transition-colors">
+                        <td className="px-6 py-3 text-[#1d1d1f] whitespace-nowrap">
+                          {game.start_time ? formatGameTime(game.start_time) : game.date || '--'}
+                        </td>
+                        <td className="px-6 py-3 text-[#1d1d1f]">
+                          <span className="text-[#86868b] mr-1">{homeAway}</span> {opponent || 'TBD'}
+                        </td>
+                        <td className="px-6 py-3 text-[#6e6e73]">{game.rink_name || game.rink || '--'}</td>
+                        <td className="px-6 py-3 text-[#1d1d1f] font-medium">{scoreDisplay}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 text-[#86868b]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+              </svg>
+              <p className="text-sm">Schedule will be released before the event.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Links */}
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#e8e8ed]">
+          <h2 className="text-base font-bold text-[#1d1d1f]">Quick Links</h2>
+        </div>
+        <div className="px-6 py-4 flex flex-wrap gap-3">
+          {event.slug && (
+            <a
+              href={`/events/${event.slug}`}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] hover:bg-[#e8e8ed] transition"
+            >
+              <svg className="w-4 h-4 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" />
+              </svg>
+              Event Page
+            </a>
+          )}
+          <a
+            href={`/register?event=${eventId}`}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] hover:bg-[#e8e8ed] transition"
+          >
+            <svg className="w-4 h-4 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Register Another Team
+          </a>
+          {myTeams.some((t: any) => t.parent_share_code) && (
+            <button
+              onClick={() => {
+                const code = myTeams.find((t: any) => t.parent_share_code)?.parent_share_code;
+                if (code) copyToClipboard(code, 'parent-share');
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] hover:bg-[#e8e8ed] transition"
+            >
+              <svg className="w-4 h-4 text-[#6e6e73]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+              </svg>
+              {copiedLink === 'parent-share' ? 'Code Copied!' : 'Share with Parents'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================
 // Generic placeholder for unbuilt sub-pages
 // ==================
 function ComingSoon({ title }: { title: string }) {
@@ -1461,6 +1526,24 @@ function ComingSoon({ title }: { title: string }) {
       <h1 className="text-2xl font-bold text-[#1d1d1f] mb-2">{title}</h1>
       <p className="text-[#6e6e73]">This section is coming soon.</p>
     </div>
+  );
+}
+
+// ==================
+// Events wrapper — isolates useSearchParams so it doesn't block other pages
+// ==================
+function EventsWithSearchParams({ role }: { role: string }) {
+  const searchParams = useSearchParams();
+  const eventIdParam = searchParams.get('id');
+  if (eventIdParam) return <CoachEventDetail eventId={eventIdParam} role={role} />;
+  return <RoleEvents role={role} />;
+}
+
+function EventsPage({ role }: { role: string }) {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><span className="animate-spin h-8 w-8 border-3 border-[#003e79] border-t-transparent rounded-full" /></div>}>
+      <EventsWithSearchParams role={role} />
+    </Suspense>
   );
 }
 
@@ -1477,7 +1560,7 @@ export default function SubPageContent() {
   if (role === 'coach') {
     switch (subPage) {
       case 'teams': return <CoachTeams role="coach" />;
-      case 'events': return <RoleEventsPage role="coach" />;
+      case 'events': return <EventsPage role="coach" />;
       case 'roster': return <RosterManagement />;
       case 'coupons': return <MyCouponCodes />;
       case 'schedule': return <ComingSoon title="Game Schedule" />;
@@ -1488,7 +1571,7 @@ export default function SubPageContent() {
   if (role === 'manager') {
     switch (subPage) {
       case 'teams': return <CoachTeams role="manager" />;
-      case 'events': return <RoleEventsPage role="manager" />;
+      case 'events': return <EventsPage role="manager" />;
       case 'roster': return <RosterManagement />;
       case 'coupons': return <MyCouponCodes />;
       case 'schedule': return <ComingSoon title="Game Schedule" />;

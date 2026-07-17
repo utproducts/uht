@@ -89,7 +89,7 @@ iceBookingRoutes.post('/book', zValidator('json', bookSlotSchema), async (c) => 
 
   // Create Stripe Checkout Session
   const priceInCents = slot.price_cents;
-  const origin = c.req.header('origin') || 'https://uht-web.pages.dev';
+  const origin = c.req.header('origin') || 'https://ultimatetournaments.com';
 
   const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',

@@ -3,7 +3,6 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import RoleSwitcher from '../components/RoleSwitcher';
 
-// Roles allowed to view the admin dashboard section
 const ADMIN_ROLES = ['admin', 'director'];
 
 function readUserName(): string {
@@ -18,12 +17,16 @@ function readUserName(): string {
   return '';
 }
 
-function hasAdminAccess(): boolean {
+function checkAdminAccess(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    if (!localStorage.getItem('uht_token')) return false;
+    const token = localStorage.getItem('uht_token');
+    if (!token) return false;
     const stored = localStorage.getItem('uht_user');
     if (!stored) return false;
-    return (JSON.parse(stored).roles || []).some((r: string) => ADMIN_ROLES.includes(r));
+    const u = JSON.parse(stored);
+    const roles: string[] = u.roles || [];
+    return roles.some((r: string) => ADMIN_ROLES.includes(r));
   } catch {}
   return false;
 }
@@ -100,37 +103,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const roleKey = pathname.split('/')[2] || 'admin';
   const nav = ROLE_NAV[roleKey] || ROLE_NAV.admin;
   const [userName, setUserName] = useState(readUserName);
-  const [redirecting, setRedirecting] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   const refreshName = useCallback(() => setUserName(readUserName()), []);
 
   useEffect(() => {
-    // Re-read on storage changes (e.g. login in another tab)
     window.addEventListener('storage', refreshName);
-    // Also re-read on mount in case value changed since initial render
     refreshName();
     return () => window.removeEventListener('storage', refreshName);
   }, [refreshName]);
 
+  // Block non-admin users from /dashboard/admin paths
   useEffect(() => {
-    // Guard the admin dashboard — only admin/director roles may view it
-    if (roleKey === 'admin' && !hasAdminAccess()) {
-      setRedirecting(true);
-      if (localStorage.getItem('uht_token')) {
-        const savedRole = localStorage.getItem('uht_role') || 'coach';
-        window.location.href = '/dashboard/' + savedRole;
-      } else {
+    if (roleKey === 'admin' && !checkAdminAccess()) {
+      setBlocked(true);
+      const token = localStorage.getItem('uht_token');
+      if (!token) {
         window.location.href = '/login';
+      } else {
+        // Redirect to their actual role dashboard
+        const role = localStorage.getItem('uht_role') || 'coach';
+        window.location.href = '/dashboard/' + role;
       }
     }
   }, [roleKey]);
 
-  if (redirecting) {
-    return (
-      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
-        <div className="text-[#86868b]">Redirecting...</div>
-      </div>
-    );
+  if (blocked) {
+    return <div className="min-h-screen bg-[#fafafa] flex items-center justify-center"><div className="text-[#86868b]">Redirecting...</div></div>;
   }
 
   return (
@@ -167,8 +166,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   key={item.name}
                   href={item.href}
                   onClick={(e) => {
-                    // Force a full page load when re-clicking the current section —
-                    // soft navigation in a static export can leave stale content
+                    // Force reload when clicking the same page link
                     if (pathname === item.href || pathname.startsWith(item.href + '/')) {
                       e.preventDefault();
                       window.location.href = item.href;

@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect, useState, useRef } from 'react';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
-import { registerForPushNotifications } from '../services/notifications';
+import { registerForPushNotifications, refreshBadgeCount, addNotificationListener, addResponseListener } from '../services/notifications';
 
 // Screens
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -17,6 +17,7 @@ import HomeScreen from '../screens/HomeScreen';
 import EventsScreen from '../screens/EventsScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
 import MyTeamsScreen from '../screens/MyTeamsScreen';
+import MyEventsScreen from '../screens/MyEventsScreen';
 import ShopScreen from '../screens/ShopScreen';
 import MenuScreen from '../screens/MenuScreen';
 import CreateTeamScreen from '../screens/CreateTeamScreen';
@@ -24,17 +25,92 @@ import CoachOnboardingScreen from '../screens/CoachOnboardingScreen';
 import TeamDetailScreen from '../screens/TeamDetailScreen';
 import RegisterEventScreen from '../screens/RegisterEventScreen';
 import ScorekeeperScreen from '../screens/ScorekeeperScreen';
+import AccountSettingsScreen from '../screens/AccountSettingsScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
+import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
+import ScoreGameScreen from '../screens/ScoreGameScreen';
+import DirectorGamesScreen from '../screens/DirectorGamesScreen';
+import RewardRevealScreen from '../screens/RewardRevealScreen';
 
 const Stack = createNativeStackNavigator();
+const MenuStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// New 5-tab icon map: Home, My Teams, My Events, Find Events, Menu
 const TAB_ICONS: Record<string, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Home: { active: 'home', inactive: 'home-outline' },
-  Events: { active: 'calendar', inactive: 'calendar-outline' },
   'My Teams': { active: 'people', inactive: 'people-outline' },
-  Shop: { active: 'cart', inactive: 'cart-outline' },
+  'My Events': { active: 'calendar', inactive: 'calendar-outline' },
+  'Find Events': { active: 'search', inactive: 'search-outline' },
   Menu: { active: 'menu', inactive: 'menu-outline' },
 };
+
+function MenuStackNavigator() {
+  return (
+    <MenuStack.Navigator screenOptions={{ headerShown: false }}>
+      <MenuStack.Screen name="MenuHome" component={MenuScreen} />
+      <MenuStack.Screen name="Scorekeeper" component={ScorekeeperScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="AccountSettings" component={AccountSettingsScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="NotificationSettings" component={NotificationSettingsScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="AdminRegistrations" component={AdminRegistrationsScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="ScoreGame" component={ScoreGameScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="DirectorGames" component={DirectorGamesScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="Shop" component={ShopScreen} options={{ animation: 'slide_from_right' }} />
+    </MenuStack.Navigator>
+  );
+}
+
+// Stack navigators for each tab so detail screens keep the tab bar visible
+const HomeStackNav = createNativeStackNavigator();
+const MyTeamsStackNav = createNativeStackNavigator();
+const MyEventsStackNav = createNativeStackNavigator();
+const FindEventsStackNav = createNativeStackNavigator();
+
+function HomeStackNavigator() {
+  return (
+    <HomeStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <HomeStackNav.Screen name="HomeScreen" component={HomeScreen} />
+      <HomeStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
+    </HomeStackNav.Navigator>
+  );
+}
+
+function MyTeamsStackNavigator() {
+  return (
+    <MyTeamsStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <MyTeamsStackNav.Screen name="MyTeamsList" component={MyTeamsScreen} />
+      <MyTeamsStackNav.Screen name="CreateTeam" component={CreateTeamScreen} options={{ animation: 'slide_from_right' }} />
+      <MyTeamsStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <MyTeamsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <MyTeamsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+    </MyTeamsStackNav.Navigator>
+  );
+}
+
+function MyEventsStackNavigator() {
+  return (
+    <MyEventsStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <MyEventsStackNav.Screen name="MyEventsList" component={MyEventsScreen} />
+      <MyEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <MyEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+      <MyEventsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
+    </MyEventsStackNav.Navigator>
+  );
+}
+
+function FindEventsStackNavigator() {
+  return (
+    <FindEventsStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <FindEventsStackNav.Screen name="EventsList" component={EventsScreen} />
+      <FindEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <FindEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+    </FindEventsStackNav.Navigator>
+  );
+}
 
 function MainTabs() {
   return (
@@ -48,22 +124,36 @@ function MainTabs() {
             <Ionicons
               name={iconName}
               size={22}
-              color={focused ? colors.navy : 'rgba(0, 62, 121, 0.45)'}
+              color={focused ? colors.cyan : 'rgba(0, 204, 255, 0.5)'}
             />
           );
         },
-        tabBarActiveTintColor: colors.navy,
-        tabBarInactiveTintColor: 'rgba(0, 62, 121, 0.45)',
+        tabBarActiveTintColor: colors.cyan,
+        tabBarInactiveTintColor: 'rgba(0, 204, 255, 0.5)',
         tabBarLabelStyle: styles.tabLabel,
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Events" component={EventsScreen} />
-      <Tab.Screen name="My Teams" component={MyTeamsScreen} />
-      <Tab.Screen name="Shop" component={ShopScreen} />
-      <Tab.Screen name="Menu" component={MenuScreen} />
+      <Tab.Screen name="Home" component={HomeStackNavigator} />
+      <Tab.Screen name="My Teams" component={MyTeamsStackNavigator} />
+      <Tab.Screen name="My Events" component={MyEventsStackNavigator} />
+      <Tab.Screen name="Find Events" component={FindEventsStackNavigator} />
+      <Tab.Screen
+        name="Menu"
+        component={MenuStackNavigator}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => {
+            if (navigation.isFocused()) {
+              e.preventDefault();
+              navigation.navigate('Home');
+            } else {
+              e.preventDefault();
+              navigation.navigate('Menu', { screen: 'MenuHome' });
+            }
+          },
+        })}
+      />
     </Tab.Navigator>
   );
 }
@@ -71,6 +161,7 @@ function MainTabs() {
 export default function AppNavigator() {
   const [checking, setChecking] = useState(true);
   const [initialRoute, setInitialRoute] = useState<string>('Welcome');
+  const navigationRef = useRef<NavigationContainerRef<any>>(null);
 
   useEffect(() => {
     (async () => {
@@ -79,10 +170,27 @@ export default function AppNavigator() {
         if (token) {
           setInitialRoute('Main');
           registerForPushNotifications();
+          refreshBadgeCount();
         }
       } catch {}
       setChecking(false);
     })();
+
+    const sub = addNotificationListener(() => {
+      refreshBadgeCount();
+    });
+
+    const responseSub = addResponseListener((response: any) => {
+      const data = response.notification?.request?.content?.data;
+      if (data?.type === 'meeting_reward') {
+        navigationRef.current?.navigate('RewardReveal' as never);
+      }
+    });
+
+    return () => {
+      sub.remove();
+      responseSub.remove();
+    };
   }, []);
 
   if (checking) {
@@ -94,7 +202,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{ headerShown: false }}
@@ -106,29 +214,12 @@ export default function AppNavigator() {
         <Stack.Screen name="FollowTeams" component={FollowTeamsScreen} />
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen
-          name="EventDetail"
-          component={EventDetailScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="TeamDetail"
-          component={TeamDetailScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="RegisterEvent"
-          component={RegisterEventScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="CreateTeam"
-          component={CreateTeamScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="Scorekeeper"
-          component={ScorekeeperScreen}
-          options={{ headerShown: false, animation: 'slide_from_right' }}
+          name="RewardReveal"
+          component={RewardRevealScreen}
+          options={{
+            presentation: 'fullScreenModal',
+            animation: 'fade',
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>
@@ -143,7 +234,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   tabBar: {
-    backgroundColor: colors.cyan,
+    backgroundColor: colors.navy,
     borderTopWidth: 0,
     height: Platform.OS === 'ios' ? 88 : 64,
     paddingTop: 6,
@@ -157,7 +248,7 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
   },

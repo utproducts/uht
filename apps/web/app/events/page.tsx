@@ -114,20 +114,22 @@ function monthName(m: number): string {
   return new Date(2026, m, 1).toLocaleString('en-US', { month: 'short' });
 }
 
-/** Normalize an event's season value into a "YYYY-YY" bucket (e.g. "2026-27") */
-function seasonBucket(season: string | null): string {
-  const raw = (season || '').trim();
-  if (raw.match(/^(\d{4})-(\d{2})$/)) return raw;
-  const s = raw.toLowerCase();
-  if (s.includes('fall-2026') || s.includes('winter-2026') || s.includes('winter-2027')) return '2026-27';
-  if (s === '2025/2026' || s.includes('fall-2025') || s.includes('winter-2025')) return '2025-26';
-  if (s === '2024/2025' || s.includes('fall-2024') || s.includes('winter-2024')) return '2024-25';
-  const yearMatch = s.match(/(\d{4})/);
+/** Map DB season values to hockey-year display buckets */
+function seasonBucket(dbSeason: string | null): string {
+  const s = (dbSeason || '').trim();
+  // Direct match: "2026-27" format already stored in DB
+  const directMatch = s.match(/^(\d{4})-(\d{2})$/);
+  if (directMatch) return s;
+  const sl = s.toLowerCase();
+  if (sl.includes('fall-2026') || sl.includes('winter-2026') || sl.includes('winter-2027')) return '2026-27';
+  if (sl === '2025/2026' || sl.includes('fall-2025') || sl.includes('winter-2025')) return '2025-26';
+  if (sl === '2024/2025' || sl.includes('fall-2024') || sl.includes('winter-2024')) return '2024-25';
+  const yearMatch = sl.match(/(\d{4})/);
   if (yearMatch) {
-    const year = parseInt(yearMatch[1]);
-    if (s.includes('fall')) return `${year}-${String(year + 1).slice(2)}`;
-    if (s.includes('winter') || s.includes('spring')) return `${year - 1}-${String(year).slice(2)}`;
-    if (s.includes('/')) return `${year}-${String(year + 1).slice(2)}`;
+    const y = parseInt(yearMatch[1]);
+    if (sl.includes('fall')) return `${y}-${String(y + 1).slice(2)}`;
+    if (sl.includes('winter') || sl.includes('spring')) return `${y - 1}-${String(y).slice(2)}`;
+    if (sl.includes('/')) return `${y}-${String(y + 1).slice(2)}`;
   }
   return 'other';
 }
@@ -250,7 +252,8 @@ export default function EventsPage() {
   const [monthFilter, setMonthFilter] = useState('');
   const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [seasonFilter, setSeasonFilter] = useState('');
+  // Auto-select newest season once data loads
+  const [seasonFilterVal, setSeasonFilterVal] = useState<string>('');
 
   // Read ?city= from URL on mount
   useEffect(() => {
@@ -275,30 +278,30 @@ export default function EventsPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  // Group events by season bucket (newest first)
-  const seasons = useMemo(() => {
-    const seasonMap = new Map<string, number>();
+  // Build dynamic season options from actual data
+  const availableSeasons = useMemo(() => {
+    const bucketCounts = new Map<string, number>();
     for (const ev of allEvents) {
       const bucket = seasonBucket(ev.season);
-      seasonMap.set(bucket, (seasonMap.get(bucket) || 0) + 1);
+      bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
     }
-    return Array.from(seasonMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
+    return Array.from(bucketCounts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0])) // newest first
       .map(([bucket, count]) => ({ bucket, count }));
   }, [allEvents]);
 
-  // Default to the newest season once events load
+  // Auto-select newest season on first data load
   useEffect(() => {
-    if (seasons.length > 0 && !seasonFilter) setSeasonFilter(seasons[0].bucket);
-  }, [seasons]);
+    if (availableSeasons.length > 0 && !seasonFilterVal) {
+      setSeasonFilterVal(availableSeasons[0].bucket);
+    }
+  }, [availableSeasons]);
 
-  // Apply season filter first
-  const seasonFiltered = useMemo(
-    () => (seasonFilter && seasonFilter !== 'all'
-      ? allEvents.filter(e => seasonBucket(e.season) === seasonFilter)
-      : allEvents),
-    [allEvents, seasonFilter]
-  );
+  // Filter by season first
+  const seasonFiltered = useMemo(() => {
+    if (!seasonFilterVal || seasonFilterVal === 'all') return allEvents;
+    return allEvents.filter(ev => seasonBucket(ev.season) === seasonFilterVal);
+  }, [allEvents, seasonFilterVal]);
 
   // Split into upcoming / past by end_date
   const { upcoming, past } = useMemo(() => {
@@ -410,7 +413,7 @@ export default function EventsPage() {
     setSearch('');
   };
 
-  // Active filter count (for clear button)
+  // Active filter count (for clear button) — don't count default season as active
   const activeFilters = [cityFilter, monthFilter, ageFilter, search].filter(Boolean).length;
 
   return (
@@ -422,7 +425,7 @@ export default function EventsPage() {
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-16 pb-20">
           <div className="max-w-2xl">
-            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">{seasonFilter === 'all' ? 'All Seasons' : `${seasonFilter} Season`}</p>
+            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">{seasonFilterVal === 'all' ? 'All Seasons' : `${seasonFilterVal} Season`}</p>
             <h1 className="text-5xl sm:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
               Find Your Next Tournament
             </h1>
@@ -452,24 +455,24 @@ export default function EventsPage() {
             </button>
           </div>
 
-          {/* Season chips */}
-          {seasons.length > 1 && (
+          {/* Season pills */}
+          {availableSeasons.length > 1 && (
             <div className="mt-4 flex gap-1.5 flex-wrap">
-              {seasons.map(({ bucket, count }) => (
+              {availableSeasons.map(({ bucket, count }) => (
                 <button
                   key={bucket}
-                  onClick={() => { setSeasonFilter(bucket); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
+                  onClick={() => { setSeasonFilterVal(bucket); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
                   className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                    seasonFilter === bucket ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
+                    seasonFilterVal === bucket ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
                   }`}
                 >
                   {bucket} <span className="opacity-60">({count})</span>
                 </button>
               ))}
               <button
-                onClick={() => { setSeasonFilter('all'); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
+                onClick={() => { setSeasonFilterVal('all'); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
                 className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  seasonFilter === 'all' ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
+                  seasonFilterVal === 'all' ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
                 }`}
               >
                 All Seasons <span className="opacity-60">({allEvents.length})</span>

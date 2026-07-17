@@ -194,7 +194,7 @@ organizationRoutes.get('/search', async (c) => {
       FROM organizations
       WHERE is_active = 1 AND (${statePlaceholders})
       ORDER BY name ASC
-      LIMIT 50
+      LIMIT 500
     `;
     params.push(...stateValues);
   }
@@ -353,6 +353,25 @@ organizationRoutes.post('/requests', async (c) => {
     return c.json({ error: 'Email is required' }, 400);
   }
 
+  // Auto-create table if it doesn't exist
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS organization_requests (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      city TEXT,
+      state TEXT,
+      requested_by_email TEXT NOT NULL,
+      requested_by_name TEXT,
+      requested_by_user_id TEXT,
+      status TEXT DEFAULT 'pending',
+      admin_notes TEXT,
+      created_org_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      reviewed_at TEXT,
+      reviewed_by TEXT
+    )
+  `).run();
+
   const id = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
@@ -376,6 +395,18 @@ organizationRoutes.post('/requests', async (c) => {
 organizationRoutes.get('/admin/requests', async (c) => {
   const db = c.env.DB;
 
+  // Auto-create table if it doesn't exist
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS organization_requests (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, city TEXT, state TEXT,
+        requested_by_email TEXT NOT NULL, requested_by_name TEXT, requested_by_user_id TEXT,
+        status TEXT DEFAULT 'pending', admin_notes TEXT, created_org_id TEXT,
+        created_at TEXT DEFAULT (datetime('now')), reviewed_at TEXT, reviewed_by TEXT
+      )
+    `).run();
+  } catch (_) {}
+
   const result = await db.prepare(`
     SELECT * FROM organization_requests ORDER BY created_at DESC
   `).all();
@@ -387,6 +418,7 @@ organizationRoutes.get('/admin/requests', async (c) => {
 // Admin: Approve an organization request
 // ==================
 organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRole('admin'), async (c) => {
+  try {
   const requestId = c.req.param('id');
   const db = c.env.DB;
   const body = await c.req.json<{ adminNotes?: string }>().catch(() => ({} as { adminNotes?: string }));
@@ -403,12 +435,33 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
     return c.json({ error: `Request already ${request.status}` }, 400);
   }
 
+  // Determine owner: use requesting user if they have an account, otherwise the approving admin
+  const admin = c.get('user') as any;
+  let ownerId: string | null = null;
+
+  // Try requesting user first
+  if (request.requested_by_user_id) {
+    const reqUser = await db.prepare('SELECT id FROM users WHERE id = ?').bind(request.requested_by_user_id).first<any>();
+    if (reqUser) ownerId = reqUser.id;
+  }
+  if (!ownerId && request.requested_by_email) {
+    const emailUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(request.requested_by_email).first<any>();
+    if (emailUser) ownerId = emailUser.id;
+  }
+  // Try the logged-in admin
+  if (!ownerId && admin?.id) {
+    const adminUser = await db.prepare('SELECT id FROM users WHERE id = ?').bind(admin.id).first<any>();
+    if (adminUser) ownerId = adminUser.id;
+  }
+  // Final fallback: use Chad's known-good ID
+  if (!ownerId) ownerId = 'chad-owner-001';
+
   // Create the organization
   const orgId = crypto.randomUUID().replace(/-/g, '');
   await db.prepare(`
     INSERT INTO organizations (id, name, city, state, owner_id, is_active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 'system_migration_user', 1, datetime('now'), datetime('now'))
-  `).bind(orgId, request.name, request.city || null, request.state || null).run();
+    VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+  `).bind(orgId, request.name, request.city || null, request.state || null, ownerId).run();
 
   // Update the request
   await db.prepare(`
@@ -439,6 +492,9 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
   } catch {}
 
   return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: 'Approve failed', detail: err?.message || String(err) }, 500);
+  }
 });
 
 // ==================
@@ -699,7 +755,8 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
 
       // Send invite email via Resend
       try {
-        const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.headCoachEmail)}&role=coach`;
+        const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+        const signupUrl = `${siteUrl}/signup?invite=${inviteCode}&email=${encodeURIComponent(data.headCoachEmail)}&role=coach`;
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -732,7 +789,8 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
       `).bind(invId, teamId, data.managerEmail.toLowerCase(), user.id).run();
 
       try {
-        const signupUrl = `https://uht-web.pages.dev/signup?invite=${inviteCode}&email=${encodeURIComponent(data.managerEmail)}&role=manager`;
+        const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+        const signupUrl = `${siteUrl}/signup?invite=${inviteCode}&email=${encodeURIComponent(data.managerEmail)}&role=manager`;
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -804,7 +862,8 @@ organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zVali
 
   // Send invite email via Resend
   try {
-    const signupUrl = `https://uht-web.pages.dev/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
+    const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+    const signupUrl = `${siteUrl}/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -1009,8 +1068,8 @@ organizationRoutes.post('/', authMiddleware, requireRole('admin', 'organization'
   const orgId = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
-    INSERT INTO organizations (id, name, owner_id, usa_hockey_org_id, address, city, state, zip, phone, email, website)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO organizations (id, name, owner_id, usa_hockey_org_id, address, city, state, zip, phone, email, website, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).bind(orgId, data.name, user.id, data.usaHockeyOrgId || null, data.address || null,
     data.city || null, data.state || null, data.zip || null, data.phone || null,
     data.email || null, data.website || null
@@ -1043,4 +1102,48 @@ organizationRoutes.patch('/:id', authMiddleware, async (c) => {
   return c.json({ success: true });
 });
 
+// ==================
+// Upload org logo (base64 — admin)
+// ==================
+organizationRoutes.post('/:orgId/logo-base64', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const storage = c.env.STORAGE;
+  const orgId = c.req.param('orgId');
+
+  const org = await db.prepare(`SELECT id, name FROM organizations WHERE id = ?`).bind(orgId).first();
+  if (!org) return c.json({ success: false, error: 'Organization not found' }, 404);
+
+  const body = await c.req.json() as { data: string; mimeType: string };
+  if (!body.data || !body.mimeType) {
+    return c.json({ success: false, error: 'Missing data or mimeType' }, 400);
+  }
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(body.mimeType)) {
+    return c.json({ success: false, error: 'Invalid image type. Use JPEG, PNG, or WebP.' }, 400);
+  }
+
+  const binaryString = atob(body.data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  if (bytes.length > 5 * 1024 * 1024) {
+    return c.json({ success: false, error: 'Image too large. Max 5MB.' }, 400);
+  }
+
+  const ext = body.mimeType === 'image/png' ? 'png' : body.mimeType === 'image/webp' ? 'webp' : 'jpg';
+  const key = `org-logos/${orgId}.${ext}`;
+
+  await storage.put(key, bytes.buffer, { httpMetadata: { contentType: body.mimeType } });
+
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
+  const logoUrl = `${apiBase}/api/assets/${key}?v=${Date.now()}`;
+
+  await db.prepare("UPDATE organizations SET logo_url = ? WHERE id = ?")
+    .bind(logoUrl, orgId).run();
+
+  return c.json({ success: true, data: { logo_url: logoUrl } });
+});
 

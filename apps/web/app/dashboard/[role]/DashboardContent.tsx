@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import DirectorDash from './DirectorDash';
 import OrgDashboard from './OrgDashboard';
 
@@ -131,7 +132,7 @@ function PendingRegistrations() {
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="text-xs font-medium text-[#003e79]">{r.event_name}</span>
                       <span className="text-[10px] text-[#86868b]">|</span>
-                      <span className="text-xs text-[#6e6e73]">{r.division_age_group} {r.division_level}</span>
+                      <span className="text-xs text-[#6e6e73]">{[r.division_age_group, r.division_level].filter(Boolean).join(' ')}</span>
                       {eventDate && <>
                         <span className="text-[10px] text-[#86868b]">|</span>
                         <span className="text-xs text-[#86868b]">{eventDate}</span>
@@ -485,9 +486,9 @@ function CoachDash() {
         <div className="space-y-4">
           {teams.map((team: any) => {
             const isExpanded = expandedTeam === team.id;
-            const parentCode = team.parent_invite_code || team.invite_code || null;
-            const shareMessage = parentCode
-              ? `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${parentCode}\n\nhttps://apps.apple.com/app/id6786085393`
+            const parentShareCode = team.parent_invite_code || team.invite_code || null;
+            const parentShareMsg = parentShareCode
+              ? `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${parentShareCode}\n\nhttps://apps.apple.com/app/id6786085393`
               : null;
             return (
               <div key={team.id} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] transition-all">
@@ -530,11 +531,11 @@ function CoachDash() {
                     <span className="text-xs font-semibold text-[#003e79]">Register Event</span>
                   </a>
 
-                  {/* 3. Share with Parents (copies app follow message) */}
+                  {/* 3. Share with Parents */}
                   <button
-                    onClick={() => shareMessage && copyToClipboard(shareMessage, `parent-${team.id}`)}
+                    onClick={() => parentShareMsg && copyToClipboard(parentShareMsg, `parent-${team.id}`)}
                     className="bg-white px-4 py-3 flex flex-col items-center gap-1.5 hover:bg-[#f0f7ff] transition-colors group disabled:opacity-40"
-                    disabled={!shareMessage}>
+                    disabled={!parentShareMsg}>
                     <span className="text-xl group-hover:scale-110 transition-transform">📱</span>
                     <span className="text-xs font-semibold text-[#003e79]">
                       {copied === `parent-${team.id}` ? '✓ Copied!' : 'Share with Parents'}
@@ -623,11 +624,11 @@ function CoachDash() {
                     </div>
 
                     {/* Share with Parents */}
-                    {parentCode && (
+                    {parentShareCode && (
                       <div className="border-t border-[#e8e8ed] pt-3">
                         <h4 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Share with Parents</h4>
                         <p className="text-xs text-[#86868b]">
-                          Parents can download the UHT app and use team code <span className="font-mono font-semibold text-[#003e79]">{parentCode}</span> to follow the team and get live scores, schedules, and updates.
+                          Parents can download the UHT app and use team code <span className="font-mono font-semibold text-[#003e79]">{parentShareCode}</span> to follow the team and get live scores, schedules, and updates.
                         </p>
                       </div>
                     )}
@@ -665,7 +666,8 @@ function CoachDash() {
                                   <div className="flex items-center gap-1 ml-2">
                                     <button
                                       onClick={() => copyToClipboard(`https://ultimatetournaments.com/pay?reg=${evt.reg_id}`, `pay-${evt.reg_id}`)}
-                                      className="text-[10px] font-semibold text-[#003e79] bg-[#e6f0fa] hover:bg-[#d0e4f5] px-2 py-0.5 rounded-full transition-colors">
+                                      className="text-[10px] font-semibold text-[#003e79] bg-[#e6f0fa] hover:bg-[#d0e4f5] px-2 py-0.5 rounded-full transition-colors"
+                                    >
                                       {copied === `pay-${evt.reg_id}` ? 'Copied!' : 'Payment Link'}
                                     </button>
                                   </div>

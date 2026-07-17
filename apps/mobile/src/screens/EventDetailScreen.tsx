@@ -16,8 +16,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getEventDetail, getEventSchedule, getEventScores, getEventStandings } from '../services/api';
+import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
 import { getUser, User } from '../services/auth';
+import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
 
 // ==================
 // Tab configuration matching USSSA layout
@@ -42,12 +43,12 @@ interface TabDef {
 
 const EVENT_TABS: TabDef[] = [
   { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
-  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
   { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
   { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
-  { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
   { key: 'venues', label: 'Venues', icon: 'location-outline' },
   { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
+  { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
+  { key: 'promotions', label: 'Promotions', icon: 'star-outline' },
   { key: 'whos_coming', label: "Who's Coming", icon: 'people-outline' },
   { key: 'merchandise', label: 'Merchandise', icon: 'cart-outline' },
   { key: 'contact', label: 'Contact', icon: 'mail-outline' },
@@ -60,15 +61,33 @@ interface GameSlot {
   id: string;
   time?: string;
   date?: string;
+  start_time?: string;
   rink_name?: string;
   rink?: string;
+  home_team_id?: string;
+  away_team_id?: string;
   home_team_name?: string;
   away_team_name?: string;
   home_team?: string;
   away_team?: string;
+  home_team_logo?: string;
+  away_team_logo?: string;
   home_score?: number | null;
   away_score?: number | null;
   division_name?: string;
+  age_group?: string;
+  division_level?: string;
+  event_division_id?: string;
+  home_locker_room?: string;
+  away_locker_room?: string;
+  status?: string;
+  delay_minutes?: number;
+  delay_note?: string;
+  venue_name?: string;
+  round?: string;
+  pool_name?: string;
+  bracket_round?: string;
+  game_number?: number;
 }
 
 interface ScoreGame {
@@ -77,6 +96,8 @@ interface ScoreGame {
   start_time?: string;
   home_team_name?: string;
   away_team_name?: string;
+  home_team_logo?: string;
+  away_team_logo?: string;
   home_score: number;
   away_score: number;
   status: string;
@@ -220,10 +241,13 @@ export default function EventDetailScreen({
   const [scoresLoaded, setScoresLoaded] = useState(false);
   const [standingsLoaded, setStandingsLoaded] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
+  const [selectedDivision, setSelectedDivision] = useState<string>('all');
 
   useEffect(() => {
     loadData();
     getUser().then(u => setCurrentUser(u));
+    getMyTeamIds().then(ids => setMyTeamIds(ids));
   }, [eventId]);
 
   useEffect(() => {
@@ -300,11 +324,14 @@ export default function EventDetailScreen({
   function formatDateRangeShort(startDate?: string, endDate?: string): string {
     if (!startDate) return 'Dates TBD';
     try {
-      const start = new Date(startDate);
+      // Append T00:00:00 to prevent UTC timezone shift (bare date strings parse as UTC)
+      const startStr2 = startDate.includes('T') ? startDate : startDate + 'T00:00:00';
+      const start = new Date(startStr2);
       const shortOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
       const startStr = start.toLocaleDateString('en-US', shortOpts);
       if (!endDate) return startStr;
-      const end = new Date(endDate);
+      const endStr2 = endDate.includes('T') ? endDate : endDate + 'T00:00:00';
+      const end = new Date(endStr2);
       const yearOpts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
       const endStr = end.toLocaleDateString('en-US', yearOpts);
       return `${startStr} - ${endStr}`;
@@ -413,7 +440,10 @@ export default function EventDetailScreen({
   const eventVenues: EventVenue[] = displayEvent?.venues || [];
   const eventHotels: EventHotel[] = displayEvent?.hotels || [];
   const registeredTeams: RegisteredTeam[] = displayEvent?.registered_teams || [];
-  const eventDivisions: EventDivision[] = (displayEvent?.divisions || []) as EventDivision[];
+  const eventDivisions: EventDivision[] = sortByAgeGroup(
+    (displayEvent?.divisions || []) as EventDivision[],
+    d => d.age_group
+  );
 
   // Group scores by date
   const scoresByDate = scores.reduce<Record<string, ScoreGame[]>>((acc, game) => {
@@ -585,7 +615,7 @@ export default function EventDetailScreen({
                   const eventName = displayEvent?.name || 'this tournament';
                   try {
                     await Share.share({
-                      message: `Hey Coach! Check out ${eventName} on UHT and register our team: https://uht-web.pages.dev/events/${slug}`,
+                      message: `Hey Coach! Check out ${eventName} on UHT and register our team: https://ultimatetournaments.com/events/${slug}`,
                     });
                   } catch {}
                 }}
@@ -722,19 +752,14 @@ export default function EventDetailScreen({
           </View>
         ) : null}
 
-        {/* Locker Room */}
+        {/* Locker Room Assignments */}
         <View style={styles.infoRow}>
           <View style={styles.infoIconBox}>
             <Ionicons name="lock-closed-outline" size={20} color={colors.navy} />
           </View>
           <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.infoRowLabel}>Locker Room Assignments</Text>
-              <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>Coming Soon</Text>
-              </View>
-            </View>
-            <Text style={styles.infoRowSub}>Posted before event day</Text>
+            <Text style={styles.infoRowLabel}>Locker Room Assignments</Text>
+            <Text style={styles.infoRowSub}>Check your game in the Schedule tab for locker room info</Text>
           </View>
         </View>
       </ScrollView>
@@ -775,44 +800,112 @@ export default function EventDetailScreen({
   }
 
   // ==================
-  // TAB: My Schedule (filtered to followed teams)
+  // TAB: My Schedule (filtered to followed/owned teams)
   // ==================
   function renderMyScheduleTab() {
-    // For now show full schedule — later we filter by followed teams
+    const myGames = myTeamIds.length > 0
+      ? schedule.filter(g => myTeamIds.includes(g.home_team_id || '') || myTeamIds.includes(g.away_team_id || ''))
+      : [];
+
     return (
       <FlatList
-        data={schedule}
+        data={myGames}
         keyExtractor={(item, index) => item.id || String(index)}
         contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
-        renderItem={({ item }) => (
-          <View style={styles.gameCard}>
-            <View style={styles.gameTimeRow}>
-              <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
-              {item.rink_name || item.rink ? (
-                <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+        renderItem={({ item }) => {
+          const isMyHome = myTeamIds.includes(item.home_team_id || '');
+          const isMyAway = myTeamIds.includes(item.away_team_id || '');
+          const gameStatus = item.status || 'scheduled';
+          const isLive = gameStatus === 'in_progress' || gameStatus === 'intermission' || gameStatus === 'warmup';
+          const isDelayed = gameStatus === 'delayed';
+          const isFinal = gameStatus === 'final';
+
+          return (
+            <View style={[styles.gameCard, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+              {/* Status badge */}
+              {gameStatus !== 'scheduled' && (
+                <View style={styles.gameStatusRow}>
+                  <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
+                    {isLive && <View style={styles.gameStatusDot} />}
+                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}</Text>
+                  </View>
+                  {isDelayed && item.delay_note && (
+                    <Text style={styles.delayNoteText}>{item.delay_note}</Text>
+                  )}
+                </View>
+              )}
+              <View style={styles.gameTimeRow}>
+                <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
+                {item.rink_name || item.rink ? (
+                  <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+                ) : null}
+              </View>
+              {item.division_name ? <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text> : null}
+              <View style={styles.matchup}>
+                <View style={styles.teamRow}>
+                  <Text style={styles.teamLabel}>HOME</Text>
+                  {item.home_team_logo ? (
+                    <Image source={{ uri: item.home_team_logo }} style={styles.teamLogo} />
+                  ) : null}
+                  <Text style={[styles.teamName, isMyHome ? styles.myTeamHighlight : null]}>
+                    {item.home_team_name || item.home_team || 'TBD'}
+                  </Text>
+                  {(isFinal || isLive) && item.home_score != null && (
+                    <Text style={[styles.inlineScore, isLive ? { color: '#e74c3c' } : null]}>{item.home_score}</Text>
+                  )}
+                </View>
+                {item.home_locker_room ? (
+                  <View style={styles.lockerRow}>
+                    <Ionicons name="lock-closed-outline" size={11} color={colors.cyan} />
+                    <Text style={styles.lockerText}>{item.home_locker_room}</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.vsText}>vs</Text>
+                <View style={styles.teamRow}>
+                  <Text style={styles.teamLabel}>AWAY</Text>
+                  {item.away_team_logo ? (
+                    <Image source={{ uri: item.away_team_logo }} style={styles.teamLogo} />
+                  ) : null}
+                  <Text style={[styles.teamName, isMyAway ? styles.myTeamHighlight : null]}>
+                    {item.away_team_name || item.away_team || 'TBD'}
+                  </Text>
+                  {(isFinal || isLive) && item.away_score != null && (
+                    <Text style={[styles.inlineScore, isLive ? { color: '#e74c3c' } : null]}>{item.away_score}</Text>
+                  )}
+                </View>
+                {item.away_locker_room ? (
+                  <View style={styles.lockerRow}>
+                    <Ionicons name="lock-closed-outline" size={11} color={colors.cyan} />
+                    <Text style={styles.lockerText}>{item.away_locker_room}</Text>
+                  </View>
+                ) : null}
+              </View>
+              {item.venue_name ? (
+                <Text style={styles.gameVenue}>{item.venue_name}</Text>
               ) : null}
             </View>
-            {item.division_name ? <Text style={styles.gameDivision}>{item.division_name}</Text> : null}
-            <View style={styles.matchup}>
-              <View style={styles.teamRow}>
-                <Text style={styles.teamLabel}>HOME</Text>
-                <Text style={styles.teamName}>{item.home_team_name || item.home_team || 'TBD'}</Text>
-              </View>
-              <Text style={styles.vsText}>vs</Text>
-              <View style={styles.teamRow}>
-                <Text style={styles.teamLabel}>AWAY</Text>
-                <Text style={styles.teamName}>{item.away_team_name || item.away_team || 'TBD'}</Text>
-              </View>
-            </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Schedule Not Yet Published</Text>
-            <Text style={styles.emptyText}>
-              Your team's schedule will appear here once it's been published. Check back closer to event day.
-            </Text>
+            {myTeamIds.length === 0 ? (
+              <>
+                <Ionicons name="people-outline" size={48} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>Follow a Team First</Text>
+                <Text style={styles.emptyText}>
+                  Follow or create a team to see your personalized schedule here. Go to the Home tab and tap "Follow a Team" to get started.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="calendar-outline" size={48} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>No Games Scheduled</Text>
+                <Text style={styles.emptyText}>
+                  Your team's schedule will appear here once it's been published. Check back closer to event day.
+                </Text>
+              </>
+            )}
           </View>
         }
       />
@@ -820,18 +913,83 @@ export default function EventDetailScreen({
   }
 
   // ==================
-  // TAB: Game Center (full schedule + scores + standings)
+  // TAB: Game Center (division picker + full schedule + scores + standings)
   // ==================
   const [gameCenterSub, setGameCenterSub] = useState<'schedule' | 'scores' | 'standings'>('schedule');
+  const [gameTimeFilter, setGameTimeFilter] = useState<'upcoming' | 'past' | 'all'>('all');
+
+  // Get unique divisions from schedule data
+  const divisions = (() => {
+    const divMap = new Map<string, { id: string; label: string }>();
+    schedule.forEach(g => {
+      if (g.event_division_id) {
+        const label = [g.age_group, g.division_level].filter(Boolean).join(' ');
+        if (!divMap.has(g.event_division_id)) {
+          divMap.set(g.event_division_id, { id: g.event_division_id, label });
+        }
+      }
+    });
+    // Also add from event divisions
+    eventDivisions.forEach(d => {
+      if (!divMap.has(d.id)) {
+        const label = [d.age_group, d.division_level].filter(Boolean).join(' ');
+        divMap.set(d.id, { id: d.id, label });
+      }
+    });
+    return sortByAgeGroup([...divMap.values()], d => d.label);
+  })();
+
+  function getFilteredSchedule() {
+    let filtered = schedule;
+    if (selectedDivision !== 'all') {
+      filtered = filtered.filter(g => g.event_division_id === selectedDivision);
+    }
+    if (gameTimeFilter === 'upcoming') {
+      filtered = filtered.filter(g => g.status !== 'final');
+    } else if (gameTimeFilter === 'past') {
+      filtered = filtered.filter(g => g.status === 'final');
+    }
+    return filtered;
+  }
+
+  function renderDivisionPicker() {
+    if (divisions.length === 0) return null;
+    return (
+      <View style={styles.divisionPickerContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.divisionPickerScroll}>
+          <TouchableOpacity
+            style={[styles.divisionPill, selectedDivision === 'all' ? styles.divisionPillActive : null]}
+            onPress={() => setSelectedDivision('all')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.divisionPillText, selectedDivision === 'all' ? styles.divisionPillTextActive : null]}>All Divisions</Text>
+          </TouchableOpacity>
+          {divisions.map(div => (
+            <TouchableOpacity
+              key={div.id}
+              style={[styles.divisionPill, selectedDivision === div.id ? styles.divisionPillActive : null]}
+              onPress={() => setSelectedDivision(div.id)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.divisionPillText, selectedDivision === div.id ? styles.divisionPillTextActive : null]}>{div.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  }
 
   function renderGameCenterTab() {
     return (
       <View style={{ flex: 1 }}>
+        {/* Division picker */}
+        {renderDivisionPicker()}
+
         {/* Sub-tabs */}
         <View style={styles.subTabBar}>
           {(['schedule', 'scores', 'standings'] as const).map((sub) => {
             const isActive = gameCenterSub === sub;
-            const label = sub === 'schedule' ? 'Full Schedule' : sub === 'scores' ? 'Scores' : 'Standings';
+            const label = sub === 'schedule' ? 'Schedule' : sub === 'scores' ? 'Scores' : 'Standings';
             return (
               <TouchableOpacity
                 key={sub}
@@ -857,38 +1015,104 @@ export default function EventDetailScreen({
   }
 
   function renderFullSchedule() {
+    const filteredSchedule = getFilteredSchedule();
+
     return (
       <FlatList
-        data={schedule}
+        data={filteredSchedule}
         keyExtractor={(item, index) => item.id || String(index)}
         contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
-        renderItem={({ item }) => (
-          <View style={styles.gameCard}>
-            <View style={styles.gameTimeRow}>
-              <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
-              {item.rink_name || item.rink ? (
-                <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
-              ) : null}
-            </View>
-            {item.division_name ? <Text style={styles.gameDivision}>{item.division_name}</Text> : null}
-            <View style={styles.matchup}>
-              <View style={styles.teamRow}>
-                <Text style={styles.teamLabel}>HOME</Text>
-                <Text style={styles.teamName}>{item.home_team_name || item.home_team || 'TBD'}</Text>
-              </View>
-              <Text style={styles.vsText}>vs</Text>
-              <View style={styles.teamRow}>
-                <Text style={styles.teamLabel}>AWAY</Text>
-                <Text style={styles.teamName}>{item.away_team_name || item.away_team || 'TBD'}</Text>
-              </View>
-            </View>
+        ListHeaderComponent={
+          <View style={styles.timeFilterRow}>
+            {(['all', 'upcoming', 'past'] as const).map(f => (
+              <TouchableOpacity
+                key={f}
+                style={[styles.timeFilterBtn, gameTimeFilter === f ? styles.timeFilterBtnActive : null]}
+                onPress={() => setGameTimeFilter(f)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.timeFilterText, gameTimeFilter === f ? styles.timeFilterTextActive : null]}>
+                  {f === 'all' ? 'All' : f === 'upcoming' ? 'Upcoming' : 'Past'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        )}
+        }
+        renderItem={({ item }) => {
+          const gameStatus = item.status || 'scheduled';
+          const isLive = gameStatus === 'in_progress' || gameStatus === 'intermission' || gameStatus === 'warmup';
+          const isDelayed = gameStatus === 'delayed';
+          const isFinal = gameStatus === 'final';
+          const isMyHome = myTeamIds.includes(item.home_team_id || '');
+          const isMyAway = myTeamIds.includes(item.away_team_id || '');
+
+          return (
+            <View style={[styles.gameCard, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+              {gameStatus !== 'scheduled' && (
+                <View style={styles.gameStatusRow}>
+                  <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
+                    {isLive && <View style={styles.gameStatusDot} />}
+                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}</Text>
+                  </View>
+                  {isDelayed && item.delay_minutes && (
+                    <Text style={styles.delayMinText}>{item.delay_minutes} min delay</Text>
+                  )}
+                </View>
+              )}
+              <View style={styles.gameTimeRow}>
+                <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
+                {item.rink_name || item.rink ? (
+                  <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+                ) : null}
+              </View>
+              {item.division_name && selectedDivision === 'all' ? (
+                <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text>
+              ) : null}
+              <View style={styles.matchup}>
+                <View style={styles.teamRow}>
+                  <Text style={styles.teamLabel}>HOME</Text>
+                  {item.home_team_logo ? (
+                    <Image source={{ uri: item.home_team_logo }} style={styles.teamLogo} />
+                  ) : null}
+                  <Text style={[styles.teamName, isMyHome ? styles.myTeamHighlight : null]}>{item.home_team_name || item.home_team || 'TBD'}</Text>
+                  {(isFinal || isLive) && item.home_score != null && (
+                    <Text style={[styles.inlineScore, isFinal && (item.home_score ?? 0) > (item.away_score ?? 0) ? styles.inlineScoreWin : null]}>{item.home_score}</Text>
+                  )}
+                </View>
+                {item.home_locker_room ? (
+                  <View style={styles.lockerRow}>
+                    <Ionicons name="lock-closed-outline" size={11} color={colors.cyan} />
+                    <Text style={styles.lockerText}>{item.home_locker_room}</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.vsText}>vs</Text>
+                <View style={styles.teamRow}>
+                  <Text style={styles.teamLabel}>AWAY</Text>
+                  {item.away_team_logo ? (
+                    <Image source={{ uri: item.away_team_logo }} style={styles.teamLogo} />
+                  ) : null}
+                  <Text style={[styles.teamName, isMyAway ? styles.myTeamHighlight : null]}>{item.away_team_name || item.away_team || 'TBD'}</Text>
+                  {(isFinal || isLive) && item.away_score != null && (
+                    <Text style={[styles.inlineScore, isFinal && (item.away_score ?? 0) > (item.home_score ?? 0) ? styles.inlineScoreWin : null]}>{item.away_score}</Text>
+                  )}
+                </View>
+                {item.away_locker_room ? (
+                  <View style={styles.lockerRow}>
+                    <Ionicons name="lock-closed-outline" size={11} color={colors.cyan} />
+                    <Text style={styles.lockerText}>{item.away_locker_room}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Schedule Not Yet Published</Text>
-            <Text style={styles.emptyText}>The schedule for this event hasn't been published yet.</Text>
+            <Text style={styles.emptyTitle}>No Games Found</Text>
+            <Text style={styles.emptyText}>
+              {gameTimeFilter !== 'all' ? 'Try switching to "All" to see all games.' : 'The schedule for this event hasn\'t been published yet.'}
+            </Text>
           </View>
         }
       />
@@ -899,7 +1123,26 @@ export default function EventDetailScreen({
     if (scoresLoading) {
       return <View style={styles.centerContent}><ActivityIndicator size="large" color={colors.navy} /></View>;
     }
-    if (scores.length === 0) {
+
+    // Filter scores by selected division
+    const filteredScores = selectedDivision === 'all'
+      ? scores
+      : scores.filter(g => {
+          const divLabel = [g.age_group, g.division_level].filter(Boolean).join(' ');
+          const matchDiv = divisions.find(d => d.id === selectedDivision);
+          return matchDiv ? divLabel === matchDiv.label : true;
+        });
+
+    // Rebuild scoresByDate with filtered scores
+    const filteredScoresByDate = filteredScores.reduce<Record<string, ScoreGame[]>>((acc, game) => {
+      const key = getDateKey(game.start_time);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(game);
+      return acc;
+    }, {});
+    const filteredDateKeys = Object.keys(filteredScoresByDate).sort();
+
+    if (filteredScores.length === 0) {
       return (
         <ScrollView contentContainerStyle={styles.tabContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
@@ -915,8 +1158,8 @@ export default function EventDetailScreen({
       <ScrollView contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
-        {sortedDateKeys.map((dateKey) => {
-          const gamesForDate = scoresByDate[dateKey];
+        {filteredDateKeys.map((dateKey) => {
+          const gamesForDate = filteredScoresByDate[dateKey];
           const dateLabel = dateKey === 'TBD' ? 'Date TBD' : formatScoreDate(gamesForDate[0].start_time);
           return (
             <View key={dateKey}>
@@ -945,6 +1188,9 @@ export default function EventDetailScreen({
                     <View style={styles.scoreMatchup}>
                       <View style={styles.scoreTeamCol}>
                         <Text style={styles.scoreTeamLabel}>AWAY</Text>
+                        {game.away_team_logo ? (
+                          <Image source={{ uri: game.away_team_logo }} style={styles.scoreTeamLogo} />
+                        ) : null}
                         <Text style={[styles.scoreTeamName, awayWins ? styles.scoreTeamWinner : null]} numberOfLines={2}>
                           {game.away_team_name || 'TBD'}
                         </Text>
@@ -968,6 +1214,9 @@ export default function EventDetailScreen({
                       </View>
                       <View style={[styles.scoreTeamCol, styles.scoreTeamColRight]}>
                         <Text style={styles.scoreTeamLabel}>HOME</Text>
+                        {game.home_team_logo ? (
+                          <Image source={{ uri: game.home_team_logo }} style={styles.scoreTeamLogo} />
+                        ) : null}
                         <Text style={[styles.scoreTeamName, homeWins ? styles.scoreTeamWinner : null]} numberOfLines={2}>
                           {game.home_team_name || 'TBD'}
                         </Text>
@@ -987,7 +1236,13 @@ export default function EventDetailScreen({
     if (standingsLoading) {
       return <View style={styles.centerContent}><ActivityIndicator size="large" color={colors.navy} /></View>;
     }
-    if (standings.length === 0) {
+
+    // Filter standings by selected division
+    const filteredStandingsGroups = selectedDivision === 'all'
+      ? standingsGroups
+      : standingsGroups.filter(g => g.entries.some(e => e.event_division_id === selectedDivision));
+
+    if (filteredStandingsGroups.length === 0) {
       return (
         <ScrollView contentContainerStyle={styles.tabContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
@@ -1003,7 +1258,7 @@ export default function EventDetailScreen({
       <ScrollView contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
-        {standingsGroups.map((group) => (
+        {filteredStandingsGroups.map((group) => (
           <View key={group.key} style={styles.standingsSection}>
             <Text style={styles.standingsSectionHeader}>{group.label}</Text>
             <View style={styles.standingsTable}>
@@ -1707,7 +1962,45 @@ const styles = StyleSheet.create({
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   teamLabel: { fontSize: 11, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, width: 40 },
   teamName: { fontSize: 15, color: colors.text, ...fonts.semibold, flex: 1 },
+  teamLogo: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#f0f0f0' },
+  lockerText: { fontSize: 11, color: colors.cyan, ...fonts.semibold },
+  lockerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 48, marginTop: 2 },
   vsText: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', marginLeft: 48 },
+  myTeamHighlight: { color: colors.navy, ...fonts.bold },
+  inlineScore: { fontSize: 18, color: colors.textSecondary, ...fonts.semibold, marginLeft: 'auto', paddingLeft: spacing.sm },
+  inlineScoreWin: { color: colors.navy, ...fonts.bold },
+  gameVenue: { fontSize: 11, color: colors.textMuted, ...fonts.regular, marginTop: spacing.sm, textAlign: 'right' },
+
+  // Game status
+  gameCardLive: { borderColor: colors.success, borderWidth: 2 },
+  gameCardDelayed: { borderColor: colors.warning, borderWidth: 2 },
+  gameStatusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  gameStatusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radii.full, gap: 4 },
+  gameStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.white },
+  gameStatusText: { fontSize: 11, color: colors.white, ...fonts.bold, textTransform: 'uppercase', letterSpacing: 0.3 },
+  delayNoteText: { fontSize: 11, color: colors.warning, ...fonts.medium, flex: 1 },
+  delayMinText: { fontSize: 11, color: colors.warning, ...fonts.medium },
+
+  // Division picker
+  divisionPickerContainer: { backgroundColor: colors.bg, paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
+  divisionPickerScroll: { paddingHorizontal: spacing.lg, gap: spacing.xs },
+  divisionPill: {
+    paddingVertical: 6, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+  },
+  divisionPillActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  divisionPillText: { fontSize: 12, color: colors.textSecondary, ...fonts.semibold },
+  divisionPillTextActive: { color: colors.white },
+
+  // Time filter
+  timeFilterRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  timeFilterBtn: {
+    paddingVertical: 5, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+  },
+  timeFilterBtnActive: { backgroundColor: colors.cyan, borderColor: colors.cyan },
+  timeFilterText: { fontSize: 12, color: colors.textSecondary, ...fonts.semibold },
+  timeFilterTextActive: { color: colors.white },
 
   // Scores
   dateSectionHeader: { fontSize: 15, color: colors.navy, ...fonts.bold, marginTop: spacing.md, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -1729,6 +2022,7 @@ const styles = StyleSheet.create({
   scoreTeamColRight: { alignItems: 'flex-end' },
   scoreTeamLabel: { fontSize: 10, color: colors.textMuted, ...fonts.semibold, letterSpacing: 0.5, marginBottom: 2, textTransform: 'uppercase' },
   scoreTeamName: { fontSize: 14, color: colors.text, ...fonts.semibold },
+  scoreTeamLogo: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#f0f0f0', marginBottom: 4 },
   scoreTeamWinner: { ...fonts.bold, color: colors.navy },
   scoreCenter: { alignItems: 'center', paddingHorizontal: spacing.md, minWidth: 70 },
   scoreNumbers: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

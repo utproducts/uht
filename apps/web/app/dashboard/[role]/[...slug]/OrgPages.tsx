@@ -702,7 +702,7 @@ export function OrgEvents() {
                   <span className="text-xs text-[#86868b]">{tr.age_group}</span>
                   {tr.division_age && (
                     <span className="px-1.5 py-0.5 bg-[#f5f5f7] rounded text-[10px] text-[#6e6e73]">
-                      {tr.division_age} {tr.division_level}
+                      {[tr.division_age, tr.division_level].filter(Boolean).join(' ')}
                     </span>
                   )}
                 </div>

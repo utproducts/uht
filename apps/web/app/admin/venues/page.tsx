@@ -109,7 +109,7 @@ function VenuesPage() {
   // Delete confirm
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'city' | 'venue' | 'rink'; id: string; name: string; venueId?: string } | null>(null);
 
-  // Rink rename
+  // Edit rink
   const [editingRinkId, setEditingRinkId] = useState<string | null>(null);
   const [editRinkName, setEditRinkName] = useState('');
 
@@ -133,8 +133,8 @@ function VenuesPage() {
   // Rinks expansion
   const [expandedRink, setExpandedRink] = useState<string | null>(null);
 
-  // Add rink
-  const [addingRinkVenueId, setAddingRinkVenueId] = useState<string | null>(null);
+  // Add rink to existing venue
+  const [addingRinkToVenue, setAddingRinkToVenue] = useState<string | null>(null);
   const [newRinkName, setNewRinkName] = useState('');
 
   // Locker rooms
@@ -386,67 +386,6 @@ function VenuesPage() {
     }
   };
 
-  // ── Rink CRUD ──
-
-  const handleRenameRink = async (rinkId: string, venueId: string) => {
-    if (!editRinkName.trim()) return;
-    try {
-      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
-        body: JSON.stringify({ name: editRinkName.trim() })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setEditingRinkId(null);
-        await loadRinks(venueId);
-      }
-    } catch (e) {
-      console.error('Failed to rename rink', e);
-    }
-  };
-
-  const handleAddRink = async (venueId: string) => {
-    if (!newRinkName.trim()) return;
-    try {
-      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
-        body: JSON.stringify({ name: newRinkName.trim() })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setAddingRinkVenueId(null);
-        setNewRinkName('');
-        await loadRinks(venueId);
-        setVenues(prev => prev.map(v => v.id === venueId
-          ? { ...v, num_rinks: (v.rinks?.length || 0) + 1 }
-          : v));
-      }
-    } catch (e) {
-      console.error('Failed to add rink', e);
-    }
-  };
-
-  const handleDeleteRink = async (rinkId: string, venueId: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
-        method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' }
-      });
-      const json = await res.json();
-      if (json.success) {
-        setConfirmDelete(null);
-        await loadRinks(venueId);
-        setVenues(prev => prev.map(v => v.id === venueId
-          ? { ...v, num_rinks: Math.max(0, (v.num_rinks || 1) - 1) }
-          : v));
-      }
-    } catch (e) {
-      console.error('Failed to delete rink', e);
-    }
-  };
-
   // ── Locker Room CRUD ──
 
   const handleAddLockerRoom = async (rinkId: string) => {
@@ -488,6 +427,71 @@ function VenuesPage() {
       console.error('Failed to delete locker room', e);
     }
     setDeletingLockerRoom(null);
+  };
+
+  // ── Rink CRUD ──
+
+  const handleRenameRink = async (rinkId: string, venueId: string) => {
+    if (!editRinkName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        body: JSON.stringify({ name: editRinkName.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setEditingRinkId(null);
+        // Reload rinks inline without collapsing venue
+        await loadRinks(venueId);
+      }
+    } catch (e) {
+      console.error('Failed to rename rink', e);
+    }
+  };
+
+  const handleAddRink = async (venueId: string) => {
+    if (!newRinkName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        body: JSON.stringify({ name: newRinkName.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAddingRinkToVenue(null);
+        setNewRinkName('');
+        // Reload rinks inline and update venue count
+        await loadRinks(venueId);
+        setVenues(prev => prev.map(v =>
+          v.id === venueId ? { ...v, num_rinks: (v.rinks?.length || 0) + 1 } : v
+        ));
+      }
+    } catch (e) {
+      console.error('Failed to add rink', e);
+    }
+  };
+
+  const handleDeleteRink = async (rinkId: string, venueId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
+        method: 'DELETE',
+        headers: { 'X-Dev-Bypass': 'true' }
+      });
+      const json = await res.json();
+      if (json.success) {
+        setConfirmDelete(null);
+        // Reload rinks inline without collapsing
+        await loadRinks(venueId);
+        // Update the venue's rink count locally
+        setVenues(prev => prev.map(v =>
+          v.id === venueId ? { ...v, num_rinks: Math.max(0, (v.num_rinks || 1) - 1) } : v
+        ));
+      }
+    } catch (e) {
+      console.error('Failed to delete rink', e);
+    }
   };
 
   const startEditCity = (city: City) => {
@@ -897,7 +901,6 @@ function VenuesPage() {
                               <div key={rink.id}>
                                 {/* Rink Card */}
                                 {editingRinkId === rink.id ? (
-                                  /* Rink rename form */
                                   <div className="bg-white border-2 border-cyan-500 rounded-lg p-3">
                                     <div className="flex items-center gap-2">
                                       <input
@@ -913,47 +916,45 @@ function VenuesPage() {
                                       <button
                                         onClick={() => handleRenameRink(rink.id, venue.id)}
                                         className="px-3 py-1 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a]"
-                                      >
-                                        Save
-                                      </button>
+                                      >Save</button>
                                       <button
                                         onClick={() => setEditingRinkId(null)}
                                         className="px-3 py-1 bg-[#e8e8ed] text-[#3d3d3d] text-xs font-semibold rounded-lg hover:bg-[#d8d8dd]"
-                                      >
-                                        Cancel
-                                      </button>
+                                      >Cancel</button>
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="bg-white border border-[#e8e8ed] rounded-lg p-3 cursor-pointer hover:bg-[#f5f5f7] transition group/rink">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex-1" onClick={() => handleExpandRink(rink.id)}>
-                                        <p className="font-medium text-[#3d3d3d] text-sm">{rink.name}</p>
-                                        {rink.address && (
-                                          <p className="text-xs text-[#86868b] mt-1">{rink.address}</p>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          onClick={e => { e.stopPropagation(); setEditingRinkId(rink.id); setEditRinkName(rink.name); }}
-                                          className="p-1 rounded transition opacity-0 group-hover/rink:opacity-100 hover:bg-[#f0f0f2] text-[#86868b] hover:text-[#3d3d3d]"
-                                          title="Rename rink"
-                                        >
-                                          <PencilIcon />
-                                        </button>
-                                        <button
-                                          onClick={e => { e.stopPropagation(); setConfirmDelete({ type: 'rink', id: rink.id, name: rink.name, venueId: venue.id }); }}
-                                          className="p-1 rounded transition opacity-0 group-hover/rink:opacity-100 hover:bg-red-50 text-[#86868b] hover:text-red-500"
-                                          title="Delete rink"
-                                        >
-                                          <TrashIcon />
-                                        </button>
-                                        <div onClick={() => handleExpandRink(rink.id)}>
-                                          <ChevronIcon expanded={expandedRink === rink.id} className="w-4 h-4" />
-                                        </div>
+                                <div
+                                  className="bg-white border border-[#e8e8ed] rounded-lg p-3 cursor-pointer hover:bg-[#f5f5f7] transition group/rink"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1" onClick={() => handleExpandRink(rink.id)}>
+                                      <p className="font-medium text-[#3d3d3d] text-sm">{rink.name}</p>
+                                      {rink.address && (
+                                        <p className="text-xs text-[#86868b] mt-1">{rink.address}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setEditingRinkId(rink.id); setEditRinkName(rink.name); }}
+                                        className="p-1 rounded transition opacity-0 group-hover/rink:opacity-100 hover:bg-[#f0f0f2] text-[#86868b] hover:text-[#3d3d3d]"
+                                        title="Rename rink"
+                                      >
+                                        <PencilIcon />
+                                      </button>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setConfirmDelete({ type: 'rink', id: rink.id, name: rink.name, venueId: venue.id }); }}
+                                        className="p-1 rounded transition opacity-0 group-hover/rink:opacity-100 hover:bg-red-50 text-[#86868b] hover:text-red-500"
+                                        title="Delete rink"
+                                      >
+                                        <TrashIcon />
+                                      </button>
+                                      <div onClick={() => handleExpandRink(rink.id)}>
+                                        <ChevronIcon expanded={expandedRink === rink.id} className="w-4 h-4" />
                                       </div>
                                     </div>
                                   </div>
+                                </div>
                                 )}
 
                                 {/* Expanded Rink Content - Locker Rooms */}
@@ -1029,7 +1030,7 @@ function VenuesPage() {
                           )}
 
                           {/* Add Rink */}
-                          {addingRinkVenueId === venue.id ? (
+                          {addingRinkToVenue === venue.id ? (
                             <div className="bg-white border-2 border-cyan-500 rounded-lg p-3">
                               <div className="flex items-center gap-2">
                                 <input
@@ -1040,31 +1041,25 @@ function VenuesPage() {
                                   autoFocus
                                   onKeyDown={e => {
                                     if (e.key === 'Enter') handleAddRink(venue.id);
-                                    if (e.key === 'Escape') { setAddingRinkVenueId(null); setNewRinkName(''); }
+                                    if (e.key === 'Escape') { setAddingRinkToVenue(null); setNewRinkName(''); }
                                   }}
                                 />
                                 <button
                                   onClick={() => handleAddRink(venue.id)}
                                   className="px-3 py-1 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a]"
-                                >
-                                  Add
-                                </button>
+                                >Add</button>
                                 <button
-                                  onClick={() => { setAddingRinkVenueId(null); setNewRinkName(''); }}
+                                  onClick={() => { setAddingRinkToVenue(null); setNewRinkName(''); }}
                                   className="px-3 py-1 bg-[#e8e8ed] text-[#3d3d3d] text-xs font-semibold rounded-lg hover:bg-[#d8d8dd]"
-                                >
-                                  Cancel
-                                </button>
+                                >Cancel</button>
                               </div>
                             </div>
                           ) : (
                             <button
-                              onClick={() => { setAddingRinkVenueId(venue.id); setNewRinkName(''); }}
+                              onClick={() => { setAddingRinkToVenue(venue.id); setNewRinkName(''); }}
                               className="w-full flex items-center justify-center gap-1 text-[#003e79] text-xs font-semibold py-2 border border-dashed border-[#003e79]/30 rounded-lg hover:bg-[#003e79]/5 transition"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                              </svg>
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                               Add Rink
                             </button>
                           )}

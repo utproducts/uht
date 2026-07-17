@@ -6,14 +6,13 @@ const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
 const UPLOAD_API = 'https://uht.chad-157.workers.dev/api/upload/image';
 
-// Shared auth headers for admin API calls (dev bypass + bearer token when present)
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
+function adminHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('uht_token');
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (token) h['Authorization'] = `Bearer ${token}`;
   }
-  return headers;
+  return h;
 }
 
 interface EventItem {
@@ -598,7 +597,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${HOTEL_API}/link/${event.id}`, {
         method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ master_hotel_id: masterHotelId }),
       });
       const json = await res.json();
@@ -616,7 +615,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${API_BASE}/admin/event-hotels`, {
         method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ event_id: event.id, ...newHotel, sort_order: hotels.length }),
       });
       const json = await res.json();
@@ -631,7 +630,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
   const handleDeleteHotel = async (hotelId: string) => {
     try {
-      await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, { method: 'DELETE', headers: authHeaders() });
+      await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, { method: 'DELETE', headers: adminHeaders() });
       setHotels(prev => prev.filter(h => h.id !== hotelId));
       // Un-mark from suggestions
       setSuggestedHotels(prev => prev.map(h => {
@@ -646,7 +645,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${API_BASE}/admin/event-hotels/${hotelId}`, {
         method: 'PATCH',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updates),
       });
       const json = await res.json();
@@ -3316,427 +3315,93 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
   );
 }
 
-// --- Scorekeepers Tab Component ---
-function ScorekeepersTab({ eventId }: { eventId: string }) {
-  const [games, setGames] = useState<any[]>([]);
-  const [scorekeepers, setScorekeepers] = useState<any[]>([]);
-  const [eventScorekeepers, setEventScorekeepers] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [assigning, setAssigning] = useState(false);
-  const [addingEventSk, setAddingEventSk] = useState(false);
-  const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
-  const [selectedScorekeeper, setSelectedScorekeeper] = useState('');
-  const [newEventScorekeeper, setNewEventScorekeeper] = useState('');
-  const [showPerGame, setShowPerGame] = useState(false);
-
-  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...authHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
-
-  const loadData = () => {
-    setLoading(true);
-    Promise.all([
-      apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()),
-      apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
-      apiFetch(`${API_BASE.replace('/api/events', '/api/scheduling')}/staff`).then(r => r.json()),
-    ]).then(([gamesJson, skJson, staffJson]) => {
-      if (gamesJson.success) setGames(gamesJson.data || []);
-      if (skJson.success) {
-        setScorekeepers(skJson.data || []);
-        setEventScorekeepers(skJson.eventScorekeepers || []);
-      }
-      if (staffJson.success) setAllUsers((staffJson.data || []).filter((u: any) => (typeof u.roles === 'string' ? u.roles.split(',') : u.roles || []).includes('scorekeeper')));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  };
-
-  useEffect(() => { loadData(); }, [eventId]);
-
-  const addEventScorekeeper = async () => {
-    if (!newEventScorekeeper) return;
-    setAddingEventSk(true);
-    try {
-      const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/event-scorekeepers`, {
-        method: 'POST',
-        body: JSON.stringify({ userIds: [newEventScorekeeper] }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setNewEventScorekeeper('');
-        loadData();
-      }
-    } catch {}
-    setAddingEventSk(false);
-  };
-
-  const removeEventScorekeeper = async (userId: string) => {
-    try {
-      await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/event-scorekeepers/${userId}`, {
-        method: 'DELETE',
-      });
-      loadData();
-    } catch {}
-  };
-
-  const assignScorekeeper = async () => {
-    if (!selectedScorekeeper || selectedGames.size === 0) return;
-    setAssigning(true);
-    try {
-      const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/bulk-assign`, {
-        method: 'PUT',
-        body: JSON.stringify({ gameIds: Array.from(selectedGames), scorekeeperId: selectedScorekeeper }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSelectedGames(new Set());
-        setSelectedScorekeeper('');
-        loadData();
-      }
-    } catch {}
-    setAssigning(false);
-  };
-
-  const unassignGames = async (gameIds: string[]) => {
-    try {
-      await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/bulk-unassign`, {
-        method: 'PUT',
-        body: JSON.stringify({ gameIds }),
-      });
-      loadData();
-    } catch {}
-  };
-
-  const toggleGame = (id: string) => {
-    setSelectedGames(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
-
-  const assignedGames = games.filter(g => g.scorekeeper_id);
-  const unassignedGames = games.filter(g => !g.scorekeeper_id);
-
-  const formatTime = (t: string | null) => {
-    if (!t) return '—';
-    try {
-      const [h, m] = t.split(':').map(Number);
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
-    } catch { return t; }
-  };
-
-  const eventSkIds = new Set(eventScorekeepers.map((sk: any) => sk.user_id));
-  const availableEventSks = allUsers.filter(u => !eventSkIds.has(u.id));
-
-  return (
-    <div className="space-y-6">
-      {/* Event-Level Scorekeepers */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-8 h-8 bg-[#34c759] rounded-lg flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-          </div>
-          <h3 className="text-lg font-bold text-[#1d1d1f]">Event Scorekeepers</h3>
-        </div>
-        <p className="text-sm text-[#86868b] mb-4 ml-11">These scorekeepers can see and score ALL games at this event</p>
-
-        {allUsers.length === 0 ? (
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
-            No users with the scorekeeper role found. Add the scorekeeper role to users on the Users page first.
-          </div>
-        ) : (
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="flex-1">
-              <select
-                value={newEventScorekeeper}
-                onChange={e => setNewEventScorekeeper(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#34c759] focus:ring-2 focus:ring-green-100 outline-none bg-white"
-              >
-                <option value="">Select a scorekeeper to add...</option>
-                {availableEventSks.map(u => (
-                  <option key={u.id} value={u.id}>{u.firstName || u.first_name || ''} {u.lastName || u.last_name || ''} ({u.email})</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={addEventScorekeeper}
-              disabled={addingEventSk || !newEventScorekeeper}
-              className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
-                (addingEventSk || !newEventScorekeeper
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-[#34c759] text-white hover:bg-[#2db84e]')}
-            >
-              {addingEventSk ? 'Adding...' : 'Add to Event'}
-            </button>
-          </div>
-        )}
-
-        {eventScorekeepers.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {eventScorekeepers.map((sk: any) => (
-              <div key={sk.user_id} className="flex items-center gap-3 p-3 bg-[#e8f5e9] rounded-xl border border-[#c8e6c9]">
-                <div className="w-10 h-10 bg-[#34c759] rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  {(sk.first_name?.[0] || '?').toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-[#1d1d1f] truncate">{sk.first_name} {sk.last_name}</p>
-                  <p className="text-xs text-[#34c759] font-medium">All games</p>
-                </div>
-                <button onClick={() => removeEventScorekeeper(sk.user_id)} className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1">
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        {eventScorekeepers.length === 0 && (
-          <p className="text-sm text-[#86868b] text-center py-3">No event-level scorekeepers assigned yet</p>
-        )}
-      </div>
-
-      {/* Per-Game Assignments (collapsible) */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <button onClick={() => setShowPerGame(!showPerGame)} className="flex items-center gap-3 w-full text-left">
-          <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-              <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-[#1d1d1f]">Per-Game Assignments</h3>
-            <p className="text-sm text-[#86868b]">Assign specific scorekeepers to individual games</p>
-          </div>
-          <svg className={`w-5 h-5 text-[#86868b] transition-transform ${showPerGame ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        {showPerGame && (
-        <div className="mt-4 pt-4 border-t border-[#e8e8ed]">
-        {games.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-[#86868b]">No games scheduled for this event yet.</p>
-            <p className="text-sm text-[#86868b] mt-1">Use the Schedule Builder to create games first.</p>
-          </div>
-        ) : (
-          <>
-            {/* Currently Assigned Scorekeepers */}
-            {scorekeepers.length > 0 && (
-              <div className="mb-4">
-                <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Assigned Scorekeepers</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {scorekeepers.map((sk: any) => (
-                    <div key={sk.user_id} className="flex items-center gap-2 p-2 bg-[#f5f5f7] rounded-lg">
-                      <div className="w-8 h-8 bg-[#003e79] rounded-full flex items-center justify-center text-white font-bold text-xs">
-                        {(sk.first_name?.[0] || '?').toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-xs text-[#1d1d1f] truncate">{sk.first_name} {sk.last_name}</p>
-                        <p className="text-xs text-[#86868b]">{sk.game_count} game{sk.game_count !== 1 ? 's' : ''}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Scorekeeper selector + assign button */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="flex-1">
-                <select
-                  value={selectedScorekeeper}
-                  onChange={e => setSelectedScorekeeper(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none bg-white"
-                >
-                  <option value="">Select a scorekeeper...</option>
-                  {allUsers.map(u => (
-                    <option key={u.id} value={u.id}>{u.firstName || u.first_name || ''} {u.lastName || u.last_name || ''} ({u.email})</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                onClick={assignScorekeeper}
-                disabled={assigning || !selectedScorekeeper || selectedGames.size === 0}
-                className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
-                  (assigning || !selectedScorekeeper || selectedGames.size === 0
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#003e79] text-white hover:bg-[#002d5a]')}
-              >
-                {assigning ? 'Assigning...' : `Assign to ${selectedGames.size} Game${selectedGames.size !== 1 ? 's' : ''}`}
-              </button>
-            </div>
-
-            {/* Unassigned Games */}
-            {unassignedGames.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <p className="text-sm font-semibold text-[#1d1d1f]">Unassigned Games ({unassignedGames.length})</p>
-                  <button
-                    onClick={() => {
-                      const unassigned = games.filter(g => !g.scorekeeper_id);
-                      if (selectedGames.size === unassigned.length) setSelectedGames(new Set());
-                      else setSelectedGames(new Set(unassigned.map(g => g.id)));
-                    }}
-                    className="text-xs text-[#003e79] font-medium hover:underline"
-                  >
-                    {selectedGames.size === unassignedGames.length ? 'Deselect All' : 'Select All'}
-                  </button>
-                </div>
-                <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
-                      <th className="px-3 py-2 text-left w-8"></th>
-                      <th className="px-3 py-2 text-left">Game</th>
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">Time</th>
-                      <th className="px-3 py-2 text-left">Rink</th>
-                      <th className="px-3 py-2 text-left">Division</th>
-                    </tr></thead>
-                    <tbody>
-                      {unassignedGames.map(g => (
-                        <tr key={g.id} onClick={() => toggleGame(g.id)}
-                          className={"border-t border-[#e8e8ed] cursor-pointer transition " + (selectedGames.has(g.id) ? 'bg-blue-50' : 'hover:bg-[#fafafa]')}>
-                          <td className="px-3 py-2.5">
-                            <input type="checkbox" checked={selectedGames.has(g.id)} onChange={() => toggleGame(g.id)}
-                              className="rounded border-gray-300 text-[#003e79] focus:ring-[#003e79]" />
-                          </td>
-                          <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
-                          <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-xs font-medium">{g.division_name || g.age_group || '—'}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Assigned Games */}
-            {assignedGames.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-[#1d1d1f] mb-3">Assigned Games ({assignedGames.length})</p>
-                <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
-                      <th className="px-3 py-2 text-left">Game</th>
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">Time</th>
-                      <th className="px-3 py-2 text-left">Rink</th>
-                      <th className="px-3 py-2 text-left">Scorekeeper</th>
-                      <th className="px-3 py-2 text-left w-20"></th>
-                    </tr></thead>
-                    <tbody>
-                      {assignedGames.map(g => (
-                        <tr key={g.id} className="border-t border-[#e8e8ed]">
-                          <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
-                          <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
-                          <td className="px-3 py-2.5 text-[#003e79] font-medium">{g.scorekeeper_name || '—'}</td>
-                          <td className="px-3 py-2.5">
-                            <button onClick={() => unassignGames([g.id])} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-        </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- Schedules Tab (game list + delay management) ---
-function SchedulesTab({ eventId }: { eventId: string }) {
+// --- Schedule Games Tab with Delay Controls ---
+function ScheduleGamesTab({ eventId }: { eventId: string }) {
   const [games, setGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [delayForms, setDelayForms] = useState<Record<string, { reason: string; minutes: string }>>({});
-  const [delayingGameId, setDelayingGameId] = useState<string | null>(null);
+  const [delayForm, setDelayForm] = useState<Record<string, { reason: string; minutes: string }>>({});
+  const [expandedDelay, setExpandedDelay] = useState<string | null>(null);
   const [savingDelay, setSavingDelay] = useState<string | null>(null);
-  const [divisionFilter, setDivisionFilter] = useState('all');
+  const [filterDivision, setFilterDivision] = useState('all');
 
-  const token = localStorage.getItem('uht_token');
-  const apiFetch = (url: string, opts?: any) => fetch(url, {
-    ...opts,
-    headers: {
-      ...(opts?.headers || {}),
-      Authorization: `Bearer ${token}`,
-      'X-Dev-Bypass': 'true',
-      'Content-Type': 'application/json',
-    },
-  });
+  const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true', 'Content-Type': 'application/json' } });
 
   const loadGames = () => {
     setLoading(true);
-    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()).then(json => {
-      if (json.success) setGames(json.data || []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) setGames(json.data || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   };
 
   useEffect(() => { loadGames(); }, [eventId]);
 
-  const setDelay = async (gameId: string, delayStatus: string | null) => {
+  const setDelay = async (gameId: string, status: 'delayed' | null) => {
     setSavingDelay(gameId);
-    const form = delayForms[gameId];
+    const form = delayForm[gameId];
     try {
       await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/${gameId}/delay`, {
         method: 'PUT',
         body: JSON.stringify({
-          delayStatus,
-          delayReason: delayStatus === 'delayed' ? (form?.reason || '') : null,
-          delayMinutes: delayStatus === 'delayed' ? (parseInt(form?.minutes || '15') || 15) : 0,
+          delayStatus: status,
+          delayReason: status === 'delayed' ? (form?.reason || '') : null,
+          delayMinutes: status === 'delayed' ? (parseInt(form?.minutes || '15') || 15) : 0,
         }),
       });
-      setDelayingGameId(null);
+      setExpandedDelay(null);
       loadGames();
     } catch {}
     setSavingDelay(null);
   };
 
-  const formatTime = (t: string | null) => t ? new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-  const formatDay = (t: string | null) => t ? new Date(t).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+  const formatTime = (iso: string) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
 
-  const divisions = Array.from(new Set(games.map(g => [g.age_group, g.division_level].filter(Boolean).join(' ')).filter(Boolean))).sort();
-  const filteredGames = divisionFilter === 'all' ? games : games.filter(g => [g.age_group, g.division_level].filter(Boolean).join(' ') === divisionFilter);
+  const formatDay = (iso: string) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
-  const gamesByDay: Record<string, any[]> = {};
-  filteredGames.forEach(g => {
-    const day = g.start_time ? formatDay(g.start_time) : 'Unscheduled';
-    if (!gamesByDay[day]) gamesByDay[day] = [];
-    gamesByDay[day].push(g);
+  // Get unique divisions for filter
+  const divisions = Array.from(new Set(games.map((g: any) => [g.age_group, g.division_level].filter(Boolean).join(' ')).filter(Boolean))).sort();
+
+  const filteredGames = filterDivision === 'all' ? games : games.filter((g: any) => {
+    const div = [g.age_group, g.division_level].filter(Boolean).join(' ');
+    return div === filterDivision;
+  });
+
+  // Group games by date
+  const gamesByDate: Record<string, any[]> = {};
+  filteredGames.forEach((g: any) => {
+    const dateKey = g.start_time ? formatDay(g.start_time) : 'Unscheduled';
+    if (!gamesByDate[dateKey]) gamesByDate[dateKey] = [];
+    gamesByDate[dateKey].push(g);
   });
 
   if (loading) return <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
 
-  if (games.length === 0) return (
-    <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-      <svg className="w-14 h-14 mx-auto text-[#003e79] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-      <p className="font-semibold text-[#1d1d1f] text-lg">No schedule yet</p>
-      <p className="text-sm text-[#6e6e73] mt-1 mb-5">Build the game schedule for this event in the Schedule Builder.</p>
-      <a
-        href="/admin/schedule"
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors shadow-sm"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-        Open Schedule Builder
-      </a>
-    </div>
-  );
+  if (games.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+        <svg className="w-14 h-14 mx-auto text-[#003e79] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+        <p className="font-semibold text-[#1d1d1f] text-lg">No schedule yet</p>
+        <p className="text-sm text-[#6e6e73] mt-1 mb-5">Build the game schedule for this event in the Schedule Builder.</p>
+        <a href="/admin/schedule" className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors shadow-sm">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          Open Schedule Builder
+        </a>
+      </div>
+    );
+  }
 
-  const statusBadgeColor = (status: string) => {
-    switch (status) {
+  const statusColor = (s: string) => {
+    switch (s) {
       case 'in_progress': return 'bg-blue-100 text-blue-700';
       case 'final': return 'bg-green-100 text-green-700';
       case 'delayed': return 'bg-orange-100 text-orange-700';
@@ -3748,15 +3413,13 @@ function SchedulesTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Header row */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-[#1d1d1f]">{games.length} games</span>
           {divisions.length > 1 && (
-            <select
-              value={divisionFilter}
-              onChange={e => setDivisionFilter(e.target.value)}
-              className="text-sm border border-[#e0e0e5] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none"
-            >
+            <select value={filterDivision} onChange={e => setFilterDivision(e.target.value)}
+              className="text-sm border border-[#e0e0e5] rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none">
               <option value="all">All Divisions</option>
               {divisions.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
@@ -3768,9 +3431,10 @@ function SchedulesTab({ eventId }: { eventId: string }) {
         </a>
       </div>
 
-      {Object.entries(gamesByDay).map(([day, dayGames]) => (
-        <div key={day}>
-          <h3 className="text-sm font-bold text-[#86868b] uppercase tracking-wider mb-2 px-1">{day}</h3>
+      {/* Games grouped by date */}
+      {Object.entries(gamesByDate).map(([dateLabel, dateGames]) => (
+        <div key={dateLabel}>
+          <h3 className="text-sm font-bold text-[#86868b] uppercase tracking-wider mb-2 px-1">{dateLabel}</h3>
           <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-sm overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -3787,10 +3451,10 @@ function SchedulesTab({ eventId }: { eventId: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f0f0f2]">
-                {dayGames.map(g => {
-                  const isDelayFormOpen = delayingGameId === g.id;
+                {(dateGames as any[]).map((g: any) => {
+                  const isDelayExpanded = expandedDelay === g.id;
                   const isDelayed = g.status === 'delayed' || g.delay_status === 'delayed';
-                  const division = [g.age_group, g.division_level].filter(Boolean).join(' ');
+                  const divLabel = [g.age_group, g.division_level].filter(Boolean).join(' ');
                   return (
                     <Fragment key={g.id}>
                       <tr className={`hover:bg-[#fafafa] ${isDelayed ? 'bg-orange-50/50' : ''}`}>
@@ -3799,23 +3463,21 @@ function SchedulesTab({ eventId }: { eventId: string }) {
                           <div className="font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'}</div>
                           <div className="text-[#6e6e73]">vs {g.away_team_name || 'TBD'}</div>
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-[#6e6e73]">{division || '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-[#6e6e73]">{divLabel || '—'}</td>
                         <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{formatTime(g.start_time)}</td>
                         <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{g.rink_name || '—'}</td>
                         <td className="px-4 py-2.5 text-center">
-                          {g.status === 'in_progress' || g.status === 'final' || g.status === 'intermission' ? (
+                          {(g.status === 'in_progress' || g.status === 'final' || g.status === 'intermission') ? (
                             <span className="font-bold text-[#1d1d1f]">{g.home_score} - {g.away_score}</span>
-                          ) : (
-                            <span className="text-[#c8c8cd]">—</span>
-                          )}
+                          ) : <span className="text-[#c8c8cd]">—</span>}
                         </td>
                         <td className="px-4 py-2.5 text-center">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusBadgeColor(g.status)}`}>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColor(g.status)}`}>
                             {g.status === 'in_progress' ? 'LIVE' : (g.status || 'scheduled').toUpperCase()}
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-center text-xs text-[#6e6e73]">
-                          {g.home_locker_room || g.away_locker_room ? `${g.home_locker_room || '—'} / ${g.away_locker_room || '—'}` : '—'}
+                          {(g.home_locker_room || g.away_locker_room) ? `${g.home_locker_room || '—'} / ${g.away_locker_room || '—'}` : '—'}
                         </td>
                         <td className="px-4 py-2.5 text-right">
                           {isDelayed ? (
@@ -3823,57 +3485,50 @@ function SchedulesTab({ eventId }: { eventId: string }) {
                               <span className="text-xs text-orange-600 font-medium max-w-[120px] truncate" title={g.delay_reason || g.delay_note || ''}>
                                 {g.delay_reason || g.delay_note || 'Delayed'}
                               </span>
-                              <button
-                                onClick={() => setDelay(g.id, null)}
-                                disabled={savingDelay === g.id}
-                                className="px-2 py-1 text-[11px] font-semibold bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition disabled:opacity-50"
-                              >
+                              <button onClick={() => setDelay(g.id, null)} disabled={savingDelay === g.id}
+                                className="px-2 py-1 text-[11px] font-semibold bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition disabled:opacity-50">
                                 {savingDelay === g.id ? '...' : 'Clear'}
                               </button>
                             </div>
                           ) : (
                             <button
                               onClick={() => {
-                                setDelayingGameId(isDelayFormOpen ? null : g.id);
-                                if (!delayForms[g.id]) setDelayForms(prev => ({ ...prev, [g.id]: { reason: '', minutes: '15' } }));
+                                setExpandedDelay(isDelayExpanded ? null : g.id);
+                                if (!delayForm[g.id]) setDelayForm(prev => ({ ...prev, [g.id]: { reason: '', minutes: '15' } }));
                               }}
-                              className="px-2.5 py-1 text-[11px] font-semibold bg-orange-50 text-orange-600 rounded-md hover:bg-orange-100 transition"
-                            >
+                              className="px-2.5 py-1 text-[11px] font-semibold bg-orange-50 text-orange-600 rounded-md hover:bg-orange-100 transition">
                               Delay
                             </button>
                           )}
                         </td>
                       </tr>
-                      {isDelayFormOpen && !isDelayed && (
+                      {isDelayExpanded && !isDelayed && (
                         <tr className="bg-orange-50/30">
                           <td colSpan={9} className="px-4 py-3">
                             <div className="flex items-center gap-3 ml-8">
                               <input
                                 type="text"
                                 placeholder="Reason (e.g., Zamboni, overtime, injury)"
-                                value={delayForms[g.id]?.reason || ''}
-                                onChange={e => setDelayForms(prev => ({ ...prev, [g.id]: { ...prev[g.id], reason: e.target.value } }))}
+                                value={delayForm[g.id]?.reason || ''}
+                                onChange={e => setDelayForm(prev => ({ ...prev, [g.id]: { ...prev[g.id], reason: e.target.value } }))}
                                 className="flex-1 max-w-sm px-3 py-2 border border-orange-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-300/50 outline-none"
                               />
                               <input
                                 type="number"
                                 placeholder="Min"
-                                value={delayForms[g.id]?.minutes || '15'}
-                                onChange={e => setDelayForms(prev => ({ ...prev, [g.id]: { ...prev[g.id], minutes: e.target.value } }))}
+                                value={delayForm[g.id]?.minutes || '15'}
+                                onChange={e => setDelayForm(prev => ({ ...prev, [g.id]: { ...prev[g.id], minutes: e.target.value } }))}
                                 className="w-20 px-3 py-2 border border-orange-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-300/50 outline-none text-center"
                               />
                               <span className="text-xs text-[#86868b]">min</span>
                               <button
                                 onClick={() => setDelay(g.id, 'delayed')}
                                 disabled={savingDelay === g.id}
-                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50"
-                              >
+                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50">
                                 {savingDelay === g.id ? 'Saving...' : 'Set Delay'}
                               </button>
-                              <button
-                                onClick={() => setDelayingGameId(null)}
-                                className="px-3 py-2 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-medium rounded-lg text-sm transition"
-                              >
+                              <button onClick={() => setExpandedDelay(null)}
+                                className="px-3 py-2 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-medium rounded-lg text-sm transition">
                                 Cancel
                               </button>
                             </div>
@@ -3892,59 +3547,62 @@ function SchedulesTab({ eventId }: { eventId: string }) {
   );
 }
 
-// --- Locker Rooms Tab ---
+// --- Locker Rooms Tab Component ---
 function LockerRoomsTab({ eventId }: { eventId: string }) {
   const [games, setGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingGameId, setSavingGameId] = useState<string | null>(null);
-  const [lockerRooms, setLockerRooms] = useState<Record<string, { home: string; away: string }>>({});
-  const [pushingGameId, setPushingGameId] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, { home: string; away: string }>>({});
+  const [sendingPush, setSendingPush] = useState<string | null>(null);
   const [pushResult, setPushResult] = useState<{ gameId: string; sent: number } | null>(null);
-  const [divisionFilter, setDivisionFilter] = useState('all');
+  const [filterDivision, setFilterDivision] = useState('all');
 
-  const token = localStorage.getItem('uht_token');
-  const apiFetch = (url: string, opts?: any) => fetch(url, {
-    ...opts,
-    headers: {
-      ...(opts?.headers || {}),
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
 
   const loadGames = () => {
     setLoading(true);
-    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()).then(json => {
-      if (json.success) {
-        setGames(json.data || []);
-        const initial: Record<string, { home: string; away: string }> = {};
-        (json.data || []).forEach((g: any) => {
-          initial[g.id] = { home: g.home_locker_room || '', away: g.away_locker_room || '' };
-        });
-        setLockerRooms(initial);
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) {
+          setGames(json.data || []);
+          // Pre-populate edits with existing locker room values
+          const initialEdits: Record<string, { home: string; away: string }> = {};
+          (json.data || []).forEach((g: any) => {
+            initialEdits[g.id] = {
+              home: g.home_locker_room || '',
+              away: g.away_locker_room || '',
+            };
+          });
+          setEdits(initialEdits);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   };
 
   useEffect(() => { loadGames(); }, [eventId]);
 
-  const saveLockerRooms = async (gameId: string) => {
-    const lr = lockerRooms[gameId];
-    if (!lr) return;
-    setSavingGameId(gameId);
+  const saveLockerRoom = async (gameId: string) => {
+    const edit = edits[gameId];
+    if (!edit) return;
+    setSaving(gameId);
     try {
       await apiFetch(`${API_BASE.replace('/api/events', '/api/push')}/games/${gameId}/locker-rooms`, {
         method: 'PATCH',
-        body: JSON.stringify({ home_locker_room: lr.home || null, away_locker_room: lr.away || null }),
+        body: JSON.stringify({
+          home_locker_room: edit.home || null,
+          away_locker_room: edit.away || null,
+        }),
       });
       loadGames();
     } catch {}
-    setSavingGameId(null);
+    setSaving(null);
   };
 
-  const sendPush = async (gameId: string) => {
-    setPushingGameId(gameId);
+  const sendLockerRoomPush = async (gameId: string) => {
+    setSendingPush(gameId);
     setPushResult(null);
     try {
       const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/push')}/send-locker-room`, {
@@ -3952,42 +3610,50 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
         body: JSON.stringify({ game_id: gameId }),
       });
       const json = await res.json();
-      if (json.success) setPushResult({ gameId, sent: json.data.sent });
+      if (json.success) {
+        setPushResult({ gameId, sent: json.data.sent });
+      }
     } catch {}
-    setPushingGameId(null);
+    setSendingPush(null);
   };
 
-  const updateLockerRoom = (gameId: string, side: 'home' | 'away', value: string) => {
-    setLockerRooms(prev => ({ ...prev, [gameId]: { ...prev[gameId], [side]: value } }));
+  const updateEdit = (gameId: string, field: 'home' | 'away', value: string) => {
+    setEdits(prev => ({
+      ...prev,
+      [gameId]: { ...prev[gameId], [field]: value },
+    }));
   };
 
-  const isDirty = (g: any) => {
-    const lr = lockerRooms[g.id];
-    if (!lr) return false;
-    return (lr.home || '') !== (g.home_locker_room || '') || (lr.away || '') !== (g.away_locker_room || '');
+  const hasChanges = (game: any) => {
+    const edit = edits[game.id];
+    if (!edit) return false;
+    return (edit.home || '') !== (game.home_locker_room || '') || (edit.away || '') !== (game.away_locker_room || '');
   };
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
 
-  if (games.length === 0) return (
-    <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-      <p className="font-semibold text-[#1d1d1f] text-lg">No games scheduled</p>
-      <p className="text-sm text-[#6e6e73] mt-1">Build the game schedule first before assigning locker rooms.</p>
-    </div>
-  );
+  if (games.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+        <p className="font-semibold text-[#1d1d1f] text-lg">No games scheduled</p>
+        <p className="text-sm text-[#6e6e73] mt-1">Build the game schedule first before assigning locker rooms.</p>
+      </div>
+    );
+  }
 
   const divisions = Array.from(new Set(games.map(g => g.division_name || g.age_group || 'Unknown'))).sort();
-  const filteredGames = divisionFilter === 'all' ? games : games.filter(g => (g.division_name || g.age_group || 'Unknown') === divisionFilter);
+  const filteredGames = filterDivision === 'all' ? games : games.filter(g => (g.division_name || g.age_group || 'Unknown') === filterDivision);
 
   const formatTime = (t: string | null) => {
     if (!t) return '—';
     try {
-      const dt = new Date(t);
-      if (isNaN(dt.getTime())) {
+      const d = new Date(t);
+      if (isNaN(d.getTime())) {
         const [h, m] = t.split(':').map(Number);
-        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
       }
-      return dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     } catch { return t; }
   };
 
@@ -3995,7 +3661,7 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
+      {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl shadow-lg p-5">
           <p className="text-sm text-[#86868b] mb-1">Total Games</p>
@@ -4011,7 +3677,7 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
         </div>
       </div>
 
-      {/* Push result banner */}
+      {/* Push result toast */}
       {pushResult && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
           <svg className="w-5 h-5 text-green-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -4020,14 +3686,14 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
         </div>
       )}
 
-      {/* Assignments table */}
+      {/* Games table */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-[#1d1d1f]">Locker Room Assignments</h3>
           {divisions.length > 1 && (
             <select
-              value={divisionFilter}
-              onChange={e => setDivisionFilter(e.target.value)}
+              value={filterDivision}
+              onChange={e => setFilterDivision(e.target.value)}
               className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] outline-none"
             >
               <option value="all">All Divisions</option>
@@ -4035,35 +3701,36 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
             </select>
           )}
         </div>
+
         <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
-              <th className="px-3 py-2 text-left">Game #</th>
-              <th className="px-3 py-2 text-left">Matchup</th>
-              <th className="px-3 py-2 text-left">Time</th>
-              <th className="px-3 py-2 text-left">Rink</th>
-              <th className="px-3 py-2 text-left">Home Locker</th>
-              <th className="px-3 py-2 text-left">Away Locker</th>
-              <th className="px-3 py-2 text-center w-32">Actions</th>
-            </tr></thead>
+            <thead>
+              <tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                <th className="px-3 py-2 text-left">Game #</th>
+                <th className="px-3 py-2 text-left">Matchup</th>
+                <th className="px-3 py-2 text-left">Time</th>
+                <th className="px-3 py-2 text-left">Rink</th>
+                <th className="px-3 py-2 text-left">Home Locker</th>
+                <th className="px-3 py-2 text-left">Away Locker</th>
+                <th className="px-3 py-2 text-center w-32">Actions</th>
+              </tr>
+            </thead>
             <tbody>
               {filteredGames.map(g => {
-                const lr = lockerRooms[g.id] || { home: '', away: '' };
-                const dirty = isDirty(g);
-                const hasAssignment = g.home_locker_room || g.away_locker_room;
+                const edit = edits[g.id] || { home: '', away: '' };
+                const changed = hasChanges(g);
+                const hasLocker = g.home_locker_room || g.away_locker_room;
                 return (
                   <tr key={g.id} className="border-t border-[#e8e8ed] hover:bg-[#fafafa] transition">
                     <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">#{g.game_number}</td>
-                    <td className="px-3 py-2.5 text-[#1d1d1f]">
-                      {g.home_team_name || g.notes?.split(' vs ')?.[0] || 'TBD'} vs {g.away_team_name || g.notes?.split(' vs ')?.[1] || 'TBD'}
-                    </td>
+                    <td className="px-3 py-2.5 text-[#1d1d1f]">{g.home_team_name || g.notes?.split(' vs ')?.[0] || 'TBD'} vs {g.away_team_name || g.notes?.split(' vs ')?.[1] || 'TBD'}</td>
                     <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
                     <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || '—'}</td>
                     <td className="px-3 py-2">
                       <input
                         type="text"
-                        value={lr.home}
-                        onChange={e => updateLockerRoom(g.id, 'home', e.target.value)}
+                        value={edit.home}
+                        onChange={e => updateEdit(g.id, 'home', e.target.value)}
                         placeholder="e.g. Room A"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
                       />
@@ -4071,34 +3738,34 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
                     <td className="px-3 py-2">
                       <input
                         type="text"
-                        value={lr.away}
-                        onChange={e => updateLockerRoom(g.id, 'away', e.target.value)}
+                        value={edit.away}
+                        onChange={e => updateEdit(g.id, 'away', e.target.value)}
                         placeholder="e.g. Room B"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
                       />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        {dirty && (
+                        {changed && (
                           <button
-                            onClick={() => saveLockerRooms(g.id)}
-                            disabled={savingGameId === g.id}
+                            onClick={() => saveLockerRoom(g.id)}
+                            disabled={saving === g.id}
                             className="px-3 py-1 rounded-lg bg-[#003e79] text-white text-xs font-semibold hover:bg-[#002d5a] transition disabled:opacity-50"
                           >
-                            {savingGameId === g.id ? '...' : 'Save'}
+                            {saving === g.id ? '...' : 'Save'}
                           </button>
                         )}
-                        {hasAssignment && !dirty && (
+                        {hasLocker && !changed && (
                           <button
-                            onClick={() => sendPush(g.id)}
-                            disabled={pushingGameId === g.id}
+                            onClick={() => sendLockerRoomPush(g.id)}
+                            disabled={sendingPush === g.id}
                             className="px-3 py-1 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition disabled:opacity-50"
                             title="Send push notification to team followers"
                           >
-                            {pushingGameId === g.id ? '...' : '📲 Push'}
+                            {sendingPush === g.id ? '...' : '📲 Push'}
                           </button>
                         )}
-                        {hasAssignment && !dirty && (
+                        {hasLocker && !changed && (
                           <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" title="Assigned" />
                         )}
                       </div>
@@ -4109,6 +3776,361 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Scorekeepers Tab Component ---
+function ScorekeepersTab({ eventId }: { eventId: string }) {
+  const [games, setGames] = useState<any[]>([]);
+  const [scorekeepers, setScorekeepers] = useState<any[]>([]);
+  const [eventScorekeepers, setEventScorekeepers] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(false);
+  const [addingEventSk, setAddingEventSk] = useState(false);
+  const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
+  const [selectedScorekeeper, setSelectedScorekeeper] = useState('');
+  const [selectedEventSk, setSelectedEventSk] = useState('');
+  const [showGameAssign, setShowGameAssign] = useState(false);
+
+  const skFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...adminHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
+
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([
+      skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()),
+      skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
+      skFetch(`${API_BASE.replace('/api/events', '/api/scheduling')}/staff`).then(r => r.json()),
+    ]).then(([gamesJson, skJson, staffJson]) => {
+      if (gamesJson.success) setGames(gamesJson.data || []);
+      if (skJson.success) {
+        setScorekeepers(skJson.data || []);
+        setEventScorekeepers(skJson.eventScorekeepers || []);
+      }
+      if (staffJson.success) {
+        const skUsers = (staffJson.data || []).filter((u: any) => {
+          const roles = typeof u.roles === 'string' ? u.roles.split(',') : (u.roles || []);
+          return roles.includes('scorekeeper');
+        });
+        setAllUsers(skUsers);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadData(); }, [eventId]);
+
+  const addEventScorekeeper = async () => {
+    if (!selectedEventSk) return;
+    setAddingEventSk(true);
+    try {
+      const res = await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/event-scorekeepers`, {
+        method: 'POST',
+        body: JSON.stringify({ userIds: [selectedEventSk] }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSelectedEventSk('');
+        loadData();
+      }
+    } catch {}
+    setAddingEventSk(false);
+  };
+
+  const removeEventScorekeeper = async (userId: string) => {
+    try {
+      await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/event-scorekeepers/${userId}`, {
+        method: 'DELETE',
+      });
+      loadData();
+    } catch {}
+  };
+
+  const assignScorekeeper = async () => {
+    if (!selectedScorekeeper || selectedGames.size === 0) return;
+    setAssigning(true);
+    try {
+      const res = await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/bulk-assign`, {
+        method: 'PUT',
+        body: JSON.stringify({ gameIds: Array.from(selectedGames), scorekeeperId: selectedScorekeeper }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSelectedGames(new Set());
+        setSelectedScorekeeper('');
+        loadData();
+      }
+    } catch {}
+    setAssigning(false);
+  };
+
+  const unassignGames = async (gameIds: string[]) => {
+    try {
+      await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/bulk-unassign`, {
+        method: 'PUT',
+        body: JSON.stringify({ gameIds }),
+      });
+      loadData();
+    } catch {}
+  };
+
+  const toggleGame = (id: string) => {
+    setSelectedGames(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllUnassigned = () => {
+    const unassigned = games.filter(g => !g.scorekeeper_id);
+    if (selectedGames.size === unassigned.length) setSelectedGames(new Set());
+    else setSelectedGames(new Set(unassigned.map(g => g.id)));
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  const assignedGames = games.filter(g => g.scorekeeper_id);
+  const unassignedGames = games.filter(g => !g.scorekeeper_id);
+
+  const formatTime = (t: string | null) => {
+    if (!t) return '—';
+    try {
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+    } catch { return t; }
+  };
+
+  // Filter out users already assigned as event scorekeepers
+  const eventSkIds = new Set(eventScorekeepers.map((es: any) => es.user_id));
+  const availableForEvent = allUsers.filter(u => !eventSkIds.has(u.id));
+
+  return (
+    <div className="space-y-6">
+      {/* Event-Level Scorekeepers */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-8 h-8 bg-[#34c759] rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+          </div>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Event Scorekeepers</h3>
+        </div>
+        <p className="text-sm text-[#86868b] mb-4 ml-11">These scorekeepers can see and score ALL games at this event</p>
+
+        {/* Add event scorekeeper */}
+        {allUsers.length === 0 ? (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
+            No users with the scorekeeper role found. Add the scorekeeper role to users on the Users page first.
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex-1">
+              <select
+                value={selectedEventSk}
+                onChange={e => setSelectedEventSk(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#34c759] focus:ring-2 focus:ring-green-100 outline-none bg-white"
+              >
+                <option value="">Select a scorekeeper to add...</option>
+                {availableForEvent.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.firstName || u.first_name || ''} {u.lastName || u.last_name || ''} ({u.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={addEventScorekeeper}
+              disabled={addingEventSk || !selectedEventSk}
+              className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
+                (addingEventSk || !selectedEventSk
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#34c759] text-white hover:bg-[#2db84e]')}
+            >
+              {addingEventSk ? 'Adding...' : 'Add to Event'}
+            </button>
+          </div>
+        )}
+
+        {/* List of event scorekeepers */}
+        {eventScorekeepers.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {eventScorekeepers.map((es: any) => (
+              <div key={es.user_id} className="flex items-center gap-3 p-3 bg-[#e8f5e9] rounded-xl border border-[#c8e6c9]">
+                <div className="w-10 h-10 bg-[#34c759] rounded-full flex items-center justify-center text-white font-bold text-sm">
+                  {(es.first_name?.[0] || '?').toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-[#1d1d1f] truncate">{es.first_name} {es.last_name}</p>
+                  <p className="text-xs text-[#34c759] font-medium">All games</p>
+                </div>
+                <button
+                  onClick={() => removeEventScorekeeper(es.user_id)}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {eventScorekeepers.length === 0 && (
+          <p className="text-sm text-[#86868b] text-center py-3">No event-level scorekeepers assigned yet</p>
+        )}
+      </div>
+
+      {/* Per-Game Assignments (collapsible) */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <button
+          onClick={() => setShowGameAssign(!showGameAssign)}
+          className="flex items-center gap-3 w-full text-left"
+        >
+          <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" /><path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" /></svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-[#1d1d1f]">Per-Game Assignments</h3>
+            <p className="text-sm text-[#86868b]">Assign specific scorekeepers to individual games</p>
+          </div>
+          <svg className={`w-5 h-5 text-[#86868b] transition-transform ${showGameAssign ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        </button>
+
+        {showGameAssign && (
+          <div className="mt-4 pt-4 border-t border-[#e8e8ed]">
+            {games.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-[#86868b]">No games scheduled for this event yet.</p>
+                <p className="text-sm text-[#86868b] mt-1">Use the Schedule Builder to create games first.</p>
+              </div>
+            ) : (
+              <>
+                {/* Currently assigned per-game scorekeepers */}
+                {scorekeepers.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-[#1d1d1f] mb-2">Assigned Scorekeepers</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {scorekeepers.map((sk: any) => (
+                        <div key={sk.user_id} className="flex items-center gap-2 p-2 bg-[#f5f5f7] rounded-lg">
+                          <div className="w-8 h-8 bg-[#003e79] rounded-full flex items-center justify-center text-white font-bold text-xs">
+                            {(sk.first_name?.[0] || '?').toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-xs text-[#1d1d1f] truncate">{sk.first_name} {sk.last_name}</p>
+                            <p className="text-xs text-[#86868b]">{sk.game_count} game{sk.game_count !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scorekeeper selector + assign button */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="flex-1">
+                    <select
+                      value={selectedScorekeeper}
+                      onChange={e => setSelectedScorekeeper(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] focus:ring-2 focus:ring-blue-100 outline-none bg-white"
+                    >
+                      <option value="">Select a scorekeeper...</option>
+                      {allUsers.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.firstName || u.first_name || ''} {u.lastName || u.last_name || ''} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={assignScorekeeper}
+                    disabled={assigning || !selectedScorekeeper || selectedGames.size === 0}
+                    className={"px-6 py-2.5 rounded-xl font-semibold text-sm transition " +
+                      (assigning || !selectedScorekeeper || selectedGames.size === 0
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-[#003e79] text-white hover:bg-[#002d5a]')}
+                  >
+                    {assigning ? 'Assigning...' : `Assign to ${selectedGames.size} Game${selectedGames.size !== 1 ? 's' : ''}`}
+                  </button>
+                </div>
+
+                {/* Unassigned Games */}
+                {unassignedGames.length > 0 && (
+                  <div className="mb-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <p className="text-sm font-semibold text-[#1d1d1f]">Unassigned Games ({unassignedGames.length})</p>
+                      <button onClick={selectAllUnassigned} className="text-xs text-[#003e79] font-medium hover:underline">
+                        {selectedGames.size === unassignedGames.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                          <th className="px-3 py-2 text-left w-8"></th>
+                          <th className="px-3 py-2 text-left">Game</th>
+                          <th className="px-3 py-2 text-left">Date</th>
+                          <th className="px-3 py-2 text-left">Time</th>
+                          <th className="px-3 py-2 text-left">Rink</th>
+                          <th className="px-3 py-2 text-left">Division</th>
+                        </tr></thead>
+                        <tbody>
+                          {unassignedGames.map(g => (
+                            <tr key={g.id} onClick={() => toggleGame(g.id)}
+                              className={"border-t border-[#e8e8ed] cursor-pointer transition " + (selectedGames.has(g.id) ? 'bg-blue-50' : 'hover:bg-[#fafafa]')}>
+                              <td className="px-3 py-2.5">
+                                <input type="checkbox" checked={selectedGames.has(g.id)} onChange={() => toggleGame(g.id)}
+                                  className="rounded border-gray-300 text-[#003e79] focus:ring-[#003e79]" />
+                              </td>
+                              <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
+                              <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-xs font-medium">{g.division_name || g.age_group || '—'}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Assigned Games */}
+                {assignedGames.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-[#1d1d1f] mb-3">Assigned Games ({assignedGames.length})</p>
+                    <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
+                          <th className="px-3 py-2 text-left">Game</th>
+                          <th className="px-3 py-2 text-left">Date</th>
+                          <th className="px-3 py-2 text-left">Time</th>
+                          <th className="px-3 py-2 text-left">Rink</th>
+                          <th className="px-3 py-2 text-left">Scorekeeper</th>
+                          <th className="px-3 py-2 text-left w-20"></th>
+                        </tr></thead>
+                        <tbody>
+                          {assignedGames.map(g => (
+                            <tr key={g.id} className="border-t border-[#e8e8ed]">
+                              <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">{g.home_team_name || 'TBD'} vs {g.away_team_name || 'TBD'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.game_date || '—'}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
+                              <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || g.rink_id || '—'}</td>
+                              <td className="px-3 py-2.5 text-[#003e79] font-medium">{g.scorekeeper_name || '—'}</td>
+                              <td className="px-3 py-2.5">
+                                <button onClick={() => unassignGames([g.id])} className="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4631,11 +4653,17 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
         </div>
       )}
 
-      {tab === 'schedules' && <SchedulesTab eventId={eventId} />}
+      {tab === 'schedules' && (
+        <ScheduleGamesTab eventId={eventId} />
+      )}
 
-      {tab === 'locker_rooms' && <LockerRoomsTab eventId={eventId} />}
+      {tab === 'locker_rooms' && (
+        <LockerRoomsTab eventId={eventId} />
+      )}
 
-      {tab === 'scorekeepers' && <ScorekeepersTab eventId={eventId} />}
+      {tab === 'scorekeepers' && (
+        <ScorekeepersTab eventId={eventId} />
+      )}
     </div>
   );
 }
@@ -4659,6 +4687,7 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState<string>('all');
+  // Auto-select newest season once data loads
   const [seasonFilter, setSeasonFilter] = useState<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -4802,40 +4831,47 @@ export default function AdminEventsPage() {
     } catch (e) { console.error(e); }
   };
 
-  // Normalize the free-form season column into "YYYY-YY" buckets (e.g. "2025-26")
-  const seasonBucket = (season: string | null | undefined): string => {
-    const raw = (season || '').trim();
-    if (raw.match(/^(\d{4})-(\d{2})$/)) return raw;
-    const s = raw.toLowerCase();
-    if (s.includes('fall-2026') || s.includes('winter-2026') || s.includes('winter-2027')) return '2026-27';
-    if (s === '2025/2026' || s.includes('fall-2025') || s.includes('winter-2025')) return '2025-26';
-    if (s === '2024/2025' || s.includes('fall-2024') || s.includes('winter-2024')) return '2024-25';
-    const yearMatch = s.match(/(\d{4})/);
+  // Map DB season values to hockey-year display buckets
+  const seasonBucket = (dbSeason: string | null): string => {
+    const s = (dbSeason || '').trim();
+    // Direct match: "2026-27" format already stored in DB
+    const directMatch = s.match(/^(\d{4})-(\d{2})$/);
+    if (directMatch) return s;
+    const sl = s.toLowerCase();
+    if (sl.includes('fall-2026') || sl.includes('winter-2026') || sl.includes('winter-2027')) return '2026-27';
+    if (sl === '2025/2026' || sl.includes('fall-2025') || sl.includes('winter-2025')) return '2025-26';
+    if (sl === '2024/2025' || sl.includes('fall-2024') || sl.includes('winter-2024')) return '2024-25';
+    const yearMatch = sl.match(/(\d{4})/);
     if (yearMatch) {
-      const year = parseInt(yearMatch[1]);
-      if (s.includes('fall')) return `${year}-${String(year + 1).slice(2)}`;
-      if (s.includes('winter') || s.includes('spring')) return `${year - 1}-${String(year).slice(2)}`;
-      if (s.includes('/')) return `${year}-${String(year + 1).slice(2)}`;
+      const y = parseInt(yearMatch[1]);
+      if (sl.includes('fall')) return `${y}-${String(y + 1).slice(2)}`;
+      if (sl.includes('winter') || sl.includes('spring')) return `${y - 1}-${String(y).slice(2)}`;
+      if (sl.includes('/')) return `${y}-${String(y + 1).slice(2)}`;
     }
     return 'other';
   };
 
-  const seasonBuckets = useMemo(() => {
-    const counts = new Map<string, number>();
+  // Build dynamic season options from actual data
+  const seasonOptions = useMemo(() => {
+    const bucketCounts = new Map<string, number>();
     for (const e of events) {
       const bucket = seasonBucket(e.season);
-      counts.set(bucket, (counts.get(bucket) || 0) + 1);
+      bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
     }
-    return Array.from(counts.entries()).sort((a, b) => b[0].localeCompare(a[0])).map(([bucket, count]) => ({ bucket, count }));
+    return Array.from(bucketCounts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0])) // newest first
+      .map(([bucket, count]) => ({ bucket, count }));
   }, [events]);
 
-  // Default the season filter to the newest bucket once events load
+  // Auto-select newest season on first data load
   useEffect(() => {
-    if (seasonBuckets.length > 0 && !seasonFilter) setSeasonFilter(seasonBuckets[0].bucket);
-  }, [seasonBuckets]);
+    if (seasonOptions.length > 0 && !seasonFilter) {
+      setSeasonFilter(seasonOptions[0].bucket);
+    }
+  }, [seasonOptions]);
 
   // Get unique months from events for month filter
-  const seasonEvents = seasonFilter && seasonFilter !== 'all' ? events.filter(e => seasonBucket(e.season) === seasonFilter) : events;
+  const seasonEvents = (!seasonFilter || seasonFilter === 'all') ? events : events.filter(e => seasonBucket(e.season) === seasonFilter);
   const months = Array.from(new Set(seasonEvents.map(e => getMonthKey(e.start_date)))).sort();
 
   // Reset month filter when switching tabs/seasons if that month doesn't exist
@@ -5130,7 +5166,7 @@ export default function AdminEventsPage() {
         {/* Season Filter */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mr-1">Season:</span>
-          {seasonBuckets.map(({ bucket, count }) => (
+          {seasonOptions.map(({ bucket, count }) => (
             <button
               key={bucket}
               onClick={() => { setSeasonFilter(bucket); setMonthFilter('all'); }}

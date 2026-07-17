@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   FlatList,
   ActivityIndicator,
   ScrollView,
+  Share,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam, searchTeams } from '../services/api';
@@ -163,38 +164,45 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  // Search within selected state
-  const handleOrgSearch = useCallback(async () => {
-    if (!orgSearch.trim() || !selectedState) return;
-    setError('');
-    setLoadingOrgs(true);
-    try {
-      const results = await searchOrganizations(orgSearch.trim(), selectedState.code);
-      setOrgs(results);
-      if (results.length === 0) {
-        setError('No organizations found. Try a different search.');
-      }
-    } catch {
-      setError('Search failed. Please try again.');
-    } finally {
-      setLoadingOrgs(false);
-    }
-  }, [orgSearch, selectedState]);
+  // Debounced live org search as user types
+  const orgSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear search and reload all orgs for state
-  async function handleClearOrgSearch() {
-    setOrgSearch('');
-    if (!selectedState) return;
-    setLoadingOrgs(true);
-    try {
-      const results = await getOrganizationsByState(selectedState.code);
-      setOrgs(results);
-    } catch {
-      setError('Failed to load organizations.');
-    } finally {
-      setLoadingOrgs(false);
+  useEffect(() => {
+    if (!selectedState || screenState !== 'orgs') return;
+
+    if (orgSearchTimer.current) clearTimeout(orgSearchTimer.current);
+
+    const query = orgSearch.trim();
+
+    if (!query) {
+      setLoadingOrgs(true);
+      getOrganizationsByState(selectedState.code)
+        .then((results) => setOrgs(results))
+        .catch(() => setError('Failed to load organizations.'))
+        .finally(() => setLoadingOrgs(false));
+      return;
     }
-  }
+
+    orgSearchTimer.current = setTimeout(async () => {
+      setError('');
+      setLoadingOrgs(true);
+      try {
+        const results = await searchOrganizations(query, selectedState.code);
+        setOrgs(results);
+        if (results.length === 0) {
+          setError('No organizations found. Try a different search.');
+        }
+      } catch {
+        setError('Search failed. Please try again.');
+      } finally {
+        setLoadingOrgs(false);
+      }
+    }, 300);
+
+    return () => {
+      if (orgSearchTimer.current) clearTimeout(orgSearchTimer.current);
+    };
+  }, [orgSearch, selectedState, screenState]);
 
   async function handleSelectOrg(org: Organization) {
     setSelectedOrg(org);
@@ -334,16 +342,28 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                   ) : (
                     <>
                       <Ionicons name="time-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
-                      <Text style={styles.emptyTitle}>Your Coach Hasn't Created This Team Yet</Text>
+                      <Text style={styles.emptyTitle}>No Teams Created Yet</Text>
                       <Text style={styles.emptyText}>
-                        In the meantime, check out our upcoming events! Once your coach creates the team, you can follow it right away.
+                        Your coach hasn't set up the team yet. Send them a link so they can get started!
                       </Text>
                       <TouchableOpacity
-                        style={[styles.primaryButton, { backgroundColor: colors.cyan, marginTop: 20, alignSelf: 'center', paddingHorizontal: 32 }]}
+                        style={[styles.primaryButton, { marginTop: 20, alignSelf: 'center', paddingHorizontal: 32, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          Share.share({
+                            message: `Hey Coach! Our ${selectedOrg?.name || ''} team needs to be set up on the Ultimate Hockey Tournaments app so families can follow along with schedules, scores, and standings. Download the app and create our team here: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393`,
+                          });
+                        }}
+                      >
+                        <Ionicons name="share-outline" size={18} color={colors.white} />
+                        <Text style={styles.primaryButtonText}>Send Link to Coach</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.skipButton, { marginTop: 16 }]}
                         activeOpacity={0.7}
                         onPress={() => navigation.replace('Main')}
                       >
-                        <Text style={styles.primaryButtonText}>Browse Events</Text>
+                        <Text style={styles.skipText}>Browse Events Instead</Text>
                       </TouchableOpacity>
                     </>
                   )}
@@ -440,39 +460,22 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
         </View>
 
         <View style={styles.searchSection}>
-          <View style={styles.searchRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, height: 44 }}>
+            <Ionicons name="search" size={18} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
             <TextInput
-              style={styles.searchInput}
+              style={{ flex: 1, fontSize: 16, color: colors.text, padding: 0 }}
               value={orgSearch}
               onChangeText={setOrgSearch}
               placeholder="Search organizations..."
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              returnKeyType="search"
-              onSubmitEditing={handleOrgSearch}
             />
             {orgSearch.length > 0 ? (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={handleClearOrgSearch}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.clearButtonText}>Clear</Text>
+              <TouchableOpacity onPress={() => setOrgSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close-circle" size={20} color={colors.textMuted} />
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity
-              style={styles.searchButton}
-              onPress={handleOrgSearch}
-              disabled={loadingOrgs || !orgSearch.trim()}
-              activeOpacity={0.85}
-            >
-              {loadingOrgs ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.searchButtonText}>Search</Text>
-              )}
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -598,8 +601,30 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
               }}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No Teams Found</Text>
-                  <Text style={styles.emptyText}>Try a different search, or browse by state below.</Text>
+                  <Ionicons name="people-outline" size={48} color={colors.textMuted} style={{ marginBottom: 12 }} />
+                  <Text style={styles.emptyTitle}>Team Not Found</Text>
+                  <Text style={styles.emptyText}>
+                    {isCoach
+                      ? "No teams match your search. Try a different name, or browse by state below to create your team."
+                      : "Your coach may not have created the team yet. Send them a link to get set up!"}
+                  </Text>
+                  {!isCoach && (
+                    <TouchableOpacity
+                      style={[styles.primaryButton, { marginTop: 20, alignSelf: 'center', paddingHorizontal: 32, flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        Share.share({
+                          message: `Hey Coach! Our team needs to be set up on the Ultimate Hockey Tournaments app so we can follow along with schedules, scores, and standings. Download the app and create our team here: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393`,
+                        });
+                      }}
+                    >
+                      <Ionicons name="share-outline" size={18} color={colors.white} />
+                      <Text style={styles.primaryButtonText}>Send Link to Coach</Text>
+                    </TouchableOpacity>
+                  )}
+                  <Text style={[styles.emptyText, { marginTop: 16, fontSize: 13 }]}>
+                    Or browse by state below to find your organization.
+                  </Text>
                 </View>
               }
             />
@@ -637,13 +662,23 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
       </View>
 
       <View style={styles.bottomSection}>
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={() => navigation.replace('Main')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.skipText}>Skip for now</Text>
-        </TouchableOpacity>
+        {teamSearchFollowed.size > 0 ? (
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => navigation.replace('Main')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryButtonText}>Continue</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={() => navigation.replace('Main')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipText}>Skip for now</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );

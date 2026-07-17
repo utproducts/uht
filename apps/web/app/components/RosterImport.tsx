@@ -11,6 +11,7 @@ interface Player {
   firstName: string;
   lastName: string;
   jerseyNumber: string;
+  awayJerseyNumber?: string;
   position: string;
   shoots: string;
 }
@@ -50,6 +51,11 @@ function normalizeShoots(raw: string): string {
   return '';
 }
 
+// Strip "H " or "A " prefix from USA Hockey jersey format (e.g. "H 98" → "98")
+function stripJerseyPrefix(raw: string): string {
+  return raw.replace(/^[HA]\s+/, '').trim();
+}
+
 // Parse a 2D array of rows into Player objects
 function parseRows(rows: string[][]): Player[] {
   if (rows.length === 0) return [];
@@ -60,7 +66,7 @@ function parseRows(rows: string[][]): Player[] {
   let startRow = 0;
 
   // Check if first row looks like a header
-  const headerKeywords = ['jersey', '#', 'first', 'last', 'name', 'pos', 'shoot', 'usa', 'number'];
+  const headerKeywords = ['jersey', '#', 'first', 'last', 'name', 'pos', 'shoot', 'usa', 'number', 'dob'];
   const isHeader = firstRow.some(c => headerKeywords.some(kw => c.includes(kw)));
 
   if (isHeader) {
@@ -73,7 +79,34 @@ function parseRows(rows: string[][]): Player[] {
       else if (h === 'name' || h === 'player') colMap.fullName = i;
       else if (h.includes('pos')) colMap.position = i;
       else if (h.includes('shoot')) colMap.shoots = i;
+      else if (h.includes('dob') || h.includes('birth')) colMap.dob = i;
       // skip usa hockey columns
+    }
+  }
+
+  // Detect USA Hockey H/A jersey format: check if data in jersey column starts with "H "
+  // and the next column starts with "A ". If so, the header column count is off by 1 —
+  // the "Position" header actually maps to the away jersey data column.
+  let awayJerseyCol = -1;
+  const sampleRow = rows[startRow];
+  if (colMap.jersey !== undefined && sampleRow) {
+    const jerseyVal = (sampleRow[colMap.jersey] || '').trim();
+    if (/^H\s+\d/.test(jerseyVal) || /^H\s*$/.test(jerseyVal)) {
+      // Home jersey detected — check next column for away jersey
+      const nextCol = colMap.jersey + 1;
+      const nextVal = (sampleRow[nextCol] || '').trim();
+      if (/^A\s+\d/.test(nextVal) || /^A\s*$/.test(nextVal)) {
+        awayJerseyCol = nextCol;
+        // The header mapped "Position" to what's actually the away jersey column.
+        // Shift position (and any other cols mapped at or after awayJerseyCol) right by 1.
+        if (colMap.position !== undefined && colMap.position === awayJerseyCol) {
+          // Real position data is one column further right
+          colMap.position = awayJerseyCol + 1;
+        }
+        if (colMap.dob !== undefined && colMap.dob >= awayJerseyCol) {
+          colMap.dob = colMap.dob + 1;
+        }
+      }
     }
   }
 
@@ -83,8 +116,8 @@ function parseRows(rows: string[][]): Player[] {
     // Or detect: if first column is numeric, it's jersey
     const sample = rows[startRow] || [];
     if (sample.length >= 3) {
-      if (/^\d{1,3}$/.test(sample[0]?.trim())) {
-        // Starts with jersey number
+      if (/^\d{1,3}$/.test(sample[0]?.trim()) || /^[HA]\s+\d/.test(sample[0]?.trim())) {
+        // Starts with jersey number (plain or H/A format)
         colMap = { jersey: 0, firstName: 1, lastName: 2, position: 3, shoots: 4 };
       } else if (sample[0]?.includes(',')) {
         // "Last, First" format
@@ -122,11 +155,26 @@ function parseRows(rows: string[][]): Player[] {
 
     if (!firstName && !lastName) continue;
 
+    // Extract jersey number, stripping H/A prefix if present
+    let jerseyNumber = (colMap.jersey !== undefined ? row[colMap.jersey] : '')?.trim() || '';
+    jerseyNumber = stripJerseyPrefix(jerseyNumber);
+
+    // Extract away jersey if we detected the H/A format
+    let awayJerseyNumber = '';
+    if (awayJerseyCol >= 0) {
+      awayJerseyNumber = stripJerseyPrefix((row[awayJerseyCol] || '').trim());
+    }
+
+    // Get position — skip if it's "None" (USA Hockey exports this when position isn't set)
+    let posRaw = colMap.position !== undefined ? row[colMap.position] || '' : '';
+    if (posRaw.trim().toLowerCase() === 'none') posRaw = '';
+
     players.push({
       firstName,
       lastName,
-      jerseyNumber: (colMap.jersey !== undefined ? row[colMap.jersey] : '')?.trim() || '',
-      position: normalizePosition(colMap.position !== undefined ? row[colMap.position] || '' : ''),
+      jerseyNumber,
+      awayJerseyNumber: awayJerseyNumber || undefined,
+      position: normalizePosition(posRaw),
       shoots: normalizeShoots(colMap.shoots !== undefined ? row[colMap.shoots] || '' : ''),
     });
   }
@@ -333,10 +381,12 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
         <p className="text-sm text-[#6e6e73]">Review the parsed roster below. Edit any fields, then click Import All to add them.</p>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden max-h-80 overflow-y-auto">
+          {(() => { const hasAway = previewPlayers.some(p => p.awayJerseyNumber); return (
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-gray-50">
               <tr className="text-left">
-                <th className="px-3 py-2 font-medium text-[#6e6e73] w-12">#</th>
+                <th className="px-3 py-2 font-medium text-[#6e6e73] w-12">{hasAway ? 'H #' : '#'}</th>
+                {hasAway && <th className="px-3 py-2 font-medium text-[#6e6e73] w-12">A #</th>}
                 <th className="px-3 py-2 font-medium text-[#6e6e73]">First Name</th>
                 <th className="px-3 py-2 font-medium text-[#6e6e73]">Last Name</th>
                 <th className="px-3 py-2 font-medium text-[#6e6e73]">Position</th>
@@ -354,6 +404,13 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
                       setPreviewPlayers(updated);
                     }} className="w-10 px-1 py-0.5 rounded border border-gray-200 text-sm text-center" />
                   </td>
+                  {hasAway && <td className="px-3 py-1.5">
+                    <input type="text" value={p.awayJerseyNumber || ''} onChange={e => {
+                      const updated = [...previewPlayers];
+                      updated[i] = { ...updated[i], awayJerseyNumber: e.target.value };
+                      setPreviewPlayers(updated);
+                    }} className="w-10 px-1 py-0.5 rounded border border-gray-200 text-sm text-center" />
+                  </td>}
                   <td className="px-3 py-1.5">
                     <input type="text" value={p.firstName} onChange={e => {
                       const updated = [...previewPlayers];
@@ -401,6 +458,7 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
               ))}
             </tbody>
           </table>
+          ); })()}
         </div>
 
         <div className="flex items-center justify-between">

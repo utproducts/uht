@@ -6,13 +6,12 @@ const API_BASE = 'https://uht.chad-157.workers.dev/api/users';
 
 const ROLES = ['admin', 'director', 'organization', 'coach', 'manager', 'parent', 'scorekeeper', 'referee'];
 
-/** Format a phone number as (XXX) XXX-XXXX, stripping non-digits */
-function formatPhone(phone: string | null): string {
+function formatPhone(phone: string | null | undefined): string {
   if (!phone) return '';
   const digits = phone.replace(/\D/g, '');
-  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  if (digits.length === 11 && digits[0] === '1') return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  return phone;
+  if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === '1') return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  return phone; // return as-is if not 10/11 digits
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -88,12 +87,12 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     setSaving(true);
     setError('');
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' };
-      const token = localStorage.getItem('uht_token');
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const h: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' };
+      const tk = localStorage.getItem('uht_token');
+      if (tk) h['Authorization'] = `Bearer ${tk}`;
       const res = await fetch(API_BASE, {
         method: 'POST',
-        headers,
+        headers: h,
         body: JSON.stringify({
           email: form.email.trim(),
           firstName: form.firstName.trim(),
@@ -180,9 +179,9 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
     setSaving(true);
     setError('');
     try {
-      const token = localStorage.getItem('uht_token');
       const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const tk2 = localStorage.getItem('uht_token');
+      if (tk2) headers['Authorization'] = `Bearer ${tk2}`;
 
       const res1 = await fetch(`${API_BASE}/${user.id}`, {
         method: 'PUT', headers,
@@ -338,27 +337,27 @@ export default function AdminUsersPage() {
   const [roleCounts, setRoleCounts] = useState<Record<string, number>>({});
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
-
-  const getAuthHeaders = () => {
-    const headers: Record<string, string> = { 'X-Dev-Bypass': 'true' };
-    const token = getToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    return headers;
+  const getHeaders = (): Record<string, string> => {
+    const h: Record<string, string> = { 'X-Dev-Bypass': 'true' };
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('uht_token');
+      if (token) h['Authorization'] = `Bearer ${token}`;
+    }
+    return h;
   };
 
-  const loadUsers = useCallback((searchTerm = '', role = 'all', status = 'all', pg = 1, showAll = false) => {
+  const loadUsers = useCallback((searchTerm = '', role = 'all', status = 'all', pg = 1, allUsers = false) => {
     setLoading(true);
     const params = new URLSearchParams();
     if (searchTerm) params.append('q', searchTerm);
     if (role !== 'all') params.append('role', role);
     if (status !== 'all') params.append('status', status);
-    if (showAll) params.append('app_users', 'false');
+    if (allUsers) params.append('app_users', 'false');
     params.append('page', pg.toString());
     params.append('per_page', '50');
 
     fetch(`${API_BASE}?${params.toString()}`, {
-      headers: getAuthHeaders(),
+      headers: getHeaders(),
     })
       .then(r => r.json())
       .then(json => {
@@ -404,7 +403,7 @@ export default function AdminUsersPage() {
     try {
       await fetch(`${API_BASE}/${user.id}/status`, {
         method: 'PUT',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...getHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: user.isActive ? 0 : 1 }),
       });
       loadUsers(search, roleFilter, statusFilter, page, showAllUsers);
@@ -412,7 +411,8 @@ export default function AdminUsersPage() {
   };
 
   const handleExport = () => {
-    fetch(`${API_BASE}/export/csv`, { headers: getAuthHeaders() })
+    const url = `${API_BASE}/export/csv`;
+    fetch(url, { headers: getHeaders() })
       .then(r => r.blob())
       .then(blob => {
         const a = document.createElement('a');
@@ -452,7 +452,7 @@ export default function AdminUsersPage() {
             <p className="text-sm text-[#86868b] mt-0.5">{totalUsers.toLocaleString()} {showAllUsers ? 'total' : 'app'} users</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => { setShowAllUsers(prev => !prev); setPage(1); }}
+            <button onClick={() => { setShowAllUsers(v => !v); setPage(1); }}
               className={`px-4 py-2.5 border font-medium rounded-full text-sm transition flex items-center gap-2 ${
                 showAllUsers ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-[#e0e0e5] hover:bg-[#f5f5f7] text-[#3d3d3d]'
               }`}>

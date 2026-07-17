@@ -713,7 +713,7 @@ eventRoutes.post('/admin/bulk-import', authMiddleware, requireRole('admin', 'dir
           const divId = crypto.randomUUID().replace(/-/g, '');
           await db.prepare(`
             INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at)
-            VALUES (?, ?, ?, 'Open', ?, 'open', datetime('now'))
+            VALUES (?, ?, ?, NULL, ?, 'open', datetime('now'))
           `).bind(divId, id, ag, priceCents || 0).run();
         }
       }
@@ -1254,10 +1254,10 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   const matchedDivisionId = await findMatchingDivision(data.eventId, data.ageGroup);
 
   await db.prepare(`
-    INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    regId, data.eventId, data.teamName, data.ageGroup, data.division || null,
+    regId, data.eventId, data.teamId || null, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
     initialStatus, initialPaymentStatus,
@@ -1274,10 +1274,10 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     const addMatchedDivId = await findMatchingDivision(addEvent.id, data.ageGroup);
 
     await db.prepare(`
-      INSERT INTO event_registrations (id, event_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      addRegId, addEvent.id, data.teamName, data.ageGroup, data.division || null,
+      addRegId, addEvent.id, data.teamId || null, data.teamName, data.ageGroup, data.division || null,
       data.managerFirstName || null, data.managerLastName || null,
       data.email, data.phone || null,
       initialStatus, initialPaymentStatus,
@@ -1318,32 +1318,35 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     }
   }
 
-  // Send confirmation email
-  const startDate = new Date(event.start_date + 'T12:00:00');
-  const endDate = new Date(event.end_date + 'T12:00:00');
-  const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-
+  // Send confirmation email — only for pay_later (already registered).
+  // For pay_now/pay_deposit, the email is sent after payment succeeds in the confirm-payment endpoint.
   let emailResult = { success: false, error: 'not sent' };
-  try {
-    emailResult = await sendRegistrationConfirmationEmail(c.env, {
-      recipientEmail: data.email,
-      recipientName: data.managerFirstName
-        ? `${data.managerFirstName} ${data.managerLastName || ''}`.trim()
-        : data.teamName,
-      teamName: data.teamName,
-      ageGroup: data.ageGroup,
-      division: data.division || undefined,
-      eventName: event.name,
-      eventDate: eventDateStr,
-      eventCity: `${event.city}, ${event.state}`,
-      headCoachName: data.headCoachName || undefined,
-      priceCents: event.price_cents || undefined,
-      depositCents: event.deposit_cents || undefined,
-      eventLogoUrl: event.logo_url || undefined,
-      discountCode: discountCode || undefined,
-    });
-  } catch (err: any) {
-    console.error('Registration confirmation email error:', err);
+  if (data.paymentChoice === 'pay_later') {
+    const startDate = new Date(event.start_date + 'T12:00:00');
+    const endDate = new Date(event.end_date + 'T12:00:00');
+    const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+    try {
+      emailResult = await sendRegistrationConfirmationEmail(c.env, {
+        recipientEmail: data.email,
+        recipientName: data.managerFirstName
+          ? `${data.managerFirstName} ${data.managerLastName || ''}`.trim()
+          : data.teamName,
+        teamName: data.teamName,
+        ageGroup: data.ageGroup,
+        division: data.division || undefined,
+        eventName: event.name,
+        eventDate: eventDateStr,
+        eventCity: `${event.city}, ${event.state}`,
+        headCoachName: data.headCoachName || undefined,
+        priceCents: event.price_cents || undefined,
+        depositCents: event.deposit_cents || undefined,
+        eventLogoUrl: event.logo_url || undefined,
+        discountCode: discountCode || undefined,
+      });
+    } catch (err: any) {
+      console.error('Registration confirmation email error:', err);
+    }
   }
 
   return c.json({
@@ -1663,7 +1666,8 @@ eventRoutes.post('/admin/hotel-image/:hotelId', authMiddleware, requireRole('adm
   });
 
   // Build public URL via Worker proxy
-  const imageUrl = `https://uht.chad-157.workers.dev/api/assets/${key}`;
+  const apiBase = c.env.API_URL || 'https://uht.chad-157.workers.dev';
+  const imageUrl = `${apiBase}/api/assets/${key}`;
 
   // Save URL to database
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
@@ -2036,6 +2040,55 @@ eventRoutes.post('/:eventId/publish-schedule', authMiddleware, requireRole('admi
 });
 
 // ==================
+// PUBLIC: Get schedule for an event (no auth required)
+// ==================
+eventRoutes.get('/:eventId/schedule', async (c) => {
+  const eventId = c.req.param('eventId');
+  const teamId = c.req.query('team_id');
+  const db = c.env.DB;
+
+  // Check if schedule is published
+  const event = await db.prepare('SELECT id, schedule_published FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+  if (!event.schedule_published) {
+    return c.json({ success: true, data: [] });
+  }
+
+  let query = `
+    SELECT g.id, g.game_number, g.event_id, g.event_division_id,
+      g.home_team_id, g.away_team_id, g.venue_id, g.rink_id,
+      g.start_time, g.end_time, g.status, g.game_type, g.pool_name,
+      g.home_score, g.away_score, g.period, g.is_overtime, g.is_shootout,
+      g.home_locker_room, g.away_locker_room,
+      g.delay_minutes, g.delay_note,
+      ht.name as home_team_name,
+      at2.name as away_team_name,
+      vr.name as rink_name,
+      v.name as venue_name,
+      ed.age_group, ed.division_level,
+      (ed.age_group || ' ' || COALESCE(ed.division_level, '')) as division_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    WHERE g.event_id = ?
+  `;
+  const bindings: any[] = [eventId];
+
+  if (teamId) {
+    query += ` AND (g.home_team_id = ? OR g.away_team_id = ?)`;
+    bindings.push(teamId, teamId);
+  }
+
+  query += ` ORDER BY g.start_time ASC, g.game_number ASC`;
+
+  const result = await db.prepare(query).bind(...bindings).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================
 // ADMIN: Seed registrations with hotel assignments (temporary migration helper)
 // ==================
 eventRoutes.post('/admin/seed-registrations', authMiddleware, requireRole('admin'), async (c) => {
@@ -2078,7 +2131,7 @@ eventRoutes.post('/admin/seed-registrations', authMiddleware, requireRole('admin
       const ageGroup = ageMap[ageSlug] || ageSlug;
       try {
         await db.prepare(
-          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, NULL, 0, 'open', datetime('now'))"
         ).bind(divId, event_id, ageGroup).run();
         console.log(`Created division: ${divId} => ${ageGroup}`);
       } catch (e: any) {
@@ -2249,13 +2302,13 @@ eventRoutes.post('/admin/fix-age-groups', authMiddleware, requireRole('admin'), 
     if (!existing) {
       try {
         await db.prepare(
-          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, NULL, 0, 'open', datetime('now'))"
         ).bind(divId, event_id, ag).run();
       } catch (e: any) {
         // Try without specific ID
         const altId = crypto.randomUUID().replace(/-/g, '');
         await db.prepare(
-          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, 'Open', 0, 'open', datetime('now'))"
+          "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status, created_at) VALUES (?, ?, ?, NULL, 0, 'open', datetime('now'))"
         ).bind(altId, event_id, ag).run();
         divMap[ag] = altId;
         continue;
@@ -2332,23 +2385,84 @@ eventRoutes.post('/validate-discount-code', async (c) => {
     'SELECT id, code, team_name, team_id, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE code = ?'
   ).bind(code.trim().toUpperCase()).first<any>();
 
-  if (!dc) {
-    return c.json({ success: false, error: 'Invalid discount code' }, 404);
-  }
-  if (dc.is_used) {
-    return c.json({ success: false, error: 'This code has already been used' }, 400);
+  if (dc) {
+    if (dc.is_used) {
+      return c.json({ success: false, error: 'This code has already been used' }, 400);
+    }
+    return c.json({
+      success: true,
+      data: {
+        code_id: dc.id,
+        code: dc.code,
+        team_name: dc.team_name,
+        discount_local_cents: dc.discount_local_cents,
+        discount_hotel_cents: dc.discount_hotel_cents,
+      },
+    });
   }
 
-  return c.json({
-    success: true,
-    data: {
-      code_id: dc.id,
-      code: dc.code,
-      team_name: dc.team_name,
-      discount_local_cents: dc.discount_local_cents,
-      discount_hotel_cents: dc.discount_hotel_cents,
-    },
-  });
+  // Fallback: check admin coupon_codes table
+  try {
+    const coupon = await db.prepare(
+      'SELECT * FROM coupon_codes WHERE UPPER(code) = UPPER(?)'
+    ).bind(code.trim()).first<any>();
+
+    if (coupon) {
+      if (!coupon.is_active) {
+        return c.json({ success: false, error: 'This coupon code is no longer active' }, 400);
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        return c.json({ success: false, error: 'This coupon code has expired' }, 400);
+      }
+      if (coupon.max_uses !== null && coupon.current_uses >= coupon.max_uses) {
+        return c.json({ success: false, error: 'This coupon code has reached its usage limit' }, 400);
+      }
+
+      // For fixed: discount_amount is in cents
+      // For percent: pass 0 as cents, frontend will calculate from percentage
+      const fixedCents = coupon.discount_type === 'fixed' ? coupon.discount_amount : 0;
+
+      return c.json({
+        success: true,
+        data: {
+          code_id: coupon.id,
+          code: coupon.code,
+          type: 'coupon',
+          discount_type: coupon.discount_type,
+          discount_amount: coupon.discount_amount,
+          discount_local_cents: fixedCents,
+          discount_hotel_cents: fixedCents,
+        },
+      });
+    }
+  } catch {}
+
+  // Fallback: check meeting_rewards table
+  try {
+    const reward = await db.prepare(
+      'SELECT id, code, amount, redeemed FROM meeting_rewards WHERE UPPER(code) = UPPER(?)'
+    ).bind(code.trim()).first<any>();
+
+    if (reward) {
+      if (reward.redeemed === 1) {
+        return c.json({ success: false, error: 'This code has already been used' }, 400);
+      }
+      const rewardCents = (reward.amount || 0) * 100;
+      return c.json({
+        success: true,
+        data: {
+          code_id: reward.id,
+          code: reward.code,
+          type: 'meeting_reward',
+          amount: reward.amount,
+          discount_local_cents: rewardCents,
+          discount_hotel_cents: rewardCents,
+        },
+      });
+    }
+  } catch {}
+
+  return c.json({ success: false, error: 'Invalid discount code' }, 404);
 });
 
 // ==================
@@ -2477,7 +2591,7 @@ eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
     return c.json({ success: true, data: { emailsSent: 0, message: 'No teams need hotel notifications.' } });
   }
 
-  const siteBase = c.env.SITE_URL || 'https://uht-web.pages.dev';
+  const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
   let sentCount = 0;
 
   for (const reg of registrations) {
@@ -2569,6 +2683,21 @@ eventRoutes.post('/:eventId/notify-hotels', authMiddleware, async (c) => {
                     <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">
                       Select your top 3 hotel preferences and we'll do our best to accommodate your first choice. Tournament hotel rates are typically lower than standard rates.
                     </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- App Download -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                    <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
                   </td>
                 </tr>
               </table>

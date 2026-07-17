@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../constants/theme';
@@ -9,15 +9,27 @@ interface ScreenHeaderProps {
   showBack?: boolean;
   onBack?: () => void;
   rightAction?: React.ReactNode;
+  hideLogo?: boolean;
 }
 
-export default function ScreenHeader({ title, showBack, onBack, rightAction }: ScreenHeaderProps) {
+export default function ScreenHeader({ title, showBack, onBack, rightAction, hideLogo }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {/* Diagonal cyan accent */}
       <View style={styles.accentSlash} />
+
+      {/* UHT Letters Logo */}
+      {!hideLogo && (
+        <View style={styles.logoRow}>
+          <Image
+            source={require('../../assets/uht-letters.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+      )}
 
       <View style={styles.content}>
         <View style={styles.leftSection}>
@@ -49,6 +61,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cyan,
     opacity: 0.15,
     transform: [{ rotate: '-15deg' }],
+  },
+  logoRow: {
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  logo: {
+    width: 120,
+    height: 40,
   },
   content: {
     flexDirection: 'row',

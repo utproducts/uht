@@ -37,8 +37,8 @@ authRoutes.post('/register', rateLimit(5, 60_000), zValidator('json', registerSc
   try {
     // Create user
     await db.prepare(`
-      INSERT INTO users (id, email, password_hash, first_name, last_name, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password_hash, first_name, last_name, phone, is_app_user)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
     `).bind(userId, data.email.toLowerCase(), passwordHash, data.firstName, data.lastName, data.phone || null).run();
 
     // Assign role
@@ -158,8 +158,8 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
   try {
     // Create user (no password — magic link only)
     await db.prepare(`
-      INSERT INTO users (id, email, password_hash, first_name, last_name, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password_hash, first_name, last_name, phone, is_app_user)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
     `).bind(userId, data.email.toLowerCase(), 'magic_link', data.firstName, data.lastName, data.phone || null).run();
 
     // Assign role
@@ -280,6 +280,11 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
                   <p style="color: #aeaeb2; font-size: 13px; margin-top: 32px;">
                     This link expires in 15 minutes. You can always request a new one from the login page.
                   </p>
+                  <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                    <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                    <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                  </div>
                 </div>
               `,
           }),
@@ -394,34 +399,6 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 });
 
 // ==================
-// ADD ROLE (self-serve — used by the dashboard "Add a Role" dropdown)
-// ==================
-// Privileged roles (admin, director, organization, manager) can NOT be self-added.
-const SELF_SERVE_ROLES = ['coach', 'parent', 'referee', 'scorekeeper'] as const;
-
-authRoutes.post('/add-role', authMiddleware, async (c) => {
-  const authUser = c.get('user');
-  const db = c.env.DB;
-  const body = await c.req.json() as { role?: string };
-  const role = (body.role || '').trim().toLowerCase();
-
-  if (!SELF_SERVE_ROLES.includes(role as any)) {
-    return c.json({ success: false, error: 'This role cannot be self-added' }, 400);
-  }
-
-  await db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)')
-    .bind(crypto.randomUUID().replace(/-/g, ''), authUser.id, role).run();
-
-  const rolesResult = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
-    .bind(authUser.id).all<{ role: UserRole }>();
-
-  return c.json({
-    success: true,
-    roles: rolesResult.results?.map(r => r.role) || [],
-  });
-});
-
-// ==================
 // MAGIC LINK - REQUEST
 // ==================
 const magicLinkSchema = z.object({
@@ -500,6 +477,11 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
                 <p style="color: #aeaeb2; font-size: 13px; margin-top: 32px;">
                   ${mlFooter}
                 </p>
+                <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
+                  <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
+                  <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
+                  <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                </div>
               </div>
             `,
         }),
@@ -698,6 +680,47 @@ authRoutes.post('/admin-pin', rateLimit(10, 60_000), zValidator('json', adminPin
 });
 
 // ==================
+// SELF-ADD ROLE
+// ==================
+const addRoleSchema = z.object({
+  role: z.enum(['coach', 'parent', 'referee', 'scorekeeper']),
+});
+
+authRoutes.post('/add-role', authMiddleware, zValidator('json', addRoleSchema), async (c) => {
+  const user = (c as any).get('user');
+  const { role } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    // Check if user already has this role
+    const existing = await db.prepare('SELECT id FROM user_roles WHERE user_id = ? AND role = ?')
+      .bind(user.id, role).first();
+
+    if (existing) {
+      // Already has role — just return current roles
+      const allRoles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+        .bind(user.id).all();
+      const roles = allRoles.results.map((r: any) => r.role);
+      return c.json({ success: true, roles });
+    }
+
+    // Insert new role
+    const newId = crypto.randomUUID();
+    await db.prepare('INSERT INTO user_roles (id, user_id, role, created_at) VALUES (?, ?, ?, datetime("now"))')
+      .bind(newId, user.id, role).run();
+
+    // Return all current roles
+    const allRoles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+      .bind(user.id).all();
+    const roles = allRoles.results.map((r: any) => r.role);
+
+    return c.json({ success: true, roles });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to add role' }, 500);
+  }
+});
+
+// ==================
 // SET ADMIN PIN
 // ==================
 const setPinSchema = z.object({
@@ -724,6 +747,32 @@ authRoutes.put('/set-pin',
     return c.json({ success: true, message: 'PIN set successfully' });
   }
 );
+
+// ==================
+// UPDATE PROFILE
+// ==================
+authRoutes.put('/update-profile', authMiddleware, async (c) => {
+  const authUser = (c as any).get('user');
+  const db = c.env.DB;
+  const body = await c.req.json();
+  const { firstName, lastName, email, phone } = body;
+
+  try {
+    await db.prepare(
+      'UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ?, updated_at = datetime(\'now\') WHERE id = ?'
+    ).bind(
+      firstName || '',
+      lastName || '',
+      email || authUser.email,
+      phone || null,
+      authUser.id
+    ).run();
+
+    return c.json({ success: true, data: { message: 'Profile updated' } });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Update failed' }, 500);
+  }
+});
 
 // ==================
 // MIGRATION HELPER (run once to add pin_code column)

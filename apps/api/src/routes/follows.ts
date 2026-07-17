@@ -59,6 +59,7 @@ followRoutes.get('/', authMiddleware, async (c) => {
   const result = await db.prepare(`
     SELECT uf.id as follow_id, uf.created_at as followed_at,
            t.id, t.id as team_id, t.name as team_name, t.age_group, t.city, t.state,
+           COALESCE(t.logo_url, o.logo_url) as logo_url,
            o.name as org_name, o.name as organization_name
     FROM user_follows uf
     JOIN teams t ON t.id = uf.team_id
@@ -67,7 +68,52 @@ followRoutes.get('/', authMiddleware, async (c) => {
     ORDER BY t.name ASC
   `).bind(user.id).all();
 
-  return c.json({ success: true, data: result.results });
+  // Enrich each followed team with registered events
+  const teams = result.results as any[];
+  for (const team of teams) {
+    const teamEvents: any[] = [];
+    const seenEventIds = new Set<string>();
+
+    // From registrations table (team_id match)
+    try {
+      const regs = await db.prepare(`
+        SELECT r.status, e.id as event_id, e.name as event_name, e.slug, e.city, e.state,
+               e.start_date, e.end_date, e.logo_url
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        WHERE r.team_id = ? AND r.status NOT IN ('withdrawn','denied','rejected','cancelled')
+        ORDER BY e.start_date ASC
+      `).bind(team.team_id).all();
+      for (const r of (regs.results || [])) {
+        if (!seenEventIds.has((r as any).event_id)) {
+          seenEventIds.add((r as any).event_id);
+          teamEvents.push(r);
+        }
+      }
+    } catch {}
+
+    // From event_registrations table (team_name match)
+    try {
+      const legacyRegs = await db.prepare(`
+        SELECT er.status, e.id as event_id, e.name as event_name, e.slug, e.city, e.state,
+               e.start_date, e.end_date, e.logo_url
+        FROM event_registrations er
+        JOIN events e ON e.id = er.event_id
+        WHERE er.team_name = ? AND er.status NOT IN ('withdrawn','denied','rejected','cancelled')
+        ORDER BY e.start_date ASC
+      `).bind(team.team_name).all();
+      for (const r of (legacyRegs.results || [])) {
+        if (!seenEventIds.has((r as any).event_id)) {
+          seenEventIds.add((r as any).event_id);
+          teamEvents.push(r);
+        }
+      }
+    } catch {}
+
+    team.registered_events = teamEvents;
+  }
+
+  return c.json({ success: true, data: teams });
 });
 
 // ==================
@@ -78,11 +124,53 @@ followRoutes.delete('/:teamId', authMiddleware, async (c) => {
   const user = c.get('user') as { id: string };
   const teamId = c.req.param('teamId');
 
-  await db.prepare(
-    `DELETE FROM user_follows WHERE user_id = ? AND team_id = ?`
-  ).bind(user.id, teamId).run();
+  // Remove from ALL relationship tables AND clear created_by — user wants this team GONE
+  await db.batch([
+    db.prepare(`DELETE FROM user_follows WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_coaches WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_managers WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`DELETE FROM team_members WHERE user_id = ? AND team_id = ?`).bind(user.id, teamId),
+    db.prepare(`UPDATE teams SET created_by = NULL WHERE id = ? AND created_by = ?`).bind(teamId, user.id),
+  ]);
 
   return c.json({ success: true, message: 'Unfollowed successfully' });
+});
+
+// ==================
+// POST /by-code — Follow a team using invite code (auth required)
+// ==================
+const followByCodeSchema = z.object({
+  inviteCode: z.string().min(4).max(10),
+});
+
+followRoutes.post('/by-code', authMiddleware, zValidator('json', followByCodeSchema), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const { inviteCode } = c.req.valid('json');
+  const code = inviteCode.toUpperCase().trim();
+
+  // Find team by parent invite code OR coach invite code (parents can use either)
+  const team = await db.prepare(
+    `SELECT id, name, age_group FROM teams WHERE (parent_invite_code = ? OR invite_code = ?) AND is_active = 1`
+  ).bind(code, code).first<{ id: string; name: string; age_group: string }>();
+
+  if (!team) {
+    return c.json({ success: false, error: 'Invalid team code. Please check and try again.' }, 404);
+  }
+
+  // Check for existing follow
+  const existing = await db.prepare(
+    `SELECT id FROM user_follows WHERE user_id = ? AND team_id = ?`
+  ).bind(user.id, team.id).first();
+
+  if (!existing) {
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(
+      `INSERT INTO user_follows (id, user_id, team_id) VALUES (?, ?, ?)`
+    ).bind(id, user.id, team.id).run();
+  }
+
+  return c.json({ success: true, data: { teamId: team.id, teamName: team.name, ageGroup: team.age_group } });
 });
 
 // ==================

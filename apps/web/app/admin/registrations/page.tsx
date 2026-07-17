@@ -52,12 +52,6 @@ interface Registration {
   registered_by_email: string | null;
   registered_by_phone: string | null;
   registered_by_name: string | null;
-  head_coach_name: string | null;
-  head_coach_email: string | null;
-  head_coach_phone: string | null;
-  manager_name: string | null;
-  manager_email: string | null;
-  manager_phone: string | null;
   roster_count: number;
   approved_by: string | null;
   approved_at: string | null;
@@ -67,6 +61,12 @@ interface Registration {
   updated_at: string | null;
   notes: string | null;
   _source?: string;
+  head_coach_name: string | null;
+  head_coach_email: string | null;
+  head_coach_phone: string | null;
+  manager_name: string | null;
+  manager_email: string | null;
+  manager_phone: string | null;
   hotel_choice_1: string | null;
   hotel_choice_2: string | null;
   hotel_choice_3: string | null;
@@ -919,7 +919,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             </div>
           </div>
 
-          {/* ── Head Coach / Manager ── */}
+          {/* ── Coach & Manager Contact ── */}
           {(reg.head_coach_name || reg.manager_name) && (
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-[#f0f7ff] rounded-xl p-4">
@@ -1149,6 +1149,7 @@ export default function AdminRegistrationsPage() {
       });
       const json = await res.json() as any;
       if (!json.success && json.requiresHotel) {
+        // Open hotel picker for this registration
         const reg = registrations.find(r => r.id === regId);
         if (reg) {
           await loadEventContext(reg.event_id);

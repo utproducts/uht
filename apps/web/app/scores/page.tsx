@@ -185,7 +185,7 @@ function GameCard({ game }: GameCardProps) {
           <StatusBadge status={game.status} />
         </div>
         <span className="text-xs text-[#86868b] uppercase tracking-widest font-semibold">
-          {game.age_group} • {game.division_level}
+          {[game.age_group, game.division_level].filter(Boolean).join(' • ')}
         </span>
       </div>
 

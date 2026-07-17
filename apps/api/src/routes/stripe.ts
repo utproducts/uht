@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
+import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 
 export const stripeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -28,67 +29,69 @@ async function stripeGet(path: string, secretKey: string) {
 }
 
 // ==================
-// PAYMENT INFO (loads registration details for the /pay page)
+// PAYMENT INFO LOOKUP (no auth — accessed via shared payment links)
 // ==================
 stripeRoutes.get('/payment-info', async (c) => {
-  const db = c.env.DB;
-  const ids = (c.req.query('ids') || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 20);
+  const idsParam = c.req.query('ids');
+  if (!idsParam) return c.json({ success: false, error: 'ids parameter required' }, 400);
 
-  if (ids.length === 0) {
-    return c.json({ success: false, error: 'No registration IDs provided' }, 400);
+  const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean);
+  if (ids.length === 0 || ids.length > 20) {
+    return c.json({ success: false, error: 'Provide 1-20 registration IDs' }, 400);
   }
 
+  const db = c.env.DB;
   const registrations: any[] = [];
 
   for (const regId of ids) {
-    // Try event_registrations first, then registrations (same order as create-payment-intent)
-    let reg = await db.prepare(
-      `SELECT er.id, er.team_name, er.age_group, er.payment_status,
-              e.name as event_name, e.city as event_city, e.state as event_state,
-              e.slug as event_slug, e.start_date, e.end_date,
-              e.price_cents as event_price_cents, e.deposit_cents as event_deposit_cents,
-              ed.price_cents as division_price_cents
-       FROM event_registrations er
-       JOIN events e ON e.id = er.event_id
-       LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
-       WHERE er.id = ?`
-    ).bind(regId).first<any>();
+    // Try event_registrations first
+    let reg = await db.prepare(`
+      SELECT er.id, er.team_id, er.event_id, er.status, er.payment_status,
+             er.event_division_id, er.age_group,
+             e.name as event_name, e.slug, e.city, e.state, e.start_date, e.end_date,
+             e.price_cents as event_price_cents, e.deposit_cents,
+             ed.price_cents as division_price_cents, ed.age_group as div_age_group,
+             t.name as team_name, t.head_coach_name, t.head_coach_email
+      FROM event_registrations er
+      JOIN events e ON e.id = er.event_id
+      LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+      LEFT JOIN teams t ON t.id = er.team_id
+      WHERE er.id = ?
+    `).bind(regId).first<any>();
 
     if (!reg) {
-      reg = await db.prepare(
-        `SELECT r.id, t.name as team_name, ed.age_group, r.payment_status, r.amount_cents,
-                e.name as event_name, e.city as event_city, e.state as event_state,
-                e.slug as event_slug, e.start_date, e.end_date,
-                e.price_cents as event_price_cents, e.deposit_cents as event_deposit_cents,
-                ed.price_cents as division_price_cents
-         FROM registrations r
-         JOIN events e ON e.id = r.event_id
-         LEFT JOIN teams t ON t.id = r.team_id
-         LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
-         WHERE r.id = ?`
-      ).bind(regId).first<any>();
+      reg = await db.prepare(`
+        SELECT r.id, r.team_id, r.event_id, r.status, r.payment_status,
+               r.event_division_id, r.amount_cents,
+               e.name as event_name, e.slug, e.city, e.state, e.start_date, e.end_date,
+               e.price_cents as event_price_cents, e.deposit_cents,
+               ed.price_cents as division_price_cents, ed.age_group as div_age_group,
+               t.name as team_name, t.head_coach_name, t.head_coach_email
+        FROM registrations r
+        JOIN events e ON e.id = r.event_id
+        LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+        LEFT JOIN teams t ON t.id = r.team_id
+        WHERE r.id = ?
+      `).bind(regId).first<any>();
     }
 
     if (!reg) continue;
 
-    // Price priority must match create-payment-intent so the displayed amount equals the charge
     const priceCents = reg.division_price_cents || reg.amount_cents || reg.event_price_cents || 0;
-    const depositCents = reg.event_deposit_cents || Math.round(priceCents * 0.25);
+    const depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
 
     registrations.push({
       id: reg.id,
-      team_name: reg.team_name || 'Team',
+      team_name: reg.team_name || 'Unknown Team',
+      age_group: reg.div_age_group || reg.age_group || '',
       event_name: reg.event_name,
-      event_city: reg.event_city,
-      event_state: reg.event_state,
-      event_slug: reg.event_slug,
+      event_slug: reg.slug,
+      event_city: reg.city,
+      event_state: reg.state,
       start_date: reg.start_date,
       end_date: reg.end_date,
-      age_group: reg.age_group || '',
+      status: reg.status,
+      payment_status: reg.payment_status,
       price_cents: priceCents,
       deposit_cents: depositCents,
       already_paid: reg.payment_status === 'paid',
@@ -96,7 +99,7 @@ stripeRoutes.get('/payment-info', async (c) => {
   }
 
   if (registrations.length === 0) {
-    return c.json({ success: false, error: 'Registrations not found. The link may be invalid or expired.' }, 404);
+    return c.json({ success: false, error: 'No registrations found' }, 404);
   }
 
   return c.json({ success: true, data: { registrations } });
@@ -113,11 +116,6 @@ const paymentIntentSchema = z.object({
   teamNames: z.array(z.string()).min(1),
   discountCode: z.string().optional(),
 });
-
-// Internal discount codes (percent off). Codes are normalized to uppercase.
-const DISCOUNT_CODES: Record<string, number> = {
-  'UHT-TEST-99': 99, // internal testing — 99% off
-};
 
 stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSchema), async (c) => {
   const data = c.req.valid('json');
@@ -176,39 +174,89 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     descriptions.push(`${teamName}${data.paymentChoice === 'pay_deposit' ? ' (Deposit)' : ''}`);
   }
 
-  if (totalCents <= 0) {
-    return c.json({ success: false, error: 'Total amount must be greater than $0' }, 400);
-  }
-
-  // Apply discount code if provided.
-  // Internal codes (DISCOUNT_CODES map) reduce the charge here. Issued event codes
-  // (discount_codes table) are validated/redeemed by the register flow separately —
-  // unknown codes are IGNORED rather than rejected so they never block a payment.
-  let discountApplied = '';
-  let discountedCents = 0;
+  // Apply discount code if provided (reward codes OR coupon codes)
+  let discountCents = 0;
+  let discountCode = '';
   if (data.discountCode) {
-    const code = data.discountCode.trim().toUpperCase();
-    const percentOff = DISCOUNT_CODES[code];
-    if (percentOff) {
-      discountApplied = code;
-      const newTotal = Math.round(totalCents * (1 - percentOff / 100));
-      discountedCents = totalCents - newTotal;
-      totalCents = newTotal;
+    const codeTrimmed = data.discountCode.trim();
+
+    // 1) Check meeting_rewards table first (single-use reward codes)
+    const reward = await db.prepare(
+      'SELECT id, code, amount, redeemed FROM meeting_rewards WHERE UPPER(code) = UPPER(?)'
+    ).bind(codeTrimmed).first() as any;
+
+    if (reward) {
+      if (reward.redeemed === 1) {
+        return c.json({ success: false, error: 'This code has already been used' }, 409);
+      }
+      discountCents = (reward.amount || 0) * 100; // amount is in dollars, convert to cents
+      discountCode = reward.code;
+      // Mark as redeemed immediately to prevent double-use
+      await db.prepare(
+        "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
+      ).bind(data.email, reward.id).run();
+    } else {
+      // 2) Check coupon_codes table (admin-created coupon codes)
+      const coupon = await db.prepare(
+        'SELECT * FROM coupon_codes WHERE UPPER(code) = UPPER(?)'
+      ).bind(codeTrimmed).first() as any;
+
+      if (!coupon) {
+        return c.json({ success: false, error: 'Invalid discount code' }, 400);
+      }
+      if (!coupon.is_active) {
+        return c.json({ success: false, error: 'This coupon code is no longer active' }, 400);
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        return c.json({ success: false, error: 'This coupon code has expired' }, 400);
+      }
+      if (coupon.max_uses !== null && coupon.current_uses >= coupon.max_uses) {
+        return c.json({ success: false, error: 'This coupon code has reached its usage limit' }, 400);
+      }
+      // Check event restriction — get the event ID from registrations
+      if (coupon.event_id) {
+        // Look up the event for these registrations
+        const regCheck = await db.prepare(
+          'SELECT event_id FROM event_registrations WHERE id = ?'
+        ).bind(data.registrationIds[0]).first() as any;
+        const regEventId = regCheck?.event_id;
+        if (regEventId && coupon.event_id !== regEventId) {
+          return c.json({ success: false, error: 'This coupon code is not valid for this event' }, 400);
+        }
+      }
+
+      // Calculate discount
+      if (coupon.discount_type === 'percent') {
+        discountCents = Math.round(totalCents * (coupon.discount_amount / 100));
+      } else {
+        // Fixed amount — discount_amount is stored in cents
+        discountCents = coupon.discount_amount;
+      }
+      discountCode = coupon.code;
+
+      // Increment usage counter
+      await db.prepare(
+        'UPDATE coupon_codes SET current_uses = current_uses + 1 WHERE id = ?'
+      ).bind(coupon.id).run();
     }
   }
 
-  // Fully discounted: no charge needed — mark registrations paid immediately
-  if (discountApplied && totalCents <= 0) {
-    const paymentStatus = data.paymentChoice === 'pay_deposit' ? 'partial' : 'paid';
+  totalCents = Math.max(0, totalCents - discountCents);
+
+  if (totalCents <= 0) {
+    // Fully covered by discount — no charge needed, just update registrations
     for (const regId of data.registrationIds) {
       await db.prepare(
-        `UPDATE event_registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, payment_amount_cents = 0, payment_method = 'discount', stripe_payment_id = ? WHERE id = ?`
-      ).bind(paymentStatus, `discount:${discountApplied}`, regId).run().catch(() => {});
+        `UPDATE event_registrations SET payment_status = 'paid', amount_paid_cents = 0, discount_code = ?, discount_cents = ? WHERE id = ?`
+      ).bind(discountCode, discountCents, regId).run().catch(() => {});
       await db.prepare(
-        `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = 0, payment_method = 'discount', stripe_payment_id = ? WHERE id = ?`
-      ).bind(paymentStatus, `discount:${discountApplied}`, regId).run().catch(() => {});
+        `UPDATE registrations SET payment_status = 'paid', amount_paid_cents = 0, discount_code = ?, discount_cents = ? WHERE id = ?`
+      ).bind(discountCode, discountCents, regId).run().catch(() => {});
     }
-    return c.json({ success: true, data: { fullyDiscounted: true, totalCents: 0, discountApplied: discountedCents } });
+    return c.json({
+      success: true,
+      data: { clientSecret: null, paymentIntentId: null, totalCents: 0, discountApplied: discountCents, fullyDiscounted: true },
+    });
   }
 
   // Minimum Stripe amount is 50 cents
@@ -221,13 +269,16 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       'amount': String(totalCents),
       'currency': 'usd',
       'automatic_payment_methods[enabled]': 'true',
-      'description': `${data.eventName} — ${descriptions.join(', ')}${discountApplied ? ` (discount ${discountApplied})` : ''}`,
+      'description': `${data.eventName} — ${descriptions.join(', ')}${discountCode ? ` (discount: ${discountCode})` : ''}`,
       'receipt_email': data.email,
       'metadata[registration_ids]': data.registrationIds.join(','),
       'metadata[payment_choice]': data.paymentChoice,
       'metadata[event_name]': data.eventName,
-      ...(discountApplied ? { 'metadata[discount_code]': discountApplied } : {}),
     };
+    if (discountCode) {
+      params['metadata[discount_code]'] = discountCode;
+      params['metadata[discount_cents]'] = String(discountCents);
+    }
 
     const paymentIntent = await stripeRequest('/payment_intents', stripeKey, params);
 
@@ -296,6 +347,43 @@ stripeRoutes.post('/confirm-payment', async (c) => {
         await db.prepare(
           `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
         ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+      }
+
+      // Send confirmation email now that payment has succeeded
+      for (const regId of regIds) {
+        try {
+          const reg = await db.prepare(
+            `SELECT er.team_name, er.age_group, er.division, er.email1, er.manager_first_name, er.manager_last_name,
+                    e.name as event_name, e.start_date, e.end_date, e.city, e.state, e.price_cents, e.deposit_cents, e.logo_url
+             FROM event_registrations er
+             JOIN events e ON e.id = er.event_id
+             WHERE er.id = ?`
+          ).bind(regId).first() as any;
+
+          if (reg && reg.email1) {
+            const startDate = new Date(reg.start_date + 'T12:00:00');
+            const endDate = new Date(reg.end_date + 'T12:00:00');
+            const eventDateStr = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+
+            await sendRegistrationConfirmationEmail(c.env, {
+              recipientEmail: reg.email1,
+              recipientName: reg.manager_first_name
+                ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim()
+                : reg.team_name,
+              teamName: reg.team_name,
+              ageGroup: reg.age_group,
+              division: reg.division || undefined,
+              eventName: reg.event_name,
+              eventDate: eventDateStr,
+              eventCity: `${reg.city}, ${reg.state}`,
+              priceCents: reg.price_cents || undefined,
+              depositCents: reg.deposit_cents || undefined,
+              eventLogoUrl: reg.logo_url || undefined,
+            });
+          }
+        } catch (emailErr) {
+          console.error('Post-payment confirmation email error:', emailErr);
+        }
       }
 
       return c.json({

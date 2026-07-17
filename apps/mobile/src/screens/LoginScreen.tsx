@@ -112,7 +112,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         }
         navigation.replace('Main');
       } else {
-        setError(result.error || 'Invalid email or password.');
+        const errMsg = typeof result.error === 'string' ? result.error : 'Invalid email or password.';
+        setError(errMsg);
       }
     } catch (e: any) {
       setError(e.message || 'Something went wrong. Please try again.');
@@ -169,6 +170,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                textContentType="emailAddress"
+                autoComplete="email"
               />
             </View>
 
@@ -185,6 +188,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
                 placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 autoCapitalize="none"
+                textContentType="password"
+                autoComplete="password"
               />
             </View>
           </View>

@@ -19,10 +19,33 @@ export async function getOrganizationsByState(state: string) {
 }
 
 // ==================
+// Lookups (age groups, divisions, state division levels)
+// ==================
+export async function getLookupValues(category: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/lookups?category=${encodeURIComponent(category)}`);
+  const json = await res.json() as any;
+  return json.success ? json.data : [];
+}
+
+export async function getStateDivisionLevels(state: string) {
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/lookups/state-divisions?state=${encodeURIComponent(state)}`);
+  const json = await res.json() as any;
+  return json.success ? json.data : [];
+}
+
+// ==================
 // Teams
 // ==================
 export async function getTeamsByOrg(orgId: string) {
   const res = await fetch(`https://uht.chad-157.workers.dev/api/teams/by-org/${orgId}`);
+  const json = await res.json();
+  return json.success ? json.data : [];
+}
+
+export async function getTeamsByOrgDivision(orgId: string, ageGroup: string, divisionLevel?: string) {
+  let url = `https://uht.chad-157.workers.dev/api/teams/by-org-division?orgId=${encodeURIComponent(orgId)}&ageGroup=${encodeURIComponent(ageGroup)}`;
+  if (divisionLevel) url += `&divisionLevel=${encodeURIComponent(divisionLevel)}`;
+  const res = await fetch(url);
   const json = await res.json();
   return json.success ? json.data : [];
 }
@@ -49,6 +72,11 @@ export async function unfollowTeam(teamId: string) {
   return res.json();
 }
 
+export async function leaveTeam(teamId: string) {
+  const res = await authFetch(`/api/teams/${teamId}/leave`, { method: 'DELETE' });
+  return res.json();
+}
+
 export async function getFollowedTeams() {
   const res = await authFetch('/api/follows');
   const json = await res.json();
@@ -71,15 +99,40 @@ export async function getEventDetail(eventId: string) {
 }
 
 export async function getTeamSchedule(eventId: string, teamId: string) {
-  const res = await fetch(`https://uht.chad-157.workers.dev/api/schedules/event/${eventId}?team_id=${teamId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}/schedule?team_id=${teamId}`);
   const json = await res.json();
   return json.success ? json.data : [];
 }
 
 export async function getEventSchedule(eventId: string) {
-  const res = await fetch(`https://uht.chad-157.workers.dev/api/schedules/event/${eventId}`);
+  const res = await fetch(`https://uht.chad-157.workers.dev/api/events/${eventId}/schedule`);
   const json = await res.json();
   return json.success ? json.data : [];
+}
+
+export async function getMyTeamIds(): Promise<string[]> {
+  try {
+    const [followsRes, myTeamsRes] = await Promise.all([
+      authFetch('/api/follows').catch(() => null),
+      authFetch('/api/teams/my-teams').catch(() => null),
+    ]);
+    const teamIds = new Set<string>();
+    if (followsRes) {
+      const fj = await followsRes.json() as any;
+      if (fj.success && Array.isArray(fj.data)) {
+        fj.data.forEach((f: any) => teamIds.add(f.team_id));
+      }
+    }
+    if (myTeamsRes) {
+      const tj = await myTeamsRes.json() as any;
+      if (tj.success && Array.isArray(tj.data)) {
+        tj.data.forEach((t: any) => teamIds.add(t.id));
+      }
+    }
+    return [...teamIds];
+  } catch {
+    return [];
+  }
 }
 
 // ==================

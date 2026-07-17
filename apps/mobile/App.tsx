@@ -1,8 +1,12 @@
 import React, { useEffect } from 'react';
 import { StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import * as Updates from 'expo-updates';
 import AppNavigator from './src/navigation/AppNavigator';
+
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51JT7FXGJu05jTbyJAmm6UfNev2syS1j9F81arSoiT6Fx8JcQhmcjBUUNVxGX0Zf0amJj1H5Ylvdh7FScdopNkxfn00kBBHQuTz';
+const MERCHANT_ID = 'merchant.com.ultimatetournaments.uht';
 
 export default function App() {
   useEffect(() => {
@@ -31,8 +35,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="dark-content" />
-      <AppNavigator />
+      <StripeProvider
+        publishableKey={STRIPE_PUBLISHABLE_KEY}
+        merchantIdentifier={MERCHANT_ID}
+      >
+        <StatusBar barStyle="dark-content" />
+        <AppNavigator />
+      </StripeProvider>
     </SafeAreaProvider>
   );
 }

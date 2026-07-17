@@ -21,6 +21,8 @@ export interface Env {
   // Config
   ENVIRONMENT: string;
   CORS_ORIGIN: string;
+  SITE_URL: string;
+  API_URL: string;
 }
 
 // User roles
