@@ -129,6 +129,23 @@ venueRoutes.post('/:id/rinks', authMiddleware, requireRole('admin'), zValidator(
   return c.json({ success: true, data: rink });
 });
 
+// Rename a rink
+venueRoutes.patch('/:venueId/rinks/:rinkId', authMiddleware, requireRole('admin'), async (c) => {
+  const { venueId, rinkId } = c.req.param();
+  const body = await c.req.json() as { name?: string };
+  const db = c.env.DB;
+
+  if (!body.name?.trim()) {
+    return c.json({ success: false, error: 'Name is required' }, 400);
+  }
+
+  await db.prepare('UPDATE venue_rinks SET name = ? WHERE id = ? AND venue_id = ?')
+    .bind(body.name.trim(), rinkId, venueId).run();
+
+  const rink = await db.prepare('SELECT * FROM venue_rinks WHERE id = ?').bind(rinkId).first();
+  return c.json({ success: true, data: rink });
+});
+
 // Delete a rink from a venue
 venueRoutes.delete('/:venueId/rinks/:rinkId', authMiddleware, requireRole('admin'), async (c) => {
   const { venueId, rinkId } = c.req.param();

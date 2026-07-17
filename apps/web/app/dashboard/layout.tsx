@@ -3,6 +3,9 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import RoleSwitcher from '../components/RoleSwitcher';
 
+// Roles allowed to view the admin dashboard section
+const ADMIN_ROLES = ['admin', 'director'];
+
 function readUserName(): string {
   if (typeof window === 'undefined') return '';
   try {
@@ -13,6 +16,16 @@ function readUserName(): string {
     }
   } catch {}
   return '';
+}
+
+function hasAdminAccess(): boolean {
+  try {
+    if (!localStorage.getItem('uht_token')) return false;
+    const stored = localStorage.getItem('uht_user');
+    if (!stored) return false;
+    return (JSON.parse(stored).roles || []).some((r: string) => ADMIN_ROLES.includes(r));
+  } catch {}
+  return false;
 }
 
 const ROLE_NAV: Record<string, { label: string; items: { name: string; href: string }[] }> = {
@@ -26,6 +39,8 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Registrations', href: '/admin/registrations' },
     { name: 'Schedule Builder', href: '/admin/schedule' },
     { name: 'Financials', href: '/admin/financials' },
+    { name: 'Coupon Codes', href: '/admin/coupons' },
+    { name: 'Shop', href: '/admin/shop' },
     { name: 'Referees', href: '/admin/referees' },
     { name: 'Communications', href: '/admin/comms' },
     { name: 'Email Campaigns', href: '/admin/email' },
@@ -33,6 +48,8 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Hotels', href: '/admin/hotels' },
     { name: 'Venues', href: '/admin/venues' },
     { name: 'Sponsors', href: '/admin/sponsors' },
+    { name: 'Notifications', href: '/admin/notifications' },
+    { name: 'RSVPs', href: '/admin/rsvps' },
     { name: 'FAQs', href: '/admin/faqs' },
     { name: 'Book Ice', href: '/admin/ice' },
     { name: 'Settings', href: '/admin/settings' },
@@ -48,18 +65,16 @@ const ROLE_NAV: Record<string, { label: string; items: { name: string; href: str
     { name: 'Events', href: '/dashboard/organization/events' },
   ]},
   coach: { label: 'Coach', items: [
-    { name: 'My Teams', href: '/dashboard/coach' },
+    { name: 'My Teams', href: '/dashboard/coach/teams' },
     { name: 'Roster', href: '/dashboard/coach/roster' },
     { name: 'Events', href: '/dashboard/coach/events' },
     { name: 'Schedule', href: '/dashboard/coach/schedule' },
-    { name: 'Coupon Codes', href: '/dashboard/coach/coupons' },
   ]},
   manager: { label: 'Manager', items: [
-    { name: 'My Teams', href: '/dashboard/manager' },
+    { name: 'My Teams', href: '/dashboard/manager/teams' },
     { name: 'Roster', href: '/dashboard/manager/roster' },
     { name: 'Events', href: '/dashboard/manager/events' },
     { name: 'Schedule', href: '/dashboard/manager/schedule' },
-    { name: 'Coupon Codes', href: '/dashboard/manager/coupons' },
   ]},
   parent: { label: 'Parent / Player', items: [
     { name: 'Overview', href: '/dashboard/parent' },
@@ -85,6 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const roleKey = pathname.split('/')[2] || 'admin';
   const nav = ROLE_NAV[roleKey] || ROLE_NAV.admin;
   const [userName, setUserName] = useState(readUserName);
+  const [redirecting, setRedirecting] = useState(false);
 
   const refreshName = useCallback(() => setUserName(readUserName()), []);
 
@@ -96,6 +112,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener('storage', refreshName);
   }, [refreshName]);
 
+  useEffect(() => {
+    // Guard the admin dashboard — only admin/director roles may view it
+    if (roleKey === 'admin' && !hasAdminAccess()) {
+      setRedirecting(true);
+      if (localStorage.getItem('uht_token')) {
+        const savedRole = localStorage.getItem('uht_role') || 'coach';
+        window.location.href = '/dashboard/' + savedRole;
+      } else {
+        window.location.href = '/login';
+      }
+    }
+  }, [roleKey]);
+
+  if (redirecting) {
+    return (
+      <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+        <div className="text-[#86868b]">Redirecting...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
       {/* Header */}
@@ -104,14 +141,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
           <span className="text-white font-semibold hidden sm:inline">Ultimate Tournaments</span>
         </a>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {userName && (
-            <span className="text-white text-sm font-medium">
+            <span className="text-white text-sm font-medium hidden sm:inline">
               Hi, {userName}
             </span>
           )}
-          <span className="text-white/40 text-xs hidden sm:inline">|</span>
-          <span className="text-white/60 text-sm font-medium hidden sm:inline">{nav.label}</span>
+          <span className="text-white/30 hidden sm:inline">|</span>
+          <RoleSwitcher />
+          <span className="text-white/30 hidden sm:inline">|</span>
           <button onClick={() => { localStorage.removeItem('uht_token'); localStorage.removeItem('uht_user'); localStorage.removeItem('uht_role'); window.location.href = '/login'; }}
             className="text-white/60 text-sm hover:text-white transition-colors font-medium">Sign out</button>
         </div>
@@ -119,7 +157,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 hidden md:block">
+        <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0 hidden md:block">
           <p className="px-3 mb-3 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">{nav.label}</p>
           <nav className="space-y-0.5">
             {nav.items.map((item) => {
@@ -128,10 +166,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <a
                   key={item.name}
                   href={item.href}
+                  onClick={(e) => {
+                    // Force a full page load when re-clicking the current section —
+                    // soft navigation in a static export can leave stale content
+                    if (pathname === item.href || pathname.startsWith(item.href + '/')) {
+                      e.preventDefault();
+                      window.location.href = item.href;
+                    }
+                  }}
                   className={
-                    "block px-3 py-2.5 rounded-xl text-sm transition-all " +
+                    "block px-3 py-2 rounded-lg text-sm transition-colors " +
                     (isActive
-                      ? "bg-[#f0f7ff] text-[#003e79] font-semibold shadow-sm"
+                      ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
                       : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
                   }
                 >
@@ -148,6 +194,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const isActive = pathname === item.href || (item.href !== `/dashboard/${roleKey}` && pathname.startsWith(item.href));
             return (
               <a key={item.name} href={item.href}
+                onClick={(e) => {
+                  if (pathname === item.href || pathname.startsWith(item.href + '/')) {
+                    e.preventDefault();
+                    window.location.href = item.href;
+                  }
+                }}
                 className={"flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors " +
                   (isActive ? "text-[#003e79] font-semibold" : "text-[#86868b]")}>
                 {item.name.replace('My ', '').replace('Coupon Codes', 'Coupons')}
@@ -159,7 +211,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Main content */}
         <main className="flex-1 p-4 sm:p-8 pb-24 md:pb-8">{children}</main>
       </div>
-      <RoleSwitcher />
     </div>
   );
 }

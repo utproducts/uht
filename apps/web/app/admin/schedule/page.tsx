@@ -74,6 +74,10 @@ interface Game {
   director_name: string | null;
   ref1_name: string | null;
   ref2_name: string | null;
+  home_locker_room?: string | null;
+  away_locker_room?: string | null;
+  delay_minutes?: number | null;
+  delay_note?: string | null;
   age_group?: string;
   division_level?: string;
 }
@@ -177,6 +181,11 @@ function EditGameModal({
   const [directorId, setDirectorId] = useState(game.director_id || '');
   const [ref1Id, setRef1Id] = useState(game.ref1_id || '');
   const [ref2Id, setRef2Id] = useState(game.ref2_id || '');
+  const [homeLockerRoom, setHomeLockerRoom] = useState(game.home_locker_room || '');
+  const [awayLockerRoom, setAwayLockerRoom] = useState(game.away_locker_room || '');
+  const [gameStatus, setGameStatus] = useState(game.status || 'scheduled');
+  const [delayMinutes, setDelayMinutes] = useState(game.delay_minutes?.toString() || '');
+  const [delayNote, setDelayNote] = useState(game.delay_note || '');
   const [saving, setSaving] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
   const [swapTargetId, setSwapTargetId] = useState('');
@@ -205,6 +214,11 @@ function EditGameModal({
       end_time: startDate && endH && endM ? `${startDate}T${endH}:${endM}:00` : null,
       game_type: gameType,
       notes: notes || null,
+      home_locker_room: homeLockerRoom || null,
+      away_locker_room: awayLockerRoom || null,
+      status: gameStatus,
+      delay_minutes: gameStatus === 'delayed' && delayMinutes ? parseInt(delayMinutes) : null,
+      delay_note: gameStatus === 'delayed' && delayNote ? delayNote : null,
       scorekeeper_id: scorekeeperId || null,
       director_id: directorId || null,
       ref1_id: ref1Id || null,
@@ -332,6 +346,76 @@ function EditGameModal({
               placeholder="e.g., 1G vs 2B — Semifinal"
               className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
             />
+          </div>
+
+          {/* Locker Rooms */}
+          <div className="pt-3 border-t border-[#e8e8ed]">
+            <h4 className="text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-3">Locker Rooms</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-[#86868b] font-semibold mb-1">Home</label>
+                <input
+                  type="text"
+                  value={homeLockerRoom}
+                  onChange={e => setHomeLockerRoom(e.target.value)}
+                  placeholder="e.g., Room A"
+                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[#86868b] font-semibold mb-1">Away</label>
+                <input
+                  type="text"
+                  value={awayLockerRoom}
+                  onChange={e => setAwayLockerRoom(e.target.value)}
+                  placeholder="e.g., Room B"
+                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Game Status */}
+          <div className="pt-3 border-t border-[#e8e8ed]">
+            <h4 className="text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-3">Game Status</h4>
+            <select
+              value={gameStatus}
+              onChange={e => setGameStatus(e.target.value)}
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm mb-3"
+            >
+              <option value="scheduled">Scheduled</option>
+              <option value="warmup">Warm Up</option>
+              <option value="in_progress">In Progress</option>
+              <option value="intermission">Intermission</option>
+              <option value="delayed">Delayed</option>
+              <option value="final">Final</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="forfeit">Forfeit</option>
+            </select>
+            {gameStatus === 'delayed' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-[#86868b] font-semibold mb-1">Delay (minutes)</label>
+                  <input
+                    type="number"
+                    value={delayMinutes}
+                    onChange={e => setDelayMinutes(e.target.value)}
+                    placeholder="e.g., 30"
+                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#86868b] font-semibold mb-1">Delay Note</label>
+                  <input
+                    type="text"
+                    value={delayNote}
+                    onChange={e => setDelayNote(e.target.value)}
+                    placeholder="e.g., Ice maintenance"
+                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Staff Assignments */}
@@ -1729,7 +1813,7 @@ function DivisionAssignment({
                       <option value="" className="text-[#1d1d1f]">Move to...</option>
                       {divisions.filter(d => d.age_group === selectedAgeGroup).map(d => (
                         <option key={d.id} value={d.id} className="text-[#1d1d1f]">
-                          {d.division_level || 'Open'}
+                          {d.division_level || d.age_group}
                         </option>
                       ))}
                     </select>
@@ -1865,10 +1949,10 @@ function DivisionAssignment({
                                 checked={divTeams.length > 0 && divTeams.every(r => selectedTeams.has(r.id))}
                                 onChange={() => selectAllInDiv(div.id)}
                                 className="w-3.5 h-3.5 rounded border-[#c8c8cd] text-[#003e79] cursor-pointer accent-[#003e79]"
-                                title={`Select all teams in ${div.division_level || 'Open'}`}
+                                title={`Select all teams in ${div.division_level || div.age_group}`}
                               />
                             )}
-                            <span className="font-semibold text-sm text-[#1d1d1f]">{div.division_level || 'Open'}</span>
+                            <span className="font-semibold text-sm text-[#1d1d1f]">{div.division_level || div.age_group}</span>
                             <span className={`text-xs ${isFull ? 'text-emerald-600 font-bold' : 'text-[#86868b]'}`}>
                               {divTeams.length}/6 teams
                             </span>
@@ -1931,7 +2015,7 @@ function DivisionAssignment({
                                     <option value="">Move...</option>
                                     {agDivs.filter(d => d.id !== div.id).map(d => (
                                       <option key={d.id} value={d.id}>
-                                        → {d.division_level || 'Open'}
+                                        → {d.division_level || d.age_group}
                                       </option>
                                     ))}
                                   </select>

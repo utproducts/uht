@@ -24,6 +24,7 @@ interface Event {
   slots_count: number | null;
   is_sold_out: number;
   schedule_published: number | null;
+  season: string | null;
 }
 
 /* ── helpers ── */
@@ -111,6 +112,24 @@ function isEventPast(ev: Event): boolean {
 /** Month name from 0-indexed month number */
 function monthName(m: number): string {
   return new Date(2026, m, 1).toLocaleString('en-US', { month: 'short' });
+}
+
+/** Normalize an event's season value into a "YYYY-YY" bucket (e.g. "2026-27") */
+function seasonBucket(season: string | null): string {
+  const raw = (season || '').trim();
+  if (raw.match(/^(\d{4})-(\d{2})$/)) return raw;
+  const s = raw.toLowerCase();
+  if (s.includes('fall-2026') || s.includes('winter-2026') || s.includes('winter-2027')) return '2026-27';
+  if (s === '2025/2026' || s.includes('fall-2025') || s.includes('winter-2025')) return '2025-26';
+  if (s === '2024/2025' || s.includes('fall-2024') || s.includes('winter-2024')) return '2024-25';
+  const yearMatch = s.match(/(\d{4})/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1]);
+    if (s.includes('fall')) return `${year}-${String(year + 1).slice(2)}`;
+    if (s.includes('winter') || s.includes('spring')) return `${year - 1}-${String(year).slice(2)}`;
+    if (s.includes('/')) return `${year}-${String(year + 1).slice(2)}`;
+  }
+  return 'other';
 }
 
 /* ── Event Card (grid view) ── */
@@ -231,6 +250,7 @@ export default function EventsPage() {
   const [monthFilter, setMonthFilter] = useState('');
   const [ageFilter, setAgeFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [seasonFilter, setSeasonFilter] = useState('');
 
   // Read ?city= from URL on mount
   useEffect(() => {
@@ -255,15 +275,38 @@ export default function EventsPage() {
       .catch(() => setLoading(false));
   }, []);
 
+  // Group events by season bucket (newest first)
+  const seasons = useMemo(() => {
+    const seasonMap = new Map<string, number>();
+    for (const ev of allEvents) {
+      const bucket = seasonBucket(ev.season);
+      seasonMap.set(bucket, (seasonMap.get(bucket) || 0) + 1);
+    }
+    return Array.from(seasonMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([bucket, count]) => ({ bucket, count }));
+  }, [allEvents]);
+
+  // Default to the newest season once events load
+  useEffect(() => {
+    if (seasons.length > 0 && !seasonFilter) setSeasonFilter(seasons[0].bucket);
+  }, [seasons]);
+
+  // Apply season filter first
+  const seasonFiltered = useMemo(
+    () => (seasonFilter && seasonFilter !== 'all'
+      ? allEvents.filter(e => seasonBucket(e.season) === seasonFilter)
+      : allEvents),
+    [allEvents, seasonFilter]
+  );
+
   // Split into upcoming / past by end_date
-  // Only show past events from Oct 2026 onward (current season)
-  const PAST_CUTOFF = '2026-10-01';
   const { upcoming, past } = useMemo(() => {
     const u: Event[] = [];
     const p: Event[] = [];
-    for (const ev of allEvents) {
+    for (const ev of seasonFiltered) {
       if (isEventPast(ev)) {
-        if (ev.start_date >= PAST_CUTOFF) p.push(ev);
+        p.push(ev);
       } else {
         u.push(ev);
       }
@@ -271,7 +314,7 @@ export default function EventsPage() {
     u.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
     p.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
     return { upcoming: u, past: p };
-  }, [allEvents]);
+  }, [seasonFiltered]);
 
   const baseEvents = tab === 'upcoming' ? upcoming : past;
 
@@ -379,7 +422,7 @@ export default function EventsPage() {
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-16 pb-20">
           <div className="max-w-2xl">
-            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">2026–27 Season</p>
+            <p className="text-white/70 text-sm font-semibold uppercase tracking-widest mb-3">{seasonFilter === 'all' ? 'All Seasons' : `${seasonFilter} Season`}</p>
             <h1 className="text-5xl sm:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
               Find Your Next Tournament
             </h1>
@@ -408,6 +451,31 @@ export default function EventsPage() {
               <span className="ml-1.5 text-xs opacity-70">({past.length})</span>
             </button>
           </div>
+
+          {/* Season chips */}
+          {seasons.length > 1 && (
+            <div className="mt-4 flex gap-1.5 flex-wrap">
+              {seasons.map(({ bucket, count }) => (
+                <button
+                  key={bucket}
+                  onClick={() => { setSeasonFilter(bucket); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    seasonFilter === bucket ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
+                  }`}
+                >
+                  {bucket} <span className="opacity-60">({count})</span>
+                </button>
+              ))}
+              <button
+                onClick={() => { setSeasonFilter('all'); setCityFilter(''); setMonthFilter(''); setAgeFilter(''); setSearch(''); }}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  seasonFilter === 'all' ? 'bg-white text-[#003e79] shadow-md' : 'bg-white/15 text-white/70 hover:bg-white/25 hover:text-white border border-white/10'
+                }`}
+              >
+                All Seasons <span className="opacity-60">({allEvents.length})</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="absolute bottom-0 left-0 right-0">
@@ -585,8 +653,8 @@ export default function EventsPage() {
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Event</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Location</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest pl-4 border-l border-[#e8e8ed]">Dates</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center pl-4 border-l border-[#e8e8ed]">Status</span>
-              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right pl-4 border-l border-[#e8e8ed]">Price</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center border-l border-[#e8e8ed]">Status</span>
+              <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-center border-l border-[#e8e8ed]">Price</span>
               <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest text-right pl-4 border-l border-[#e8e8ed]"></span>
             </div>
 
@@ -704,7 +772,7 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-center pl-4 border-l border-[#e8e8ed]">
+                    <div className="flex items-center justify-center border-l border-[#e8e8ed]">
                       {scheduleLive ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-700">
                           <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />Live
@@ -716,7 +784,7 @@ export default function EventsPage() {
                       )}
                     </div>
 
-                    <div className="text-right pl-4 border-l border-[#e8e8ed]">
+                    <div className="flex items-center justify-center border-l border-[#e8e8ed]">
                       {(event.price_min_cents || event.price_cents) && isUp ? (
                         <span className="text-sm font-bold text-[#003e79] whitespace-nowrap">{formatPriceRange(event)}</span>
                       ) : (

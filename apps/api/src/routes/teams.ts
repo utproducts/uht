@@ -936,7 +936,10 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
 
-  // Get teams where user is creator, coach, manager, team_member, or org owner
+  // Get teams the user is assigned to: coach, manager, active team member,
+  // or org admin (all teams in orgs where the user has an organization_admins row).
+  // Note: legacy organizations.owner_id is NOT used here — most orgs were imported
+  // with a placeholder owner, so only explicit org admin assignments count.
   const result = await db.prepare(`
     SELECT DISTINCT t.*, o.name as organization_name,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
@@ -946,87 +949,107 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
     LEFT JOIN team_coaches tc ON tc.team_id = t.id
     LEFT JOIN team_managers tm ON tm.team_id = t.id
     LEFT JOIN team_members tmem ON tmem.team_id = t.id AND tmem.status = 'active'
-    LEFT JOIN organizations org ON org.id = t.organization_id AND org.owner_id = ?
-    WHERE t.is_active = 1 AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR org.owner_id = ?)
+    LEFT JOIN organization_admins oa ON oa.organization_id = t.organization_id AND oa.user_id = ?
+    WHERE t.is_active = 1 AND (tc.user_id = ? OR tm.user_id = ? OR tmem.user_id = ? OR oa.user_id IS NOT NULL)
     ORDER BY t.age_group ASC, t.name ASC
-  `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
+  `).bind(user.id, user.id, user.id, user.id).all();
 
-  // Enrich each team with its registered events (from both tables)
+  // Enrich all teams in a single batched round trip (avoids N+1 per-team queries)
   const teams = result.results || [];
-  for (const team of teams) {
-    const teamEvents: any[] = [];
+  if (teams.length === 0) {
+    return c.json({ success: true, data: teams });
+  }
 
-    // From normalized registrations table (by team_id)
-    try {
-      const normRegs = await db.prepare(`
-        SELECT r.id as reg_id, r.status, r.payment_status, e.id as event_id, e.name as event_name,
+  const teamIds = teams.map((t: any) => t.id);
+  const teamNames = teams.map((t: any) => t.name);
+  const idPlaceholders = teamIds.map(() => '?').join(',');
+  const namePlaceholders = teamNames.map(() => '?').join(',');
+
+  let normRegRows: any[] = [];
+  let legacyRegRows: any[] = [];
+  let coachRows: any[] = [];
+  let mgrRows: any[] = [];
+  let claimRows: any[] = [];
+  try {
+    const [normRegs, legacyRegs, coaches, managers, claims] = await db.batch([
+      // Registered events from normalized registrations table (by team_id)
+      db.prepare(`
+        SELECT r.team_id as _team_id, r.id as reg_id, r.status, r.payment_status, e.id as event_id, e.name as event_name,
           e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
         FROM registrations r
         JOIN events e ON e.id = r.event_id
-        WHERE r.team_id = ? AND r.status NOT IN ('withdrawn','denied','rejected')
+        WHERE r.team_id IN (${idPlaceholders}) AND r.status NOT IN ('withdrawn','denied','rejected')
         ORDER BY e.start_date ASC
-      `).bind((team as any).id).all();
-      for (const r of (normRegs.results || [])) {
-        teamEvents.push(r);
-      }
-    } catch {}
-
-    // From event_registrations table (by team_name match)
-    try {
-      const legacyRegs = await db.prepare(`
-        SELECT er.id as reg_id, er.status, er.payment_status, e.id as event_id, e.name as event_name,
+      `).bind(...teamIds),
+      // Registered events from event_registrations table (by team_name match)
+      db.prepare(`
+        SELECT er.team_name as _team_name, er.id as reg_id, er.status, er.payment_status, e.id as event_id, e.name as event_name,
           e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url
         FROM event_registrations er
         JOIN events e ON e.id = er.event_id
-        WHERE er.team_name = ? AND er.status NOT IN ('withdrawn','denied','rejected')
+        WHERE er.team_name IN (${namePlaceholders}) AND er.status NOT IN ('withdrawn','denied','rejected')
         ORDER BY e.start_date ASC
-      `).bind((team as any).name).all();
-      // Deduplicate by event_id
-      const existingEventIds = new Set(teamEvents.map((te: any) => te.event_id));
-      for (const r of (legacyRegs.results || [])) {
-        if (!existingEventIds.has((r as any).event_id)) {
-          teamEvents.push(r);
-        }
-      }
-    } catch {}
-
-    (team as any).registered_events = teamEvents;
-
-    // Enrich with coaches
-    try {
-      const coachRows = await db.prepare(`
-        SELECT u.id, u.first_name, u.last_name, u.email, u.phone, tc.role
+      `).bind(...teamNames),
+      db.prepare(`
+        SELECT tc.team_id as _team_id, u.id, u.first_name, u.last_name, u.email, u.phone, tc.role
         FROM users u JOIN team_coaches tc ON tc.user_id = u.id
-        WHERE tc.team_id = ?
-      `).bind((team as any).id).all();
-      (team as any).coaches = coachRows.results || [];
-    } catch { (team as any).coaches = []; }
-
-    // Enrich with managers
-    try {
-      const mgrRows = await db.prepare(`
-        SELECT u.id, u.first_name, u.last_name, u.email, u.phone
+        WHERE tc.team_id IN (${idPlaceholders})
+      `).bind(...teamIds),
+      db.prepare(`
+        SELECT tm.team_id as _team_id, u.id, u.first_name, u.last_name, u.email, u.phone
         FROM users u JOIN team_managers tm ON tm.user_id = u.id
-        WHERE tm.team_id = ?
-      `).bind((team as any).id).all();
-      (team as any).managers = mgrRows.results || [];
-    } catch { (team as any).managers = []; }
-
-    // Count claimed vs unclaimed players
-    try {
-      const claimStats = await db.prepare(`
-        SELECT
+        WHERE tm.team_id IN (${idPlaceholders})
+      `).bind(...teamIds),
+      db.prepare(`
+        SELECT tp.team_id as _team_id,
           COUNT(*) as total_players,
           SUM(CASE WHEN p.claimed_by IS NOT NULL THEN 1 ELSE 0 END) as claimed_players
         FROM players p JOIN team_players tp ON tp.player_id = p.id
-        WHERE tp.team_id = ? AND tp.status = 'active'
-      `).bind((team as any).id).first<{ total_players: number; claimed_players: number }>();
-      (team as any).claimed_players = claimStats?.claimed_players || 0;
-      (team as any).total_players = claimStats?.total_players || 0;
-    } catch {
-      (team as any).claimed_players = 0;
-      (team as any).total_players = 0;
+        WHERE tp.team_id IN (${idPlaceholders}) AND tp.status = 'active'
+        GROUP BY tp.team_id
+      `).bind(...teamIds),
+    ]);
+    normRegRows = normRegs.results || [];
+    legacyRegRows = legacyRegs.results || [];
+    coachRows = coaches.results || [];
+    mgrRows = managers.results || [];
+    claimRows = claims.results || [];
+  } catch {}
+
+  const groupBy = (rows: any[], key: string) => {
+    const map = new Map<string, any[]>();
+    for (const row of rows) {
+      const { [key]: groupKey, ...rest } = row;
+      const list = map.get(groupKey);
+      if (list) list.push(rest); else map.set(groupKey, [rest]);
     }
+    return map;
+  };
+
+  const normRegsByTeam = groupBy(normRegRows, '_team_id');
+  const legacyRegsByName = groupBy(legacyRegRows, '_team_name');
+  const coachesByTeam = groupBy(coachRows, '_team_id');
+  const managersByTeam = groupBy(mgrRows, '_team_id');
+  const claimsByTeam = new Map(claimRows.map((r: any) => [r._team_id, r]));
+
+  for (const team of teams) {
+    const teamEvents: any[] = [...(normRegsByTeam.get((team as any).id) || [])];
+
+    // Legacy regs matched by team_name, deduplicated by event_id
+    const existingEventIds = new Set(teamEvents.map((te: any) => te.event_id));
+    for (const r of (legacyRegsByName.get((team as any).name) || [])) {
+      if (!existingEventIds.has(r.event_id)) {
+        teamEvents.push(r);
+      }
+    }
+
+    (team as any).registered_events = teamEvents;
+    (team as any).coaches = coachesByTeam.get((team as any).id) || [];
+    (team as any).managers = managersByTeam.get((team as any).id) || [];
+
+    const claimStats = claimsByTeam.get((team as any).id) as any;
+    (team as any).claimed_players = claimStats?.claimed_players || 0;
+    (team as any).total_players = claimStats?.total_players || 0;
   }
 
   return c.json({ success: true, data: teams });
@@ -1449,11 +1472,15 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
-  // Generate a short invite code for the team (6 chars, uppercase alphanumeric)
+  // Generate short invite codes (6 chars, uppercase alphanumeric) — separate codes
+  // for coaches/managers (invite_code) and parents (parent_invite_code)
   const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 to avoid confusion
   let inviteCode = '';
   const randBytes = crypto.getRandomValues(new Uint8Array(6));
   for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
+  let parentInviteCode = '';
+  const parentRandBytes = crypto.getRandomValues(new Uint8Array(6));
+  for (let i = 0; i < 6; i++) parentInviteCode += codeChars[parentRandBytes[i] % codeChars.length];
 
   // Generate a roster share token (URL-safe, 12 chars) for parent/player claim link
   const tokenChars = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -1473,8 +1500,8 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
       usa_hockey_team_id, usa_hockey_roster_url, city, state,
       website, hometown_league, team_type, season_record,
       head_coach_name, head_coach_email, head_coach_phone,
-      manager_name, manager_email, manager_phone, created_by, invite_code, roster_share_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      manager_name, manager_email, manager_phone, created_by, invite_code, parent_invite_code, roster_share_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, data.organizationId || null, data.name, data.ageGroup,
     data.divisionLevel || null, data.usaHockeyTeamId || null,
@@ -1483,7 +1510,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
     data.teamType || null, data.seasonRecord || null,
     data.headCoachName || null, data.headCoachEmail || null, data.headCoachPhone || null,
     data.managerName || null, data.managerEmail || null, data.managerPhone || null,
-    createdByUserId, inviteCode, rosterShareToken
+    createdByUserId, inviteCode, parentInviteCode, rosterShareToken
   ).run();
 
   // Link creator as a team_member

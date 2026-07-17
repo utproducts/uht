@@ -127,6 +127,84 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
 });
 
 // ==================
+// PATCH /games/:gameId/locker-rooms — set locker room text on a game (admin locker tab)
+// ==================
+pushRoutes.patch('/games/:gameId/locker-rooms', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const gameId = c.req.param('gameId');
+  const body = await c.req.json() as { home_locker_room?: string | null; away_locker_room?: string | null };
+
+  const game = await db.prepare('SELECT id FROM games WHERE id = ?').bind(gameId).first();
+  if (!game) {
+    return c.json({ success: false, error: 'Game not found' }, 404);
+  }
+
+  await db.prepare('UPDATE games SET home_locker_room = ?, away_locker_room = ? WHERE id = ?')
+    .bind(body.home_locker_room || null, body.away_locker_room || null, gameId).run();
+
+  return c.json({ success: true });
+});
+
+// ==================
+// POST /send-locker-room — push locker room assignments to both teams' followers
+// ==================
+pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json() as { game_id?: string };
+  if (!body.game_id) {
+    return c.json({ success: false, error: 'game_id is required' }, 400);
+  }
+
+  const game = await db.prepare(`
+    SELECT g.id, g.home_team_id, g.away_team_id, g.home_locker_room, g.away_locker_room, g.start_time,
+      ht.name as home_team_name, at.name as away_team_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at ON at.id = g.away_team_id
+    WHERE g.id = ?
+  `).bind(body.game_id).first<any>();
+
+  if (!game) {
+    return c.json({ success: false, error: 'Game not found' }, 404);
+  }
+  if (!game.home_locker_room && !game.away_locker_room) {
+    return c.json({ success: false, error: 'No locker rooms assigned for this game' }, 400);
+  }
+
+  const gameTime = game.start_time
+    ? new Date(game.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '';
+
+  let sent = 0;
+  for (const side of ['home', 'away'] as const) {
+    const teamId = side === 'home' ? game.home_team_id : game.away_team_id;
+    const locker = side === 'home' ? game.home_locker_room : game.away_locker_room;
+    const teamName = side === 'home' ? game.home_team_name : game.away_team_name;
+    const opponent = side === 'home' ? game.away_team_name : game.home_team_name;
+    if (!teamId || !locker) continue;
+
+    const result = await db.prepare(`
+      SELECT pt.token FROM push_tokens pt
+      JOIN user_follows uf ON uf.user_id = pt.user_id
+      WHERE uf.team_id = ?
+    `).bind(teamId).all();
+    const tokens = (result.results || []).map((r: any) => r.token as string);
+    if (tokens.length === 0) continue;
+
+    sent += await sendExpoPushNotifications(
+      tokens,
+      `Locker Room: ${locker}`,
+      `${teamName || 'Your team'}${opponent ? ` vs ${opponent}` : ''}${gameTime ? ` at ${gameTime}` : ''} — locker room ${locker}`,
+      { type: 'locker_room', game_id: game.id }
+    );
+  }
+
+  await db.prepare("UPDATE games SET locker_room_notified = 1 WHERE id = ?").bind(game.id).run().catch(() => {});
+
+  return c.json({ success: true, data: { sent } });
+});
+
+// ==================
 // POST /migrate — Create push_tokens table
 // ==================
 pushRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {

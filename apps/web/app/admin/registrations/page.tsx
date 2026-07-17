@@ -52,6 +52,12 @@ interface Registration {
   registered_by_email: string | null;
   registered_by_phone: string | null;
   registered_by_name: string | null;
+  head_coach_name: string | null;
+  head_coach_email: string | null;
+  head_coach_phone: string | null;
+  manager_name: string | null;
+  manager_email: string | null;
+  manager_phone: string | null;
   roster_count: number;
   approved_by: string | null;
   approved_at: string | null;
@@ -913,6 +919,44 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             </div>
           </div>
 
+          {/* ── Head Coach / Manager ── */}
+          {(reg.head_coach_name || reg.manager_name) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#f0f7ff] rounded-xl p-4">
+                <div className="text-xs font-semibold text-[#003e79] uppercase tracking-widest mb-2">Head Coach</div>
+                {reg.head_coach_name ? (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold text-[#1d1d1f]">{reg.head_coach_name}</p>
+                    {reg.head_coach_email && (
+                      <p className="text-[#6e6e73] text-xs">
+                        <a href={`mailto:${reg.head_coach_email}`} className="hover:text-[#003e79] transition">{reg.head_coach_email}</a>
+                      </p>
+                    )}
+                    {reg.head_coach_phone && <p className="text-[#6e6e73] text-xs">{reg.head_coach_phone}</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#aeaeb2]">Not set</p>
+                )}
+              </div>
+              <div className="bg-[#f5f0ff] rounded-xl p-4">
+                <div className="text-xs font-semibold text-[#6b21a8] uppercase tracking-widest mb-2">Manager</div>
+                {reg.manager_name ? (
+                  <div className="space-y-1 text-sm">
+                    <p className="font-semibold text-[#1d1d1f]">{reg.manager_name}</p>
+                    {reg.manager_email && (
+                      <p className="text-[#6e6e73] text-xs">
+                        <a href={`mailto:${reg.manager_email}`} className="hover:text-[#003e79] transition">{reg.manager_email}</a>
+                      </p>
+                    )}
+                    {reg.manager_phone && <p className="text-[#6e6e73] text-xs">{reg.manager_phone}</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#aeaeb2]">Not set</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Payment ── */}
           <div>
             <div className="text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Payment</div>
@@ -978,7 +1022,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
               className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
               <option value="">Not assigned</option>
               {eventHotels.map(h => (
-                <option key={h.id} value={h.id}>{h.hotel_name}{h.price_per_night ? ` ($${h.price_per_night}/night)` : ''}</option>
+                <option key={h.id} value={h.id}>{h.hotel_name}{h.price_per_night ? ` ($${Math.round(h.price_per_night / 100)}/night)` : ''}</option>
               ))}
             </select>
           </div>
@@ -1105,9 +1149,18 @@ export default function AdminRegistrationsPage() {
       });
       const json = await res.json() as any;
       if (!json.success && json.requiresHotel) {
-        alert('This team is non-local and requires a hotel assignment. Please add hotels to this event first (Events → Hotels tab).');
+        const reg = registrations.find(r => r.id === regId);
+        if (reg) {
+          await loadEventContext(reg.event_id);
+          setHotelModalReg(reg);
+        } else {
+          alert('This team is non-local and requires a hotel assignment.');
+        }
         setApproving(false);
         return;
+      }
+      if (json.success && json.email_sent === false) {
+        alert('Team approved, but the acceptance email could not be sent. Please verify the contact email.');
       }
       setHotelModalReg(null);
       loadAllRegistrations();
@@ -1276,6 +1329,8 @@ export default function AdminRegistrationsPage() {
                   <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Team</th>
                   <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Event</th>
                   <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden md:table-cell">Division</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden lg:table-cell">Coach</th>
+                  <th className="text-left px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden lg:table-cell">Manager</th>
                   <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider">Status</th>
                   <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden md:table-cell">Payment</th>
                   <th className="text-center px-4 py-3 text-xs font-bold text-[#86868b] uppercase tracking-wider hidden lg:table-cell">Date</th>
@@ -1301,6 +1356,28 @@ export default function AdminRegistrationsPage() {
                         <span className="text-xs font-medium text-[#6e6e73]">{reg.division_age_group} {reg.division_level}</span>
                       ) : (
                         <span className="text-xs text-amber-600 font-medium">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {reg.head_coach_name ? (
+                        <div>
+                          <p className="text-xs font-semibold text-[#1d1d1f]">{reg.head_coach_name}</p>
+                          {reg.head_coach_phone && <p className="text-[10px] text-[#86868b]">{reg.head_coach_phone}</p>}
+                          {reg.head_coach_email && <p className="text-[10px] text-[#86868b] truncate max-w-[160px]">{reg.head_coach_email}</p>}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-[#aeaeb2]">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {reg.manager_name ? (
+                        <div>
+                          <p className="text-xs font-semibold text-[#1d1d1f]">{reg.manager_name}</p>
+                          {reg.manager_phone && <p className="text-[10px] text-[#86868b]">{reg.manager_phone}</p>}
+                          {reg.manager_email && <p className="text-[10px] text-[#86868b] truncate max-w-[160px]">{reg.manager_email}</p>}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-[#aeaeb2]">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -1424,7 +1501,7 @@ export default function AdminRegistrationsPage() {
                         </div>
                         {h.address && <p className="text-xs text-[#86868b] mt-0.5">{h.address}{h.city ? `, ${h.city}` : ''}{h.state ? `, ${h.state}` : ''}</p>}
                         <div className="flex gap-3 mt-1">
-                          {h.price_per_night && <span className="text-xs font-semibold text-[#003e79]">${h.price_per_night}/night</span>}
+                          {h.price_per_night && <span className="text-xs font-semibold text-[#003e79]">${Math.round(h.price_per_night / 100)}/night</span>}
                           {h.booking_code && <span className="text-xs text-[#86868b]">Code: {h.booking_code}</span>}
                         </div>
                       </div>

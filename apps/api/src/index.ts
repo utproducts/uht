@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { authRoutes } from './routes/auth';
+import { meetingRewardRoutes } from './routes/meeting-rewards';
 import { eventRoutes } from './routes/events';
 import { teamRoutes } from './routes/teams';
 import { registrationRoutes } from './routes/registrations';
@@ -64,6 +65,9 @@ app.get('/', (c) => c.json({
 
 // API routes
 app.route('/api/auth', authRoutes);
+app.route('/api/meeting-reward', meetingRewardRoutes);
+// The deployed register bundle calls this path with a doubled /api prefix — keep both mounts
+app.route('/api/api/meeting-reward', meetingRewardRoutes);
 app.route('/api/events', eventRoutes);
 app.route('/api/teams', teamRoutes);
 app.route('/api/organizations', organizationRoutes);

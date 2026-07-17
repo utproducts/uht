@@ -6,6 +6,18 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 
 export const organizationRoutes = new Hono<{ Bindings: Env }>();
 
+// A user can administer an org if they're the legacy owner_id OR have an
+// organization_admins row (multi-owner support, populated via owner invites).
+async function isOrgAdmin(db: D1Database, orgId: string, userId: string): Promise<boolean> {
+  const row = await db.prepare(`
+    SELECT 1 FROM organizations o
+    WHERE o.id = ? AND (o.owner_id = ? OR EXISTS (
+      SELECT 1 FROM organization_admins oa WHERE oa.organization_id = o.id AND oa.user_id = ?
+    ))
+  `).bind(orgId, userId, userId).first();
+  return !!row;
+}
+
 // ==================
 // Dashboard — comprehensive stats for org owner
 // ==================
@@ -13,10 +25,12 @@ organizationRoutes.get('/dashboard', authMiddleware, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
 
-  // Get org(s) owned by user
+  // Get org(s) owned by user (legacy owner_id or invited org admin)
   const orgs = await db.prepare(`
-    SELECT o.* FROM organizations o WHERE o.owner_id = ? AND o.is_active = 1
-  `).bind(user.id).all();
+    SELECT DISTINCT o.* FROM organizations o
+    LEFT JOIN organization_admins oa ON oa.organization_id = o.id AND oa.user_id = ?
+    WHERE (o.owner_id = ? OR oa.user_id IS NOT NULL) AND o.is_active = 1
+  `).bind(user.id, user.id).all();
 
   if (!orgs.results.length) {
     return c.json({ success: true, data: { org: null, stats: null } });
@@ -90,11 +104,12 @@ organizationRoutes.get('/mine', authMiddleware, async (c) => {
   const db = c.env.DB;
 
   const result = await db.prepare(`
-    SELECT o.*,
+    SELECT DISTINCT o.*,
       (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
     FROM organizations o
-    WHERE o.owner_id = ? AND o.is_active = 1
-  `).bind(user.id).all();
+    LEFT JOIN organization_admins oa ON oa.organization_id = o.id AND oa.user_id = ?
+    WHERE (o.owner_id = ? OR oa.user_id IS NOT NULL) AND o.is_active = 1
+  `).bind(user.id, user.id).all();
 
   return c.json({ success: true, data: result.results });
 });
@@ -634,27 +649,29 @@ organizationRoutes.post('/:id/teams', authMiddleware, zValidator('json', createO
   const db = c.env.DB;
 
   // Verify org ownership
-  const org = await db.prepare('SELECT id FROM organizations WHERE id = ? AND owner_id = ?').bind(orgId, user.id).first();
-  if (!org) return c.json({ success: false, error: 'Organization not found or access denied' }, 403);
+  if (!(await isOrgAdmin(db, orgId, user.id))) return c.json({ success: false, error: 'Organization not found or access denied' }, 403);
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
-  // Generate invite code
+  // Generate invite codes — separate codes for coaches (invite_code) and parents (parent_invite_code)
   const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let inviteCode = '';
   const randBytes = crypto.getRandomValues(new Uint8Array(6));
   for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
+  let parentInviteCode = '';
+  const parentRandBytes = crypto.getRandomValues(new Uint8Array(6));
+  for (let i = 0; i < 6; i++) parentInviteCode += codeChars[parentRandBytes[i] % codeChars.length];
 
   await db.prepare(`
     INSERT INTO teams (id, organization_id, name, age_group, division_level, city, state,
-      head_coach_name, head_coach_email, manager_name, manager_email, created_by, invite_code)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      head_coach_name, head_coach_email, manager_name, manager_email, created_by, invite_code, parent_invite_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, orgId, data.name, data.ageGroup, data.divisionLevel || null,
     data.city || null, data.state || null,
     data.headCoachName || null, data.headCoachEmail || null,
     data.managerName || null, data.managerEmail || null,
-    user.id, inviteCode
+    user.id, inviteCode, parentInviteCode
   ).run();
 
   // Auto-link org owner as team member
@@ -752,11 +769,11 @@ organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zVali
   const db = c.env.DB;
 
   // Verify org ownership and team belongs to org
+  if (!(await isOrgAdmin(db, orgId, user.id))) return c.json({ success: false, error: 'Team not found or access denied' }, 403);
   const team = await db.prepare(`
     SELECT t.id, t.name, t.invite_code FROM teams t
-    JOIN organizations o ON o.id = t.organization_id AND o.owner_id = ?
     WHERE t.id = ? AND t.organization_id = ?
-  `).bind(user.id, teamId, orgId).first<{ id: string; name: string; invite_code: string }>();
+  `).bind(teamId, orgId).first<{ id: string; name: string; invite_code: string }>();
 
   if (!team) return c.json({ success: false, error: 'Team not found or access denied' }, 403);
 
@@ -816,13 +833,136 @@ organizationRoutes.delete('/:id/teams/:teamId/staff/:userId', authMiddleware, as
   const db = c.env.DB;
 
   // Verify org ownership
-  const org = await db.prepare('SELECT id FROM organizations WHERE id = ? AND owner_id = ?').bind(orgId, user.id).first();
-  if (!org) return c.json({ success: false, error: 'Access denied' }, 403);
+  if (!(await isOrgAdmin(db, orgId, user.id))) return c.json({ success: false, error: 'Access denied' }, 403);
 
   await db.prepare('DELETE FROM team_coaches WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
   await db.prepare('DELETE FROM team_managers WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
   await db.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').bind(teamId, staffUserId).run();
 
+  return c.json({ success: true });
+});
+
+// ==================
+// List org owners/admins (including pending invites)
+// ==================
+organizationRoutes.get('/:id/admins', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  if (!(await isOrgAdmin(db, orgId, user.id))) return c.json({ success: false, error: 'Access denied' }, 403);
+
+  const admins = await db.prepare(`
+    SELECT u.id, u.first_name, u.last_name, u.email, u.phone, oa.role, oa.created_at
+    FROM organization_admins oa JOIN users u ON u.id = oa.user_id
+    WHERE oa.organization_id = ?
+    ORDER BY oa.created_at ASC
+  `).bind(orgId).all();
+
+  const pending = await db.prepare(`
+    SELECT id, email, created_at FROM organization_invites
+    WHERE organization_id = ? AND status = 'pending'
+    ORDER BY created_at ASC
+  `).bind(orgId).all();
+
+  return c.json({ success: true, data: { admins: admins.results, pendingInvites: pending.results } });
+});
+
+// ==================
+// Invite another org owner by email
+// ==================
+const inviteOwnerSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+});
+
+organizationRoutes.post('/:id/invite-owner', authMiddleware, zValidator('json', inviteOwnerSchema), async (c) => {
+  const orgId = c.req.param('id');
+  const data = c.req.valid('json');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  if (!(await isOrgAdmin(db, orgId, user.id))) return c.json({ success: false, error: 'Access denied' }, 403);
+
+  const org = await db.prepare('SELECT id, name FROM organizations WHERE id = ? AND is_active = 1').bind(orgId).first<{ id: string; name: string }>();
+  if (!org) return c.json({ success: false, error: 'Organization not found' }, 404);
+
+  const email = data.email.toLowerCase();
+  const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').bind(email).first<{ id: string }>();
+
+  if (existingUser) {
+    // Link immediately: org admin row + organization role
+    await db.prepare(`
+      INSERT OR IGNORE INTO organization_admins (id, organization_id, user_id, role, invited_by)
+      VALUES (?, ?, ?, 'owner', ?)
+    `).bind(crypto.randomUUID().replace(/-/g, ''), orgId, existingUser.id, user.id).run();
+    await db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)')
+      .bind(crypto.randomUUID().replace(/-/g, ''), existingUser.id, 'organization').run();
+
+    // Notify them by email
+    if (c.env.RESEND_API) {
+      try {
+        const baseUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+            to: [email],
+            subject: `You're now an owner of ${org.name}`,
+            html: `<p>You've been added as an owner of <strong>${org.name}</strong> on Ultimate Tournaments.</p>
+              <p>All of the organization's teams are now linked to your account.</p>
+              <p><a href="${baseUrl}/dashboard/organization" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Open Org Dashboard</a></p>`,
+          }),
+        });
+      } catch {}
+    }
+
+    return c.json({ success: true, message: 'User added as org owner', linked: true });
+  }
+
+  // No account yet — create a pending invite, auto-linked when they sign up
+  await db.prepare(`
+    INSERT INTO organization_invites (id, organization_id, email, invited_by, status)
+    VALUES (?, ?, ?, ?, 'pending')
+    ON CONFLICT(organization_id, email) DO UPDATE SET status = 'pending', invited_by = excluded.invited_by
+  `).bind(crypto.randomUUID().replace(/-/g, ''), orgId, email, user.id).run();
+
+  if (c.env.RESEND_API) {
+    try {
+      const baseUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+      const signupUrl = `${baseUrl}/signup?email=${encodeURIComponent(email)}&role=organization`;
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+          to: [email],
+          subject: `You've been invited to own ${org.name}`,
+          html: `<p>You've been invited to be an owner of <strong>${org.name}</strong> on Ultimate Tournaments.</p>
+            <p>Create your account and you'll automatically get access to all of the organization's teams.</p>
+            <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Create Account</a></p>`,
+        }),
+      });
+    } catch {}
+  }
+
+  return c.json({ success: true, message: 'Invite sent', linked: false });
+});
+
+// ==================
+// Remove an org owner/admin
+// ==================
+organizationRoutes.delete('/:id/admins/:userId', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const targetUserId = c.req.param('userId');
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  if (!(await isOrgAdmin(db, orgId, user.id))) return c.json({ success: false, error: 'Access denied' }, 403);
+  if (targetUserId === user.id) return c.json({ success: false, error: 'You cannot remove yourself' }, 400);
+
+  await db.prepare('DELETE FROM organization_admins WHERE organization_id = ? AND user_id = ?').bind(orgId, targetUserId).run();
   return c.json({ success: true });
 });
 

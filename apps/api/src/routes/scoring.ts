@@ -1301,8 +1301,75 @@ scoringRoutes.get('/events/:eventId/scorekeepers', authMiddleware, requireRole('
       ORDER BY u.last_name, u.first_name
     `).bind(eventId).all();
 
-    return c.json({ success: true, data: assigned.results });
+    // Event-level scorekeepers (can score any game at the event)
+    const eventSks = await db.prepare(`
+      SELECT u.id, u.first_name, u.last_name, u.email, u.phone
+      FROM event_scorekeepers es
+      JOIN users u ON u.id = es.user_id
+      WHERE es.event_id = ?
+      ORDER BY u.last_name, u.first_name
+    `).bind(eventId).all();
+
+    return c.json({ success: true, data: assigned.results, eventScorekeepers: eventSks.results });
   } catch (err: any) {
     return c.json({ success: false, error: err?.message || 'Failed to fetch scorekeepers' }, 500);
   }
+});
+
+// Add event-level scorekeepers
+scoringRoutes.post('/events/:eventId/event-scorekeepers', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const body = await c.req.json() as { userIds?: string[] };
+  const userIds = (body.userIds || []).filter(Boolean);
+
+  if (userIds.length === 0) {
+    return c.json({ success: false, error: 'userIds is required' }, 400);
+  }
+
+  for (const userId of userIds) {
+    await db.prepare(
+      "INSERT OR IGNORE INTO event_scorekeepers (id, event_id, user_id, created_at) VALUES (?, ?, ?, datetime('now'))"
+    ).bind(crypto.randomUUID().replace(/-/g, ''), eventId, userId).run();
+  }
+
+  return c.json({ success: true });
+});
+
+// Remove an event-level scorekeeper
+scoringRoutes.delete('/events/:eventId/event-scorekeepers/:userId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { eventId, userId } = c.req.param();
+  const db = c.env.DB;
+
+  await db.prepare('DELETE FROM event_scorekeepers WHERE event_id = ? AND user_id = ?')
+    .bind(eventId, userId).run();
+
+  return c.json({ success: true });
+});
+
+// Set or clear a game delay (admin schedules tab)
+scoringRoutes.put('/games/:gameId/delay', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+  const body = await c.req.json() as { delayStatus?: string | null; delayReason?: string | null; delayMinutes?: number | null };
+
+  const game = await db.prepare('SELECT id, status FROM games WHERE id = ?').bind(gameId).first<any>();
+  if (!game) {
+    return c.json({ success: false, error: 'Game not found' }, 404);
+  }
+
+  if (body.delayStatus) {
+    await db.prepare(
+      `UPDATE games SET status = CASE WHEN status IN ('scheduled', 'delayed') THEN 'delayed' ELSE status END,
+        delay_status = ?, delay_reason = ?, delay_minutes = ?, delay_note = ? WHERE id = ?`
+    ).bind(body.delayStatus, body.delayReason || null, body.delayMinutes || 0, body.delayReason || null, gameId).run();
+  } else {
+    // Clear the delay
+    await db.prepare(
+      `UPDATE games SET status = CASE WHEN status = 'delayed' THEN 'scheduled' ELSE status END,
+        delay_status = NULL, delay_reason = NULL, delay_minutes = 0, delay_note = NULL WHERE id = ?`
+    ).bind(gameId).run();
+  }
+
+  return c.json({ success: true });
 });

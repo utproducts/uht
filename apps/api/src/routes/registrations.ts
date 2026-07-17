@@ -611,14 +611,23 @@ registrationRoutes.post('/admin/add-team', authMiddleware, requireRole('admin', 
   if (data.newTeam) {
     teamId = crypto.randomUUID().replace(/-/g, '');
     teamName = data.newTeam.name;
+    // Separate invite codes for coaches (invite_code) and parents (parent_invite_code)
+    const codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let inviteCode = '';
+    const randBytes = crypto.getRandomValues(new Uint8Array(6));
+    for (let i = 0; i < 6; i++) inviteCode += codeChars[randBytes[i] % codeChars.length];
+    let parentInviteCode = '';
+    const parentRandBytes = crypto.getRandomValues(new Uint8Array(6));
+    for (let i = 0; i < 6; i++) parentInviteCode += codeChars[parentRandBytes[i] % codeChars.length];
     await db.prepare(`
       INSERT INTO teams (id, name, age_group, division_level, city, state,
-        head_coach_name, head_coach_email, head_coach_phone, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        head_coach_name, head_coach_email, head_coach_phone, invite_code, parent_invite_code, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).bind(
       teamId, data.newTeam.name, data.newTeam.ageGroup,
       data.newTeam.divisionLevel || null, data.newTeam.city || null, data.newTeam.state || null,
-      data.newTeam.headCoachName || null, data.newTeam.headCoachEmail || null, data.newTeam.headCoachPhone || null
+      data.newTeam.headCoachName || null, data.newTeam.headCoachEmail || null, data.newTeam.headCoachPhone || null,
+      inviteCode, parentInviteCode
     ).run();
   } else {
     // Verify existing team

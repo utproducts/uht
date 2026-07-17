@@ -80,6 +80,33 @@ authRoutes.post('/register', rateLimit(5, 60_000), zValidator('json', registerSc
       console.error('Auto-link invites on register error:', err?.message || String(err));
     }
 
+    // Auto-link any pending org owner invites for this email
+    try {
+      const orgInvites = await db.prepare(`
+        SELECT oi.id, oi.organization_id
+        FROM organization_invites oi
+        JOIN organizations o ON o.id = oi.organization_id AND o.is_active = 1
+        WHERE oi.email = ? AND oi.status = 'pending'
+      `).bind(data.email.toLowerCase()).all<{ id: string; organization_id: string }>();
+
+      for (const inv of orgInvites.results || []) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO organization_admins (id, organization_id, user_id, role)
+          VALUES (?, ?, ?, 'owner')
+        `).bind(crypto.randomUUID().replace(/-/g, ''), inv.organization_id, userId).run();
+        await db.prepare(`
+          UPDATE organization_invites SET status = 'accepted', accepted_by = ?, accepted_at = datetime('now') WHERE id = ?
+        `).bind(userId, inv.id).run();
+        if (!allRoles.includes('organization')) {
+          await db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)')
+            .bind(crypto.randomUUID().replace(/-/g, ''), userId, 'organization').run();
+          allRoles.push('organization');
+        }
+      }
+    } catch (err: any) {
+      console.error('Auto-link org invites on register error:', err?.message || String(err));
+    }
+
     // Generate token
     const token = await generateToken(
       { id: userId, email: data.email.toLowerCase(), roles: allRoles as UserRole[] },
@@ -183,6 +210,36 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
       console.error('Auto-link invites on signup error:', err?.message || String(err));
     }
 
+    // Auto-link any pending org owner invites for this email
+    let orgsLinked = 0;
+    try {
+      const orgInvites = await db.prepare(`
+        SELECT oi.id, oi.organization_id
+        FROM organization_invites oi
+        JOIN organizations o ON o.id = oi.organization_id AND o.is_active = 1
+        WHERE oi.email = ? AND oi.status = 'pending'
+      `).bind(data.email.toLowerCase()).all<{ id: string; organization_id: string }>();
+
+      for (const inv of orgInvites.results || []) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO organization_admins (id, organization_id, user_id, role)
+          VALUES (?, ?, ?, 'owner')
+        `).bind(crypto.randomUUID().replace(/-/g, ''), inv.organization_id, userId).run();
+
+        await db.prepare(`
+          UPDATE organization_invites SET status = 'accepted', accepted_by = ?, accepted_at = datetime('now') WHERE id = ?
+        `).bind(userId, inv.id).run();
+
+        if (data.role !== 'organization') {
+          await db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)')
+            .bind(crypto.randomUUID().replace(/-/g, ''), userId, 'organization').run();
+        }
+        orgsLinked++;
+      }
+    } catch (err: any) {
+      console.error('Auto-link org invites on signup error:', err?.message || String(err));
+    }
+
     // Generate magic link token
     const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
     const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -240,8 +297,11 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
         email: data.email.toLowerCase(),
         role: data.role,
         teamsLinked,
+        orgsLinked,
       },
-      message: teamsLinked > 0
+      message: orgsLinked > 0
+        ? `Account created and linked as owner of ${orgsLinked} organization(s)! Check your email for a sign-in link.`
+        : teamsLinked > 0
         ? `Account created and linked to ${teamsLinked} team(s)! Check your email for a sign-in link.`
         : 'Account created! Check your email for a sign-in link.',
     }, 201);
@@ -330,6 +390,34 @@ authRoutes.get('/me', authMiddleware, async (c) => {
       ...user,
       roles: rolesResult.results?.map(r => r.role) || [],
     },
+  });
+});
+
+// ==================
+// ADD ROLE (self-serve — used by the dashboard "Add a Role" dropdown)
+// ==================
+// Privileged roles (admin, director, organization, manager) can NOT be self-added.
+const SELF_SERVE_ROLES = ['coach', 'parent', 'referee', 'scorekeeper'] as const;
+
+authRoutes.post('/add-role', authMiddleware, async (c) => {
+  const authUser = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json() as { role?: string };
+  const role = (body.role || '').trim().toLowerCase();
+
+  if (!SELF_SERVE_ROLES.includes(role as any)) {
+    return c.json({ success: false, error: 'This role cannot be self-added' }, 400);
+  }
+
+  await db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (?, ?, ?)')
+    .bind(crypto.randomUUID().replace(/-/g, ''), authUser.id, role).run();
+
+  const rolesResult = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+    .bind(authUser.id).all<{ role: UserRole }>();
+
+  return c.json({
+    success: true,
+    roles: rolesResult.results?.map(r => r.role) || [],
   });
 });
 

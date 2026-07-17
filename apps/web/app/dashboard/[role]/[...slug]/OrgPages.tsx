@@ -355,6 +355,25 @@ export function OrgCoaches() {
   const { orgId, orgLoading } = useOrgId();
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [pendingOwnerInvites, setPendingOwnerInvites] = useState<any[]>([]);
+  const [showInviteOwner, setShowInviteOwner] = useState(false);
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerInviteLoading, setOwnerInviteLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const loadOwners = useCallback(() => {
+    if (!orgId) return;
+    fetch(`${API}/api/organizations/${orgId}/admins`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) {
+          setOwners(json.data?.admins || []);
+          setPendingOwnerInvites(json.data?.pendingInvites || []);
+        }
+      })
+      .catch(() => {});
+  }, [orgId]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -363,14 +382,128 @@ export function OrgCoaches() {
       .then(json => { if (json.success) setStaff(json.data || []); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [orgId]);
+    loadOwners();
+  }, [orgId, loadOwners]);
+
+  const handleInviteOwner = async () => {
+    if (!ownerEmail.trim() || !orgId) return;
+    setOwnerInviteLoading(true);
+    try {
+      const res = await fetch(`${API}/api/organizations/${orgId}/invite-owner`, {
+        method: 'POST', headers: getAuthHeaders(),
+        body: JSON.stringify({ email: ownerEmail.trim() }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setToast({ msg: json.linked ? 'Owner added!' : 'Invite sent!', type: 'success' });
+        setShowInviteOwner(false);
+        setOwnerEmail('');
+        loadOwners();
+      } else {
+        setToast({ msg: json.error || 'Failed to invite owner', type: 'error' });
+      }
+    } catch { setToast({ msg: 'Network error', type: 'error' }); }
+    finally { setOwnerInviteLoading(false); }
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleRemoveOwner = async (userId: string, name: string) => {
+    if (!orgId || !window.confirm(`Remove ${name} as an org owner? They will lose access to all org teams.`)) return;
+    try {
+      const res = await fetch(`${API}/api/organizations/${orgId}/admins/${userId}`, {
+        method: 'DELETE', headers: getAuthHeaders(),
+      });
+      const json = await res.json();
+      if (json.success) { setToast({ msg: 'Owner removed', type: 'success' }); loadOwners(); }
+      else setToast({ msg: json.error || 'Failed to remove owner', type: 'error' });
+    } catch { setToast({ msg: 'Network error', type: 'error' }); }
+    setTimeout(() => setToast(null), 3000);
+  };
 
   if (orgLoading || loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
   if (!orgId) return <NoOrgMessage />;
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-semibold shadow-lg ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Org Owners */}
       <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-[#1d1d1f]">Organization Owners</h1>
+        <button onClick={() => { setShowInviteOwner(true); setOwnerEmail(''); }}
+          className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors">
+          + Invite Owner
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
+        {owners.length === 0 && pendingOwnerInvites.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-sm text-[#86868b]">No additional owners yet. Invite someone to co-manage this organization — they&apos;ll automatically get access to all org teams.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-[#fafafa] text-left text-[#6e6e73]">
+              <tr>
+                <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">Name</th>
+                <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">Email</th>
+                <th className="px-5 py-3 font-medium text-xs uppercase tracking-wider">Status</th>
+                <th className="px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#f0f0f2]">
+              {owners.map((o: any) => (
+                <tr key={o.id} className="hover:bg-[#fafafa]">
+                  <td className="px-5 py-3.5 font-semibold text-[#1d1d1f]">{o.first_name} {o.last_name}</td>
+                  <td className="px-5 py-3.5 text-[#6e6e73]">{o.email}</td>
+                  <td className="px-5 py-3.5"><span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">Owner</span></td>
+                  <td className="px-5 py-3.5 text-right">
+                    <button onClick={() => handleRemoveOwner(o.id, `${o.first_name} ${o.last_name}`)}
+                      className="text-xs font-semibold text-red-600 hover:text-red-700">Remove</button>
+                  </td>
+                </tr>
+              ))}
+              {pendingOwnerInvites.map((inv: any) => (
+                <tr key={inv.id} className="hover:bg-[#fafafa]">
+                  <td className="px-5 py-3.5 text-[#86868b] italic">Invited</td>
+                  <td className="px-5 py-3.5 text-[#6e6e73]">{inv.email}</td>
+                  <td className="px-5 py-3.5"><span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">Pending</span></td>
+                  <td className="px-5 py-3.5" />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Invite Owner modal */}
+      {showInviteOwner && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteOwner(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Invite an Org Owner</h3>
+            <p className="text-sm text-[#86868b] mb-4">They&apos;ll get full access to this organization and all of its teams. If they don&apos;t have an account yet, they&apos;ll receive an email invitation to create one.</p>
+            <input type="email" value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)}
+              placeholder="email@example.com" autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleInviteOwner(); }}
+              className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/30" />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowInviteOwner(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#f5f5f7] text-[#1d1d1f] text-sm font-semibold hover:bg-[#e8e8ed] transition">Cancel</button>
+              <button onClick={handleInviteOwner} disabled={ownerInviteLoading || !ownerEmail.trim()}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition disabled:opacity-50">
+                {ownerInviteLoading ? 'Sending…' : 'Send Invite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Coaches & Managers */}
+      <div className="flex items-center justify-between pt-2">
         <h1 className="text-2xl font-bold text-[#1d1d1f]">Coaches & Managers</h1>
         <a href="/dashboard/organization/teams"
           className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors">

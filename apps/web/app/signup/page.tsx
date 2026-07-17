@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
 const ROLES = [
-  { id: 'organization', label: 'Organization', desc: 'I manage a hockey organization with multiple teams', icon: '🏢' },
+  { id: 'organization', label: 'Organization Owner', desc: 'I own or run a hockey organization with multiple teams', icon: '🏢' },
   { id: 'coach', label: 'Coach', desc: 'I coach a team and need to manage rosters and register for events', icon: '🏒' },
   { id: 'manager', label: 'Team Manager', desc: 'I manage a team, handle registrations, and coordinate logistics', icon: '📋' },
   { id: 'referee', label: 'Referee', desc: 'I officiate games and need to see my assignments', icon: '🦓' },

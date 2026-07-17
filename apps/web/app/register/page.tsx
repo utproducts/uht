@@ -559,8 +559,30 @@ export default function RegisterPage() {
       if (json.success) {
         setDiscountValidation({ valid: true, ...json.data });
       } else {
-        setDiscountError(json.error || 'Invalid code');
-        setDiscountValidation(null);
+        // Fall back to meeting reward codes (UHT-XXXXXX, dollar amounts)
+        try {
+          const mrRes = await fetch(`${API}/meeting-reward/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: discountCode.trim().toUpperCase() }),
+          });
+          const mrJson = await mrRes.json() as any;
+          if (mrJson.success && mrJson.data?.valid) {
+            setDiscountValidation({
+              valid: true,
+              type: 'meeting_reward',
+              amount: mrJson.data.amount,
+              discount_hotel_cents: mrJson.data.amount * 100,
+              discount_local_cents: mrJson.data.amount * 100,
+            } as any);
+          } else {
+            setDiscountError(mrJson.error || json.error || 'Invalid code');
+            setDiscountValidation(null);
+          }
+        } catch {
+          setDiscountError(json.error || 'Invalid code');
+          setDiscountValidation(null);
+        }
       }
     } catch { setDiscountError('Failed to validate code'); }
     setValidatingCode(false);
@@ -642,9 +664,22 @@ export default function RegisterPage() {
               email: auth.user?.email || 'unknown@email.com',
               eventName: event.name,
               teamNames,
+              ...(discountCode.trim() ? { discountCode: discountCode.trim().toUpperCase() } : {}),
             }),
           });
           const stripeJson = await stripeRes.json() as any;
+
+          if (stripeJson.success && stripeJson.data?.fullyDiscounted) {
+            setRegResult({
+              ...(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length }),
+              discountCode: discountCode.trim().toUpperCase(),
+              discountAmount: stripeJson.data.discountApplied ? stripeJson.data.discountApplied / 100 : 0,
+              paymentNote: 'Your discount code covered the full registration!',
+            });
+            loadUpsellEvents();
+            setStep('confirmed');
+            return;
+          }
 
           if (stripeJson.success && stripeJson.data?.clientSecret) {
             setClientSecret(stripeJson.data.clientSecret);
@@ -683,10 +718,13 @@ export default function RegisterPage() {
         try {
           const primaryRegId = results[0]?.primaryRegistrationId || results[0]?.allRegistrationIds?.[0];
           if (primaryRegId) {
-            await fetch(`${API}/events/redeem-discount-code`, {
+            const redeemUrl = (discountValidation as any).type === 'meeting_reward'
+              ? `${API}/meeting-reward/redeem`
+              : `${API}/events/redeem-discount-code`;
+            await fetch(redeemUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: discountCode.trim().toUpperCase(), registrationId: primaryRegId }),
+              body: JSON.stringify({ code: discountCode.trim().toUpperCase(), registrationId: primaryRegId, eventId: event.id }),
             });
           }
         } catch (redeemErr) {
@@ -725,6 +763,10 @@ export default function RegisterPage() {
   const totalPriceCents = teamsToPrice.reduce((sum, t) => sum + getTeamPrice(t), 0);
   // Calculate discount based on hotel selection
   const discountAmountCents = discountValidation ? (() => {
+    // Percent-type codes discount the whole total
+    if ((discountValidation as any).discount_type === 'percent' && (discountValidation as any).discount_amount) {
+      return Math.round(totalPriceCents * (discountValidation as any).discount_amount / 100);
+    }
     // Check if any team selected "Local Team"
     const anyLocal = multiTeamMode
       ? Object.values(teamLocalFlags).some(v => v)
@@ -732,8 +774,8 @@ export default function RegisterPage() {
     return anyLocal ? discountValidation.discount_local_cents : discountValidation.discount_hotel_cents;
   })() : 0;
   const basePriceCents = Math.max(0, totalPriceCents - discountAmountCents);
-  const perTeamDeposit = event?.deposit_cents || 0;
-  const depositCents = perTeamDeposit * Math.max(teamsToPrice.length, 1);
+  // Deposit is a flat $350 per team
+  const depositCents = 35000 * Math.max(teamsToPrice.length, 1);
   // Step names
   const stepNames = ['Team', 'Hotels', 'Payment', 'Checkout'];
   const stepIndex = step === 'team' ? 0 : step === 'hotels' ? 1 : step === 'payment' ? 2 : step === 'card_form' || step === 'confirmed' || step === 'submitting' ? 3 : 0;
@@ -1449,12 +1491,16 @@ export default function RegisterPage() {
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                       <p className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                        {isLocalTeam || Object.values(teamLocalFlags).some(v => v)
-                          ? `$${(discountValidation.discount_local_cents / 100).toFixed(0)} discount applied!`
-                          : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`
+                        {(discountValidation as any).discount_type === 'percent'
+                          ? `${(discountValidation as any).discount_amount}% discount applied!`
+                          : isLocalTeam || Object.values(teamLocalFlags).some(v => v)
+                            ? `$${(discountValidation.discount_local_cents / 100).toFixed(0)} discount applied!`
+                            : `$${(discountValidation.discount_hotel_cents / 100).toFixed(0)} discount applied!`
                         }
                       </p>
-                      <p className="text-xs text-emerald-600 mt-1">Code for {discountValidation.team_name}</p>
+                      {discountValidation.team_name && (
+                        <p className="text-xs text-emerald-600 mt-1">Code for {discountValidation.team_name}</p>
+                      )}
                     </div>
                   )}
                 </div>
