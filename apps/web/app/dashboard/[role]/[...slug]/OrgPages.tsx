@@ -647,6 +647,7 @@ export function OrgEvents() {
   const { orgId, orgLoading } = useOrgId();
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedRegId, setCopiedRegId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgId) return;
@@ -696,7 +697,7 @@ export function OrgEvents() {
         {evt.teamRegistrations && evt.teamRegistrations.length > 0 && (
           <div className="border-t border-[#f0f0f2] pt-3 space-y-2">
             {evt.teamRegistrations.map((tr: any) => (
-              <div key={tr.team_id} className="flex items-center justify-between text-sm">
+              <div key={tr.reg_id || tr.team_id} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-[#1d1d1f]">{tr.team_name}</span>
                   <span className="text-xs text-[#86868b]">{tr.age_group}</span>
@@ -714,6 +715,26 @@ export function OrgEvents() {
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                     tr.payment_status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
                   }`}>{tr.payment_status || 'unpaid'}</span>
+                  {tr.reg_id && tr.payment_status !== 'paid' && (
+                    <>
+                      <a
+                        href={`/pay/?reg=${tr.reg_id}`}
+                        className="px-2 py-0.5 bg-[#003e79] hover:bg-[#002d5a] text-white rounded-full text-[10px] font-semibold transition-colors"
+                      >
+                        Pay Now
+                      </a>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`https://ultimatetournaments.com/pay?reg=${tr.reg_id}`);
+                          setCopiedRegId(tr.reg_id);
+                          setTimeout(() => setCopiedRegId(null), 2000);
+                        }}
+                        className="px-2 py-0.5 border border-[#003e79] text-[#003e79] hover:bg-[#f0f7ff] rounded-full text-[10px] font-semibold transition-colors"
+                      >
+                        {copiedRegId === tr.reg_id ? 'Copied!' : 'Copy Link'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

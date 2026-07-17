@@ -584,35 +584,69 @@ organizationRoutes.get('/:id/events', authMiddleware, async (c) => {
   const orgId = c.req.param('id');
   const db = c.env.DB;
 
-  const events = await db.prepare(`
-    SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
-      GROUP_CONCAT(DISTINCT t.name) as team_names,
-      COUNT(DISTINCT r.team_id) as teams_registered,
-      SUM(CASE WHEN r.payment_status = 'paid' THEN 1 ELSE 0 END) as teams_paid,
-      SUM(CASE WHEN r.status = 'approved' THEN 1 ELSE 0 END) as teams_approved
-    FROM events e
-    JOIN registrations r ON r.event_id = e.id AND r.status != 'cancelled'
-    JOIN teams t ON t.id = r.team_id AND t.organization_id = ? AND t.is_active = 1
-    GROUP BY e.id
-    ORDER BY e.start_date DESC
-  `).bind(orgId).all();
-
-  // For each event, get individual team registrations
-  const eventsWithTeams = [];
-  for (const evt of events.results as any[]) {
-    const teamRegs = await db.prepare(`
-      SELECT t.id as team_id, t.name as team_name, t.age_group,
-        r.status as reg_status, r.payment_status, r.created_at as reg_date,
-        ed.age_group as division_age, ed.level as division_level
+  // Registrations for org teams live in BOTH tables: `registrations` (normalized,
+  // by team_id) and `event_registrations` (website register flow, by team_id or
+  // legacy team_name). Query both, then group by event.
+  const [normRegs, formRegs] = await Promise.all([
+    db.prepare(`
+      SELECT r.id as reg_id, r.status as reg_status, r.payment_status, r.created_at as reg_date,
+        t.id as team_id, t.name as team_name, t.age_group,
+        ed.age_group as division_age, ed.division_level,
+        e.id as event_id, e.name as event_name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status as event_status
       FROM registrations r
       JOIN teams t ON t.id = r.team_id AND t.organization_id = ? AND t.is_active = 1
-      LEFT JOIN event_divisions ed ON ed.id = r.division_id
-      WHERE r.event_id = ? AND r.status != 'cancelled'
-      ORDER BY t.age_group ASC, t.name ASC
-    `).bind(orgId, evt.id).all();
+      JOIN events e ON e.id = r.event_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      WHERE r.status NOT IN ('cancelled', 'withdrawn', 'denied', 'rejected')
+    `).bind(orgId).all(),
+    db.prepare(`
+      SELECT er.id as reg_id, er.status as reg_status, er.payment_status, er.created_at as reg_date,
+        t.id as team_id, t.name as team_name, t.age_group,
+        ed.age_group as division_age, ed.division_level,
+        e.id as event_id, e.name as event_name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status as event_status
+      FROM event_registrations er
+      JOIN teams t ON (er.team_id = t.id OR (er.team_id IS NULL AND er.team_name = t.name))
+        AND t.organization_id = ? AND t.is_active = 1
+      JOIN events e ON e.id = er.event_id
+      LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+      WHERE er.status NOT IN ('cancelled', 'withdrawn', 'denied', 'rejected')
+    `).bind(orgId).all(),
+  ]);
 
-    eventsWithTeams.push({ ...evt, teamRegistrations: teamRegs.results });
+  // Merge, de-duplicating by registration id
+  const seen = new Set<string>();
+  const allRegs: any[] = [];
+  for (const r of [...(normRegs.results as any[]), ...(formRegs.results as any[])]) {
+    if (seen.has(r.reg_id)) continue;
+    seen.add(r.reg_id);
+    allRegs.push(r);
   }
+
+  // Group by event
+  const byEvent = new Map<string, any>();
+  for (const r of allRegs) {
+    let evt = byEvent.get(r.event_id);
+    if (!evt) {
+      evt = {
+        id: r.event_id, name: r.event_name, slug: r.slug, city: r.city, state: r.state,
+        start_date: r.start_date, end_date: r.end_date, logo_url: r.logo_url, status: r.event_status,
+        teams_registered: 0, teams_paid: 0, teams_approved: 0, team_names: '', teamRegistrations: [],
+      };
+      byEvent.set(r.event_id, evt);
+    }
+    evt.teamRegistrations.push({
+      reg_id: r.reg_id, team_id: r.team_id, team_name: r.team_name, age_group: r.age_group,
+      reg_status: r.reg_status, payment_status: r.payment_status, reg_date: r.reg_date,
+      division_age: r.division_age, division_level: r.division_level,
+    });
+    evt.teams_registered += 1;
+    if (r.payment_status === 'paid') evt.teams_paid += 1;
+    if (r.reg_status === 'approved') evt.teams_approved += 1;
+    evt.team_names = evt.team_names ? `${evt.team_names},${r.team_name}` : r.team_name;
+  }
+
+  const eventsWithTeams = Array.from(byEvent.values())
+    .sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
 
   return c.json({ success: true, data: eventsWithTeams });
 });
