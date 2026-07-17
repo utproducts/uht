@@ -25,6 +25,7 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinMsg, setJoinMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [rosterTeamId, setRosterTeamId] = useState<string | null>(null);
   const [rosterLinkCopied, setRosterLinkCopied] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -248,16 +249,11 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                     <div className="space-y-2">
                       {upcomingEvents.map((ev: any) => {
                         const startDt = ev.start_date ? new Date(ev.start_date + 'T12:00:00') : null;
-                        const statusColors: Record<string, string> = {
-                          approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                          pending: 'bg-amber-50 text-amber-700 border-amber-200',
-                          awaiting_payment: 'bg-blue-50 text-blue-700 border-blue-200',
-                        };
-                        const statusLabel: Record<string, string> = {
-                          approved: 'Approved',
-                          pending: 'Pending',
-                          awaiting_payment: 'Awaiting Payment',
-                        };
+                        // Approval and payment are independent — show both so teams know
+                        // an unpaid registration is still in the approval queue.
+                        const isApproved = ev.status === 'approved' || ev.status === 'confirmed';
+                        const isPaid = ev.payment_status === 'paid';
+                        const isDeposit = ev.payment_status === 'deposit' || ev.payment_status === 'partial';
                         return (
                           <a key={ev.reg_id} href={`/dashboard/${role}/events/?id=${ev.event_id}`} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f5f5f7] transition group">
                             {ev.logo_url ? (
@@ -274,8 +270,19 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                                 {startDt && ` · ${startDt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                               </p>
                             </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${statusColors[ev.status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                              {statusLabel[ev.status] || ev.status}
+                            <span className="flex items-center gap-1.5 shrink-0">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                isApproved ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {isApproved ? 'Approved' : 'Pending Approval'}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                isDeposit ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                'bg-red-50 text-red-600 border-red-200'
+                              }`}>
+                                {isPaid ? 'Paid' : isDeposit ? 'Deposit Paid' : 'Awaiting Payment'}
+                              </span>
                             </span>
                           </a>
                         );
@@ -289,11 +296,11 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
 
                 {/* Action buttons */}
                 <div className="border-t border-[#f0f0f2] bg-[#fafafa] px-5 py-3 flex items-center gap-2 flex-wrap">
-                  <a href={`/dashboard/${role}/roster?team=${team.id}`}
+                  <button onClick={() => setRosterTeamId(rosterTeamId === team.id ? null : team.id)}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#003e79] text-white text-xs font-semibold hover:bg-[#002d5a] transition">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    {playerCount > 0 ? 'View Roster' : 'Add Roster'}
-                  </a>
+                    {rosterTeamId === team.id ? 'Hide Roster' : playerCount > 0 ? 'View Roster' : 'Add Roster'}
+                  </button>
                   <a href="/events"
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#f0f7ff] text-[#003e79] text-xs font-semibold hover:bg-[#e0efff] transition">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -331,6 +338,13 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                     </button>
                   )}
                 </div>
+
+                {/* Inline roster management */}
+                {rosterTeamId === team.id && (
+                  <div className="border-t border-[#f0f0f2] px-5 py-4 bg-white">
+                    <RosterManagement initialTeamId={team.id} embedded />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -464,7 +478,7 @@ function RoleEvents({ role }: { role: string }) {
 // ==================
 // Roster Management (Coach/Manager/Org)
 // ==================
-function RosterManagement() {
+function RosterManagement({ initialTeamId, embedded }: { initialTeamId?: string; embedded?: boolean } = {}) {
   const [teams, setTeams] = useState<any[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [players, setPlayers] = useState<any[]>([]);
@@ -504,9 +518,9 @@ function RosterManagement() {
       .then(json => {
         if (json.success && json.data?.length > 0) {
           setTeams(json.data);
-          // Check for ?team= query param to pre-select correct team
+          // Pre-select: explicit prop (embedded in My Teams) > ?team= query param > first team
           const params = new URLSearchParams(window.location.search);
-          const teamParam = params.get('team');
+          const teamParam = initialTeamId || params.get('team');
           if (teamParam && json.data.some((t: any) => t.id === teamParam)) {
             setSelectedTeamId(teamParam);
           } else {
@@ -676,21 +690,23 @@ function RosterManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1d1d1f]">Roster Management</h1>
-          <p className="text-sm text-[#6e6e73] mt-0.5">Manage your team&apos;s player roster</p>
+      {/* Header (hidden when embedded inside a My Teams card) */}
+      {!embedded && (
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-[#1d1d1f]">Roster Management</h1>
+            <p className="text-sm text-[#6e6e73] mt-0.5">Manage your team&apos;s player roster</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {teams.length > 1 && (
+              <select value={selectedTeamId} onChange={e => { setSelectedTeamId(e.target.value); setShowImport(false); setShowAddForm(false); setEditingId(null); }}
+                className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003e79]/20">
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {teams.length > 1 && (
-            <select value={selectedTeamId} onChange={e => { setSelectedTeamId(e.target.value); setShowImport(false); setShowAddForm(false); setEditingId(null); }}
-              className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003e79]/20">
-              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Team info bar */}
       {selectedTeam && (
@@ -1245,14 +1261,26 @@ function CoachEventDetail({ eventId, role }: { eventId: string; role: string }) 
           <div className="divide-y divide-[#f0f0f2]">
             {teamRegistrations.map(({ team, reg, division }: any) => (
               <div key={team.id} className="px-6 py-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <h3 className="font-semibold text-[#1d1d1f]">{team.name}</h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    reg.status === 'confirmed' || reg.status === 'approved' ? 'bg-green-50 text-green-700 border border-green-200' :
-                    reg.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
-                    'bg-blue-50 text-blue-700 border border-blue-200'
-                  }`}>
-                    {(reg.status || 'registered').charAt(0).toUpperCase() + (reg.status || 'registered').slice(1)}
+                  {/* Approval and payment are independent — show both so an unpaid team
+                      knows their registration is still moving through approval. */}
+                  <span className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                      reg.status === 'confirmed' || reg.status === 'approved'
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                    }`}>
+                      {reg.status === 'confirmed' || reg.status === 'approved' ? 'Approved' : 'Pending Approval'}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                      reg.payment_status === 'paid' ? 'bg-green-50 text-green-700 border-green-200' :
+                      reg.payment_status === 'deposit' || reg.payment_status === 'partial' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      'bg-red-50 text-red-600 border-red-200'
+                    }`}>
+                      {reg.payment_status === 'paid' ? 'Paid' :
+                        reg.payment_status === 'deposit' || reg.payment_status === 'partial' ? 'Deposit Paid' : 'Awaiting Payment'}
+                    </span>
                   </span>
                 </div>
 
