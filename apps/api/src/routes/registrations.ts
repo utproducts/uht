@@ -395,13 +395,17 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     let teamState: string | null = null;
     let teamCity: string | null = null;
     let coachPhone: string | null = null;
+    let linkedCoachEmail: string | null = null;
+    let linkedManagerEmail: string | null = null;
     if (reg.team_id) {
-      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone FROM teams WHERE id = ?')
+      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone, head_coach_name, head_coach_email, manager_email FROM teams WHERE id = ?')
         .bind(reg.team_id).first<any>();
       if (linkedTeam) {
         teamState = linkedTeam.state;
         teamCity = linkedTeam.city;
         coachPhone = linkedTeam.head_coach_phone;
+        linkedCoachEmail = linkedTeam.head_coach_email;
+        linkedManagerEmail = linkedTeam.manager_email;
       }
     }
     team = {
@@ -410,11 +414,13 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       city: teamCity,
       state: teamState,
       head_coach_name: [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ') || null,
-      head_coach_email: reg.email1,
+      // Prefer the linked team's actual head coach; fall back to the registrant
+      head_coach_email: linkedCoachEmail || reg.email1,
       head_coach_phone: coachPhone || reg.phone || null,
+      manager_email: linkedManagerEmail,
     };
   } else {
-    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone FROM teams WHERE id = ?')
+    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone, manager_email FROM teams WHERE id = ?')
       .bind(reg.team_id).first<any>();
   }
 
@@ -472,6 +478,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
 
   // Send approval email
   let emailSent = false;
+  let emailCcSent: string[] = [];
   try {
     let divisionInfo: any = null;
     if (!isConsumer && reg.event_division_id) {
@@ -485,6 +492,23 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
 
       const recipientEmail = team.head_coach_email || user.email;
       const recipientName = team.head_coach_name || team.name;
+
+      // CC the manager and any other registration contacts (dedup, exclude the recipient).
+      // For team-based regs, also pull emails from team_managers.
+      const ccCandidates: (string | null | undefined)[] = [team.manager_email];
+      if (isConsumer) {
+        ccCandidates.push(reg.email1, reg.email2);
+      } else if (reg.team_id) {
+        const mgrs = await db.prepare(`
+          SELECT u.email FROM users u JOIN team_managers tm ON tm.user_id = u.id WHERE tm.team_id = ?
+        `).bind(reg.team_id).all<{ email: string }>();
+        for (const m of mgrs.results || []) ccCandidates.push(m.email);
+      }
+      const approvalCc = [...new Set(ccCandidates
+        .filter((e): e is string => !!e && e.includes('@'))
+        .map(e => e.toLowerCase()))]
+        .filter(e => e !== (recipientEmail || '').toLowerCase());
+      emailCcSent = approvalCc;
 
       // Determine payment status from the registration
       let paymentStatus = 'unpaid';
@@ -507,6 +531,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       const result = await sendApprovalEmail(c.env, {
         recipientEmail,
         recipientName,
+        ccEmails: approvalCc,
         teamName: team.name,
         ageGroup: divisionInfo?.age_group || reg.age_group || team.age_group,
         division: divisionInfo?.division_level || reg.division || undefined,
@@ -600,6 +625,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     message: 'Registration approved',
     email_sent: emailSent,
     email_recipient: team?.head_coach_email || null,
+    email_cc: emailCcSent,
     hotel_email_sent: hotelEmailSent,
   });
 });

@@ -1537,12 +1537,23 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
         const startDate = new Date(event.start_date + 'T12:00:00');
         const eventDateStr = startDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
-        // Collect CC emails (manager email2, coach emails if available)
-        const ccEmails: string[] = [];
-        if (updated.email2) ccEmails.push(updated.email2);
+        // Recipient: linked team's head coach when known, else the registrant.
+        // CC: manager + all registration contacts (dedup, exclude recipient).
+        let linkedCoachEmail: string | null = null;
+        let linkedManagerEmail: string | null = null;
+        if (updated.team_id) {
+          const lt = await db.prepare('SELECT head_coach_email, manager_email FROM teams WHERE id = ?')
+            .bind(updated.team_id).first<any>();
+          if (lt) { linkedCoachEmail = lt.head_coach_email; linkedManagerEmail = lt.manager_email; }
+        }
+        const toEmail = linkedCoachEmail || updated.email1;
+        const ccEmails = [...new Set([updated.email1, updated.email2, linkedManagerEmail]
+          .filter((e): e is string => !!e && e.includes('@'))
+          .map(e => e.toLowerCase()))]
+          .filter(e => e !== (toEmail || '').toLowerCase());
 
         const emailResult = await sendApprovalEmail(c.env, {
-          recipientEmail: updated.email1,
+          recipientEmail: toEmail,
           recipientName: updated.manager_first_name
             ? `${updated.manager_first_name} ${updated.manager_last_name || ''}`.trim()
             : updated.team_name,
