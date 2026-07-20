@@ -5,6 +5,9 @@ compatibility_flags = ["nodejs_compat"]
 
 # Serve the API on the main domain and the legacy api subdomain (fixes Stripe
 # webhook delivery and the long-standing api.ultimatetournaments.com 522s).
+# workers_dev MUST stay true — the deployed web bundles and the mobile app call
+# uht.chad-157.workers.dev directly; adding routes disables it by default.
+workers_dev = true
 routes = [
   { pattern = "ultimatetournaments.com/api/*", zone_name = "ultimatetournaments.com" },
   { pattern = "api.ultimatetournaments.com/*", zone_name = "ultimatetournaments.com" },
