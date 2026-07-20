@@ -185,21 +185,30 @@ function paymentOptionsHtml(): string {
 }
 
 function buildHotelSectionHtml(hotel: HotelInfo): string {
-  const priceStr = hotel.pricePerNight ? `$${hotel.pricePerNight}/night` : '';
+  // price_per_night is stored in cents; prefer the human rate description when present
+  const priceStr = hotel.rateDescription
+    ? hotel.rateDescription
+    : hotel.pricePerNight
+      ? `$${hotel.pricePerNight >= 1000 ? Math.round(hotel.pricePerNight / 100) : hotel.pricePerNight}/night`
+      : '';
   const locationParts = [hotel.city, hotel.state].filter(Boolean).join(', ');
+
+  // Some hotels have the booking link stored in the code field — treat URLs as links
+  const codeIsUrl = hotel.bookingCode?.startsWith('http');
+  const bookingUrl = hotel.bookingUrl || (codeIsUrl ? hotel.bookingCode : undefined);
+  const bookingCode = codeIsUrl ? undefined : hotel.bookingCode;
 
   let details = '';
   if (hotel.address) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">${hotel.address}${locationParts ? `, ${locationParts}` : ''}</p>`;
   if (hotel.phone) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Phone: ${hotel.phone}</p>`;
   if (priceStr) details += `<p style="margin: 4px 0; font-size: 13px; color: #003e79; font-weight: 600;">${priceStr}</p>`;
-  if (hotel.rateDescription) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">${hotel.rateDescription}</p>`;
-  if (hotel.bookingCode) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Booking Code: <strong>${hotel.bookingCode}</strong></p>`;
+  if (bookingCode) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Booking Code: <strong>${bookingCode}</strong></p>`;
 
   let bookingBtn = '';
-  if (hotel.bookingUrl) {
+  if (bookingUrl) {
     bookingBtn = `
       <p style="margin: 12px 0 0 0;">
-        <a href="${hotel.bookingUrl}" style="display: inline-block; background-color: #00ccff; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 20px; border-radius: 20px;">Book Your Room</a>
+        <a href="${bookingUrl}" style="display: inline-block; background-color: #00ccff; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 20px; border-radius: 20px;">Book Your Room</a>
       </p>`;
   }
 
@@ -237,13 +246,19 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
   let hotelPlain = '';
   if (params.hotelInfo) {
     const h = params.hotelInfo;
+    const rate = h.rateDescription
+      ? h.rateDescription
+      : h.pricePerNight
+        ? `$${h.pricePerNight >= 1000 ? Math.round(h.pricePerNight / 100) : h.pricePerNight}/night`
+        : '';
+    const codeIsUrl = h.bookingCode?.startsWith('http');
     hotelPlain = `\n\nHotel: ${h.name}`;
     if (h.address) hotelPlain += `\nAddress: ${h.address}`;
     if (h.phone) hotelPlain += `\nPhone: ${h.phone}`;
-    if (h.pricePerNight) hotelPlain += `\nRate: $${h.pricePerNight}/night`;
-    if (h.rateDescription) hotelPlain += `\n${h.rateDescription}`;
-    if (h.bookingCode) hotelPlain += `\nBooking Code: ${h.bookingCode}`;
-    if (h.bookingUrl) hotelPlain += `\nBook here: ${h.bookingUrl}`;
+    if (rate) hotelPlain += `\nRate: ${rate}`;
+    if (h.bookingCode && !codeIsUrl) hotelPlain += `\nBooking Code: ${h.bookingCode}`;
+    const plainUrl = h.bookingUrl || (codeIsUrl ? h.bookingCode : undefined);
+    if (plainUrl) hotelPlain += `\nBook here: ${plainUrl}`;
   }
   const plainText = `Congratulations! Your registration for ${eventName} has been accepted.\n\nTeam: ${teamName}\nAge Group: ${ageGroup}${divisionText}\nEvent: ${eventName}\nDate: ${eventDate}\nCity: ${eventCity}${hotelPlain}\n\nPlease send us your approved hockey roster as soon as it's ready.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;
 

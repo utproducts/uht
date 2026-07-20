@@ -1162,6 +1162,8 @@ export default function AdminRegistrationsPage() {
       }
       if (json.success && json.email_sent === false) {
         alert('Team approved, but the acceptance email could not be sent. Please verify the contact email.');
+      } else if (json.success) {
+        alert(`Team approved!${json.email_recipient ? ` Acceptance email sent to ${json.email_recipient}.` : ' Acceptance email sent.'}`);
       }
       setHotelModalReg(null);
       loadAllRegistrations();

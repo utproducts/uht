@@ -594,7 +594,13 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     }
   }
 
-  return c.json({ success: true, message: 'Registration approved', email_sent: emailSent, hotel_email_sent: hotelEmailSent });
+  return c.json({
+    success: true,
+    message: 'Registration approved',
+    email_sent: emailSent,
+    email_recipient: team?.head_coach_email || null,
+    hotel_email_sent: hotelEmailSent,
+  });
 });
 
 // ==================
