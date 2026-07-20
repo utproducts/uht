@@ -1727,6 +1727,7 @@ const updateHotelSchema = z.object({
   sort_order: z.number().optional(),
   is_active: z.number().optional(),
   image_url: z.string().nullable().optional(),
+  booking_cutoff_date: z.string().nullable().optional(),
 });
 
 eventRoutes.patch('/admin/event-hotels/:id', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateHotelSchema), async (c) => {

@@ -10,6 +10,7 @@ interface HotelInfo {
   bookingUrl?: string;
   bookingCode?: string;
   pricePerNight?: number;
+  bookingCutoffDate?: string;
 }
 
 interface ApprovalEmailParams {
@@ -203,6 +204,10 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
   if (hotel.phone) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Phone: ${hotel.phone}</p>`;
   if (priceStr) details += `<p style="margin: 4px 0; font-size: 13px; color: #003e79; font-weight: 600;">${priceStr}</p>`;
   if (bookingCode) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Booking Code: <strong>${bookingCode}</strong></p>`;
+  if (hotel.bookingCutoffDate) {
+    const cutoff = new Date(hotel.bookingCutoffDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    details += `<p style="margin: 8px 0 4px 0; font-size: 14px; color: #b91c1c; font-weight: 700;">Must book your hotel room by: ${cutoff}</p>`;
+  }
 
   let bookingBtn = '';
   if (bookingUrl) {
@@ -259,6 +264,10 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
     if (h.bookingCode && !codeIsUrl) hotelPlain += `\nBooking Code: ${h.bookingCode}`;
     const plainUrl = h.bookingUrl || (codeIsUrl ? h.bookingCode : undefined);
     if (plainUrl) hotelPlain += `\nBook here: ${plainUrl}`;
+    if (h.bookingCutoffDate) {
+      const cutoff = new Date(h.bookingCutoffDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      hotelPlain += `\nMUST BOOK YOUR HOTEL ROOM BY: ${cutoff}`;
+    }
   }
   const plainText = `Congratulations! Your registration for ${eventName} has been accepted.\n\nTeam: ${teamName}\nAge Group: ${ageGroup}${divisionText}\nEvent: ${eventName}\nDate: ${eventDate}\nCity: ${eventCity}${hotelPlain}\n\nPlease send us your approved hockey roster as soon as it's ready.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;
 

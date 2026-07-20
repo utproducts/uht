@@ -525,6 +525,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
           bookingUrl: hotelInfo.booking_url,
           bookingCode: hotelInfo.booking_code,
           pricePerNight: hotelInfo.price_per_night,
+          bookingCutoffDate: hotelInfo.booking_cutoff_date,
         } : undefined,
         _overrides: approvalOverrides,
       } as any);

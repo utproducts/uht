@@ -1969,7 +1969,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                           </button>
                         </div>
                         {/* Editable pricing & details */}
-                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2">
                           <div>
                             <label className="block text-[10px] text-[#86868b] uppercase tracking-widest font-semibold mb-1">Price / Night</label>
                             <div className="relative">
@@ -2031,6 +2031,16 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                 const val = parseInt(e.target.value);
                                 handleUpdateHotel(h.id, { room_block_count: isNaN(val) ? null : val } as any);
                               }}
+                              className="w-full border border-[#e8e8ed] rounded-lg px-2.5 py-1.5 text-sm text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-[#86868b] uppercase tracking-widest font-semibold mb-1">Cutoff Date</label>
+                            <input
+                              type="date"
+                              value={(h as any).booking_cutoff_date || ''}
+                              onChange={e => setHotels(prev => prev.map(x => x.id === h.id ? { ...x, booking_cutoff_date: e.target.value || null } as any : x))}
+                              onBlur={e => handleUpdateHotel(h.id, { booking_cutoff_date: e.target.value || null } as any)}
                               className="w-full border border-[#e8e8ed] rounded-lg px-2.5 py-1.5 text-sm text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none"
                             />
                           </div>
