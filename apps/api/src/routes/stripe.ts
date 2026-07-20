@@ -410,8 +410,18 @@ stripeRoutes.post('/webhook', async (c) => {
   const body = await c.req.json() as any;
 
   if (body.type === 'payment_intent.succeeded') {
-    const pi = body.data?.object;
-    if (!pi) return c.json({ received: true });
+    const claimed = body.data?.object;
+    if (!claimed?.id) return c.json({ received: true });
+
+    // Never trust the webhook payload directly — re-fetch the PaymentIntent from
+    // Stripe and confirm it actually succeeded before marking anything paid.
+    // (Payloads are unauthenticated without signature verification.)
+    const stripeKey = c.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) return c.json({ received: true });
+    const pi = await stripeGet(`/payment_intents/${claimed.id}`, stripeKey);
+    if (pi.error || pi.status !== 'succeeded') {
+      return c.json({ received: true });
+    }
 
     const regIds = (pi.metadata?.registration_ids || '').split(',').filter(Boolean);
     const paymentChoice = pi.metadata?.payment_choice || 'pay_now';
