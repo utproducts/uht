@@ -151,7 +151,7 @@ export default function HomePage() {
         {/* Background image with overlay */}
         <div className="absolute inset-0">
           <img
-            src="/hero-bg.webp"
+            src="/hero-bg-2026.jpg"
             alt=""
             className="w-full h-full object-cover opacity-40"
           />
