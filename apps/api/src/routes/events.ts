@@ -6,6 +6,7 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
 import { sendApprovalEmail } from '../lib/approval-email';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
+import { getResolvedFields } from '../lib/template-overrides';
 
 export const eventRoutes = new Hono<{ Bindings: Env }>();
 
@@ -1343,7 +1344,8 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
         depositCents: event.deposit_cents || undefined,
         eventLogoUrl: event.logo_url || undefined,
         discountCode: discountCode || undefined,
-      });
+        _overrides: await getResolvedFields(db, 'registration_confirmation'),
+      } as any);
     } catch (err: any) {
       console.error('Registration confirmation email error:', err);
     }
@@ -1553,7 +1555,11 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
           eventCity: `${event.city}, ${event.state}`,
           paymentStatus: updated.payment_status || 'unpaid',
           priceCents: event.price_cents || undefined,
-        });
+          _overrides: await getResolvedFields(db,
+            updated.payment_status === 'paid' ? 'approval_paid'
+              : updated.payment_status === 'partial' ? 'approval_deposit'
+              : 'approval_unpaid'),
+        } as any);
 
         // Include email status in response
         (updated as any).email_sent = emailResult.success;

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
+import { getResolvedFields } from '../lib/template-overrides';
 
 export const stripeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -379,7 +380,8 @@ stripeRoutes.post('/confirm-payment', async (c) => {
               priceCents: reg.price_cents || undefined,
               depositCents: reg.deposit_cents || undefined,
               eventLogoUrl: reg.logo_url || undefined,
-            });
+              _overrides: await getResolvedFields(db, 'registration_confirmation'),
+            } as any);
           }
         } catch (emailErr) {
           console.error('Post-payment confirmation email error:', emailErr);
