@@ -117,7 +117,7 @@ const statusLabel = (status: string) => {
 
 
 // --- Standard age groups & divisions ---
-const STANDARD_AGE_GROUPS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', '16u/JV', '18u/Var.'];
+const STANDARD_AGE_GROUPS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', '16u/JV', '18u/Var.', 'Girls 8U', 'Girls 10U', 'Girls 12U', 'Girls 14U', 'Girls 16U', 'Girls 19U'];
 const STANDARD_DIVISIONS = ['AA', 'Gold', 'A1', 'A2', 'Silver', 'A3', 'B1', 'Bronze', 'B2', 'B3', 'House', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3'];
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
 const TIMEZONES = ['Eastern (EST)', 'Central (CST)', 'Mountain (MST)', 'Pacific (PST)'];
