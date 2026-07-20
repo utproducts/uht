@@ -397,8 +397,9 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     let coachPhone: string | null = null;
     let linkedCoachEmail: string | null = null;
     let linkedManagerEmail: string | null = null;
+    let linkedManagerPhone: string | null = null;
     if (reg.team_id) {
-      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone, head_coach_name, head_coach_email, manager_email FROM teams WHERE id = ?')
+      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone, head_coach_name, head_coach_email, manager_email, manager_phone FROM teams WHERE id = ?')
         .bind(reg.team_id).first<any>();
       if (linkedTeam) {
         teamState = linkedTeam.state;
@@ -406,6 +407,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         coachPhone = linkedTeam.head_coach_phone;
         linkedCoachEmail = linkedTeam.head_coach_email;
         linkedManagerEmail = linkedTeam.manager_email;
+        linkedManagerPhone = linkedTeam.manager_phone;
       }
     }
     team = {
@@ -418,9 +420,10 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       head_coach_email: linkedCoachEmail || reg.email1,
       head_coach_phone: coachPhone || reg.phone || null,
       manager_email: linkedManagerEmail,
+      manager_phone: linkedManagerPhone,
     };
   } else {
-    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone, manager_email FROM teams WHERE id = ?')
+    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone, manager_email, manager_phone FROM teams WHERE id = ?')
       .bind(reg.team_id).first<any>();
   }
 
@@ -569,9 +572,11 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       let managerEmail = '';
       let managerPhone = '';
       if (isConsumer) {
+        // The registrant is the manager — fall back through second contact,
+        // the linked team's manager, then the primary registration contact.
         managerName = [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ');
-        managerEmail = reg.email2 || '';
-        managerPhone = reg.phone2 || '';
+        managerEmail = reg.email2 || team.manager_email || reg.email1 || '';
+        managerPhone = reg.phone2 || team.manager_phone || reg.phone || '';
       } else {
         // Look up team managers
         try {
@@ -586,6 +591,9 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
             managerPhone = mgrRow.phone || '';
           }
         } catch {}
+        if (!managerEmail) managerEmail = team.manager_email || '';
+        if (!managerPhone) managerPhone = team.manager_phone || '';
+        if (!managerName && (managerEmail || managerPhone)) managerName = team.manager_name || '';
       }
 
       const startDate = new Date(event.start_date + 'T12:00:00');
