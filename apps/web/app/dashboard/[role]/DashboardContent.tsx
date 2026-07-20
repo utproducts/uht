@@ -53,7 +53,7 @@ function PendingRegistrations() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   const API = 'https://uht.chad-157.workers.dev/api';
-  const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true' };
+  const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
 
   const fetchPending = async () => {
     try {
@@ -253,7 +253,7 @@ function AdminDash() {
 
   useEffect(() => {
     const API = 'https://uht.chad-157.workers.dev/api';
-    const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true' };
+    const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
     Promise.all([
       fetch(`${API}/events/admin/list?filter=upcoming`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/events/admin/list?filter=all`, { headers: devHeaders }).then(r => r.json()),

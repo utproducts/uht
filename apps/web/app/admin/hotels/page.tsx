@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
 
 function adminHeaders(extra?: Record<string, string>): Record<string, string> {
-  const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
+  const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}), ...extra };
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('uht_token');
     if (token) h['Authorization'] = `Bearer ${token}`;

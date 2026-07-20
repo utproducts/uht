@@ -131,7 +131,7 @@ export default function ScoringPage() {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Dev-Bypass': 'true',
+        'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}),
       },
     };
     if (body) {

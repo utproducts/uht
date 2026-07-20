@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
 // Dev auth header — TODO: replace with real JWT auth when login is wired up
-const devHeaders = { 'X-Dev-Bypass': 'true' };
+const devHeaders = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
 const authFetch = (url: string, opts: RequestInit = {}) =>
   fetch(url, { ...opts, headers: { ...devHeaders, ...(opts.headers || {}) } });
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
-const headers: Record<string, string> = { 'X-Dev-Bypass': 'true' };
+const headers: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
 const jsonHeaders = { ...headers, 'Content-Type': 'application/json' };
 
 interface City { id: string; name: string; state: string; }

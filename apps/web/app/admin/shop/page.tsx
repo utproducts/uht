@@ -74,7 +74,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 /* ─── Helpers ─── */
 
-const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true' };
+const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
 
 function adminHeaders(json = true): Record<string, string> {
   const h: Record<string, string> = { ...devHeaders };

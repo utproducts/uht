@@ -51,7 +51,7 @@ export default function ContactsPage() {
 
   // Fetch stats
   useEffect(() => {
-    fetch(`${API}/api/contacts/stats`, { headers: { 'X-Dev-Bypass': 'true' } })
+    fetch(`${API}/api/contacts/stats`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } })
       .then(r => r.json())
       .then(data => { if (data.success) setStats(data.data); })
       .catch(console.error);
@@ -66,7 +66,7 @@ export default function ContactsPage() {
       if (sourceFilter) params.set('source', sourceFilter);
 
       const res = await fetch(`${API}/api/contacts/all?${params}`, {
-        headers: { 'X-Dev-Bypass': 'true' },
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
       });
       const data = await res.json();
       if (data.success) {

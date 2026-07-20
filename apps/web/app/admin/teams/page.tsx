@@ -87,7 +87,7 @@ export default function TeamsPage() {
       if (seasonFilter) params.set('season', seasonFilter);
 
       const res = await fetch(`${API}/api/teams/admin/list?${params}`, {
-        headers: { 'X-Dev-Bypass': 'true' },
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
       });
       const data = await res.json();
       if (data.success) {
@@ -117,7 +117,7 @@ export default function TeamsPage() {
     setRoster([]);
     try {
       const res = await fetch(`${API}/api/teams/admin/team-roster/${teamId}`, {
-        headers: { 'X-Dev-Bypass': 'true' },
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
       });
       const data = await res.json();
       if (data.success) {
@@ -138,7 +138,7 @@ export default function TeamsPage() {
     try {
       const res = await fetch(`${API}/api/teams/admin/${deleteModal.team.id}`, {
         method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' },
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
       });
       const data = await res.json();
       if (data.success) {

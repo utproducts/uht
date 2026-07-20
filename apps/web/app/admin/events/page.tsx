@@ -7,7 +7,7 @@ const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
 const UPLOAD_API = 'https://uht.chad-157.workers.dev/api/upload/image';
 
 function adminHeaders(extra?: Record<string, string>): Record<string, string> {
-  const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...extra };
+  const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}), ...extra };
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('uht_token');
     if (token) h['Authorization'] = `Bearer ${token}`;
@@ -515,7 +515,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`${API_BASE}/admin/${event.id}/divisions`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ divisions: divisionConfigs }),
       });
       const json = await res.json();
@@ -540,8 +540,8 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'rules' && isEdit && event?.id) {
       setLoadingRules(true);
       Promise.all([
-        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/rules`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
-        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/team-ratings`, { headers: { 'X-Dev-Bypass': 'true' } }).then(r => r.json()),
+        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/rules`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } }).then(r => r.json()),
+        fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event.id}/team-ratings`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } }).then(r => r.json()),
       ]).then(([rulesJson, ratingsJson]) => {
         if (rulesJson.success) {
           setScheduleRules((rulesJson.data || []).map((r: any) => ({ ruleType: r.rule_type, ruleValue: r.rule_value, priority: r.priority })));
@@ -563,7 +563,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'directors' && isEdit && event?.id) {
       setLoadingDirectors(true);
       fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       }).then(r => r.json()).then(json => {
         if (json.success) setDirectors(json.data);
         setLoadingDirectors(false);
@@ -576,7 +576,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     if (activeTab === 'directors' && directorOptions.length === 0) {
       setLoadingDirectorOptions(true);
       fetch(`https://uht.chad-157.workers.dev/api/users?role=director`, {
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       }).then(r => r.json()).then(json => {
         if (json.success) setDirectorOptions(json.data);
         setLoadingDirectorOptions(false);
@@ -682,13 +682,13 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       const res = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ userId: selectedDirectorId, rinkIds: rinkIds || [] }),
       });
       const json = await res.json();
       if (json.success) {
         // Reload directors list
-        const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
+        const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } });
         const dirJson = await dirRes.json();
         if (dirJson.success) setDirectors(dirJson.data);
         setSelectedDirectorId('');
@@ -702,11 +702,11 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ userId, rinkIds }),
       });
       // Reload
-      const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true' } });
+      const dirRes = await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } });
       const dirJson = await dirRes.json();
       if (dirJson.success) setDirectors(dirJson.data);
     } catch (e) { /* ignore */ }
@@ -717,7 +717,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     try {
       await fetch(`https://uht.chad-157.workers.dev/api/director/events/${event.id}/directors/${userId}`, {
         method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       setDirectors(prev => prev.filter(d => d.user_id !== userId));
     } catch (e) { /* ignore */ }
@@ -763,7 +763,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
@@ -777,7 +777,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
             try {
               await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${newEventId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                 body: JSON.stringify({
                   venue_ids: Array.from(selectedVenueIds),
                   primary_venue_id: primaryVenueId,
@@ -790,7 +790,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
             try {
               await fetch(`${API_BASE}/admin/${newEventId}/divisions`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                 body: JSON.stringify({ divisions: divisionConfigs }),
               });
             } catch (_) {}
@@ -1350,7 +1350,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         try {
                           const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${event!.id}`, {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                            headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                             body: JSON.stringify({ venue_ids: Array.from(assignedVenueIds), primary_venue_id: primaryVenueIdTab }),
                           });
                           const json = await res.json() as any;
@@ -1536,7 +1536,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                         try {
                                           const res = await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks`, {
                                             method: 'POST',
-                                            headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                                            headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                                             body: JSON.stringify({ name: newRinkName.trim(), surface_size: newRinkSize || undefined }),
                                           });
                                           const json = await res.json() as any;
@@ -1568,7 +1568,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                                         <button onClick={async () => {
                                           if (!confirm(`Remove ${rink.name}?`)) return;
                                           try {
-                                            await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks/${rink.id}`, { method: 'DELETE', headers: { 'X-Dev-Bypass': 'true' } });
+                                            await fetch(`https://uht.chad-157.workers.dev/api/venues/${v.id}/rinks/${rink.id}`, { method: 'DELETE', headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } });
                                             setEventRinksMap(prev => ({ ...prev, [v.id]: (prev[v.id] || []).filter((r: any) => r.id !== rink.id) }));
                                             if (event?.venue_id === v.id) setVenueRinks(prev => prev.filter(r => r.id !== rink.id));
                                           } catch (_) {}
@@ -1610,7 +1610,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         // Save rules
                         const res = await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event!.id}/rules`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                          headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                           body: JSON.stringify({ rules: scheduleRules }),
                         });
                         // Save MHR ratings
@@ -1618,7 +1618,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         if (ratingsToSave.length > 0) {
                           await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${event!.id}/team-ratings`, {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                            headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                             body: JSON.stringify({ ratings: ratingsToSave }),
                           });
                         }
@@ -2809,7 +2809,7 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
       }
       const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
@@ -3117,7 +3117,7 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
     try {
       const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/event-venues/${eventId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({
           venue_ids: Array.from(assignedIds),
           primary_venue_id: primaryId,
@@ -3335,7 +3335,7 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
   const [filterDivision, setFilterDivision] = useState('all');
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
-  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true', 'Content-Type': 'application/json' } });
+  const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}), 'Content-Type': 'application/json' } });
 
   const loadGames = () => {
     setLoading(true);
@@ -4429,7 +4429,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                               try {
                                 const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
                                   method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+                                  headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
                                   body: JSON.stringify({ status: newStatus }),
                                 });
                                 const json = await res.json() as any;
@@ -4776,7 +4776,7 @@ export default function AdminEventsPage() {
     try {
       const res = await fetch('https://uht.chad-157.workers.dev/api/events/admin/bulk-import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ events: importRows }),
       });
       const json = await res.json();

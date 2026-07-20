@@ -58,7 +58,7 @@ interface LockerRoom {
 }
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
-const HEADERS = { 'X-Dev-Bypass': 'true', 'Content-Type': 'application/json' };
+const HEADERS = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}), 'Content-Type': 'application/json' };
 
 const statusColors: Record<string, { bg: string; text: string; badge: string }> = {
   scheduled: { bg: 'bg-slate-50', text: 'text-slate-700', badge: 'bg-slate-200' },

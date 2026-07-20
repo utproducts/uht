@@ -159,7 +159,7 @@ function VenuesPage() {
     setLoadingCities(true);
     try {
       const res = await fetch(`${API_BASE}/cities`, {
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -178,7 +178,7 @@ function VenuesPage() {
     setLoadingVenues(true);
     try {
       const res = await fetch(`${API_BASE}/cities/${cityId}/venues`, {
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -195,7 +195,7 @@ function VenuesPage() {
   const loadRinks = async (venueId: string) => {
     try {
       const res = await fetch(`${API_BASE}/venues/${venueId}/rinks`, {
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -209,7 +209,7 @@ function VenuesPage() {
   const loadLockerRooms = async (rinkId: string) => {
     try {
       const res = await fetch(`${API_BASE}/director/rinks/${rinkId}/locker-rooms`, {
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -249,7 +249,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/cities`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ name: newCityName, state: newCityState })
       });
       const json = await res.json();
@@ -272,7 +272,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/cities/${cityId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ name: editCityName, state: editCityState })
       });
       const json = await res.json();
@@ -290,7 +290,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/cities/${cityId}`, {
         method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -320,7 +320,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/venues`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({
           name: newVenueName,
           address: newVenueAddress || null,
@@ -353,7 +353,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/venues/${venueId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ name: editVenueName, address: editVenueAddress || null })
       });
       const json = await res.json();
@@ -371,7 +371,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/venues/${venueId}`, {
         method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -397,7 +397,7 @@ function VenuesPage() {
 
       const res = await fetch(`${API_BASE}/director/rinks/${rinkId}/locker-rooms`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ name: newLockerRoomName, sortOrder: lockerRoomCount })
       });
       const json = await res.json();
@@ -417,7 +417,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/director/locker-rooms/${lockerRoomId}`, {
         method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {
@@ -436,7 +436,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ name: editRinkName.trim() })
       });
       const json = await res.json();
@@ -455,7 +455,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/venues/${venueId}/rinks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify({ name: newRinkName.trim() })
       });
       const json = await res.json();
@@ -477,7 +477,7 @@ function VenuesPage() {
     try {
       const res = await fetch(`${API_BASE}/venues/${venueId}/rinks/${rinkId}`, {
         method: 'DELETE',
-        headers: { 'X-Dev-Bypass': 'true' }
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) }
       });
       const json = await res.json();
       if (json.success) {

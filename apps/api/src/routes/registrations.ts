@@ -698,7 +698,7 @@ registrationRoutes.delete('/:id', authMiddleware, requireRole('admin', 'director
     // Delete the registration
     await db.prepare(`DELETE FROM ${tableName} WHERE id = ?`).bind(regId).run();
 
-    // Audit log
+    // Audit log (non-fatal — must not fail the delete or poison the response)
     await db.prepare(`
       INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'registration.deleted', 'registration', ?, ?)
@@ -707,7 +707,7 @@ registrationRoutes.delete('/:id', authMiddleware, requireRole('admin', 'director
       user.id,
       regId,
       JSON.stringify({ source: tableName === 'event_registrations' ? 'consumer' : 'normalized' })
-    ).run();
+    ).run().catch((err: any) => console.error('Audit log insert failed (non-fatal), user:', user.id, err?.message));
 
     return c.json({ success: true, message: 'Registration deleted' });
   } catch (err: any) {

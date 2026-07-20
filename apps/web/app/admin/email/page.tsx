@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
-const devHeaders = { 'X-Dev-Bypass': 'true' };
+const devHeaders = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
 const authFetch = (url: string, opts: RequestInit = {}) =>
   fetch(url, { ...opts, headers: { ...devHeaders, ...(opts.headers || {}) } });
 

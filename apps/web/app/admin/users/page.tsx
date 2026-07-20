@@ -87,7 +87,7 @@ function CreateUserModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     setSaving(true);
     setError('');
     try {
-      const h: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' };
+      const h: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
       const tk = localStorage.getItem('uht_token');
       if (tk) h['Authorization'] = `Bearer ${tk}`;
       const res = await fetch(API_BASE, {
@@ -179,7 +179,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
     setSaving(true);
     setError('');
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
       const tk2 = localStorage.getItem('uht_token');
       if (tk2) headers['Authorization'] = `Bearer ${tk2}`;
 
@@ -263,7 +263,7 @@ function DeleteModal({ user, onClose, onConfirm }: { user: User; onClose: () => 
       const token = localStorage.getItem('uht_token');
       const res = await fetch(`${API_BASE}/${user.id}`, {
         method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true' } : { 'X-Dev-Bypass': 'true' },
+        headers: token ? { Authorization: `Bearer ${token}`, 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } : { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
       });
       const json = await res.json();
       if (json.success) {
@@ -338,7 +338,7 @@ export default function AdminUsersPage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const getHeaders = (): Record<string, string> => {
-    const h: Record<string, string> = { 'X-Dev-Bypass': 'true' };
+    const h: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('uht_token');
       if (token) h['Authorization'] = `Bearer ${token}`;

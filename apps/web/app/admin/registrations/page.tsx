@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
-const devHeaders = { 'X-Dev-Bypass': 'true' };
+const devHeaders = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
 const authFetch = (url: string, opts: RequestInit = {}) =>
   fetch(url, { ...opts, headers: { ...devHeaders, ...(opts.headers || {}) } });
 
@@ -409,6 +409,7 @@ function AddTeamModal({
   const [newCoachPhone, setNewCoachPhone] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
@@ -790,6 +791,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [notes, setNotes] = useState(reg.notes || '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -807,7 +809,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
 
       const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
         body: JSON.stringify(body),
       });
       const json = await res.json() as any;
@@ -815,10 +817,10 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
         setSaved(true);
         setTimeout(() => { onSaved(); onClose(); }, 600);
       } else {
-        alert(json.error || 'Failed to save');
+        setSaveError(json.error || 'Failed to save.');
       }
     } catch (err) {
-      alert('Failed to save changes.');
+      setSaveError('Failed to save changes. Please try again.');
     }
     setSaving(false);
   };
@@ -1058,6 +1060,9 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             className="flex-1 px-4 py-2.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">
             Cancel
           </button>
+          {saveError && (
+            <p className="w-full text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 order-first">{saveError}</p>
+          )}
           <button onClick={handleSave} disabled={saving || saved}
             className={"flex-1 px-4 py-2.5 font-bold rounded-xl text-sm transition " +
               (saved ? "bg-emerald-500 text-white" : "bg-[#003e79] hover:bg-[#002d5a] text-white") +
@@ -1097,6 +1102,9 @@ export default function AdminRegistrationsPage() {
   const [hotelModalReg, setHotelModalReg] = useState<Registration | null>(null);
   const [selectedHotelId, setSelectedHotelId] = useState('');
   const [approving, setApproving] = useState(false);
+  // UHT-branded dialogs (replaces browser alert/confirm)
+  const [dialog, setDialog] = useState<{ kind: 'success' | 'error'; title: string; message: string } | null>(null);
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; danger?: boolean; confirmLabel?: string; onConfirm: () => void } | null>(null);
   const [eventHotels, setEventHotels] = useState<EventHotel[]>([]);
 
   const loadAllRegistrations = useCallback(async () => {
@@ -1155,26 +1163,29 @@ export default function AdminRegistrationsPage() {
           await loadEventContext(reg.event_id);
           setHotelModalReg(reg);
         } else {
-          alert('This team is non-local and requires a hotel assignment.');
+          setDialog({ kind: 'error', title: 'Hotel Required', message: 'This team is non-local and requires a hotel assignment.' });
         }
         setApproving(false);
         return;
       }
       if (json.success && json.email_sent === false) {
-        alert('Team approved, but the acceptance email could not be sent. Please verify the contact email.');
+        setDialog({ kind: 'error', title: 'Approved — Email Not Sent', message: 'The team was approved, but the acceptance email could not be sent. Please verify the contact email.' });
       } else if (json.success) {
-        alert(`Team approved!${json.email_recipient ? ` Acceptance email sent to ${json.email_recipient}.` : ' Acceptance email sent.'}`);
+        setDialog({
+          kind: 'success',
+          title: 'Team Approved!',
+          message: `Acceptance email sent to ${json.email_recipient || 'the team'}${json.email_cc?.length ? `, cc: ${json.email_cc.join(', ')}` : ''}.${json.hotel_email_sent ? ' Hotel contact notified.' : ''}`,
+        });
       }
       setHotelModalReg(null);
       loadAllRegistrations();
     } catch (err) {
-      alert('Failed to approve registration.');
+      setDialog({ kind: 'error', title: 'Approval Failed', message: 'Failed to approve registration. Please try again.' });
     }
     setApproving(false);
   };
 
-  const handleReject = async (regId: string) => {
-    if (!confirm('Reject this registration?')) return;
+  const doReject = async (regId: string) => {
     await authFetch(`${API_BASE}/registrations/${regId}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1183,8 +1194,17 @@ export default function AdminRegistrationsPage() {
     loadAllRegistrations();
   };
 
-  const handleDelete = async (regId: string) => {
-    if (!confirm('Are you sure you want to DELETE this registration? This cannot be undone.')) return;
+  const handleReject = (regId: string) => {
+    setConfirmState({
+      title: 'Reject Registration?',
+      message: 'The team will be marked as rejected. You can still see them under the Rejected filter.',
+      danger: true,
+      confirmLabel: 'Reject',
+      onConfirm: () => doReject(regId),
+    });
+  };
+
+  const doDelete = async (regId: string) => {
     try {
       const res = await authFetch(`${API_BASE}/registrations/${regId}`, { method: 'DELETE' });
       const json = await res.json() as any;
@@ -1192,11 +1212,21 @@ export default function AdminRegistrationsPage() {
         loadAllRegistrations();
         setSelectedReg(null);
       } else {
-        alert(json.error || 'Failed to delete registration');
+        setDialog({ kind: 'error', title: 'Delete Failed', message: json.error || 'Failed to delete registration.' });
       }
     } catch {
-      alert('Failed to delete registration.');
+      setDialog({ kind: 'error', title: 'Delete Failed', message: 'Failed to delete registration. Please try again.' });
     }
+  };
+
+  const handleDelete = (regId: string) => {
+    setConfirmState({
+      title: 'Delete Registration?',
+      message: 'This permanently removes the registration and cannot be undone.',
+      danger: true,
+      confirmLabel: 'Delete',
+      onConfirm: () => doDelete(regId),
+    });
   };
 
   // Filters
@@ -1456,6 +1486,59 @@ export default function AdminRegistrationsPage() {
       )}
 
       {/* Hotel Selection Modal for Non-Local Teams */}
+      {/* UHT notification dialog (replaces browser alert) */}
+      {dialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setDialog(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className={`px-6 py-5 text-center ${dialog.kind === 'success' ? 'bg-gradient-to-br from-[#003e79] to-[#001f3f]' : 'bg-gradient-to-br from-[#7f1d1d] to-[#450a0a]'}`}>
+              <img src="/uht-logo.png" alt="UHT" className="h-10 mx-auto mb-2" />
+              <div className={`w-12 h-12 mx-auto mb-1 rounded-full flex items-center justify-center text-2xl ${dialog.kind === 'success' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                {dialog.kind === 'success' ? '✓' : '!'}
+              </div>
+              <h3 className="text-white font-bold text-lg">{dialog.title}</h3>
+            </div>
+            <div className="px-6 py-5 text-center">
+              <p className="text-sm text-[#3d3d3d] leading-relaxed">{dialog.message}</p>
+              <button
+                onClick={() => setDialog(null)}
+                className="mt-5 w-full py-2.5 rounded-xl bg-[#003e79] hover:bg-[#002d5a] text-white text-sm font-semibold transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UHT confirm dialog (replaces browser confirm) */}
+      {confirmState && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setConfirmState(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 text-center bg-gradient-to-br from-[#003e79] to-[#001f3f]">
+              <img src="/uht-logo.png" alt="UHT" className="h-10 mx-auto mb-2" />
+              <h3 className="text-white font-bold text-lg">{confirmState.title}</h3>
+            </div>
+            <div className="px-6 py-5 text-center">
+              <p className="text-sm text-[#3d3d3d] leading-relaxed">{confirmState.message}</p>
+              <div className="mt-5 flex gap-2">
+                <button
+                  onClick={() => setConfirmState(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-white border border-[#d2d2d7] text-[#3d3d3d] text-sm font-semibold hover:bg-[#f5f5f7] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { const fn = confirmState.onConfirm; setConfirmState(null); fn(); }}
+                  className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-colors ${confirmState.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#003e79] hover:bg-[#002d5a]'}`}
+                >
+                  {confirmState.confirmLabel || 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {hotelModalReg && (() => {
         const teamChoices: { id: string; name: string; rank: number }[] = [];
         if (hotelModalReg.hotel_choice_1_id) teamChoices.push({ id: hotelModalReg.hotel_choice_1_id, name: hotelModalReg.hotel_choice_1_name || '', rank: 1 });
