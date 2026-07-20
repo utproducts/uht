@@ -473,11 +473,12 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     }
   }
 
-  // Audit log
+  // Audit log (non-fatal — a failed audit write must never block the approval or its emails)
   await db.prepare(`
     INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
     VALUES (?, ?, 'registration.approved', 'registration', ?, ?)
-  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ team_name: team?.name, hotel_id: body.hotelId || null, source: isConsumer ? 'consumer' : 'normalized' })).run();
+  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ team_name: team?.name, hotel_id: body.hotelId || null, source: isConsumer ? 'consumer' : 'normalized' })).run()
+    .catch((err: any) => console.error('Audit log insert failed (non-fatal), user:', user.id, err?.message));
 
   // Send approval email
   let emailSent = false;
@@ -665,7 +666,8 @@ registrationRoutes.post('/:id/reject', authMiddleware, requireRole('admin', 'dir
   await db.prepare(`
     INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, details)
     VALUES (?, ?, 'registration.rejected', 'registration', ?, ?)
-  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ reason: body.reason, source: isConsumer ? 'consumer' : 'normalized' })).run();
+  `).bind(crypto.randomUUID().replace(/-/g, ''), user.id, regId, JSON.stringify({ reason: body.reason, source: isConsumer ? 'consumer' : 'normalized' })).run()
+    .catch((err: any) => console.error('Audit log insert failed (non-fatal), user:', user.id, err?.message));
 
   return c.json({ success: true, message: 'Registration rejected' });
 });

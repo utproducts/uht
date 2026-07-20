@@ -8,12 +8,12 @@ import type { Env, AuthUser, UserRole, JWTPayload } from '../types';
  * Attaches user info to context
  */
 export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
-  // Dev bypass: when no JWT is configured or X-Dev-Bypass header is present
-  // This allows admin pages to work during development before full auth is wired up
+  // Dev bypass: ONLY outside production (local wrangler dev). In production this
+  // header must never grant access — it previously gave anyone full admin.
   const devBypass = c.req.header('X-Dev-Bypass') === 'true';
   const noJwtSecret = !c.env.JWT_SECRET;
 
-  if (devBypass || noJwtSecret) {
+  if ((devBypass || noJwtSecret) && c.env.ENVIRONMENT !== 'production') {
     const mockUser: AuthUser = {
       id: 'dev-admin-001',
       email: 'admin@ultimatetournaments.com',
