@@ -1153,7 +1153,8 @@ export default function AdminRegistrationsPage() {
       const res = await authFetch(`${API_BASE}/registrations/${regId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hotelId: actualHotelId || undefined }),
+        // 'skip' = admin explicitly approving without a hotel (e.g., local team)
+        body: JSON.stringify({ hotelId: actualHotelId || undefined, skipHotel: hotelId === 'skip' || undefined }),
       });
       const json = await res.json() as any;
       if (!json.success && json.requiresHotel) {

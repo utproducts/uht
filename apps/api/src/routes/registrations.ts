@@ -368,7 +368,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
   const regId = c.req.param('id');
   const user = c.get('user');
   const db = c.env.DB;
-  const body = await c.req.json().catch(() => ({})) as { hotelId?: string };
+  const body = await c.req.json().catch(() => ({})) as { hotelId?: string; skipHotel?: boolean };
 
   // Check both tables for the registration
   let isConsumer = false;
@@ -432,8 +432,9 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     .bind(reg.event_id).first<any>();
   const hasHotels = eventHotels && eventHotels.cnt > 0;
 
-  // Non-local teams require hotel selection (applies to all registration types)
-  if (hasHotels && !body.hotelId) {
+  // Non-local teams require hotel selection (applies to all registration types).
+  // skipHotel = admin explicitly approving without one (local team, own lodging, etc.)
+  if (hasHotels && !body.hotelId && !body.skipHotel) {
     const isLocal = team && event && team.state && event.state && team.state.toUpperCase() === event.state.toUpperCase();
     if (!isLocal) {
       return c.json({ success: false, error: 'Hotel selection required for non-local teams', requiresHotel: true }, 400);
