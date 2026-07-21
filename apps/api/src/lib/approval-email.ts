@@ -26,6 +26,7 @@ interface ApprovalEmailParams {
   paymentStatus: string;
   priceCents?: number;
   hotelInfo?: HotelInfo;
+  noHotelNeeded?: boolean;
   /** Admin-customized field overrides from DB */
   _overrides?: Record<string, string>;
 }
@@ -129,7 +130,11 @@ export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { tea
             <td style="padding: 24px 32px 32px 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
               <p style="margin: 0 0 16px 0;"><strong>${bodyIntro}</strong></p>
               ${paymentSection}
-              ${hotelInfo ? buildHotelSectionHtml(hotelInfo) : ''}
+              ${hotelInfo ? buildHotelSectionHtml(hotelInfo) : params.noHotelNeeded ? `
+    <div style="margin-top: 24px; padding: 16px 20px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px;">
+      <p style="margin: 0; font-size: 15px; font-weight: 700; color: #047857;">No hotel needed: Local Team</p>
+      <p style="margin: 4px 0 0 0; font-size: 13px; color: #6e6e73;">Your team is local to this event, so no tournament hotel booking is required.</p>
+    </div>` : ''}
             </td>
           </tr>
 
@@ -249,6 +254,9 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
 
   const html = buildAcceptanceHtml(params);
   let hotelPlain = '';
+  if (!params.hotelInfo && params.noHotelNeeded) {
+    hotelPlain = '\n\nNo hotel needed: Local Team';
+  }
   if (params.hotelInfo) {
     const h = params.hotelInfo;
     const rate = h.rateDescription

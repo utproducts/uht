@@ -435,7 +435,24 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
   // Non-local teams require hotel selection (applies to all registration types).
   // skipHotel = admin explicitly approving without one (local team, own lodging, etc.)
   if (hasHotels && !body.hotelId && !body.skipHotel) {
-    const isLocal = team && event && team.state && event.state && team.state.toUpperCase() === event.state.toUpperCase();
+    // States can be stored as abbreviations or full names ("IL" vs "Illinois") — normalize both sides
+    const STATE_ABBR: Record<string, string> = {
+      ALABAMA: 'AL', ALASKA: 'AK', ARIZONA: 'AZ', ARKANSAS: 'AR', CALIFORNIA: 'CA', COLORADO: 'CO',
+      CONNECTICUT: 'CT', DELAWARE: 'DE', FLORIDA: 'FL', GEORGIA: 'GA', HAWAII: 'HI', IDAHO: 'ID',
+      ILLINOIS: 'IL', INDIANA: 'IN', IOWA: 'IA', KANSAS: 'KS', KENTUCKY: 'KY', LOUISIANA: 'LA',
+      MAINE: 'ME', MARYLAND: 'MD', MASSACHUSETTS: 'MA', MICHIGAN: 'MI', MINNESOTA: 'MN',
+      MISSISSIPPI: 'MS', MISSOURI: 'MO', MONTANA: 'MT', NEBRASKA: 'NE', NEVADA: 'NV',
+      'NEW HAMPSHIRE': 'NH', 'NEW JERSEY': 'NJ', 'NEW MEXICO': 'NM', 'NEW YORK': 'NY',
+      'NORTH CAROLINA': 'NC', 'NORTH DAKOTA': 'ND', OHIO: 'OH', OKLAHOMA: 'OK', OREGON: 'OR',
+      PENNSYLVANIA: 'PA', 'RHODE ISLAND': 'RI', 'SOUTH CAROLINA': 'SC', 'SOUTH DAKOTA': 'SD',
+      TENNESSEE: 'TN', TEXAS: 'TX', UTAH: 'UT', VERMONT: 'VT', VIRGINIA: 'VA', WASHINGTON: 'WA',
+      'WEST VIRGINIA': 'WV', WISCONSIN: 'WI', WYOMING: 'WY',
+    };
+    const norm = (s: string) => { const u = (s || '').trim().toUpperCase(); return STATE_ABBR[u] || u; };
+    const sameState = team && event && team.state && event.state && norm(team.state) === norm(event.state);
+    // The registrant can also declare local (needs_hotel = 0) during registration
+    const declaredLocal = isConsumer && reg.needs_hotel === 0 && reg.needs_hotel !== null;
+    const isLocal = sameState || declaredLocal;
     if (!isLocal) {
       return c.json({ success: false, error: 'Hotel selection required for non-local teams', requiresHotel: true }, 400);
     }
@@ -545,6 +562,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         eventCity: `${event.city}, ${event.state}`,
         paymentStatus,
         priceCents: event.price_cents || undefined,
+        noHotelNeeded: !hotelInfo && hasHotels,
         hotelInfo: hotelInfo ? {
           name: hotelInfo.hotel_name,
           address: hotelInfo.address,
