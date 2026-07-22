@@ -312,6 +312,39 @@ userRoutes.get('/export/csv',
 );
 
 // ==================
+// ADMIN: GENERATE LOGIN LINK (for users whose email blocks the magic link —
+// corporate quarantine like Proofpoint, aggressive spam filters, etc.
+// The admin copies the link and texts/DMs it to the user. 24h expiry.)
+// ==================
+userRoutes.post('/:userId/login-link',
+  authMiddleware,
+  requireRole('admin'),
+  async (c) => {
+    const userId = c.req.param('userId');
+    const db = c.env.DB;
+
+    const user = await db.prepare('SELECT id, email, is_active FROM users WHERE id = ?').bind(userId).first<any>();
+    if (!user) return c.json({ success: false, error: 'User not found' }, 404);
+    if (user.is_active === 0) return c.json({ success: false, error: 'User is deactivated' }, 400);
+
+    const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+    const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const linkId = crypto.randomUUID().replace(/-/g, '');
+
+    await db.prepare(
+      'INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)'
+    ).bind(linkId, userId, token, expiresAt).run();
+
+    const baseUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
+    return c.json({
+      success: true,
+      data: { url: `${baseUrl}/login/verify?token=${token}`, email: user.email, expires_at: expiresAt },
+    });
+  }
+);
+
+// ==================
 // GET USER BY ID
 // ==================
 userRoutes.get('/:userId',

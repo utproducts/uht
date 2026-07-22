@@ -688,6 +688,24 @@ function UserRow({ user, isExpanded, sourceInfo, onToggleExpand, onEdit, onToggl
   onToggleExpand: () => void; onEdit: () => void; onToggleStatus: () => void; onDelete: () => void;
   formatDate: (d: string) => string; formatDateLong: (d: string) => string;
 }) {
+  const [linkState, setLinkState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const copyLoginLink = async () => {
+    try {
+      const token = localStorage.getItem('uht_token');
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/users/${user.id}/login-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const json = await res.json();
+      if (json.success && json.data?.url) {
+        await navigator.clipboard.writeText(json.data.url);
+        setLinkState('copied');
+      } else {
+        setLinkState('error');
+      }
+    } catch { setLinkState('error'); }
+    setTimeout(() => setLinkState('idle'), 2500);
+  };
   return (
     <>
       <tr className={`hover:bg-[#fafafa]/80 transition cursor-pointer ${isExpanded ? 'bg-[#f8f8fa]' : ''}`}
@@ -743,6 +761,14 @@ function UserRow({ user, isExpanded, sourceInfo, onToggleExpand, onEdit, onToggl
         </td>
         <td className="px-5 py-3.5 text-right" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1">
+            <button onClick={copyLoginLink} title={linkState === 'copied' ? 'Link copied!' : linkState === 'error' ? 'Failed — try again' : 'Copy login link (for users whose email blocks the sign-in link)'}
+              className={"w-8 h-8 flex items-center justify-center rounded-lg transition " + (linkState === 'copied' ? 'bg-emerald-50 text-emerald-600' : linkState === 'error' ? 'bg-red-50 text-red-600' : 'hover:bg-emerald-50 text-[#86868b] hover:text-emerald-600')}>
+              {linkState === 'copied' ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
+              )}
+            </button>
             <button onClick={onEdit} title="Edit"
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-[#86868b] hover:text-[#003e79] transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
