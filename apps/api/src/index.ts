@@ -118,7 +118,7 @@ app.post('/api/rsvps', async (c) => {
     + '<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">'
     // Header
     + '<tr><td style="background:linear-gradient(135deg,#001d3d 0%,#003566 100%);padding:32px 40px;text-align:center;">'
-    + '<img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;">'
+    + '<img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;height:auto;margin-bottom:12px;">'
     + '<h1 style="color:#ffffff;font-size:24px;margin:0;">You&#39;re In!</h1>'
     + '</td></tr>'
     // Body
@@ -451,7 +451,7 @@ app.post('/api/coaches-meeting/send', async (c) => {
 
 <!-- Header with logo -->
 <tr><td style="background-color:#003e79;padding:28px 24px;text-align:center;">
-  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;" />
+  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;height:auto;margin-bottom:12px;" />
   <h1 style="color:#ffffff;font-size:22px;margin:0;font-weight:800;">Coach/Manager Meeting</h1>
   <p style="color:#8bb8e8;font-size:14px;margin:6px 0 0;">2026-27 Season Kickoff</p>
 </td></tr>
@@ -652,7 +652,7 @@ app.post('/api/coaches-meeting/send-reminder', async (c) => {
 <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
 
 <tr><td style="background-color:#003e79;padding:28px 24px;text-align:center;">
-  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;" />
+  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;height:auto;margin-bottom:12px;" />
   <h1 style="color:#ffffff;font-size:22px;margin:0;font-weight:800;">Meeting Reminder</h1>
   <p style="color:#8bb8e8;font-size:14px;margin:6px 0 0;">Coach/Manager Meeting &mdash; Tonight!</p>
 </td></tr>
@@ -784,7 +784,7 @@ app.post('/api/coaches-meeting/send-video', async (c) => {
 <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
 
 <tr><td style="background-color:#003e79;padding:28px 24px;text-align:center;">
-  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;" />
+  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;height:auto;margin-bottom:12px;" />
   <h1 style="color:#ffffff;font-size:22px;margin:0;font-weight:800;">Coaches Meeting</h1>
   <p style="color:#8bb8e8;font-size:14px;margin:6px 0 0;">2026-27 Season</p>
 </td></tr>
@@ -905,7 +905,7 @@ app.post('/api/coaches-meeting/send-rewards', async (c) => {
 <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
 
 <tr><td style="background:linear-gradient(135deg,#003e79 0%,#005599 50%,#0077cc 100%);padding:32px 24px;text-align:center;">
-  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;margin-bottom:12px;" />
+  <img src="https://ultimatetournaments.com/uht-logo.png" alt="UHT" width="80" style="display:inline-block;height:auto;margin-bottom:12px;" />
   <h1 style="color:#ffffff;font-size:26px;margin:0;font-weight:800;letter-spacing:-0.5px;">Thank You for Attending!</h1>
   <p style="color:#8bb8e8;font-size:15px;margin:8px 0 0;">Coaches Meeting &mdash; July 2026</p>
 </td></tr>
