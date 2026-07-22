@@ -1778,7 +1778,13 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
         // Send invite email
         if (c.env.RESEND_API) {
           const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
-          const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(coachEmail)}&role=coach`;
+          const signupUrl = existingUser
+            ? `${siteBase}/login?redirect=${encodeURIComponent('/dashboard/coach/teams')}`
+            : `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(coachEmail)}&role=coach`;
+          const ctaLabel = existingUser ? 'Sign In to Accept' : `Join ${data.name}`;
+          const introCopy = existingUser
+            ? 'You already have a UHT account — sign in, then use the team code below under My Teams &rarr; Join a Team to accept.'
+            : 'Create your account to manage your team, view schedules, and register for events.';
           try {
             await fetch('https://api.resend.com/emails', {
               method: 'POST',
@@ -1792,13 +1798,13 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                     <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" width="64" height="48" style="width: 64px; height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
-                      You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
+                      You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong>${data.name.includes(data.ageGroup) ? '' : ` (${data.ageGroup})`} on Ultimate Tournaments.
                     </p>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
-                      Create your account to manage your team, view schedules, and register for events.
+                      ${introCopy}
                     </p>
                     <a href="${signupUrl}" style="display: inline-block; background: #003e79; color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin: 24px 0;">
-                      Join ${data.name}
+                      ${ctaLabel}
                     </a>
                     <p style="color: #aeaeb2; font-size: 13px; margin-top: 24px;">
                       Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
@@ -1842,7 +1848,13 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
 
         if (c.env.RESEND_API) {
           const siteBase = c.env.SITE_URL || 'https://ultimatetournaments.com';
-          const signupUrl = `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(mgrEmail)}&role=manager`;
+          const signupUrl = existingUser
+            ? `${siteBase}/login?redirect=${encodeURIComponent('/dashboard/manager/teams')}`
+            : `${siteBase}/signup?invite=${inviteCode}&email=${encodeURIComponent(mgrEmail)}&role=manager`;
+          const ctaLabel = existingUser ? 'Sign In to Accept' : `Join ${data.name}`;
+          const introCopy = existingUser
+            ? 'You already have a UHT account — sign in, then use the team code below under My Teams &rarr; Join a Team to accept.'
+            : 'Create your account to manage your team, view schedules, and register for events.';
           try {
             await fetch('https://api.resend.com/emails', {
               method: 'POST',
@@ -1856,13 +1868,13 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                     <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" width="64" height="48" style="width: 64px; height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
-                      You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
+                      You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong>${data.name.includes(data.ageGroup) ? '' : ` (${data.ageGroup})`} on Ultimate Tournaments.
                     </p>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
-                      Create your account to manage your team, view schedules, and register for events.
+                      ${introCopy}
                     </p>
                     <a href="${signupUrl}" style="display: inline-block; background: #003e79; color: white; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin: 24px 0;">
-                      Join ${data.name}
+                      ${ctaLabel}
                     </a>
                     <p style="color: #aeaeb2; font-size: 13px; margin-top: 24px;">
                       Or use team code <strong>${inviteCode}</strong> to join from the dashboard.
