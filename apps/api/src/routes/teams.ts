@@ -1789,7 +1789,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" width="64" height="48" style="width: 64px; height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Head Coach</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.
@@ -1853,7 +1853,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                 subject: `You've been invited to join ${data.name} on Ultimate Tournaments`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                    <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" width="64" height="48" style="width: 64px; height: 48px; margin-bottom: 24px;" />
                     <h2 style="color: #1d1d1f; margin-bottom: 8px;">You've been invited!</h2>
                     <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                       You've been added as a <strong>Team Manager</strong> for <strong>${data.name}</strong> (${data.ageGroup}) on Ultimate Tournaments.

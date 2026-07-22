@@ -269,7 +269,7 @@ authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema
             subject: 'Welcome to Ultimate Tournaments!',
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                  <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                  <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" width="64" height="48" style="width: 64px; height: 48px; margin-bottom: 24px;" />
                   <h2 style="color: #1d1d1f; margin-bottom: 8px;">Welcome, ${data.firstName}!</h2>
                   <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                     Your account has been created. Click the button below to sign in for the first time.
@@ -466,7 +466,7 @@ authRoutes.post('/magic-link', rateLimit(5, 60_000), zValidator('json', magicLin
           subject: mlSubject,
           html: `
               <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" style="height: 48px; margin-bottom: 24px;" />
+                <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="UHT" width="64" height="48" style="width: 64px; height: 48px; margin-bottom: 24px;" />
                 <h2 style="color: #1d1d1f; margin-bottom: 8px;">Hi ${user.first_name},</h2>
                 <p style="color: #6e6e73; font-size: 16px; line-height: 1.5;">
                   ${mlBody}
