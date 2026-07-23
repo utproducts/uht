@@ -36,14 +36,21 @@ function VerifyContent() {
 
           setStatus('success');
 
+          // Where they were headed
+          let dest = redirectUrl || '';
+          if (!dest) {
+            const role = data.data.user.roles?.[0] || 'parent';
+            if (role === 'admin') dest = '/admin/events';
+            else if (role === 'director') dest = '/director';
+            else dest = '/dashboard/' + role;
+          }
+
           setTimeout(() => {
-            if (redirectUrl) {
-              router.push(redirectUrl);
+            if (data.data.needsPassword) {
+              // No password on the account yet — offer to set one (skippable)
+              window.location.href = '/account/set-password?welcome=1&next=' + encodeURIComponent(dest);
             } else {
-              const role = data.data.user.roles?.[0] || 'parent';
-              if (role === 'admin') router.push('/admin/events');
-              else if (role === 'director') router.push('/director');
-              else router.push('/dashboard/' + role);
+              window.location.href = dest;
             }
           }, 1500);
         } else {

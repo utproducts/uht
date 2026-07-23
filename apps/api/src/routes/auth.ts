@@ -518,13 +518,14 @@ authRoutes.post('/magic-link/verify', zValidator('json', verifyMagicLinkSchema),
   // Find the magic link
   const link = await db.prepare(`
     SELECT ml.id, ml.user_id, ml.expires_at, ml.used_at,
-           u.email, u.first_name, u.last_name, u.is_active
+           u.email, u.first_name, u.last_name, u.is_active, u.password_hash
     FROM magic_links ml
     JOIN users u ON u.id = ml.user_id
     WHERE ml.token = ?
   `).bind(token).first<{
     id: string; user_id: string; expires_at: string; used_at: string | null;
     email: string; first_name: string; last_name: string; is_active: number;
+    password_hash: string;
   }>();
 
   if (!link) {
@@ -571,6 +572,9 @@ authRoutes.post('/magic-link/verify', zValidator('json', verifyMagicLinkSchema),
     success: true,
     data: {
       token: jwtToken,
+      // True when the account has no real password yet — the web app uses this
+      // to offer password setup right after a magic-link sign-in
+      needsPassword: link.password_hash === 'magic_link' || link.password_hash === 'LOCKED-no-login-system-placeholder-account',
       user: {
         id: link.user_id,
         email: link.email,
@@ -755,13 +759,21 @@ authRoutes.post('/set-password', authMiddleware, zValidator('json', setPasswordS
     .bind(authUser.id).first<{ id: string; password_hash: string }>();
   if (!user) return c.json({ success: false, error: 'User not found' }, 404);
 
-  const hasPassword = user.password_hash !== 'magic_link';
+  const hasPassword = user.password_hash !== 'magic_link' && user.password_hash !== 'LOCKED-no-login-system-placeholder-account';
   if (hasPassword) {
     if (!currentPassword) {
-      return c.json({ success: false, error: 'current_password_required', message: 'Enter your current password to change it.' }, 400);
+      // Forgot-password flow: a magic-link sign-in within the last 15 minutes
+      // proves email ownership, so allow the reset without the old password
+      const recentMagicLink = await db.prepare(
+        "SELECT 1 FROM magic_links WHERE user_id = ? AND used_at >= datetime('now', '-15 minutes')"
+      ).bind(user.id).first();
+      if (!recentMagicLink) {
+        return c.json({ success: false, error: 'current_password_required', message: 'Enter your current password to change it.' }, 400);
+      }
+    } else {
+      const ok = await verifyPassword(currentPassword, user.password_hash);
+      if (!ok) return c.json({ success: false, error: 'Current password is incorrect' }, 401);
     }
-    const ok = await verifyPassword(currentPassword, user.password_hash);
-    if (!ok) return c.json({ success: false, error: 'Current password is incorrect' }, 401);
   }
 
   const newHash = await hashPassword(newPassword);

@@ -11,8 +11,16 @@ export default function SetPasswordPage() {
   const [confirm, setConfirm] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');
+  const [welcome, setWelcome] = useState(false);
+  const [nextUrl, setNextUrl] = useState('/dashboard');
 
   useEffect(() => {
+    // Parsed by hand (not useSearchParams) — this page is statically exported
+    const params = new URLSearchParams(window.location.search);
+    setWelcome(params.get('welcome') === '1');
+    const next = params.get('next');
+    if (next && next.startsWith('/')) setNextUrl(next);
+
     const token = localStorage.getItem('uht_token');
     if (!token) {
       setLoggedIn(false);
@@ -87,9 +95,9 @@ export default function SetPasswordPage() {
           <p className="text-sm text-[#6e6e73] mb-6">
             From now on you can sign in with your email and password — on the website and in the UHT app.
           </p>
-          <a href="/dashboard"
+          <a href={nextUrl}
             className="inline-block px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition">
-            Go to Dashboard
+            Continue
           </a>
         </div>
       </div>
@@ -100,9 +108,13 @@ export default function SetPasswordPage() {
     <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center p-6">
       <form onSubmit={handleSave} className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full">
         <img src="/uht-logo.png" alt="UHT" className="h-12 mx-auto mb-4" />
-        <h1 className="text-xl font-bold text-[#1d1d1f] text-center mb-1">Set Your Password</h1>
+        <h1 className="text-xl font-bold text-[#1d1d1f] text-center mb-1">
+          {welcome ? 'Create a Password' : 'Set Your Password'}
+        </h1>
         <p className="text-sm text-[#6e6e73] text-center mb-6">
-          Use it to sign in on the website and the UHT app.
+          {welcome
+            ? 'Next time you can sign in instantly with your email and password — no waiting for an email link. Works on the website and the UHT app.'
+            : 'Use it to sign in on the website and the UHT app.'}
         </p>
         {hasPassword && (
           <div className="mb-4">
@@ -128,6 +140,11 @@ export default function SetPasswordPage() {
           className={`w-full py-3.5 rounded-xl bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold transition ${status === 'saving' ? 'opacity-60' : ''}`}>
           {status === 'saving' ? 'Saving...' : 'Save Password'}
         </button>
+        {welcome && (
+          <a href={nextUrl} className="block text-center text-sm text-[#6e6e73] hover:text-[#1d1d1f] mt-4 transition">
+            Skip for now
+          </a>
+        )}
       </form>
     </div>
   );

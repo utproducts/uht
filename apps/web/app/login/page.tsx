@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
   const [noPassword, setNoPassword] = useState(false);
+  const [forgotFlow, setForgotFlow] = useState(false);
   const [pin, setPin] = useState(['', '', '', '']);
   const [pinError, setPinError] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
@@ -41,7 +42,14 @@ export default function LoginPage() {
       const resp = await fetch(`${API}/api/auth/magic-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), redirect: redirectUrl || undefined }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          // Forgot-password: after the emailed link signs them in, land on the
+          // set-password screen (skippable) instead of the dashboard
+          redirect: forgotFlow
+            ? `/account/set-password?welcome=1&next=${encodeURIComponent(redirectUrl || '/dashboard')}`
+            : redirectUrl || undefined,
+        }),
       });
       const data = await resp.json();
 
@@ -228,7 +236,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${loginMode === 'password' ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
               Password
             </button>
-            <button onClick={() => setLoginMode('magic')}
+            <button onClick={() => { setForgotFlow(false); setLoginMode('magic'); }}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${loginMode === 'magic' ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
               Email Link
             </button>
@@ -262,7 +270,7 @@ export default function LoginPage() {
                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl">
                   <p className="text-sm text-red-700">{pwError}</p>
                   {noPassword && (
-                    <button type="button" onClick={() => setLoginMode('magic')}
+                    <button type="button" onClick={() => { setForgotFlow(false); setLoginMode('magic'); }}
                       className="mt-2 text-sm font-semibold text-[#003e79] hover:underline">
                       Email me a sign-in link →
                     </button>
@@ -277,10 +285,10 @@ export default function LoginPage() {
                 {pwLoading ? 'Signing in...' : 'Sign In'}
               </button>
               <div className="mt-4 flex items-center justify-between text-sm">
-                <button type="button" onClick={() => setLoginMode('magic')} className="text-[#003e79] font-medium hover:underline">
+                <button type="button" onClick={() => { setForgotFlow(true); setLoginMode('magic'); }} className="text-[#003e79] font-medium hover:underline">
                   Forgot password?
                 </button>
-                <button type="button" onClick={() => setLoginMode('magic')} className="text-[#6e6e73] hover:text-[#1d1d1f] hover:underline">
+                <button type="button" onClick={() => { setForgotFlow(false); setLoginMode('magic'); }} className="text-[#6e6e73] hover:text-[#1d1d1f] hover:underline">
                   Email me a sign-in link
                 </button>
               </div>
