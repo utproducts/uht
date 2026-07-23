@@ -9,30 +9,88 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 }
 
-/* ── Org Setup Wizard ── */
-function OrgSetup({ onCreated }: { onCreated: () => void }) {
+/* ── Pending Request Card ── */
+function PendingRequestCard({ request }: { request: any }) {
+  return (
+    <div className="max-w-lg mx-auto py-12">
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] text-center">
+        <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-[#1d1d1f] mb-2">Organization Request Pending</h2>
+        <p className="text-sm text-[#86868b] mb-6">
+          Your request for <span className="font-semibold text-[#1d1d1f]">{request.name}</span>
+          {(request.city || request.state) && <> ({[request.city, request.state].filter(Boolean).join(', ')})</>} is being reviewed by the UHT team.
+          You&apos;ll get an email as soon as it&apos;s approved — then your organization dashboard will unlock automatically.
+        </p>
+        <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-full text-amber-700 text-sm font-semibold">
+          <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+          Pending Review
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Org Setup Wizard (submits an org request for admin approval) ── */
+function OrgSetup({ onSubmitted }: { onSubmitted: () => void }) {
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) { setError('Organization name is required'); return; }
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API}/api/organizations`, {
+      let user: any = {};
+      try { user = JSON.parse(localStorage.getItem('uht_user') || '{}'); } catch {}
+      const res = await fetch(`${API}/api/organizations/requests`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ name: name.trim(), city: city.trim() || undefined, state: state.trim() || undefined }),
+        body: JSON.stringify({
+          name: name.trim(),
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+          requestedByEmail: user.email || '',
+          requestedByName: [user.first_name, user.last_name].filter(Boolean).join(' ') || undefined,
+          requestedByUserId: user.id || undefined,
+        }),
       });
       const json = await res.json();
-      if (json.success) onCreated();
-      else setError(json.error || 'Failed to create organization');
+      if (json.success) setSubmitted(true);
+      else setError(json.error || 'Failed to submit request');
     } catch { setError('Network error'); }
     finally { setLoading(false); }
   };
+
+  if (submitted) {
+    return (
+      <div className="max-w-lg mx-auto py-12">
+        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] text-center">
+          <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-[#1d1d1f] mb-2">Request Submitted!</h2>
+          <p className="text-sm text-[#86868b] mb-6">
+            We received your request for <span className="font-semibold text-[#1d1d1f]">{name.trim()}</span>.
+            The UHT team will review it and email you once it&apos;s approved — usually within one business day.
+          </p>
+          <button onClick={onSubmitted}
+            className="px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors">
+            Got It
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-lg mx-auto py-12">
@@ -43,7 +101,7 @@ function OrgSetup({ onCreated }: { onCreated: () => void }) {
           </svg>
         </div>
         <h2 className="text-xl font-bold text-[#1d1d1f] text-center mb-2">Set Up Your Organization</h2>
-        <p className="text-sm text-[#86868b] text-center mb-6">Create your organization to manage all your teams, coaches, and registrations in one place.</p>
+        <p className="text-sm text-[#86868b] text-center mb-6">Tell us about your organization. The UHT team reviews every request — once approved, you&apos;ll manage all your teams, coaches, and registrations in one place.</p>
 
         {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
 
@@ -67,7 +125,7 @@ function OrgSetup({ onCreated }: { onCreated: () => void }) {
           </div>
           <button onClick={handleCreate} disabled={loading}
             className="w-full py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50">
-            {loading ? 'Creating...' : 'Create Organization'}
+            {loading ? 'Submitting...' : 'Submit for Approval'}
           </button>
         </div>
       </div>
@@ -80,6 +138,7 @@ export default function OrgDashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState<any>(null);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -88,10 +147,17 @@ export default function OrgDashboard() {
       const json = await res.json();
       if (json.success) {
         if (!json.data.org) {
+          // No org yet — check for an outstanding org request before showing the setup form
+          try {
+            const reqRes = await fetch(`${API}/api/organizations/requests/mine`, { headers: getAuthHeaders() });
+            const reqJson = await reqRes.json();
+            setPendingRequest(reqJson.data && reqJson.data.status === 'pending' ? reqJson.data : null);
+          } catch { setPendingRequest(null); }
           setNeedsSetup(true);
         } else {
           setData(json.data);
           setNeedsSetup(false);
+          setPendingRequest(null);
         }
       }
     } catch {}
@@ -105,7 +171,8 @@ export default function OrgDashboard() {
   }
 
   if (needsSetup) {
-    return <OrgSetup onCreated={loadDashboard} />;
+    if (pendingRequest) return <PendingRequestCard request={pendingRequest} />;
+    return <OrgSetup onSubmitted={loadDashboard} />;
   }
 
   if (!data) return <div />;

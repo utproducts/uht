@@ -10,6 +10,8 @@ interface Org {
   state: string;
   team_count?: number;
   is_active?: number;
+  owner_email?: string;
+  owner_name?: string;
 }
 
 interface CsvRow {
@@ -107,6 +109,39 @@ export default function OrganizationsPage() {
   const [requests, setRequests] = useState<OrgRequest[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [denyingId, setDenyingId] = useState<string | null>(null);
+
+  // Owner assignment
+  const [ownerEditId, setOwnerEditId] = useState<number | null>(null);
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerSaving, setOwnerSaving] = useState(false);
+  const [ownerError, setOwnerError] = useState('');
+
+  const handleSetOwner = async (org: Org) => {
+    if (!ownerEmail.trim()) return;
+    setOwnerSaving(true);
+    setOwnerError('');
+    try {
+      const res = await fetch(`${API}/organizations/admin/${org.id}/owner`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ email: ownerEmail.trim() }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setOrgs(prev => prev.map(o => o.id === org.id
+          ? { ...o, owner_email: json.data.owner_email, owner_name: json.data.owner_name }
+          : o));
+        setOwnerEditId(null);
+        setOwnerEmail('');
+      } else {
+        setOwnerError(json.error || 'Failed to set owner');
+      }
+    } catch {
+      setOwnerError('Network error');
+    } finally {
+      setOwnerSaving(false);
+    }
+  };
 
   const fetchOrgs = async () => {
     try {
@@ -637,6 +672,7 @@ export default function OrganizationsPage() {
                         <tr className="bg-[#f5f5f7]">
                           <th className="text-left px-5 py-2 font-medium text-[#6e6e73] text-xs">Name</th>
                           <th className="text-left px-5 py-2 font-medium text-[#6e6e73] text-xs w-24">Teams</th>
+                          <th className="text-left px-5 py-2 font-medium text-[#6e6e73] text-xs">Owner</th>
                           <th className="text-right px-5 py-2 font-medium text-[#6e6e73] text-xs w-20"></th>
                         </tr>
                       </thead>
@@ -646,6 +682,38 @@ export default function OrganizationsPage() {
                             <td className="px-5 py-2.5 text-[#1d1d1f]">{org.name}</td>
                             <td className="px-5 py-2.5 text-[#6e6e73]">
                               {org.team_count != null ? org.team_count : '—'}
+                            </td>
+                            <td className="px-5 py-2.5 text-[#6e6e73]">
+                              {ownerEditId === org.id ? (
+                                <span className="flex items-center gap-1.5">
+                                  <input
+                                    autoFocus
+                                    value={ownerEmail}
+                                    onChange={(e) => { setOwnerEmail(e.target.value); setOwnerError(''); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSetOwner(org); if (e.key === 'Escape') { setOwnerEditId(null); setOwnerEmail(''); setOwnerError(''); } }}
+                                    placeholder="owner@email.com"
+                                    className="border border-[#d2d2d7] rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:border-[#003e79]"
+                                  />
+                                  <button onClick={() => handleSetOwner(org)} disabled={ownerSaving}
+                                    className="text-xs text-white bg-[#003e79] hover:bg-[#002d5a] rounded-lg px-2 py-1 font-medium disabled:opacity-50">
+                                    {ownerSaving ? '...' : 'Save'}
+                                  </button>
+                                  <button onClick={() => { setOwnerEditId(null); setOwnerEmail(''); setOwnerError(''); }}
+                                    className="text-xs text-[#6e6e73] hover:text-[#1d1d1f] px-1">✕</button>
+                                  {ownerError && <span className="text-xs text-red-500">{ownerError}</span>}
+                                </span>
+                              ) : org.owner_email ? (
+                                <button onClick={() => { setOwnerEditId(org.id); setOwnerEmail(org.owner_email || ''); setOwnerError(''); }}
+                                  className="text-left hover:text-[#003e79] transition-colors" title="Click to change owner">
+                                  {org.owner_name || org.owner_email}
+                                  <span className="block text-[11px] text-[#a1a1a6]">{org.owner_email}</span>
+                                </button>
+                              ) : (
+                                <button onClick={() => { setOwnerEditId(org.id); setOwnerEmail(''); setOwnerError(''); }}
+                                  className="text-xs text-[#003e79] hover:text-[#002d5a] font-medium">
+                                  + Set Owner
+                                </button>
+                              )}
                             </td>
                             <td className="px-5 py-2.5 text-right">
                               <button

@@ -232,7 +232,9 @@ organizationRoutes.post('/quick-create', authMiddleware, async (c) => {
   await db.prepare(`
     INSERT INTO organizations (id, name, city, state, owner_id, is_active, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
-  `).bind(orgId, trimmedName, body.city || null, body.state || null, user.id).run();
+  `).bind(orgId, trimmedName, body.city || null, body.state || null, 'system_migration_user').run();
+  // NOTE: quick-create is for labeling teams with an org — it deliberately does NOT
+  // grant the creator ownership. Real ownership goes through org requests/admin.
 
   return c.json({ success: true, data: { id: orgId, name: trimmedName, city: body.city || null, state: body.state || null }, existed: false }, 201);
 });
@@ -240,18 +242,60 @@ organizationRoutes.post('/quick-create', authMiddleware, async (c) => {
 // ==================
 // Admin: List ALL organizations (ordered by state, name) with team counts
 // ==================
-organizationRoutes.get('/admin/list', async (c) => {
+organizationRoutes.get('/admin/list', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   const result = await db.prepare(`
     SELECT o.*,
-      (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
+      (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count,
+      u.email as owner_email,
+      TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) as owner_name
     FROM organizations o
+    LEFT JOIN users u ON u.id = o.owner_id AND o.owner_id NOT IN ('chad-owner-001', 'system_migration_user')
     WHERE o.is_active = 1
     ORDER BY o.state ASC, o.name ASC
   `).all();
 
   return c.json({ success: true, data: result.results });
+});
+
+// ==================
+// Admin: Assign/reassign the owner of an organization by user email
+// ==================
+organizationRoutes.put('/admin/:id/owner', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const orgId = c.req.param('id');
+  const body = await c.req.json<{ email: string }>().catch(() => ({ email: '' }));
+
+  if (!body.email || !body.email.trim()) {
+    return c.json({ error: 'Email is required' }, 400);
+  }
+
+  const org = await db.prepare('SELECT id, name FROM organizations WHERE id = ?').bind(orgId).first<any>();
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  const newOwner = await db.prepare('SELECT id, email, first_name, last_name FROM users WHERE LOWER(email) = LOWER(?)')
+    .bind(body.email.trim()).first<any>();
+  if (!newOwner) return c.json({ error: 'No UHT account found with that email. They need to sign up first.' }, 404);
+
+  await db.prepare(`UPDATE organizations SET owner_id = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(newOwner.id, orgId).run();
+  await db.prepare(`
+    INSERT OR IGNORE INTO organization_admins (organization_id, user_id, created_at)
+    VALUES (?, ?, datetime('now'))
+  `).bind(orgId, newOwner.id).run().catch((err: any) => console.error('org_admins insert failed (non-fatal):', err?.message));
+  await db.prepare(`
+    INSERT OR IGNORE INTO user_roles (user_id, role, created_at)
+    VALUES (?, 'organization', datetime('now'))
+  `).bind(newOwner.id).run().catch((err: any) => console.error('user_roles insert failed (non-fatal):', err?.message));
+
+  return c.json({
+    success: true,
+    data: {
+      owner_email: newOwner.email,
+      owner_name: [newOwner.first_name, newOwner.last_name].filter(Boolean).join(' '),
+    },
+  });
 });
 
 // ==================
@@ -336,6 +380,23 @@ organizationRoutes.post('/admin/migrate-requests', authMiddleware, requireRole('
 // ==================
 // Public: Request a new organization be created (for fall coaches)
 // ==================
+// The signed-in user's latest organization request (org dashboard pending state)
+organizationRoutes.get('/requests/mine', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  try {
+    const row = await db.prepare(`
+      SELECT id, name, city, state, status, created_at, created_org_id
+      FROM organization_requests
+      WHERE requested_by_user_id = ? OR requested_by_email = ?
+      ORDER BY created_at DESC LIMIT 1
+    `).bind(user.id, (user.email || '').toLowerCase()).first();
+    return c.json({ success: true, data: row || null });
+  } catch {
+    return c.json({ success: true, data: null });
+  }
+});
+
 organizationRoutes.post('/requests', async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{
@@ -344,6 +405,7 @@ organizationRoutes.post('/requests', async (c) => {
     state?: string;
     requestedByEmail: string;
     requestedByName?: string;
+    requestedByUserId?: string;
   }>();
 
   if (!body.name || !body.name.trim()) {
@@ -375,15 +437,16 @@ organizationRoutes.post('/requests', async (c) => {
   const id = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
-    INSERT INTO organization_requests (id, name, city, state, requested_by_email, requested_by_name, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO organization_requests (id, name, city, state, requested_by_email, requested_by_name, requested_by_user_id, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
   `).bind(
     id,
     body.name.trim(),
     body.city || null,
     body.state || null,
     body.requestedByEmail.trim().toLowerCase(),
-    body.requestedByName || null
+    body.requestedByName || null,
+    body.requestedByUserId || null
   ).run();
 
   return c.json({ success: true, id }, 201);
@@ -392,7 +455,7 @@ organizationRoutes.post('/requests', async (c) => {
 // ==================
 // Admin: List all organization requests
 // ==================
-organizationRoutes.get('/admin/requests', async (c) => {
+organizationRoutes.get('/admin/requests', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
   // Auto-create table if it doesn't exist
@@ -462,6 +525,20 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
     INSERT INTO organizations (id, name, city, state, owner_id, is_active, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
   `).bind(orgId, request.name, request.city || null, request.state || null, ownerId).run();
+
+  // Grant the requester real ownership (organization_admins) and the org role,
+  // but only when the owner is the requester (not the approving admin fallback)
+  const ownerIsRequester = ownerId !== 'chad-owner-001' && ownerId !== admin?.id;
+  if (ownerIsRequester || (request.requested_by_user_id && ownerId === request.requested_by_user_id)) {
+    await db.prepare(`
+      INSERT OR IGNORE INTO organization_admins (organization_id, user_id, created_at)
+      VALUES (?, ?, datetime('now'))
+    `).bind(orgId, ownerId).run().catch((err: any) => console.error('org_admins insert failed (non-fatal):', err?.message));
+    await db.prepare(`
+      INSERT OR IGNORE INTO user_roles (user_id, role, created_at)
+      VALUES (?, 'organization', datetime('now'))
+    `).bind(ownerId).run().catch((err: any) => console.error('user_roles insert failed (non-fatal):', err?.message));
+  }
 
   // Update the request
   await db.prepare(`
