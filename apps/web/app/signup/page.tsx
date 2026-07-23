@@ -19,6 +19,8 @@ export default function SignupPage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [teamsLinked, setTeamsLinked] = useState(0);
@@ -41,16 +43,19 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !email || !selectedRole) return;
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
 
     setStep('sending');
     setError('');
 
     try {
-      const resp = await fetch(`${API}/api/auth/signup`, {
+      const resp = await fetch(`${API}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
+          password,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           phone: phone.trim() || undefined,
@@ -59,11 +64,17 @@ export default function SignupPage() {
       });
       const data = await resp.json();
 
-      if (data.success) {
-        setTeamsLinked(data.data?.teamsLinked || 0);
-        setStep('done');
-      } else if (data.error === 'email_exists') {
-        setError(data.message || 'An account with this email already exists.');
+      if (data.success && data.data?.token) {
+        // Signed in immediately — no email round-trip needed
+        localStorage.setItem('uht_token', data.data.token);
+        localStorage.setItem('uht_user', JSON.stringify(data.data.user));
+        localStorage.setItem('uht_role', data.data.user.roles?.[0] || selectedRole);
+        const role = data.data.user.roles?.[0] || selectedRole;
+        if (role === 'admin') window.location.href = '/admin/events';
+        else if (role === 'director') window.location.href = '/director';
+        else window.location.href = '/dashboard/' + role;
+      } else if (String(data.error || '').includes('already exists')) {
+        setError('An account with this email already exists. Try signing in instead — if you never set a password, use "Email me a sign-in link" on the login page.');
         setStep('info');
       } else {
         setError(data.message || data.error || 'Something went wrong. Please try again.');
@@ -249,6 +260,29 @@ export default function SignupPage() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="(555) 555-5555"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Password *</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    required
+                    minLength={8}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Confirm Password *</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your password"
+                    required
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm"
                   />
                 </div>

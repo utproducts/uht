@@ -987,8 +987,10 @@ export default function CreateTeamPage() {
                       </div>
                     )}
 
-                    {/* Bottom link — spring: create new, fall: request one */}
-                    {orgSearch.length >= 2 && !orgSearching && orgResults.length > 0 && (
+                    {/* Bottom link — spring: create new, fall: request one.
+                        Always visible under the list (not only after typing) so users
+                        browsing a state's orgs can request theirs. */}
+                    {!orgSearching && !(orgSearch.length >= 2 && orgResults.length === 0) && (
                       seasonType === 'fall' ? (
                         <button onClick={() => { setRequestingOrg(true); setReqOrgName(orgSearch); setOrgResults([]); }}
                           className="mt-2 w-full text-center py-2.5 text-sm text-amber-600 hover:text-amber-700 font-medium hover:bg-amber-50 rounded-xl transition flex items-center justify-center gap-1.5">

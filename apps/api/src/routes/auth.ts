@@ -18,7 +18,7 @@ const registerSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   phone: z.string().optional(),
-  role: z.enum(['organization', 'coach', 'manager', 'parent']).default('parent'),
+  role: z.enum(['organization', 'coach', 'manager', 'parent', 'referee', 'scorekeeper']).default('parent'),
 });
 
 authRoutes.post('/register', rateLimit(5, 60_000), zValidator('json', registerSchema), async (c) => {
@@ -339,6 +339,15 @@ authRoutes.post('/login', rateLimit(10, 60_000), zValidator('json', loginSchema)
 
   if (!user || !user.is_active) {
     return c.json({ success: false, error: 'Invalid email or password' }, 401);
+  }
+
+  // Accounts created via email-link signup have no password yet
+  if (user.password_hash === 'magic_link' || user.password_hash === 'LOCKED-no-login-system-placeholder-account') {
+    return c.json({
+      success: false,
+      error: 'no_password',
+      message: 'Your account was created with email sign-in and has no password yet. Use "Email me a sign-in link" below, then set a password in your account.',
+    }, 403);
   }
 
   // Verify password
@@ -725,6 +734,41 @@ authRoutes.post('/add-role', authMiddleware, zValidator('json', addRoleSchema), 
 // ==================
 const setPinSchema = z.object({
   pin: z.string().length(4).regex(/^\d{4}$/, 'PIN must be 4 digits'),
+});
+
+// ==================
+// SET / CHANGE PASSWORD
+// Email-link accounts (password_hash = 'magic_link') can set one without a
+// current password; accounts that already have one must provide it.
+// ==================
+const setPasswordSchema = z.object({
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+  currentPassword: z.string().optional(),
+});
+
+authRoutes.post('/set-password', authMiddleware, zValidator('json', setPasswordSchema), async (c) => {
+  const authUser = c.get('user');
+  const { newPassword, currentPassword } = c.req.valid('json');
+  const db = c.env.DB;
+
+  const user = await db.prepare('SELECT id, password_hash FROM users WHERE id = ?')
+    .bind(authUser.id).first<{ id: string; password_hash: string }>();
+  if (!user) return c.json({ success: false, error: 'User not found' }, 404);
+
+  const hasPassword = user.password_hash !== 'magic_link';
+  if (hasPassword) {
+    if (!currentPassword) {
+      return c.json({ success: false, error: 'current_password_required', message: 'Enter your current password to change it.' }, 400);
+    }
+    const ok = await verifyPassword(currentPassword, user.password_hash);
+    if (!ok) return c.json({ success: false, error: 'Current password is incorrect' }, 401);
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(newHash, user.id).run();
+
+  return c.json({ success: true, message: 'Password saved. You can now sign in with your email and password.' });
 });
 
 authRoutes.put('/set-pin',

@@ -10,7 +10,11 @@ export default function LoginPage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
-  const [loginMode, setLoginMode] = useState<'magic' | 'pin'>('magic');
+  const [loginMode, setLoginMode] = useState<'password' | 'magic' | 'pin'>('password');
+  const [password, setPassword] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const [noPassword, setNoPassword] = useState(false);
   const [pin, setPin] = useState(['', '', '', '']);
   const [pinError, setPinError] = useState('');
   const [pinLoading, setPinLoading] = useState(false);
@@ -56,6 +60,44 @@ export default function LoginPage() {
     } catch {
       setStatus('error');
       setErrorMsg('Unable to connect. Please try again.');
+    }
+  };
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setPwLoading(true);
+    setPwError('');
+    setNoPassword(false);
+    try {
+      const resp = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+      const data = await resp.json();
+      if (data.success && data.data) {
+        localStorage.setItem('uht_token', data.data.token);
+        localStorage.setItem('uht_user', JSON.stringify(data.data.user));
+        localStorage.setItem('uht_role', data.data.user.roles?.[0] || 'parent');
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+        } else {
+          const role = data.data.user.roles?.[0] || 'parent';
+          if (role === 'admin') window.location.href = '/admin/events';
+          else if (role === 'director') window.location.href = '/director';
+          else window.location.href = '/dashboard/' + role;
+        }
+      } else if (data.error === 'no_password') {
+        setNoPassword(true);
+        setPwError(data.message || 'Your account uses email sign-in. Use "Email me a sign-in link" to log in, then set a password.');
+      } else {
+        setPwError(data.message || data.error || 'Invalid email or password.');
+      }
+    } catch {
+      setPwError('Unable to connect. Please try again.');
+    } finally {
+      setPwLoading(false);
     }
   };
 
@@ -176,12 +218,16 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-semibold text-[#1d1d1f]">Sign in</h1>
             <p className="mt-2 text-[#6e6e73]">
-              {loginMode === 'magic' ? 'Enter your email to receive a login link' : 'Enter your email and 4-digit PIN'}
+              {loginMode === 'password' ? 'Enter your email and password' : loginMode === 'magic' ? 'Enter your email to receive a login link' : 'Enter your email and 4-digit PIN'}
             </p>
           </div>
 
           {/* Mode Toggle */}
           <div className="flex bg-white rounded-xl border border-gray-200 p-1 mb-6">
+            <button onClick={() => setLoginMode('password')}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${loginMode === 'password' ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
+              Password
+            </button>
             <button onClick={() => setLoginMode('magic')}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${loginMode === 'magic' ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
               Email Link
@@ -192,7 +238,54 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {loginMode === 'magic' ? (
+          {loginMode === 'password' ? (
+            <form onSubmit={handlePasswordLogin} className="bg-white rounded-2xl shadow-soft p-8">
+              <label className="block text-sm font-medium text-[#1d1d1f] mb-2">Email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setPwError(''); }}
+                placeholder="you@example.com"
+                required
+                className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:border-[#003e79] focus:ring-2 focus:ring-[#003e79]/20 outline-none transition text-[#1d1d1f]"
+              />
+              <label className="block text-sm font-medium text-[#1d1d1f] mb-2 mt-4">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setPwError(''); }}
+                placeholder="Your password"
+                required
+                className="w-full px-4 py-3 rounded-xl border border-[#d2d2d7] focus:border-[#003e79] focus:ring-2 focus:ring-[#003e79]/20 outline-none transition text-[#1d1d1f]"
+              />
+              {pwError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <p className="text-sm text-red-700">{pwError}</p>
+                  {noPassword && (
+                    <button type="button" onClick={() => setLoginMode('magic')}
+                      className="mt-2 text-sm font-semibold text-[#003e79] hover:underline">
+                      Email me a sign-in link →
+                    </button>
+                  )}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={pwLoading}
+                className={`mt-6 w-full py-3.5 rounded-xl bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold transition ${pwLoading ? 'opacity-60' : ''}`}
+              >
+                {pwLoading ? 'Signing in...' : 'Sign In'}
+              </button>
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <button type="button" onClick={() => setLoginMode('magic')} className="text-[#003e79] font-medium hover:underline">
+                  Forgot password?
+                </button>
+                <button type="button" onClick={() => setLoginMode('magic')} className="text-[#6e6e73] hover:text-[#1d1d1f] hover:underline">
+                  Email me a sign-in link
+                </button>
+              </div>
+            </form>
+          ) : loginMode === 'magic' ? (
             <form onSubmit={handleMagicLink} className="bg-white rounded-2xl shadow-soft p-8">
               <div>
                 <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Email address</label>
