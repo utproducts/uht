@@ -118,7 +118,7 @@ function OrgSetup({ onSubmitted }: { onSubmitted: () => void }) {
                 className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79]" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">State</label>
+              <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">State / Province</label>
               <input value={state} onChange={e => setState(e.target.value)} placeholder="CT" maxLength={2}
                 className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] uppercase" />
             </div>

@@ -129,6 +129,11 @@ const STATE_MAP: Record<string, string> = {
   OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',
   TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',
   WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',
+  // Canadian provinces/territories
+  AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',
+  NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',
+  NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',
+  SK:'Saskatchewan',YT:'Yukon',
 };
 
 organizationRoutes.get('/search', async (c) => {

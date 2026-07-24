@@ -48,6 +48,14 @@ const US_STATES = [
   { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' },
   { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
+  // Canadian provinces/territories
+  { code: 'AB', name: 'Alberta' }, { code: 'BC', name: 'British Columbia' },
+  { code: 'MB', name: 'Manitoba' }, { code: 'NB', name: 'New Brunswick' },
+  { code: 'NL', name: 'Newfoundland and Labrador' }, { code: 'NS', name: 'Nova Scotia' },
+  { code: 'NT', name: 'Northwest Territories' }, { code: 'NU', name: 'Nunavut' },
+  { code: 'ON', name: 'Ontario' }, { code: 'PE', name: 'Prince Edward Island' },
+  { code: 'QC', name: 'Quebec' }, { code: 'SK', name: 'Saskatchewan' },
+  { code: 'YT', name: 'Yukon' },
 ];
 
 export default function CreateTeamScreen({

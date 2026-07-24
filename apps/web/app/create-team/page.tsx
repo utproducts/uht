@@ -7,6 +7,14 @@ const FALLBACK_AGE_GROUPS = ['Mite (8U)', 'Squirt (10U)', 'Pee Wee (12U)', 'Bant
 const FALLBACK_DIVISIONS = ['AA', 'Gold', 'A1', 'A2', 'Silver', 'B1', 'Bronze', 'House'];
 const FALLBACK_TEAM_TYPES = ['Draft (no cuts)', 'Tournament team', 'Tryout', 'Regular Season Team', 'Added Players'];
 
+const CA_PROVINCES = [
+  { code: 'AB', name: 'Alberta' }, { code: 'BC', name: 'British Columbia' }, { code: 'MB', name: 'Manitoba' },
+  { code: 'NB', name: 'New Brunswick' }, { code: 'NL', name: 'Newfoundland and Labrador' }, { code: 'NS', name: 'Nova Scotia' },
+  { code: 'NT', name: 'Northwest Territories' }, { code: 'NU', name: 'Nunavut' }, { code: 'ON', name: 'Ontario' },
+  { code: 'PE', name: 'Prince Edward Island' }, { code: 'QC', name: 'Quebec' }, { code: 'SK', name: 'Saskatchewan' },
+  { code: 'YT', name: 'Yukon' },
+];
+
 const US_STATES = [
   { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
   { code: 'AR', name: 'Arkansas' }, { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
@@ -766,8 +774,13 @@ export default function CreateTeamPage() {
                   <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">State <span className="text-red-500">*</span></label>
                   <select value={form.state} onChange={e => { set('state', e.target.value); clearOrg(); }}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm bg-white">
-                    <option value="">Select your state...</option>
-                    {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    <option value="">Select your state/province...</option>
+                    <optgroup label="United States">
+                      {US_STATES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    </optgroup>
+                    <optgroup label="Canada">
+                      {CA_PROVINCES.map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    </optgroup>
                   </select>
                 </div>
                 )}

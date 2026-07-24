@@ -80,6 +80,8 @@ const US_STATES = [
   'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
   'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
   'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY',
+  // Canadian provinces/territories
+  'AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT',
 ];
 
 export default function OrganizationsPage() {
