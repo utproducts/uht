@@ -278,14 +278,19 @@ export default function EventsPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  // Build dynamic season options from actual data
+  // Build dynamic season options from actual data.
+  // Only offer seasons that still have upcoming events — fully-past seasons
+  // (e.g. last year) shouldn't be browsable here.
   const availableSeasons = useMemo(() => {
     const bucketCounts = new Map<string, number>();
+    const bucketHasUpcoming = new Map<string, boolean>();
     for (const ev of allEvents) {
       const bucket = seasonBucket(ev.season);
       bucketCounts.set(bucket, (bucketCounts.get(bucket) || 0) + 1);
+      if (!isEventPast(ev)) bucketHasUpcoming.set(bucket, true);
     }
     return Array.from(bucketCounts.entries())
+      .filter(([bucket]) => bucketHasUpcoming.get(bucket))
       .sort((a, b) => b[0].localeCompare(a[0])) // newest first
       .map(([bucket, count]) => ({ bucket, count }));
   }, [allEvents]);
@@ -451,7 +456,6 @@ export default function EventsPage() {
               }`}
             >
               Past Events
-              <span className="ml-1.5 text-xs opacity-70">({past.length})</span>
             </button>
           </div>
 
