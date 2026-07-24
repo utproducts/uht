@@ -102,9 +102,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (typeof window === 'undefined') return {};
     try { return JSON.parse(localStorage.getItem('uht_admin_nav_open') || '{}'); } catch { return {}; }
   });
-  const toggleSection = (title: string) => {
+  const toggleSection = (title: string, currentlyOpen: boolean) => {
     setOpenSections(prev => {
-      const next = { ...prev, [title]: !prev[title] };
+      const next = { ...prev, [title]: !currentlyOpen };
       try { localStorage.setItem('uht_admin_nav_open', JSON.stringify(next)); } catch {}
       return next;
     });
@@ -167,12 +167,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               const sectionHasActive = section.items.some(
                 (item) => pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href))
               );
-              const isOpen = !section.title || sectionHasActive || openSections[section.title];
+              // Explicit user choice wins; otherwise default open for the active section
+              const isOpen = !section.title
+                || (section.title in openSections ? !!openSections[section.title] : sectionHasActive);
               return (
                 <div key={section.title || 'top'} className={si === 0 ? '' : 'mt-2'}>
                   {section.title && (
                     <button
-                      onClick={() => toggleSection(section.title!)}
+                      onClick={() => toggleSection(section.title!, isOpen)}
                       className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors"
                     >
                       {section.title}
