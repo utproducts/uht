@@ -335,3 +335,124 @@ contactRoutes.get('/lists', authMiddleware, requireRole('admin', 'director'), as
   const result = await db.prepare('SELECT * FROM contact_lists ORDER BY name ASC').all();
   return c.json({ success: true, data: result.results });
 });
+
+// ──────────────────────────────────────
+// PUBLIC: Contact Us form submission
+// ──────────────────────────────────────
+const INTEREST_LABELS: Record<string, string> = {
+  general: 'General Inquiries',
+  tournament: 'Tournament Information',
+  sponsorship: 'Sponsorship Opportunities',
+  ice: 'Ice Time Booking',
+  careers: 'Careers',
+};
+
+const submitSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().max(200),
+  phone: z.string().max(50).optional(),
+  interest: z.string().max(50).optional(),
+  message: z.string().min(1).max(5000),
+  // Honeypot — real users never see or fill this field
+  website: z.string().optional(),
+});
+
+async function ensureSubmissionsTable(db: D1Database) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS contact_submissions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT,
+      interest TEXT,
+      message TEXT NOT NULL,
+      status TEXT DEFAULT 'new',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `).run();
+}
+
+contactRoutes.post('/submit', zValidator('json', submitSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  // Bot filled the honeypot — pretend success, store nothing, send nothing
+  if (data.website) {
+    return c.json({ success: true, data: { id: crypto.randomUUID().replace(/-/g, '') } }, 201);
+  }
+
+  const interestLabel = INTEREST_LABELS[data.interest || ''] || data.interest || 'General Inquiries';
+  const id = crypto.randomUUID().replace(/-/g, '');
+
+  try {
+    await ensureSubmissionsTable(db);
+    await db.prepare(`
+      INSERT INTO contact_submissions (id, name, email, phone, interest, message)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, data.name, data.email, data.phone || null, interestLabel, data.message).run();
+  } catch (err) {
+    console.error('Contact submission insert error:', err);
+    return c.json({ success: false, error: 'Failed to submit message' }, 500);
+  }
+
+  // Notify the team — failure here shouldn't fail the submission (it's stored)
+  try {
+    if (c.env.RESEND_API) {
+      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${c.env.RESEND_API}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'UHT Website <noreply@ultimatetournaments.com>',
+          to: ['registration@ultimatetournaments.com'],
+          reply_to: data.email,
+          subject: `New Contact Form Submission — ${data.name}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px"><h2 style="color:#003e79">New Contact Form Submission</h2><table style="width:100%;border-collapse:collapse;margin:16px 0"><tr><td style="padding:8px;font-weight:bold;color:#666;width:110px">Name:</td><td style="padding:8px">${esc(data.name)}</td></tr><tr><td style="padding:8px;font-weight:bold;color:#666">Email:</td><td style="padding:8px"><a href="mailto:${esc(data.email)}">${esc(data.email)}</a></td></tr><tr><td style="padding:8px;font-weight:bold;color:#666">Phone:</td><td style="padding:8px">${esc(data.phone || '—')}</td></tr><tr><td style="padding:8px;font-weight:bold;color:#666">Interested In:</td><td style="padding:8px">${esc(interestLabel)}</td></tr></table><div style="background:#f5f5f7;border-radius:8px;padding:16px;margin:16px 0"><p style="margin:0;white-space:pre-wrap">${esc(data.message)}</p></div><p style="color:#999;font-size:12px;margin-top:20px">Sent from the ultimatetournaments.com contact page. View all submissions in the admin dashboard under Inquiries.</p></div>`,
+        }),
+      });
+      if (!emailRes.ok) {
+        console.error('Contact submission email failed:', emailRes.status, await emailRes.text());
+      } else {
+        console.log('Contact submission email sent for', id);
+      }
+    }
+  } catch (err) {
+    console.error('Contact submission email error:', err);
+  }
+
+  return c.json({ success: true, data: { id } }, 201);
+});
+
+// ──────────────────────────────────────
+// ADMIN: List contact form submissions
+// ──────────────────────────────────────
+contactRoutes.get('/submissions', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  await ensureSubmissionsTable(db);
+  const status = c.req.query('status');
+  const sql = status
+    ? 'SELECT * FROM contact_submissions WHERE status = ? ORDER BY created_at DESC'
+    : 'SELECT * FROM contact_submissions ORDER BY created_at DESC';
+  const result = status
+    ? await db.prepare(sql).bind(status).all()
+    : await db.prepare(sql).all();
+  return c.json({ success: true, data: result.results });
+});
+
+// ──────────────────────────────────────
+// ADMIN: Update submission status
+// ──────────────────────────────────────
+const submissionStatusSchema = z.object({
+  status: z.enum(['new', 'replied', 'archived', 'spam']),
+});
+
+contactRoutes.patch('/submissions/:id', authMiddleware, requireRole('admin'), zValidator('json', submissionStatusSchema), async (c) => {
+  const id = c.req.param('id');
+  const { status } = c.req.valid('json');
+  const db = c.env.DB;
+  await db.prepare('UPDATE contact_submissions SET status = ? WHERE id = ?').bind(status, id).run();
+  return c.json({ success: true });
+});

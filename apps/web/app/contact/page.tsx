@@ -2,14 +2,34 @@
 
 import { useState } from 'react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
+
 export default function ContactPage() {
   const [form, setForm] = useState({ name: '', phone: '', email: '', interest: 'general', message: '' });
+  const [honeypot, setHoneypot] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: wire to API / Resend
-    setSubmitted(true);
+    if (sending) return;
+    setSending(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/api/contacts/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, website: honeypot }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to send');
+      setSubmitted(true);
+    } catch {
+      setError('Something went wrong sending your message. Please try again, or email us directly.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -138,6 +158,20 @@ export default function ContactPage() {
                   <p className="text-sm text-[#6e6e73] mb-6">Fill out the form below and we&apos;ll respond within 24 hours.</p>
 
                   <form onSubmit={handleSubmit} className="space-y-5">
+                    {/* Honeypot — hidden from real users, bots auto-fill it */}
+                    <div aria-hidden="true" className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden">
+                      <label>
+                        Website
+                        <input
+                          type="text"
+                          name="website"
+                          tabIndex={-1}
+                          autoComplete="off"
+                          value={honeypot}
+                          onChange={e => setHoneypot(e.target.value)}
+                        />
+                      </label>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Name</label>
@@ -201,11 +235,16 @@ export default function ContactPage() {
                       />
                     </div>
 
+                    {error && (
+                      <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{error}</p>
+                    )}
+
                     <button
                       type="submit"
-                      className="w-full py-3 rounded-full bg-[#003e79] text-white font-semibold text-base hover:bg-[#002d5a] active:scale-[0.98] transition-all shadow-md"
+                      disabled={sending}
+                      className="w-full py-3 rounded-full bg-[#003e79] text-white font-semibold text-base hover:bg-[#002d5a] active:scale-[0.98] transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Send Message
+                      {sending ? 'Sending…' : 'Send Message'}
                     </button>
                   </form>
                 </>

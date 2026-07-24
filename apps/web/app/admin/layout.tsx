@@ -38,6 +38,7 @@ const ADMIN_NAV = [
   { name: 'Organizations', href: '/admin/organizations' },
   { name: 'Users', href: '/admin/users' },
   { name: 'Contacts', href: '/admin/contacts' },
+  { name: 'Inquiries', href: '/admin/inquiries' },
   { name: 'Registrations', href: '/admin/registrations' },
   { name: 'Schedule Builder', href: '/admin/schedule' },
   { name: 'Financials', href: '/admin/financials' },
