@@ -86,7 +86,8 @@ export default function OrganizationsPage() {
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [collapsedStates, setCollapsedStates] = useState<Set<string>>(new Set());
+  // States start collapsed; this tracks the ones the admin has opened
+  const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
 
   // CSV upload
   const [csvRows, setCsvRows] = useState<CsvRow[] | null>(null);
@@ -246,7 +247,7 @@ export default function OrganizationsPage() {
   }, [filtered]);
 
   const toggleState = (state: string) => {
-    setCollapsedStates((prev) => {
+    setExpandedStates((prev) => {
       const next = new Set(prev);
       if (next.has(state)) next.delete(state);
       else next.add(state);
@@ -639,7 +640,8 @@ export default function OrganizationsPage() {
       ) : (
         <div className="space-y-3">
           {grouped.map(([state, stateOrgs]) => {
-            const isCollapsed = collapsedStates.has(state);
+            // Searching expands everything so matches are visible immediately
+            const isCollapsed = search.trim() ? false : !expandedStates.has(state);
             return (
               <div
                 key={state}
