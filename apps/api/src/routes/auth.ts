@@ -25,6 +25,11 @@ authRoutes.post('/register', rateLimit(5, 60_000), zValidator('json', registerSc
   const data = c.req.valid('json');
   const db = c.env.DB;
 
+  // Coaches and managers must have a phone on file for tournament contact
+  if ((data.role === 'coach' || data.role === 'manager') && !data.phone?.trim()) {
+    return c.json({ success: false, error: 'phone_required', message: 'A phone number is required for coach and manager accounts.' }, 400);
+  }
+
   // Check if email already exists
   const existing = await db.prepare('SELECT id FROM users WHERE email = ?').bind(data.email.toLowerCase()).first();
   if (existing) {
@@ -146,6 +151,11 @@ const signupSchema = z.object({
 authRoutes.post('/signup', rateLimit(5, 60_000), zValidator('json', signupSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
+
+  // Coaches and managers must have a phone on file for tournament contact
+  if ((data.role === 'coach' || data.role === 'manager') && !data.phone?.trim()) {
+    return c.json({ success: false, error: 'phone_required', message: 'A phone number is required for coach and manager accounts.' }, 400);
+  }
 
   // Check if email already exists
   const existing = await db.prepare('SELECT id FROM users WHERE email = ?').bind(data.email.toLowerCase()).first();

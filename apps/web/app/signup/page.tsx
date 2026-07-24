@@ -43,6 +43,9 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName || !lastName || !email || !selectedRole) return;
+    const phoneRequired = selectedRole === 'coach' || selectedRole === 'manager';
+    if (phoneRequired && !phone.trim()) { setError('A phone number is required for coach and manager accounts.'); return; }
+    if (phoneRequired && phone.replace(/\D/g, '').length < 10) { setError('Please enter a valid phone number.'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
     if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
 
@@ -241,13 +244,16 @@ export default function SignupPage() {
 
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">
-                    Phone Number <span className="text-[#aeaeb2] font-normal">(optional)</span>
+                    {selectedRole === 'coach' || selectedRole === 'manager'
+                      ? <>Phone Number *</>
+                      : <>Phone Number <span className="text-[#aeaeb2] font-normal">(optional)</span></>}
                   </label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="(555) 555-5555"
+                    required={selectedRole === 'coach' || selectedRole === 'manager'}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm"
                   />
                 </div>
