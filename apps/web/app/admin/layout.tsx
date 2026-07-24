@@ -97,6 +97,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [userName, setUserName] = useState(readUserName);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
+  // Collapsible sidebar sections — remembered across visits
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {};
+    try { return JSON.parse(localStorage.getItem('uht_admin_nav_open') || '{}'); } catch { return {}; }
+  });
+  const toggleSection = (title: string) => {
+    setOpenSections(prev => {
+      const next = { ...prev, [title]: !prev[title] };
+      try { localStorage.setItem('uht_admin_nav_open', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const refreshName = useCallback(() => setUserName(readUserName()), []);
 
   useEffect(() => {
@@ -150,32 +163,51 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Sidebar */}
         <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0">
           <nav>
-            {ADMIN_NAV_SECTIONS.map((section, si) => (
-              <div key={section.title || 'top'} className={si === 0 ? '' : 'mt-5'}>
-                {section.title && (
-                  <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">{section.title}</p>
-                )}
-                <div className="space-y-0.5">
-                  {section.items.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href));
-                    return (
-                      <a
-                        key={item.name}
-                        href={item.href}
-                        className={
-                          "block px-3 py-1.5 rounded-lg text-sm transition-colors " +
-                          (isActive
-                            ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
-                            : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
-                        }
+            {ADMIN_NAV_SECTIONS.map((section, si) => {
+              const sectionHasActive = section.items.some(
+                (item) => pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href))
+              );
+              const isOpen = !section.title || sectionHasActive || openSections[section.title];
+              return (
+                <div key={section.title || 'top'} className={si === 0 ? '' : 'mt-2'}>
+                  {section.title && (
+                    <button
+                      onClick={() => toggleSection(section.title!)}
+                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors"
+                    >
+                      {section.title}
+                      <svg
+                        className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
                       >
-                        {item.name}
-                      </a>
-                    );
-                  })}
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  )}
+                  {isOpen && (
+                    <div className="space-y-0.5 mt-0.5">
+                      {section.items.map((item) => {
+                        const isActive = pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href));
+                        return (
+                          <a
+                            key={item.name}
+                            href={item.href}
+                            className={
+                              "block px-3 py-1.5 rounded-lg text-sm transition-colors " +
+                              (isActive
+                                ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
+                                : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
+                            }
+                          >
+                            {item.name}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </nav>
         </aside>
 
