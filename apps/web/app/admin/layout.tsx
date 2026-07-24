@@ -31,31 +31,64 @@ function checkAdminAccess(): boolean {
   return false;
 }
 
-const ADMIN_NAV = [
-  { name: 'Overview', href: '/dashboard/admin' },
-  { name: 'Events', href: '/admin/events' },
-  { name: 'Teams', href: '/admin/teams' },
-  { name: 'Organizations', href: '/admin/organizations' },
-  { name: 'Users', href: '/admin/users' },
-  { name: 'Contacts', href: '/admin/contacts' },
-  { name: 'Inquiries', href: '/admin/inquiries' },
-  { name: 'Registrations', href: '/admin/registrations' },
-  { name: 'Schedule Builder', href: '/admin/schedule' },
-  { name: 'Financials', href: '/admin/financials' },
-  { name: 'Coupon Codes', href: '/admin/coupons' },
-  { name: 'Shop', href: '/admin/shop' },
-  { name: 'Referees', href: '/admin/referees' },
-  { name: 'Communications', href: '/admin/comms' },
-  { name: 'Email Campaigns', href: '/admin/email' },
-  { name: 'Reports', href: '/admin/reports' },
-  { name: 'Hotels', href: '/admin/hotels' },
-  { name: 'Venues', href: '/admin/venues' },
-  { name: 'Sponsors', href: '/admin/sponsors' },
-  { name: 'Notifications', href: '/admin/notifications' },
-  { name: 'RSVPs', href: '/admin/rsvps' },
-  { name: 'FAQs', href: '/admin/faqs' },
-  { name: 'Book Ice', href: '/admin/ice' },
-  { name: 'Settings', href: '/admin/settings' },
+const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: string }[] }[] = [
+  {
+    title: null,
+    items: [{ name: 'Overview', href: '/dashboard/admin' }],
+  },
+  {
+    title: 'Tournaments',
+    items: [
+      { name: 'Events', href: '/admin/events' },
+      { name: 'Registrations', href: '/admin/registrations' },
+      { name: 'Schedule Builder', href: '/admin/schedule' },
+      { name: 'Referees', href: '/admin/referees' },
+      { name: 'RSVPs', href: '/admin/rsvps' },
+    ],
+  },
+  {
+    title: 'People',
+    items: [
+      { name: 'Teams', href: '/admin/teams' },
+      { name: 'Organizations', href: '/admin/organizations' },
+      { name: 'Users', href: '/admin/users' },
+      { name: 'Contacts', href: '/admin/contacts' },
+      { name: 'Inquiries', href: '/admin/inquiries' },
+    ],
+  },
+  {
+    title: 'Money',
+    items: [
+      { name: 'Financials', href: '/admin/financials' },
+      { name: 'Coupon Codes', href: '/admin/coupons' },
+      { name: 'Shop', href: '/admin/shop' },
+      { name: 'Sponsors', href: '/admin/sponsors' },
+    ],
+  },
+  {
+    title: 'Communication',
+    items: [
+      { name: 'Communications', href: '/admin/comms' },
+      { name: 'Email Campaigns', href: '/admin/email' },
+      { name: 'Notifications', href: '/admin/notifications' },
+    ],
+  },
+  {
+    title: 'Locations',
+    items: [
+      { name: 'Hotels', href: '/admin/hotels' },
+      { name: 'Venues', href: '/admin/venues' },
+      { name: 'Book Ice', href: '/admin/ice' },
+    ],
+  },
+  {
+    title: 'Site',
+    items: [
+      { name: 'Reports', href: '/admin/reports' },
+      { name: 'FAQs', href: '/admin/faqs' },
+      { name: 'Settings', href: '/admin/settings' },
+    ],
+  },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -116,25 +149,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0">
-          <p className="px-3 mb-3 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">Admin</p>
-          <nav className="space-y-0.5">
-            {ADMIN_NAV.map((item) => {
-              const isActive = pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href));
-              return (
-                <a
-                  key={item.name}
-                  href={item.href}
-                  className={
-                    "block px-3 py-2 rounded-lg text-sm transition-colors " +
-                    (isActive
-                      ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
-                      : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
-                  }
-                >
-                  {item.name}
-                </a>
-              );
-            })}
+          <nav>
+            {ADMIN_NAV_SECTIONS.map((section, si) => (
+              <div key={section.title || 'top'} className={si === 0 ? '' : 'mt-5'}>
+                {section.title && (
+                  <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">{section.title}</p>
+                )}
+                <div className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const isActive = pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href));
+                    return (
+                      <a
+                        key={item.name}
+                        href={item.href}
+                        className={
+                          "block px-3 py-1.5 rounded-lg text-sm transition-colors " +
+                          (isActive
+                            ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
+                            : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
+                        }
+                      >
+                        {item.name}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </aside>
 
