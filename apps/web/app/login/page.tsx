@@ -177,12 +177,6 @@ export default function LoginPage() {
   if (status === 'sent') {
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
 
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md text-center">
@@ -214,12 +208,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-      <nav className="bg-navy-700 px-6 py-4">
-        <a href="/" className="flex items-center gap-3">
-          <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-          <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-        </a>
-      </nav>
 
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">

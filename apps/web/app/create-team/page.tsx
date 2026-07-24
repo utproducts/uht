@@ -487,12 +487,6 @@ export default function CreateTeamPage() {
 
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md">
             <div className="text-center mb-6">
@@ -606,16 +600,12 @@ export default function CreateTeamPage() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-      <nav className="bg-navy-700 px-6 py-4 flex items-center justify-between">
-        <a href="/" className="flex items-center gap-3">
-          <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-          <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-        </a>
-        <a href={backLink.href} className="text-white/70 text-sm hover:text-white transition-colors flex items-center gap-1">
+      <div className="px-6 pt-4">
+        <a href={backLink.href} className="text-[#6e6e73] text-sm hover:text-[#1d1d1f] transition-colors inline-flex items-center gap-1">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           {backLink.label}
         </a>
-      </nav>
+      </div>
 
       {/* Duplicate Team Warning Modal */}
       {showDuplicateWarning && duplicateTeam && (

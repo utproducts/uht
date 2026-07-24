@@ -169,12 +169,6 @@ export default function RosterClaimPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <svg className="w-10 h-10 text-[#003e79] animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24">
@@ -192,12 +186,6 @@ export default function RosterClaimPage() {
   if (error || !team) {
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center max-w-md">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -220,12 +208,6 @@ export default function RosterClaimPage() {
   if (mode === 'success' && successData) {
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md text-center">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
@@ -282,12 +264,6 @@ export default function RosterClaimPage() {
   if (mode === 'claim' && selectedPlayer) {
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
         <div className="flex-1 flex items-start justify-center p-6 pt-8">
           <div className="w-full max-w-lg">
             <button onClick={() => setMode('roster')} className="text-sm text-[#003e79] hover:underline mb-4 flex items-center gap-1">
@@ -369,12 +345,6 @@ export default function RosterClaimPage() {
   if (mode === 'register') {
     return (
       <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-        <nav className="bg-navy-700 px-6 py-4">
-          <a href="/" className="flex items-center gap-3">
-            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-            <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-          </a>
-        </nav>
         <div className="flex-1 flex items-start justify-center p-6 pt-8">
           <div className="w-full max-w-lg">
             <button onClick={() => setMode('roster')} className="text-sm text-[#003e79] hover:underline mb-4 flex items-center gap-1">
@@ -482,12 +452,6 @@ export default function RosterClaimPage() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
-      <nav className="bg-navy-700 px-6 py-4">
-        <a href="/" className="flex items-center gap-3">
-          <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-          <span className="text-white font-semibold text-lg">Ultimate Tournaments</span>
-        </a>
-      </nav>
 
       <div className="flex-1 flex items-start justify-center p-4 sm:p-6 pt-6 sm:pt-8">
         <div className="w-full max-w-2xl">
