@@ -132,7 +132,9 @@ export default function InquiriesPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <a
-                    href={`mailto:${s.email}?subject=${encodeURIComponent('Re: Your message to Ultimate Tournaments')}`}
+                    href={`https://mail.google.com/mail/u/registration@ultimatetournaments.com/?view=cm&fs=1&to=${encodeURIComponent(s.email)}&su=${encodeURIComponent('Re: Your message to Ultimate Tournaments')}&body=${encodeURIComponent(`Hi ${s.name.split(' ')[0]},\n\n\n\n—\nYour original message:\n${s.message}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => s.status === 'new' && setStatus(s.id, 'replied')}
                     className="px-3 py-1.5 rounded-full text-xs font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] transition-colors"
                   >
