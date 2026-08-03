@@ -1,0 +1,32 @@
+name: EAS OTA Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Update message'
+        required: true
+        default: 'Bug fixes and improvements'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: npm install
+
+      - name: Push OTA Update
+        working-directory: apps/mobile
+        run: eas update --branch production --message "${{ inputs.message }}" --non-interactive
