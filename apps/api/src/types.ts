@@ -17,6 +17,7 @@ export interface Env {
   CLAUDE_API_KEY: string;
   JWT_SECRET: string;
   USA_HOCKEY_API_KEY: string;
+  ADMIN_SQL_KEY?: string;
 
   // Config
   ENVIRONMENT: string;
