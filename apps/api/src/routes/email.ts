@@ -682,6 +682,22 @@ emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('a
     recipientName: 'Coach Johnson',
     priceCents: 89500,
     depositCents: 35000,
+    // Sample hotel block so the preview/test shows the hotel + hotel contact section
+    hotelInfo: {
+      name: 'Sample Tournament Hotel',
+      address: '123 Main Street',
+      city: 'Chicago',
+      state: 'IL',
+      phone: '3125551200',
+      rateDescription: '$129/night (team rate)',
+      bookingUrl: 'https://ultimatetournaments.com',
+      bookingCode: 'UHT2026',
+      bookingCutoffDate: '2026-05-01',
+      contactName: 'Jamie Rivera',
+      contactTitle: 'Sales Manager',
+      contactPhone: '3125551234',
+      contactEmail: 'jamie.rivera@samplehotel.com',
+    },
   };
 
   const vars = {
@@ -760,6 +776,22 @@ emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), z
     headCoachName: 'Mike Johnson',
     priceCents: 89500,
     depositCents: 35000,
+    // Sample hotel block so the preview/test shows the hotel + hotel contact section
+    hotelInfo: {
+      name: 'Sample Tournament Hotel',
+      address: '123 Main Street',
+      city: 'Chicago',
+      state: 'IL',
+      phone: '3125551200',
+      rateDescription: '$129/night (team rate)',
+      bookingUrl: 'https://ultimatetournaments.com',
+      bookingCode: 'UHT2026',
+      bookingCutoffDate: '2026-05-01',
+      contactName: 'Jamie Rivera',
+      contactTitle: 'Sales Manager',
+      contactPhone: '3125551234',
+      contactEmail: 'jamie.rivera@samplehotel.com',
+    },
   };
 
   let result: { success: boolean; error?: string } = { success: false, error: 'Unknown template' };

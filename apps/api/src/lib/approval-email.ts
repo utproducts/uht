@@ -11,6 +11,11 @@ interface HotelInfo {
   bookingCode?: string;
   pricePerNight?: number;
   bookingCutoffDate?: string;
+  /** Hotel sales/group contact entered on the hotel record */
+  contactName?: string;
+  contactTitle?: string;
+  contactPhone?: string;
+  contactEmail?: string;
 }
 
 interface ApprovalEmailParams {
@@ -190,6 +195,15 @@ function paymentOptionsHtml(): string {
   `;
 }
 
+/** Format a 10-digit US number as (312) 555-1234; pass anything else through */
+function formatPhone(raw?: string): string {
+  if (!raw) return '';
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return raw;
+}
+
 function buildHotelSectionHtml(hotel: HotelInfo): string {
   // price_per_night is stored in cents; prefer the human rate description when present
   const priceStr = hotel.rateDescription
@@ -206,7 +220,7 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
 
   let details = '';
   if (hotel.address) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">${hotel.address}${locationParts ? `, ${locationParts}` : ''}</p>`;
-  if (hotel.phone) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Phone: ${hotel.phone}</p>`;
+  if (hotel.phone) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Phone: ${formatPhone(hotel.phone)}</p>`;
   if (priceStr) details += `<p style="margin: 4px 0; font-size: 13px; color: #003e79; font-weight: 600;">${priceStr}</p>`;
   if (bookingCode) details += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Booking Code: <strong>${bookingCode}</strong></p>`;
   if (hotel.bookingCutoffDate) {
@@ -222,12 +236,37 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
       </p>`;
   }
 
+  // Hotel sales/group contact — who the team calls to book or ask questions
+  let contactBlock = '';
+  const hasContact = hotel.contactName || hotel.contactPhone || hotel.contactEmail;
+  if (hasContact) {
+    let contactLines = '';
+    if (hotel.contactName) {
+      const titlePart = hotel.contactTitle ? `<span style="color: #6e6e73; font-weight: 400;"> · ${hotel.contactTitle}</span>` : '';
+      contactLines += `<p style="margin: 4px 0; font-size: 14px; color: #1d1d1f; font-weight: 600;">${hotel.contactName}${titlePart}</p>`;
+    }
+    if (hotel.contactPhone) {
+      const digits = hotel.contactPhone.replace(/[^0-9+]/g, '');
+      contactLines += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Phone: <a href="tel:${digits}" style="color: #003e79; text-decoration: none;">${formatPhone(hotel.contactPhone)}</a></p>`;
+    }
+    if (hotel.contactEmail) {
+      contactLines += `<p style="margin: 4px 0; font-size: 13px; color: #6e6e73;">Email: <a href="mailto:${hotel.contactEmail}" style="color: #00ccff; text-decoration: none;">${hotel.contactEmail}</a></p>`;
+    }
+    contactBlock = `
+      <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #bae6fd;">
+        <p style="margin: 0 0 6px 0; font-size: 12px; color: #6e6e73; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Hotel Contact</p>
+        ${contactLines}
+        <p style="margin: 8px 0 0 0; font-size: 12px; color: #86868b;">Contact them directly with any room block or booking questions.</p>
+      </div>`;
+  }
+
   return `
     <div style="margin-top: 24px; padding: 20px; background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px;">
       <h3 style="color: #003e79; margin: 0 0 8px 0; font-size: 16px;">Hotel Information</h3>
       <p style="margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: #1d1d1f;">${hotel.name}</p>
       ${details}
       ${bookingBtn}
+      ${contactBlock}
       <p style="margin: 12px 0 0 0; font-size: 12px; color: #86868b;"><em>All out-of-state teams are required to stay at the designated tournament hotel.</em></p>
     </div>
   `;
@@ -267,7 +306,7 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
     const codeIsUrl = h.bookingCode?.startsWith('http');
     hotelPlain = `\n\nHotel: ${h.name}`;
     if (h.address) hotelPlain += `\nAddress: ${h.address}`;
-    if (h.phone) hotelPlain += `\nPhone: ${h.phone}`;
+    if (h.phone) hotelPlain += `\nPhone: ${formatPhone(h.phone)}`;
     if (rate) hotelPlain += `\nRate: ${rate}`;
     if (h.bookingCode && !codeIsUrl) hotelPlain += `\nBooking Code: ${h.bookingCode}`;
     const plainUrl = h.bookingUrl || (codeIsUrl ? h.bookingCode : undefined);
@@ -275,6 +314,12 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
     if (h.bookingCutoffDate) {
       const cutoff = new Date(h.bookingCutoffDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       hotelPlain += `\nMUST BOOK YOUR HOTEL ROOM BY: ${cutoff}`;
+    }
+    if (h.contactName || h.contactPhone || h.contactEmail) {
+      hotelPlain += `\n\nHotel Contact:`;
+      if (h.contactName) hotelPlain += `\n${h.contactName}${h.contactTitle ? ` - ${h.contactTitle}` : ''}`;
+      if (h.contactPhone) hotelPlain += `\nPhone: ${formatPhone(h.contactPhone)}`;
+      if (h.contactEmail) hotelPlain += `\nEmail: ${h.contactEmail}`;
     }
   }
   const plainText = `Congratulations! Your registration for ${eventName} has been accepted.\n\nTeam: ${teamName}\nAge Group: ${ageGroup}${divisionText}\nEvent: ${eventName}\nDate: ${eventDate}\nCity: ${eventCity}${hotelPlain}\n\nPlease send us your approved hockey roster as soon as it's ready.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;

@@ -1552,6 +1552,25 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
           .map(e => e.toLowerCase()))]
           .filter(e => e !== (toEmail || '').toLowerCase());
 
+        // Look up the assigned hotel so the acceptance carries hotel + contact info.
+        // hotel_assigned holds an event_hotels id on newer records and a hotel name on
+        // legacy ones — match on either. Contact falls back to the master hotel record.
+        let hotelRow: any = null;
+        if (updated.hotel_assigned) {
+          hotelRow = await db.prepare(`
+            SELECT eh.*,
+              COALESCE(eh.contact_name, mh.contact_name) as contact_name,
+              COALESCE(eh.contact_title, mh.contact_title) as contact_title,
+              COALESCE(eh.contact_phone, mh.contact_phone) as contact_phone,
+              COALESCE(eh.contact_email, mh.contact_email) as contact_email,
+              COALESCE(eh.phone, mh.phone) as phone
+            FROM event_hotels eh
+            LEFT JOIN master_hotels mh ON mh.id = eh.master_hotel_id
+            WHERE eh.event_id = ? AND (eh.id = ? OR eh.hotel_name = ?)
+            LIMIT 1
+          `).bind(existing.event_id, updated.hotel_assigned, updated.hotel_assigned).first<any>().catch(() => null);
+        }
+
         const emailResult = await sendApprovalEmail(c.env, {
           recipientEmail: toEmail,
           recipientName: updated.manager_first_name
@@ -1566,6 +1585,22 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
           eventCity: `${event.city}, ${event.state}`,
           paymentStatus: updated.payment_status || 'unpaid',
           priceCents: event.price_cents || undefined,
+          hotelInfo: hotelRow ? {
+            name: hotelRow.hotel_name,
+            address: hotelRow.address,
+            city: hotelRow.city,
+            state: hotelRow.state,
+            phone: hotelRow.phone,
+            rateDescription: hotelRow.rate_description,
+            bookingUrl: hotelRow.booking_url,
+            bookingCode: hotelRow.booking_code,
+            pricePerNight: hotelRow.price_per_night,
+            bookingCutoffDate: hotelRow.booking_cutoff_date,
+            contactName: hotelRow.contact_name,
+            contactTitle: hotelRow.contact_title,
+            contactPhone: hotelRow.contact_phone,
+            contactEmail: hotelRow.contact_email,
+          } : undefined,
           _overrides: await getResolvedFields(db,
             updated.payment_status === 'paid' ? 'approval_paid'
               : updated.payment_status === 'partial' ? 'approval_deposit'

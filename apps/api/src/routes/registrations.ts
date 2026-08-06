@@ -461,7 +461,19 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
   // If hotel provided, look it up for the email
   let hotelInfo: any = null;
   if (body.hotelId) {
-    hotelInfo = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(body.hotelId).first<any>();
+    // Pull the event hotel, falling back to the master hotel record for contact
+    // details when the event-level row was created without them.
+    hotelInfo = await db.prepare(`
+      SELECT eh.*,
+        COALESCE(eh.contact_name, mh.contact_name) as contact_name,
+        COALESCE(eh.contact_title, mh.contact_title) as contact_title,
+        COALESCE(eh.contact_phone, mh.contact_phone) as contact_phone,
+        COALESCE(eh.contact_email, mh.contact_email) as contact_email,
+        COALESCE(eh.phone, mh.phone) as phone
+      FROM event_hotels eh
+      LEFT JOIN master_hotels mh ON mh.id = eh.master_hotel_id
+      WHERE eh.id = ?
+    `).bind(body.hotelId).first<any>();
     if (isConsumer) {
       try { await db.prepare("ALTER TABLE event_registrations ADD COLUMN hotel_assigned TEXT").run(); } catch (_) {}
       await db.prepare('UPDATE event_registrations SET hotel_assigned = ? WHERE id = ?').bind(body.hotelId, regId).run();
@@ -574,6 +586,10 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
           bookingCode: hotelInfo.booking_code,
           pricePerNight: hotelInfo.price_per_night,
           bookingCutoffDate: hotelInfo.booking_cutoff_date,
+          contactName: hotelInfo.contact_name,
+          contactTitle: hotelInfo.contact_title,
+          contactPhone: hotelInfo.contact_phone,
+          contactEmail: hotelInfo.contact_email,
         } : undefined,
         _overrides: approvalOverrides,
       } as any);
