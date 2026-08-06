@@ -18,6 +18,15 @@ interface HotelConfirmationParams {
   managerPhone?: string;
 }
 
+/** Format a 10-digit US number as (312) 555-1234; pass anything else through */
+function formatPhone(raw?: string): string {
+  if (!raw) return '';
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return raw;
+}
+
 function buildHotelConfirmationHtml(params: HotelConfirmationParams): string {
   const { hotelContactName, hotelName, teamName, ageGroup, division, eventName, eventDate, eventCity,
     coachName, coachEmail, coachPhone, managerName, managerEmail, managerPhone } = params;
@@ -33,7 +42,7 @@ function buildHotelConfirmationHtml(params: HotelConfirmationParams): string {
           <p style="margin: 0 0 4px 0; font-size: 11px; color: #86868b; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Head Coach</p>
           ${coachName ? `<p style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">${coachName}</p>` : ''}
           ${coachEmail ? `<p style="margin: 2px 0; font-size: 14px;"><a href="mailto:${coachEmail}" style="color: #003e79; text-decoration: none;">${coachEmail}</a></p>` : ''}
-          ${coachPhone ? `<p style="margin: 2px 0; font-size: 14px; color: #6e6e73;">${coachPhone}</p>` : ''}
+          ${coachPhone ? `<p style="margin: 2px 0; font-size: 14px; color: #6e6e73;">${formatPhone(coachPhone)}</p>` : ''}
         </td>
       </tr>`;
   }
@@ -47,7 +56,7 @@ function buildHotelConfirmationHtml(params: HotelConfirmationParams): string {
           <p style="margin: 0 0 4px 0; font-size: 11px; color: #86868b; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Team Manager</p>
           ${managerName ? `<p style="margin: 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">${managerName}</p>` : ''}
           ${managerEmail ? `<p style="margin: 2px 0; font-size: 14px;"><a href="mailto:${managerEmail}" style="color: #003e79; text-decoration: none;">${managerEmail}</a></p>` : ''}
-          ${managerPhone ? `<p style="margin: 2px 0; font-size: 14px; color: #6e6e73;">${managerPhone}</p>` : ''}
+          ${managerPhone ? `<p style="margin: 2px 0; font-size: 14px; color: #6e6e73;">${formatPhone(managerPhone)}</p>` : ''}
         </td>
       </tr>`;
   }
@@ -147,10 +156,10 @@ export async function sendHotelConfirmationEmail(env: Env, params: HotelConfirma
   let plainText = `Hi ${params.hotelContactName || 'Hotel Partner'},\n\nA new team has been assigned to ${hotelName} for an upcoming Ultimate Hockey Tournament event.\n\nEvent: ${eventName}\nDate: ${eventDate}\nLocation: ${params.eventCity}\n\nTeam: ${teamName}\nAge Group: ${params.ageGroup}${params.division ? ` - ${params.division}` : ''}`;
   if (params.coachName) plainText += `\n\nHead Coach: ${params.coachName}`;
   if (params.coachEmail) plainText += `\nEmail: ${params.coachEmail}`;
-  if (params.coachPhone) plainText += `\nPhone: ${params.coachPhone}`;
+  if (params.coachPhone) plainText += `\nPhone: ${formatPhone(params.coachPhone)}`;
   if (params.managerName) plainText += `\n\nTeam Manager: ${params.managerName}`;
   if (params.managerEmail) plainText += `\nEmail: ${params.managerEmail}`;
-  if (params.managerPhone) plainText += `\nPhone: ${params.managerPhone}`;
+  if (params.managerPhone) plainText += `\nPhone: ${formatPhone(params.managerPhone)}`;
   plainText += `\n\nThe coach has been notified and may reach out to coordinate room bookings.\n\nUltimate Hockey Tournaments\nregistration@ultimatetournaments.com`;
 
   try {

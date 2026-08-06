@@ -396,18 +396,22 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     let teamCity: string | null = null;
     let coachPhone: string | null = null;
     let linkedCoachEmail: string | null = null;
+    let linkedCoachName: string | null = null;
     let linkedManagerEmail: string | null = null;
     let linkedManagerPhone: string | null = null;
+    let linkedManagerName: string | null = null;
     if (reg.team_id) {
-      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone, head_coach_name, head_coach_email, manager_email, manager_phone FROM teams WHERE id = ?')
+      const linkedTeam = await db.prepare('SELECT city, state, head_coach_phone, head_coach_name, head_coach_email, manager_name, manager_email, manager_phone FROM teams WHERE id = ?')
         .bind(reg.team_id).first<any>();
       if (linkedTeam) {
         teamState = linkedTeam.state;
         teamCity = linkedTeam.city;
         coachPhone = linkedTeam.head_coach_phone;
         linkedCoachEmail = linkedTeam.head_coach_email;
+        linkedCoachName = linkedTeam.head_coach_name;
         linkedManagerEmail = linkedTeam.manager_email;
         linkedManagerPhone = linkedTeam.manager_phone;
+        linkedManagerName = linkedTeam.manager_name;
       }
     }
     team = {
@@ -415,15 +419,18 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       age_group: reg.age_group,
       city: teamCity,
       state: teamState,
-      head_coach_name: [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ') || null,
-      // Prefer the linked team's actual head coach; fall back to the registrant
+      // Prefer the linked team's actual head coach; fall back to the registrant.
+      // The registration form does not capture a coach name, so without the
+      // linked-team fallback these names come through blank on emails.
+      head_coach_name: linkedCoachName || [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ') || null,
       head_coach_email: linkedCoachEmail || reg.email1,
       head_coach_phone: coachPhone || reg.phone || null,
+      manager_name: linkedManagerName,
       manager_email: linkedManagerEmail,
       manager_phone: linkedManagerPhone,
     };
   } else {
-    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone, manager_email, manager_phone FROM teams WHERE id = ?')
+    team = await db.prepare('SELECT name, age_group, city, state, head_coach_name, head_coach_email, head_coach_phone, manager_name, manager_email, manager_phone FROM teams WHERE id = ?')
       .bind(reg.team_id).first<any>();
   }
 
@@ -610,7 +617,8 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
       if (isConsumer) {
         // The registrant is the manager — fall back through second contact,
         // the linked team's manager, then the primary registration contact.
-        managerName = [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ');
+        managerName = [reg.manager_first_name, reg.manager_last_name].filter(Boolean).join(' ')
+          || team.manager_name || '';
         managerEmail = reg.email2 || team.manager_email || reg.email1 || '';
         managerPhone = reg.phone2 || team.manager_phone || reg.phone || '';
       } else {
@@ -632,6 +640,25 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         if (!managerName && (managerEmail || managerPhone)) managerName = team.manager_name || '';
       }
 
+      // Last resort: if we still have an email but no name, look the person up
+      // in users so the hotel never gets a bare email address with no name.
+      const nameFromEmail = async (email: string): Promise<string> => {
+        if (!email) return '';
+        try {
+          const u = await db.prepare('SELECT first_name, last_name FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1')
+            .bind(email).first<any>();
+          return u ? [u.first_name, u.last_name].filter(Boolean).join(' ') : '';
+        } catch { return ''; }
+      };
+
+      let coachName = team.head_coach_name || '';
+      if (!coachName) coachName = await nameFromEmail(team.head_coach_email || '');
+      if (!managerName) managerName = await nameFromEmail(managerEmail);
+
+      // Don't repeat the same person as both coach and manager
+      const sameContact = managerEmail && team.head_coach_email
+        && managerEmail.toLowerCase() === String(team.head_coach_email).toLowerCase();
+
       const startDate = new Date(event.start_date + 'T12:00:00');
       const hotelEventDate = startDate.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
@@ -651,12 +678,12 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         eventName: event.name,
         eventDate: hotelEventDate,
         eventCity: `${event.city}, ${event.state}`,
-        coachName: team.head_coach_name || '',
+        coachName,
         coachEmail: team.head_coach_email || '',
         coachPhone: team.head_coach_phone || '',
-        managerName,
-        managerEmail,
-        managerPhone,
+        managerName: sameContact ? '' : managerName,
+        managerEmail: sameContact ? '' : managerEmail,
+        managerPhone: sameContact ? '' : managerPhone,
       });
       hotelEmailSent = hotelResult.success;
     } catch (err: any) {
