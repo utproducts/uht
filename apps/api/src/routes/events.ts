@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
 import { sendApprovalEmail } from '../lib/approval-email';
+import { sendHotelConfirmationEmail } from '../lib/hotel-confirmation-email';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { getResolvedFields } from '../lib/template-overrides';
 
@@ -1596,6 +1597,7 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
             bookingCode: hotelRow.booking_code,
             pricePerNight: hotelRow.price_per_night,
             bookingCutoffDate: hotelRow.booking_cutoff_date,
+            importantNotes: hotelRow.important_notes,
             contactName: hotelRow.contact_name,
             contactTitle: hotelRow.contact_title,
             contactPhone: hotelRow.contact_phone,
@@ -1611,6 +1613,84 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
         (updated as any).email_sent = emailResult.success;
         if (!emailResult.success) {
           (updated as any).email_error = emailResult.error;
+        }
+
+        // Notify the hotel contact that a team has been assigned to them.
+        // Mirrors the Registrations-page approve flow so acceptances sent from
+        // here reach the hotel too.
+        if (hotelRow && hotelRow.contact_email) {
+          try {
+            let coachName = '';
+            let coachEmail = '';
+            let coachPhone = '';
+            let managerName = '';
+            let managerEmail = '';
+            let managerPhone = '';
+
+            if (updated.team_id) {
+              const lt = await db.prepare(`
+                SELECT head_coach_name, head_coach_email, head_coach_phone,
+                  manager_name, manager_email, manager_phone
+                FROM teams WHERE id = ?
+              `).bind(updated.team_id).first<any>();
+              if (lt) {
+                coachName = lt.head_coach_name || '';
+                coachEmail = lt.head_coach_email || '';
+                coachPhone = lt.head_coach_phone || '';
+                managerName = lt.manager_name || '';
+                managerEmail = lt.manager_email || '';
+                managerPhone = lt.manager_phone || '';
+              }
+            }
+
+            // Fall back to the registration's own contacts
+            if (!coachEmail) coachEmail = updated.email1 || '';
+            if (!coachPhone) coachPhone = updated.phone || '';
+            if (!coachName) {
+              coachName = [updated.manager_first_name, updated.manager_last_name].filter(Boolean).join(' ');
+            }
+            if (!managerEmail) managerEmail = updated.email2 || '';
+            if (!managerPhone) managerPhone = updated.phone2 || '';
+
+            // Last resort: pull a name from users by email so the hotel never
+            // gets a bare email address with no name attached.
+            const nameFromEmail = async (email: string): Promise<string> => {
+              if (!email) return '';
+              try {
+                const u = await db.prepare('SELECT first_name, last_name FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1')
+                  .bind(email).first<any>();
+                return u ? [u.first_name, u.last_name].filter(Boolean).join(' ') : '';
+              } catch { return ''; }
+            };
+            if (!coachName) coachName = await nameFromEmail(coachEmail);
+            if (!managerName) managerName = await nameFromEmail(managerEmail);
+
+            // Don't list the same person twice
+            const sameContact = managerEmail && coachEmail
+              && managerEmail.toLowerCase() === coachEmail.toLowerCase();
+
+            const hotelEmailResult = await sendHotelConfirmationEmail(c.env, {
+              hotelContactEmail: hotelRow.contact_email,
+              hotelContactName: hotelRow.contact_name || '',
+              hotelName: hotelRow.hotel_name,
+              teamName: updated.team_name,
+              ageGroup: updated.age_group || '',
+              division: updated.division || undefined,
+              eventName: event.name,
+              eventDate: eventDateStr,
+              eventCity: `${event.city}, ${event.state}`,
+              coachName,
+              coachEmail,
+              coachPhone,
+              managerName: sameContact ? '' : managerName,
+              managerEmail: sameContact ? '' : managerEmail,
+              managerPhone: sameContact ? '' : managerPhone,
+            });
+            (updated as any).hotel_email_sent = hotelEmailResult.success;
+          } catch (hotelErr: any) {
+            console.error('Hotel confirmation email error:', hotelErr);
+            (updated as any).hotel_email_sent = false;
+          }
         }
       }
     } catch (emailErr: any) {
@@ -1675,6 +1755,7 @@ eventRoutes.get('/admin/event-hotels/:eventId', async (c) => {
   // Auto-migrate: add columns if missing
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN price_per_night INTEGER").run(); } catch (_) { /* already exists */ }
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN important_notes TEXT").run(); } catch (_) { /* already exists */ }
   const result = await db.prepare(`
     SELECT * FROM event_hotels WHERE event_id = ? AND is_active = 1 ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
@@ -1744,19 +1825,21 @@ const addHotelSchema = z.object({
   booking_code: z.string().nullable().optional(),
   room_block_count: z.number().nullable().optional(),
   price_per_night: z.number().nullable().optional(),
+  important_notes: z.string().nullable().optional(),
   sort_order: z.number().optional(),
 });
 
 eventRoutes.post('/admin/event-hotels', authMiddleware, requireRole('admin', 'director'), zValidator('json', addHotelSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN important_notes TEXT").run(); } catch (_) { /* already exists */ }
   const id = crypto.randomUUID().replace(/-/g, '');
   await db.prepare(`
-    INSERT INTO event_hotels (id, event_id, hotel_name, address, city, state, phone, rate_description, booking_url, booking_code, room_block_count, price_per_night, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO event_hotels (id, event_id, hotel_name, address, city, state, phone, rate_description, booking_url, booking_code, room_block_count, price_per_night, important_notes, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(id, data.event_id, data.hotel_name, data.address || null, data.city || null, data.state || null,
     data.phone || null, data.rate_description || null, data.booking_url || null, data.booking_code || null,
-    data.room_block_count || null, data.price_per_night || null, data.sort_order || 0
+    data.room_block_count || null, data.price_per_night || null, data.important_notes || null, data.sort_order || 0
   ).run();
   const hotel = await db.prepare('SELECT * FROM event_hotels WHERE id = ?').bind(id).first();
   return c.json({ success: true, data: hotel }, 201);
@@ -1780,12 +1863,14 @@ const updateHotelSchema = z.object({
   is_active: z.number().optional(),
   image_url: z.string().nullable().optional(),
   booking_cutoff_date: z.string().nullable().optional(),
+  important_notes: z.string().nullable().optional(),
 });
 
 eventRoutes.patch('/admin/event-hotels/:id', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateHotelSchema), async (c) => {
   const id = c.req.param('id');
   const data = c.req.valid('json');
   const db = c.env.DB;
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN important_notes TEXT").run(); } catch (_) { /* already exists */ }
 
   const setClauses: string[] = [];
   const params: (string | number | null)[] = [];

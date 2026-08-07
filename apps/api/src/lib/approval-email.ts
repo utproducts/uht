@@ -11,6 +11,8 @@ interface HotelInfo {
   bookingCode?: string;
   pricePerNight?: number;
   bookingCutoffDate?: string;
+  /** Free-text notes entered on the event hotel — surfaced to assigned teams */
+  importantNotes?: string;
   /** Hotel sales/group contact entered on the hotel record */
   contactName?: string;
   contactTitle?: string;
@@ -195,6 +197,15 @@ function paymentOptionsHtml(): string {
   `;
 }
 
+/** Escape user-entered text before dropping it into the email HTML */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /** Format a 10-digit US number as (312) 555-1234; pass anything else through */
 function formatPhone(raw?: string): string {
   if (!raw) return '';
@@ -236,6 +247,20 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
       </p>`;
   }
 
+  // Important notes entered on the event hotel — shown prominently to the team
+  let notesBlock = '';
+  const notes = (hotel.importantNotes || '').trim();
+  if (notes) {
+    const paragraphs = notes.split(/\n\s*\n/).map(part =>
+      `<p style="margin: 0 0 8px 0; font-size: 14px; line-height: 1.6; color: #78350f;">${escapeHtml(part).replace(/\n/g, '<br>')}</p>`
+    ).join('');
+    notesBlock = `
+      <div style="margin-top: 16px; padding: 14px 16px; background-color: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px;">
+        <p style="margin: 0 0 6px 0; font-size: 12px; color: #92400e; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Important Hotel Notes</p>
+        ${paragraphs}
+      </div>`;
+  }
+
   // Hotel sales/group contact — who the team calls to book or ask questions
   let contactBlock = '';
   const hasContact = hotel.contactName || hotel.contactPhone || hotel.contactEmail;
@@ -266,6 +291,7 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
       <p style="margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: #1d1d1f;">${hotel.name}</p>
       ${details}
       ${bookingBtn}
+      ${notesBlock}
       ${contactBlock}
       <p style="margin: 12px 0 0 0; font-size: 12px; color: #86868b;"><em>All out-of-state teams are required to stay at the designated tournament hotel.</em></p>
     </div>
@@ -314,6 +340,9 @@ export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): 
     if (h.bookingCutoffDate) {
       const cutoff = new Date(h.bookingCutoffDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       hotelPlain += `\nMUST BOOK YOUR HOTEL ROOM BY: ${cutoff}`;
+    }
+    if ((h.importantNotes || '').trim()) {
+      hotelPlain += `\n\nIMPORTANT HOTEL NOTES:\n${(h.importantNotes || '').trim()}`;
     }
     if (h.contactName || h.contactPhone || h.contactEmail) {
       hotelPlain += `\n\nHotel Contact:`;

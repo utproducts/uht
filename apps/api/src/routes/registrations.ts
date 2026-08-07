@@ -593,6 +593,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
           bookingCode: hotelInfo.booking_code,
           pricePerNight: hotelInfo.price_per_night,
           bookingCutoffDate: hotelInfo.booking_cutoff_date,
+          importantNotes: hotelInfo.important_notes,
           contactName: hotelInfo.contact_name,
           contactTitle: hotelInfo.contact_title,
           contactPhone: hotelInfo.contact_phone,

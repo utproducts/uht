@@ -64,6 +64,7 @@ interface EventHotel {
   booking_code: string | null;
   room_block_count: number | null;
   price_per_night: number | null;
+  important_notes: string | null;
   sort_order: number;
   image_url: string | null;
 }
@@ -260,7 +261,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [showAddManual, setShowAddManual] = useState(false);
-  const [newHotel, setNewHotel] = useState({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
+  const [newHotel, setNewHotel] = useState({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '', important_notes: '' });
   const [addingHotel, setAddingHotel] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   // Hotel search state
@@ -621,7 +622,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
       const json = await res.json();
       if (json.success) {
         setHotels(prev => [...prev, json.data]);
-        setNewHotel({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '' });
+        setNewHotel({ hotel_name: '', rate_description: '', booking_url: '', booking_code: '', address: '', city: '', state: '', phone: '', important_notes: '' });
         setShowAddManual(false);
       }
     } catch (e) { /* ignore */ }
@@ -2045,6 +2046,20 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                             />
                           </div>
                         </div>
+                        <div className="mt-3">
+                          <label className="block text-[10px] text-[#86868b] uppercase tracking-widest font-semibold mb-1">
+                            Important Notes
+                            <span className="ml-2 normal-case tracking-normal font-normal text-[#86868b]">Included in the acceptance email for teams assigned here</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={(h as any).important_notes || ''}
+                            placeholder="e.g. Breakfast included. Book under 'Ultimate Hockey'. Parking is free."
+                            onChange={e => setHotels(prev => prev.map(x => x.id === h.id ? { ...x, important_notes: e.target.value } as any : x))}
+                            onBlur={e => handleUpdateHotel(h.id, { important_notes: e.target.value || null } as any)}
+                            className="w-full border border-[#e8e8ed] rounded-lg px-2.5 py-1.5 text-sm text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none resize-y"
+                          />
+                        </div>
                         {((h as any).contact_name || (h as any).contact_email) && (
                           <div className="flex flex-wrap gap-x-3 mt-2.5 pt-2 border-t border-[#e8e8ed]">
                             <span className="text-xs text-[#6e6e73] font-medium">Rep: {(h as any).contact_name || 'N/A'}</span>
@@ -2213,6 +2228,13 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                         <input type="tel" value={newHotel.phone} onChange={e => setNewHotel({ ...newHotel, phone: e.target.value })}
                           placeholder="(847) 555-0123" className={inputCls} />
                       </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Important Notes</label>
+                      <textarea rows={3} value={newHotel.important_notes}
+                        onChange={e => setNewHotel({ ...newHotel, important_notes: e.target.value })}
+                        placeholder="Included in the acceptance email for teams assigned to this hotel"
+                        className={`${inputCls} resize-y`} />
                     </div>
                     <button onClick={handleAddHotel} disabled={!newHotel.hotel_name || addingHotel}
                       className="px-4 py-2 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition disabled:opacity-50">
