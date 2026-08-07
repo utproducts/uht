@@ -96,6 +96,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [userName, setUserName] = useState(readUserName);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  // Mobile: the 224px sidebar eats most of a phone screen, so it becomes a
+  // slide-in drawer, hidden by default. Unchanged on md and up.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Collapsible sidebar sections — remembered across visits
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
@@ -131,6 +134,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [pathname, router]);
 
+  useEffect(() => { setMobileNavOpen(false); }, [pathname]);
+
   if (hasAccess === null) {
     return <div className="min-h-screen bg-[#fafafa] flex items-center justify-center"><div className="text-[#86868b]">Loading...</div></div>;
   }
@@ -141,11 +146,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-[#fafafa]">
       {/* Header */}
-      <header className="bg-gradient-to-r from-[#003e79] to-[#005599] h-14 flex items-center px-6 justify-between shadow-sm">
-        <a href="/" className="flex items-center gap-3">
-          <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
-          <span className="text-white font-semibold">Ultimate Tournaments</span>
-        </a>
+      <header className="bg-gradient-to-r from-[#003e79] to-[#005599] h-14 flex items-center px-4 sm:px-6 justify-between shadow-sm sticky top-0 z-40">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => setMobileNavOpen(o => !o)}
+            aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileNavOpen}
+            className="md:hidden -ml-2 p-2 rounded-lg text-white/80 active:bg-white/10 transition"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              {mobileNavOpen
+                ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />}
+            </svg>
+          </button>
+          <a href="/" className="flex items-center gap-3 min-w-0">
+            <img src="/uht-logo.png" alt="UHT" className="h-8 w-auto" />
+            <span className="text-white font-semibold truncate">Ultimate Tournaments</span>
+          </a>
+        </div>
         <div className="flex items-center gap-3">
           {userName && (
             <span className="text-white text-sm font-medium hidden sm:inline">
@@ -159,9 +178,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </header>
 
+      {/* Backdrop for the mobile drawer */}
+      {mobileNavOpen && (
+        <div
+          onClick={() => setMobileNavOpen(false)}
+          className="md:hidden fixed inset-0 top-14 bg-black/40 z-30"
+          aria-hidden="true"
+        />
+      )}
+
       <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0">
+        {/* Sidebar — static column on md+, slide-in drawer below that */}
+        <aside
+          className={
+            "w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0 " +
+            "max-md:fixed max-md:top-14 max-md:left-0 max-md:bottom-0 max-md:z-40 max-md:overflow-y-auto " +
+            "max-md:shadow-xl max-md:transition-transform " +
+            (mobileNavOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full")
+          }
+        >
           <nav>
             {ADMIN_NAV_SECTIONS.map((section, si) => {
               const sectionHasActive = section.items.some(
@@ -194,6 +229,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           <a
                             key={item.name}
                             href={item.href}
+                            onClick={() => setMobileNavOpen(false)}
                             className={
                               "block px-3 py-1.5 rounded-lg text-sm transition-colors " +
                               (isActive

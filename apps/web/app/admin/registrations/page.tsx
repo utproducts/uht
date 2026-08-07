@@ -1146,6 +1146,27 @@ export default function AdminRegistrationsPage() {
     await loadEventContext(reg.event_id);
   };
 
+  // Approve button entry point. The registration form submits needsHotel: false
+  // on every hotel-enabled event, so the API auto-approves without ever asking
+  // for a hotel. Fetch the event's hotels here and always show the picker when
+  // the event has any — matching what the iOS admin screen does.
+  const handleApproveClick = async (reg: Registration) => {
+    setSelectedHotelId('');
+    let hotels: EventHotel[] = [];
+    try {
+      const res = await authFetch(`${API_BASE}/events/admin/event-hotels/${reg.event_id}`);
+      const json = await res.json() as any;
+      if (json.success) hotels = json.data || [];
+    } catch {}
+    setEventHotels(hotels);
+    if (hotels.length > 0) {
+      setHotelModalReg(reg);
+      return;
+    }
+    // No hotels on this event — nothing to assign, approve straight through
+    handleApprove(reg.id);
+  };
+
   const handleApprove = async (regId: string, hotelId?: string) => {
     setApproving(true);
     try {
@@ -1356,7 +1377,59 @@ export default function AdminRegistrationsPage() {
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <>
+          {/* Mobile: cards. The table's columns are wider than a phone screen and
+              the Actions column (Approve/Reject) gets clipped off the edge. */}
+          <div className="md:hidden space-y-3">
+            {filtered.map(reg => (
+              <div key={reg.id} className="bg-white rounded-2xl shadow p-4" onClick={() => handleOpenDetail(reg)}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[#1d1d1f] text-sm">{reg.team_name}</p>
+                    <p className="text-xs text-[#86868b] mt-0.5">
+                      {reg.team_age_group && <span className="font-medium text-[#6e6e73]">{reg.team_age_group}</span>}
+                      {reg.team_city && <>{reg.team_age_group ? ' · ' : ''}{reg.team_city}{reg.team_state ? `, ${reg.team_state}` : ''}</>}
+                    </p>
+                    <p className="text-xs text-[#1d1d1f] mt-1.5 font-medium">{(reg as any).event_name}</p>
+                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDelete(reg.id); }}
+                    className="p-1.5 rounded-lg text-[#c7c7cc] hover:text-red-500 hover:bg-red-50 transition shrink-0"
+                    title="Delete registration"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-2.5">
+                  <StatusBadge status={reg.status} />
+                  <PaymentBadge status={reg.payment_status || 'unpaid'} />
+                </div>
+                {(reg.status === 'pending' || reg.status === 'waitlisted') && (
+                  <div className="flex gap-2 mt-3" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleApproveClick(reg)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-500 active:bg-emerald-600 transition"
+                    >
+                      Approve
+                    </button>
+                    {reg.status === 'pending' && (
+                      <button
+                        onClick={() => handleReject(reg.id)}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-red-600 bg-red-50 active:bg-red-100 transition"
+                      >
+                        Reject
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Tablet and up: full table. overflow-x-auto so nothing clips silently. */}
+          <div className="hidden md:block bg-white rounded-2xl shadow-lg overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#e8e8ed] bg-[#fafafa]">
@@ -1428,7 +1501,7 @@ export default function AdminRegistrationsPage() {
                         {reg.status === 'pending' && (
                           <>
                             <button
-                              onClick={() => handleApprove(reg.id)}
+                              onClick={() => handleApproveClick(reg)}
                               className="px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition"
                             >
                               Approve
@@ -1443,7 +1516,7 @@ export default function AdminRegistrationsPage() {
                         )}
                         {reg.status === 'waitlisted' && (
                           <button
-                            onClick={() => handleApprove(reg.id)}
+                            onClick={() => handleApproveClick(reg)}
                             className="px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition"
                           >
                             Approve
@@ -1471,6 +1544,7 @@ export default function AdminRegistrationsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -1541,25 +1615,49 @@ export default function AdminRegistrationsPage() {
       )}
 
       {hotelModalReg && (() => {
-        const teamChoices: { id: string; name: string; rank: number }[] = [];
-        if (hotelModalReg.hotel_choice_1_id) teamChoices.push({ id: hotelModalReg.hotel_choice_1_id, name: hotelModalReg.hotel_choice_1_name || '', rank: 1 });
-        if (hotelModalReg.hotel_choice_2_id) teamChoices.push({ id: hotelModalReg.hotel_choice_2_id, name: hotelModalReg.hotel_choice_2_name || '', rank: 2 });
-        if (hotelModalReg.hotel_choice_3_id) teamChoices.push({ id: hotelModalReg.hotel_choice_3_id, name: hotelModalReg.hotel_choice_3_name || '', rank: 3 });
-        const displayHotels = teamChoices.length > 0
-          ? teamChoices.map(c => ({ ...eventHotels.find(h => h.id === c.id)!, rank: c.rank })).filter(h => h && h.id)
-          : eventHotels.map(h => ({ ...h, rank: 0 }));
+        // Preferences come through as raw names on consumer registrations
+        // (hotel_choice_*_id is null), so resolve by id first, then by name.
+        const norm = (v?: string | null) => (v || '').trim().toLowerCase();
+        const rawChoices = [
+          { id: (hotelModalReg as any).hotel_choice_1_id, name: (hotelModalReg as any).hotel_choice_1_name || (hotelModalReg as any).hotel_choice_1, rank: 1 },
+          { id: (hotelModalReg as any).hotel_choice_2_id, name: (hotelModalReg as any).hotel_choice_2_name || (hotelModalReg as any).hotel_choice_2, rank: 2 },
+          { id: (hotelModalReg as any).hotel_choice_3_id, name: (hotelModalReg as any).hotel_choice_3_name || (hotelModalReg as any).hotel_choice_3, rank: 3 },
+        ].filter(c => c.id || c.name);
+
+        const matched = rawChoices
+          .map(c => {
+            const hotel = eventHotels.find(h => (c.id && h.id === c.id) || (c.name && norm(h.hotel_name) === norm(c.name)));
+            return hotel ? { ...hotel, rank: c.rank } : null;
+          })
+          .filter((h): h is EventHotel & { rank: number } => !!h);
+
+        // Always list every event hotel — preferred ones first, so an admin can
+        // still assign a hotel the team didn't rank.
+        const matchedIds = new Set(matched.map(h => h.id));
+        const displayHotels: any[] = [
+          ...matched,
+          ...eventHotels.filter(h => !matchedIds.has(h.id)).map(h => ({ ...h, rank: 0 })),
+        ];
+        const teamChoices = matched;
 
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setHotelModalReg(null)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
               <div className="px-6 py-5 border-b border-[#e8e8ed]">
-                <h3 className="text-lg font-bold text-[#1d1d1f]">Assign Hotel Before Approval</h3>
+                <h3 className="text-lg font-bold text-[#1d1d1f]">Approve Team</h3>
                 <p className="text-sm text-[#86868b] mt-1">
                   <span className="font-semibold text-[#1d1d1f]">{hotelModalReg.team_name}</span>
                   {hotelModalReg.team_city && ` from ${hotelModalReg.team_city}, ${hotelModalReg.team_state}`}
-                  {' '}is a non-local team.
-                  {teamChoices.length > 0 ? ' Showing their hotel preferences below.' : ' No hotel preferences submitted — showing all event hotels.'}
+                  {'. '}
+                  {teamChoices.length > 0
+                    ? 'Their hotel preferences are listed first.'
+                    : 'No hotel preferences submitted — choose from the event hotels below.'}
                 </p>
+                {(hotelModalReg as any).hotel_choice_1 === 'Local Team' && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                    This team selected <span className="font-semibold">Local Team</span> on their registration.
+                  </p>
+                )}
               </div>
               <div className="px-6 py-5 space-y-3">
                 {displayHotels.length === 0 ? (
@@ -1608,7 +1706,7 @@ export default function AdminRegistrationsPage() {
                   disabled={approving}
                   className="px-5 py-2.5 rounded-full text-sm font-semibold text-[#6e6e73] border border-[#e8e8ed] hover:bg-[#f5f5f7] transition"
                 >
-                  Approve Without Hotel
+                  Approve — Local / No Hotel
                 </button>
                 <button
                   onClick={() => hotelModalReg && handleApprove(hotelModalReg.id, selectedHotelId)}
