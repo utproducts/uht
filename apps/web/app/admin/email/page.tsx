@@ -80,6 +80,7 @@ const templateLabels: Record<string, string> = {
   market_all_events: 'Market All Events',
   market_specific_event: 'Market Specific Event',
   find_team: 'Find a Team',
+  super_saver: 'Super Saver Promo',
   custom: 'Custom',
 };
 
@@ -229,6 +230,9 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
 
   // Step 1: Template type
   const [templateType, setTemplateType] = useState('');
+  // Super Saver: featured events + promo window
+  const [superSaverEventIds, setSuperSaverEventIds] = useState<string[]>([]);
+  const [promoDays, setPromoDays] = useState(7);
 
   // Step 2: Audience
   const [audienceScope, setAudienceScope] = useState('everyone');
@@ -332,6 +336,10 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
       if (templateType === 'market_specific_event' && customMessage) {
         body.customMessage = customMessage;
       }
+      if (templateType === 'super_saver') {
+        body.eventIds = superSaverEventIds;
+        body.promoDays = promoDays;
+      }
       const r = await authFetch(`${API_BASE}/email/templates/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -370,7 +378,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
       }
     } catch (e) { console.error(e); }
     setGeneratingTemplate(false);
-  }, [templateType, selectedEventId, divisions]);
+  }, [templateType, selectedEventId, divisions, superSaverEventIds, promoDays]);
 
   // Preview audience
   const loadPreview = useCallback(async () => {
@@ -526,13 +534,14 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
     return msg; // The API will wrap it
   }
 
-  const canProceedStep1 = !!templateType;
+  const canProceedStep1 = !!templateType && (templateType !== 'super_saver' || superSaverEventIds.length > 0);
   const needsEvent = templateType === 'market_specific_event' || templateType === 'find_team';
   const canProceedStep2 = audienceScope === 'everyone' ||
     audienceScope === 'all_coaches' ||
     audienceScope === 'past_contacts' ||
     audienceScope === 'icontacts' ||
     audienceScope === 'registered_users' ||
+    audienceScope === 'purchased' ||
     (audienceScope === 'event' && !!selectedEventId) ||
     (audienceScope === 'division' && !!selectedDivisionId) ||
     (audienceScope === 'age_group' && !!selectedAgeGroup) ||
@@ -612,6 +621,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                   { value: 'market_all_events', icon: '📅', label: 'Market All Events', desc: 'Promote all upcoming tournaments to your contact list' },
                   { value: 'market_specific_event', icon: '🏒', label: 'Market a Specific Event', desc: 'Send details about one tournament' },
                   { value: 'find_team', icon: '🔍', label: 'Find a Team for an Event', desc: 'Let teams know about open spots in divisions' },
+                  { value: 'super_saver', icon: '💰', label: 'Super Saver Promo', desc: '$400 off their 2nd event — pick the featured events, valid for a set number of days' },
                   { value: 'custom', icon: '✏️', label: 'Custom Email', desc: 'Write your own message from scratch' },
                 ].map(opt => (
                   <button key={opt.value} onClick={() => setTemplateType(opt.value)}
@@ -630,6 +640,36 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                   </button>
                 ))}
               </div>
+
+              {/* Super Saver: multi-event picker + promo window */}
+              {templateType === 'super_saver' && (
+                <div className="mt-6">
+                  <label className="block text-sm font-semibold text-[#3d3d3d] mb-2">
+                    Which events are in the Super Saver? <span className="font-normal text-[#86868b]">({superSaverEventIds.length} selected)</span>
+                  </label>
+                  <div className="max-h-56 overflow-y-auto rounded-xl border border-[#e8e8ed] divide-y divide-[#f0f0f2]">
+                    {events.map(ev => {
+                      const checked = superSaverEventIds.includes(ev.id);
+                      return (
+                        <label key={ev.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-[#fafafa]">
+                          <input type="checkbox" checked={checked}
+                            onChange={() => setSuperSaverEventIds(prev => checked ? prev.filter(id => id !== ev.id) : [...prev, ev.id])}
+                            className="w-4 h-4 accent-[#003e79]" />
+                          <span className="text-sm text-[#1d1d1f] flex-1">{ev.name}</span>
+                          <span className="text-xs text-[#86868b]">{ev.city}, {ev.state}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-4 flex items-center gap-3">
+                    <label className="text-sm font-semibold text-[#3d3d3d]">Offer valid for</label>
+                    <input type="number" min={1} max={60} value={promoDays}
+                      onChange={e => setPromoDays(Math.max(1, Math.min(60, parseInt(e.target.value) || 7)))}
+                      className="w-20 px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] outline-none" />
+                    <span className="text-sm text-[#6e6e73]">days (the deadline date is written into the email)</span>
+                  </div>
+                </div>
+              )}
 
               {/* If specific event or find team, show event picker */}
               {needsEvent && (
@@ -661,6 +701,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                   { value: 'past_contacts', label: 'Past Contacts', desc: 'Coaches and managers from previous seasons (imported team data)' },
                   { value: 'icontacts', label: 'iContacts', desc: 'Email list imported from iContact' },
                   { value: 'registered_users', label: 'Registered Users', desc: 'Users who created accounts on the new site' },
+                  { value: 'purchased', label: 'Purchased List', desc: 'Purchased coach & manager contacts (2025-26 list)' },
                 ].map(opt => (
                   <button key={opt.value} onClick={() => { setAudienceScope(opt.value); setPreview(null); }}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
@@ -1013,6 +1054,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                        audienceScope === 'past_contacts' ? 'Past contacts from previous seasons' :
                        audienceScope === 'icontacts' ? 'iContact email list' :
                        audienceScope === 'registered_users' ? 'Registered site users' :
+                       audienceScope === 'purchased' ? 'Purchased coach & manager list' :
                        audienceScope === 'all_coaches' ? 'All team head coaches' :
                        audienceScope === 'event' ? `Teams registered for: ${events.find(e => e.id === selectedEventId)?.name || 'Unknown'}` :
                        audienceScope === 'division' ? `Division: ${divisions.find(d => d.id === selectedDivisionId)?.age_group || ''} ${divisions.find(d => d.id === selectedDivisionId)?.division_level || ''}` :

@@ -115,7 +115,7 @@ emailRoutes.get('/campaigns/:id', authMiddleware, requireRole('admin', 'director
 // Preview audience — returns count and sample for a given filter
 // ==================
 const audienceFilterSchema = z.object({
-  scope: z.enum(['everyone', 'all_coaches', 'event', 'division', 'age_group', 'manual_emails', 'past_contacts', 'icontacts', 'registered_users']),
+  scope: z.enum(['everyone', 'all_coaches', 'event', 'division', 'age_group', 'manual_emails', 'past_contacts', 'icontacts', 'registered_users', 'purchased']),
   eventId: z.string().optional(),
   divisionId: z.string().optional(),
   ageGroup: z.string().optional(),
@@ -175,7 +175,7 @@ const createCampaignSchema = z.object({
   bodyHtml: z.string().min(1),
   bodyText: z.string().optional(),
   eventId: z.string().optional(),
-  templateType: z.enum(['market_all_events', 'market_specific_event', 'find_team', 'custom']).optional(),
+  templateType: z.enum(['market_all_events', 'market_specific_event', 'find_team', 'super_saver', 'custom']).optional(),
   audience: audienceFilterSchema.optional(),
 });
 
@@ -457,8 +457,11 @@ emailRoutes.get('/audience/events/:eventId/divisions', authMiddleware, requireRo
 // Generate email template HTML
 // ==================
 const templateSchema = z.object({
-  templateType: z.enum(['market_all_events', 'market_specific_event', 'find_team', 'custom']),
+  templateType: z.enum(['market_all_events', 'market_specific_event', 'find_team', 'super_saver', 'custom']),
   eventId: z.string().optional(),
+  eventIds: z.array(z.string()).optional(),
+  promoDays: z.number().min(1).max(60).optional(),
+  discountAmount: z.number().min(1).optional(),
   customMessage: z.string().optional(),
 });
 
@@ -544,6 +547,26 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
       }
       subject = `Spots Available: ${event.name}`;
       html = generateFindTeamEmail(event, divisions.results || [], ftHotels.results || [], ftVenues.results || []);
+      break;
+    }
+    case 'super_saver': {
+      if (!data.eventIds || data.eventIds.length === 0) {
+        return c.json({ success: false, error: 'eventIds required for the Super Saver template' }, 400);
+      }
+      const placeholders = data.eventIds.map(() => '?').join(',');
+      const ssEvents = await db.prepare(`
+        SELECT id, name, slug, city, state, start_date, end_date, logo_url
+        FROM events WHERE id IN (${placeholders})
+        ORDER BY start_date ASC
+      `).bind(...data.eventIds).all<any>();
+
+      const promoDays = data.promoDays || 7;
+      const discount = data.discountAmount || 400;
+      const deadline = new Date(Date.now() + promoDays * 24 * 60 * 60 * 1000);
+      const deadlineStr = deadline.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+      subject = `\u{1F6A8} Super Saver: $${discount} Off Your 2nd Tournament — ${promoDays} Days Only`;
+      html = generateSuperSaverEmail(ssEvents.results || [], deadlineStr, discount, promoDays);
       break;
     }
     case 'custom':
@@ -1002,6 +1025,22 @@ function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionI
     return { query, params };
   }
 
+  // "purchased" → purchased coach/manager lists from contacts table
+  if (filter.scope === 'purchased') {
+    const query = `
+      SELECT DISTINCT c.email,
+        COALESCE(c.first_name || ' ' || c.last_name, c.email) as name,
+        COALESCE(c.organization_name, '') as team_name,
+        COALESCE(c.tags, '') as age_group,
+        '' as event_name
+      FROM contacts c
+      WHERE c.source LIKE 'purchased%' AND c.email IS NOT NULL AND c.email != ''
+        AND c.is_subscribed_email = 1
+      ORDER BY c.last_name, c.first_name
+    `;
+    return { query, params };
+  }
+
   // "past_contacts" → legacy team contacts from contacts table
   if (filter.scope === 'past_contacts') {
     const query = `
@@ -1308,6 +1347,98 @@ function generateAllEventsEmail(events: any[]): string {
     <p style="margin:0 0 24px;color:#6e6e73;font-size:14px;line-height:1.5;">Check out our upcoming events across the Midwest and register your team today!</p>
     ${citySections}
     <div style="text-align:center;margin-top:28px;">
+      <a href="https://ultimatetournaments.com/events" style="display:inline-block;background-color:#00ccff;color:#003e79;padding:14px 36px;border-radius:24px;text-decoration:none;font-size:15px;font-weight:bold;">View All Events</a>
+    </div>
+  `);
+}
+
+function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: number, promoDays: number): string {
+  const fmtRange = (start: string, end: string) => {
+    const s = new Date(start + 'T12:00:00');
+    const e = new Date(end + 'T12:00:00');
+    const sameMonth = s.getMonth() === e.getMonth();
+    const sStr = s.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const eStr = e.toLocaleDateString('en-US', sameMonth ? { day: 'numeric', year: 'numeric' } : { month: 'long', day: 'numeric', year: 'numeric' });
+    return `${sStr}–${eStr}`;
+  };
+
+  // Event cards: two per row (stack naturally on mobile-width clients)
+  const cells = events.map(ev => {
+    const registerUrl = `https://ultimatetournaments.com/events/${ev.slug}`;
+    const logo = ev.logo_url
+      ? `<img src="${ev.logo_url}" alt="" width="64" height="64" style="border-radius:12px;object-fit:cover;display:block;margin:0 auto 10px;" />`
+      : `<div style="width:64px;height:64px;border-radius:12px;background-color:#003e79;margin:0 auto 10px;line-height:64px;text-align:center;color:#ffffff;font-size:24px;font-weight:800;">\u{1F3D2}</div>`;
+    return `
+      <td width="50%" style="padding:6px;vertical-align:top;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e8ed;border-radius:14px;background-color:#ffffff;">
+          <tr><td style="padding:18px 14px;text-align:center;">
+            ${logo}
+            <p style="margin:0 0 2px;color:#1d1d1f;font-size:15px;font-weight:700;">${ev.name}</p>
+            <p style="margin:0 0 2px;color:#6e6e73;font-size:12px;">${ev.city}, ${ev.state}</p>
+            <p style="margin:0 0 12px;color:#003e79;font-size:12px;font-weight:600;">${fmtRange(ev.start_date, ev.end_date)}</p>
+            <a href="${registerUrl}" style="display:inline-block;background-color:#003e79;color:#ffffff;padding:9px 22px;border-radius:20px;text-decoration:none;font-size:13px;font-weight:700;">Register Now</a>
+          </td></tr>
+        </table>
+      </td>`;
+  });
+  const eventRows: string[] = [];
+  for (let i = 0; i < cells.length; i += 2) {
+    eventRows.push(`<tr>${cells[i]}${cells[i + 1] || '<td width="50%" style="padding:6px;"></td>'}</tr>`);
+  }
+
+  return wrapEmail(`
+    <!-- Promo hero -->
+    <div style="background:linear-gradient(135deg,#003e79 0%,#005599 100%);background-color:#003e79;border-radius:16px;padding:32px 24px;text-align:center;margin-bottom:24px;">
+      <span style="display:inline-block;background-color:#00ccff;color:#003e79;font-size:12px;font-weight:800;letter-spacing:1.5px;padding:5px 14px;border-radius:14px;text-transform:uppercase;">\u{1F4E3} Limited-Time Super Saver</span>
+      <p style="margin:16px 0 4px;color:#ffffff;font-size:44px;font-weight:800;line-height:1;">$${discount} OFF</p>
+      <p style="margin:0 0 14px;color:#9fd8ff;font-size:17px;font-weight:600;">your 2nd tournament registration</p>
+      <span style="display:inline-block;background-color:rgba(255,255,255,0.14);color:#ffffff;font-size:13px;font-weight:600;padding:7px 16px;border-radius:18px;">⏰ Offer ends ${deadlineStr}</span>
+    </div>
+
+    <!-- How it works -->
+    <h2 style="margin:0 0 14px;color:#1d1d1f;font-size:19px;">How it works</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+      <tr>
+        <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">1</div></td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for any <b>Super Saver event</b> below within the next ${promoDays} days</td>
+      </tr>
+      <tr>
+        <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">2</div></td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for a <b>2nd UHT tournament</b> — any event, any city</td>
+      </tr>
+      <tr>
+        <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#00a86b;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">3</div></td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">A <b style="color:#00a86b;">$${discount} credit</b> is applied to that 2nd registration</td>
+      </tr>
+    </table>
+
+    <!-- Hotel requirement -->
+    <div style="background-color:#fff8e6;border:1px solid #f5d88f;border-radius:12px;padding:12px 16px;margin:14px 0 26px;">
+      <p style="margin:0;color:#8a6100;font-size:13px;font-weight:600;">\u{1F3E8} Hotel booking at the time of registration is required to qualify for the Super Saver credit.</p>
+    </div>
+
+    <!-- Events -->
+    <h2 style="margin:0 0 14px;color:#1d1d1f;font-size:19px;">Super Saver Events</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:26px;">
+      ${eventRows.join('')}
+    </table>
+
+    <!-- Why act now -->
+    <div style="background-color:#f5f9ff;border-radius:14px;padding:20px 22px;margin-bottom:26px;">
+      <h3 style="margin:0 0 10px;color:#003e79;font-size:16px;">Why act now?</h3>
+      <p style="margin:0 0 6px;color:#1d1d1f;font-size:14px;">✅ <b>$${discount} off</b> your next UHT event</p>
+      <p style="margin:0 0 6px;color:#1d1d1f;font-size:14px;">✅ Teams already registered from <b>30+ states</b></p>
+      <p style="margin:0 0 6px;color:#1d1d1f;font-size:14px;">✅ Last season <b>every event sold out</b></p>
+      <p style="margin:0;color:#1d1d1f;font-size:14px;">✅ Every event had a <b>waitlist</b> — don't miss your spot</p>
+    </div>
+
+    <!-- Deadline urgency -->
+    <div style="border:2px solid #e34948;border-radius:14px;padding:18px 22px;text-align:center;margin-bottom:26px;">
+      <p style="margin:0 0 4px;color:#e34948;font-size:16px;font-weight:800;">⚠️ Only ${promoDays} days to claim this deal</p>
+      <p style="margin:0;color:#6e6e73;font-size:13px;">Lock in your team's spot now — offer ends <b>${deadlineStr}</b>.</p>
+    </div>
+
+    <div style="text-align:center;">
       <a href="https://ultimatetournaments.com/events" style="display:inline-block;background-color:#00ccff;color:#003e79;padding:14px 36px;border-radius:24px;text-decoration:none;font-size:15px;font-weight:bold;">View All Events</a>
     </div>
   `);
