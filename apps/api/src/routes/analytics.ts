@@ -360,6 +360,72 @@ analyticsRoutes.get('/reports/registration-trends', authMiddleware, requireRole(
 });
 
 // ==================
+// ADMIN: Season comparison — approved teams by month, this season computed
+// live vs prior-season benchmarks imported from the old Airtable tracker.
+// Seasons run June (month 6) through May (month 5).
+// ==================
+analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+
+  // Current season boundaries (June 1 -> May 31)
+  const now = new Date();
+  const seasonStartYear = now.getUTCMonth() + 1 >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  const currentSeason = `${seasonStartYear}-${seasonStartYear + 1}`;
+  const seasonStart = `${seasonStartYear}-06-01`;
+
+  const [benchmarks, erApproved, rApproved, pendingCount] = await Promise.all([
+    db.prepare('SELECT season, month, approved FROM season_benchmarks ORDER BY season, month').all(),
+    db.prepare(`
+      SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
+      FROM event_registrations
+      WHERE created_at >= ? AND status = 'approved'
+      GROUP BY month
+    `).bind(seasonStart).all(),
+    db.prepare(`
+      SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
+      FROM registrations
+      WHERE created_at >= ? AND status = 'approved'
+      GROUP BY month
+    `).bind(seasonStart).all(),
+    db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM event_registrations WHERE created_at >= ? AND status NOT IN ('approved','denied','rejected','withdrawn','awaiting_payment')) +
+        (SELECT COUNT(*) FROM registrations WHERE created_at >= ? AND status NOT IN ('approved','rejected','withdrawn')) as n
+    `).bind(seasonStart, seasonStart).first<{ n: number }>(),
+  ]);
+
+  // Prior seasons from benchmarks: { '2025-2026': { total, months: {6: 2, ...} } }
+  const priorSeasons: Record<string, { total: number | null; months: Record<number, number> }> = {};
+  for (const row of (benchmarks.results || []) as any[]) {
+    const s = (priorSeasons[row.season] ||= { total: null, months: {} });
+    if (row.month === 0) s.total = row.approved;
+    else s.months[row.month] = row.approved;
+  }
+
+  // Current season live months
+  const currentMonths: Record<number, number> = {};
+  for (const row of [...(erApproved.results || []), ...(rApproved.results || [])] as any[]) {
+    currentMonths[row.month] = (currentMonths[row.month] || 0) + row.n;
+  }
+  const currentTotal = Object.values(currentMonths).reduce((s, v) => s + v, 0);
+
+  const seasons = [
+    ...Object.keys(priorSeasons).sort().map(season => ({
+      season,
+      total: priorSeasons[season].total,
+      months: priorSeasons[season].months,
+      current: false,
+    })),
+    { season: currentSeason, total: currentTotal, months: currentMonths, current: true },
+  ];
+
+  return c.json({
+    success: true,
+    data: { seasons, awaitingApproval: pendingCount?.n || 0 },
+  });
+});
+
+// ==================
 // ADMIN: User activity detail (for clicking into a specific user)
 // ==================
 analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRole('admin', 'director'), async (c) => {
