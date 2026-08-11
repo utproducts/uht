@@ -11,11 +11,12 @@ export const contactRoutes = new Hono<{ Bindings: Env }>();
 // ──────────────────────────────────────
 contactRoutes.get('/stats', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
-  const [contactsRes, icontactsRes, usersRes, legacyRes] = await Promise.all([
+  const [contactsRes, icontactsRes, usersRes, legacyRes, purchasedRes] = await Promise.all([
     db.prepare('SELECT COUNT(*) as cnt FROM contacts').first<{ cnt: number }>(),
     db.prepare('SELECT COUNT(*) as cnt FROM email_list_contacts WHERE is_active = 1').first<{ cnt: number }>(),
     db.prepare('SELECT COUNT(*) as cnt FROM users WHERE is_active = 1').first<{ cnt: number }>(),
     db.prepare("SELECT COUNT(*) as cnt FROM contacts WHERE source = 'legacy_team'").first<{ cnt: number }>(),
+    db.prepare("SELECT COUNT(*) as cnt FROM contacts WHERE source LIKE 'purchased%'").first<{ cnt: number }>(),
   ]);
   // Source breakdown of contacts table
   const sourceBreakdown = await db.prepare(
@@ -29,6 +30,7 @@ contactRoutes.get('/stats', authMiddleware, requireRole('admin'), async (c) => {
       icontacts: icontactsRes?.cnt || 0,
       users: usersRes?.cnt || 0,
       legacy_team: legacyRes?.cnt || 0,
+      purchased: purchasedRes?.cnt || 0,
       sources: sourceBreakdown.results,
     },
   });
@@ -54,12 +56,14 @@ contactRoutes.get('/all', authMiddleware, requireRole('admin'), async (c) => {
   else if (source === 'icontact') sourceFilter = "AND source_type = 'iContact'";
   else if (source === 'registered') sourceFilter = "AND source_type = 'Registered User'";
   else if (source === 'manual') sourceFilter = "AND source_type = 'Manual'";
+  else if (source === 'purchased') sourceFilter = "AND source_type = 'Purchased'";
 
   const unionQuery = `
     SELECT * FROM (
       SELECT email, first_name, last_name, phone,
         CASE WHEN source = 'legacy_team' THEN 'Past Contact'
              WHEN source = 'import' THEN 'Manual'
+             WHEN source LIKE 'purchased%' THEN 'Purchased'
              ELSE COALESCE(source, 'Manual') END as source_type,
         city, state, organization_name as org, created_at
       FROM contacts
@@ -99,16 +103,21 @@ contactRoutes.get('/all', authMiddleware, requireRole('admin'), async (c) => {
 
   const countQuery = `
     SELECT COUNT(*) as total FROM (
-      SELECT email FROM contacts WHERE email IS NOT NULL ${searchFilter} ${stateFilter}
-      ${source === 'icontact' ? '' : source === 'registered' ? '' : ''}
+      SELECT email,
+        CASE WHEN source = 'legacy_team' THEN 'Past Contact'
+             WHEN source = 'import' THEN 'Manual'
+             WHEN source LIKE 'purchased%' THEN 'Purchased'
+             ELSE COALESCE(source, 'Manual') END as source_type
+      FROM contacts WHERE email IS NOT NULL ${searchFilter} ${stateFilter}
       UNION ALL
-      SELECT email FROM email_list_contacts
+      SELECT email, 'iContact' as source_type FROM email_list_contacts
       WHERE is_active = 1 AND email NOT IN (SELECT email FROM contacts WHERE email IS NOT NULL)
         AND email NOT IN (SELECT email FROM users WHERE email IS NOT NULL) ${searchFilter}
       UNION ALL
-      SELECT email FROM users
+      SELECT email, 'Registered User' as source_type FROM users
       WHERE is_active = 1 AND email NOT IN (SELECT email FROM contacts WHERE email IS NOT NULL) ${searchFilter}
     ) combined
+    WHERE 1=1 ${sourceFilter}
   `;
 
   try {
@@ -300,10 +309,11 @@ contactRoutes.get('/export/csv', authMiddleware, requireRole('admin'), async (c)
 
   let rows: any[] = [];
 
-  if (!source || source === 'all' || source === 'legacy_team' || source === 'manual') {
-    const sourceFilter = source && source !== 'all' ? `AND source = '${source}'` : '';
-    const r = await db.prepare(`SELECT email, first_name, last_name, phone, source, city, state, organization_name, created_at FROM contacts WHERE email IS NOT NULL ${sourceFilter} ORDER BY last_name`).all();
-    rows.push(...(r.results || []).map((r: any) => ({ ...r, source_label: r.source === 'legacy_team' ? 'Past Contact' : r.source })));
+  if (!source || source === 'all' || source === 'legacy_team' || source === 'manual' || source === 'purchased') {
+    const sourceFilter = source === 'purchased' ? "AND source LIKE 'purchased%'"
+      : source && source !== 'all' ? `AND source = '${source}'` : '';
+    const r = await db.prepare(`SELECT email, first_name, last_name, phone, source, city, state, organization_name, tags, created_at FROM contacts WHERE email IS NOT NULL ${sourceFilter} ORDER BY last_name`).all();
+    rows.push(...(r.results || []).map((r: any) => ({ ...r, source_label: r.source === 'legacy_team' ? 'Past Contact' : (r.source || '').startsWith('purchased') ? 'Purchased' : r.source })));
   }
   if (!source || source === 'all' || source === 'icontact') {
     const r = await db.prepare("SELECT email, first_name, last_name, NULL as phone, 'iContact' as source, NULL as city, NULL as state, NULL as organization_name, created_at FROM email_list_contacts WHERE is_active = 1 ORDER BY last_name").all();
@@ -314,9 +324,9 @@ contactRoutes.get('/export/csv', authMiddleware, requireRole('admin'), async (c)
     rows.push(...(r.results || []).map((r: any) => ({ ...r, source_label: 'Registered User' })));
   }
 
-  const header = 'Email,First Name,Last Name,Phone,Source,City,State,Organization,Date Added\n';
+  const header = 'Email,First Name,Last Name,Phone,Source,City,State,Organization,Role,Date Added\n';
   const csv = rows.map((r: any) =>
-    `"${r.email || ''}","${r.first_name || ''}","${r.last_name || ''}","${r.phone || ''}","${r.source_label || r.source || ''}","${r.city || ''}","${r.state || ''}","${r.organization_name || ''}","${r.created_at || ''}"`
+    `"${r.email || ''}","${r.first_name || ''}","${r.last_name || ''}","${r.phone || ''}","${r.source_label || r.source || ''}","${r.city || ''}","${r.state || ''}","${r.organization_name || ''}","${r.tags || ''}","${r.created_at || ''}"`
   ).join('\n');
 
   return new Response(header + csv, {

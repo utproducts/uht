@@ -21,6 +21,7 @@ interface Stats {
   icontacts: number;
   users: number;
   legacy_team: number;
+  purchased: number;
 }
 
 const SOURCE_FILTERS = [
@@ -28,6 +29,7 @@ const SOURCE_FILTERS = [
   { value: 'legacy_team', label: 'Past Contacts' },
   { value: 'icontact', label: 'iContacts' },
   { value: 'registered', label: 'Registered Users' },
+  { value: 'purchased', label: 'Purchased' },
   { value: 'manual', label: 'Manual' },
 ];
 
@@ -36,6 +38,7 @@ const SOURCE_COLORS: Record<string, string> = {
   'iContact': 'bg-purple-50 text-purple-700 border-purple-200',
   'Registered User': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Manual': 'bg-blue-50 text-blue-700 border-blue-200',
+  'Purchased': 'bg-sky-50 text-sky-700 border-sky-200',
 };
 
 export default function ContactsPage() {
@@ -116,7 +119,7 @@ export default function ContactsPage() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           <button
             onClick={() => { setSourceFilter(''); }}
             className={`bg-white rounded-xl border p-4 text-left transition hover:shadow-sm ${!sourceFilter ? 'border-[#003e79] ring-1 ring-[#003e79]/20' : 'border-[#e8e8ed]'}`}
@@ -146,6 +149,13 @@ export default function ContactsPage() {
           >
             <p className="text-2xl font-semibold text-emerald-700">{stats.users.toLocaleString()}</p>
             <p className="text-xs text-[#86868b] mt-0.5">Registered Users</p>
+          </button>
+          <button
+            onClick={() => setSourceFilter('purchased')}
+            className={`bg-white rounded-xl border p-4 text-left transition hover:shadow-sm ${sourceFilter === 'purchased' ? 'border-sky-400 ring-1 ring-sky-200' : 'border-[#e8e8ed]'}`}
+          >
+            <p className="text-2xl font-semibold text-sky-700">{(stats.purchased || 0).toLocaleString()}</p>
+            <p className="text-xs text-[#86868b] mt-0.5">Purchased</p>
           </button>
         </div>
       )}
