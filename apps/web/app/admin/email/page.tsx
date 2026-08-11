@@ -482,6 +482,9 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
           templateType,
           eventId: selectedEventId || undefined,
           audience: filter,
+          // Super Saver: activates the auto-credit promo window on send
+          eventIds: templateType === 'super_saver' ? superSaverEventIds : undefined,
+          promoDays: templateType === 'super_saver' ? promoDays : undefined,
         }),
       });
       const createData = await createRes.json() as any;

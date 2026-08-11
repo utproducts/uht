@@ -177,6 +177,9 @@ const createCampaignSchema = z.object({
   eventId: z.string().optional(),
   templateType: z.enum(['market_all_events', 'market_specific_event', 'find_team', 'super_saver', 'custom']).optional(),
   audience: audienceFilterSchema.optional(),
+  // Super Saver: featured events + promo window (activates the auto-credit)
+  eventIds: z.array(z.string()).optional(),
+  promoDays: z.number().min(1).max(60).optional(),
 });
 
 emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'), zValidator('json', createCampaignSchema), async (c) => {
@@ -191,6 +194,21 @@ emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'),
     data.eventId || null, data.templateType || 'custom', c.get('user').id,
     data.audience ? JSON.stringify(data.audience) : null
   ).run();
+
+  // Sending a Super Saver campaign activates the auto-credit promo window.
+  // Only one promo is active at a time — a new send supersedes the previous one.
+  if (data.templateType === 'super_saver' && data.eventIds && data.eventIds.length > 0) {
+    try {
+      const promoDays = data.promoDays || 7;
+      await db.prepare('UPDATE super_saver_promos SET is_active = 0 WHERE is_active = 1').run();
+      await db.prepare(`
+        INSERT INTO super_saver_promos (name, discount_cents, starts_at, ends_at, event_ids, is_active)
+        VALUES (?, 40000, datetime('now'), datetime('now', '+' || ? || ' days'), ?, 1)
+      `).bind(data.name, promoDays, JSON.stringify(data.eventIds)).run();
+    } catch (err: any) {
+      console.error('Super Saver promo activation failed:', err?.message || String(err));
+    }
+  }
 
   return c.json({ success: true, data: { id } }, 201);
 });
@@ -980,26 +998,46 @@ emailRoutes.post('/unsubscribe', async (c) => {
 function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionId?: string; ageGroup?: string; excludeRegisteredForEvent?: string }) {
   const params: string[] = [];
 
-  // "everyone" → all users in the system with valid emails
+  // "everyone" → every contact source combined (users + contacts + iContact
+  // list), deduplicated by email. Unsubscribed contacts are excluded.
   if (filter.scope === 'everyone') {
     let query = `
-      SELECT DISTINCT u.email,
-        COALESCE(u.first_name || ' ' || u.last_name, u.email) as name,
-        '' as team_name, '' as age_group, '' as event_name
-      FROM users u
-      WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''
-        AND u.email NOT LIKE '%@system.internal'
+      SELECT email, name, team_name, age_group, event_name, MIN(pri) as best FROM (
+        SELECT LOWER(u.email) as email,
+          COALESCE(u.first_name || ' ' || u.last_name, u.email) as name,
+          '' as team_name, '' as age_group, '' as event_name, 1 as pri
+        FROM users u
+        WHERE u.is_active = 1 AND u.email IS NOT NULL AND u.email != ''
+          AND u.email NOT LIKE '%@system.internal'
+
+        UNION ALL
+
+        SELECT LOWER(c.email) as email,
+          COALESCE(c.first_name || ' ' || c.last_name, c.email) as name,
+          COALESCE(c.organization_name, '') as team_name, '' as age_group, '' as event_name, 2 as pri
+        FROM contacts c
+        WHERE c.email IS NOT NULL AND c.email != '' AND c.is_subscribed_email = 1
+
+        UNION ALL
+
+        SELECT LOWER(el.email) as email,
+          COALESCE(el.first_name || ' ' || el.last_name, el.email) as name,
+          '' as team_name, '' as age_group, '' as event_name, 3 as pri
+        FROM email_list_contacts el
+        WHERE el.is_active = 1 AND el.email IS NOT NULL AND el.email != ''
+      ) combined
+      GROUP BY email
     `;
     if (filter.excludeRegisteredForEvent) {
-      query += ` AND u.email NOT IN (
-        SELECT t2.head_coach_email FROM event_registrations er2
+      query += ` HAVING email NOT IN (
+        SELECT LOWER(t2.head_coach_email) FROM event_registrations er2
         JOIN teams t2 ON t2.id = er2.team_id
         WHERE er2.event_id = ? AND er2.status IN ('approved', 'pending')
         AND t2.head_coach_email IS NOT NULL AND t2.head_coach_email != ''
       )`;
       params.push(filter.excludeRegisteredForEvent);
     }
-    query += ' ORDER BY u.first_name, u.last_name';
+    query += ' ORDER BY name';
     return { query, params };
   }
 
