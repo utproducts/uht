@@ -42,9 +42,10 @@ function OrgSetup({ onSubmitted }: { onSubmitted: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // Existing org that matches what the user typed (shown for confirmation before submitting)
+  const [existingMatch, setExistingMatch] = useState<any | null>(null);
 
-  const handleCreate = async () => {
-    if (!name.trim()) { setError('Organization name is required'); return; }
+  const submitRequest = async (matchedOrgId?: string) => {
     setLoading(true);
     setError('');
     try {
@@ -60,6 +61,7 @@ function OrgSetup({ onSubmitted }: { onSubmitted: () => void }) {
           requestedByEmail: user.email || '',
           requestedByName: [user.first_name, user.last_name].filter(Boolean).join(' ') || undefined,
           requestedByUserId: user.id || undefined,
+          matchedOrgId: matchedOrgId || undefined,
         }),
       });
       const json = await res.json();
@@ -67,6 +69,23 @@ function OrgSetup({ onSubmitted }: { onSubmitted: () => void }) {
       else setError(json.error || 'Failed to submit request');
     } catch { setError('Network error'); }
     finally { setLoading(false); }
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim()) { setError('Organization name is required'); return; }
+    setLoading(true);
+    setError('');
+    // Check whether this org already exists before submitting
+    try {
+      const res = await fetch(`${API}/api/organizations/requests/check?name=${encodeURIComponent(name.trim())}&state=${encodeURIComponent(state.trim())}`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) {
+        setExistingMatch(json.data[0]);
+        setLoading(false);
+        return; // show the confirmation panel instead of submitting
+      }
+    } catch {}
+    await submitRequest();
   };
 
   if (submitted) {
@@ -123,10 +142,44 @@ function OrgSetup({ onSubmitted }: { onSubmitted: () => void }) {
                 className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] uppercase" />
             </div>
           </div>
-          <button onClick={handleCreate} disabled={loading}
-            className="w-full py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50">
-            {loading ? 'Submitting...' : 'Submit for Approval'}
-          </button>
+          {existingMatch ? (
+            <div className="p-4 bg-[#f0f7ff] border border-[#003e79]/20 rounded-xl">
+              <p className="text-sm font-semibold text-[#1d1d1f] mb-1">
+                We found this organization already on Ultimate Tournaments:
+              </p>
+              <p className="text-sm text-[#1d1d1f] mb-3">
+                <span className="font-bold">{existingMatch.name}</span>
+                {(existingMatch.city || existingMatch.state) && (
+                  <span className="text-[#6e6e73]"> — {[existingMatch.city, existingMatch.state].filter(Boolean).join(', ')}</span>
+                )}
+                {existingMatch.team_count > 0 && (
+                  <span className="text-[#6e6e73]"> · {existingMatch.team_count} team{existingMatch.team_count !== 1 ? 's' : ''}</span>
+                )}
+              </p>
+              <p className="text-xs text-[#6e6e73] mb-3">
+                If this is your organization, we&apos;ll connect your request to it — no duplicate will be created.
+              </p>
+              <div className="space-y-2">
+                <button onClick={() => submitRequest(existingMatch.id)} disabled={loading}
+                  className="w-full py-2.5 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50">
+                  {loading ? 'Submitting...' : "Yes, that's my organization"}
+                </button>
+                <button onClick={() => submitRequest()} disabled={loading}
+                  className="w-full py-2.5 bg-white border border-[#e8e8ed] text-[#1d1d1f] font-semibold rounded-xl text-sm hover:bg-[#f5f5f7] transition-colors disabled:opacity-50">
+                  No, mine is a different organization
+                </button>
+                <button onClick={() => setExistingMatch(null)} disabled={loading}
+                  className="w-full py-2 text-xs font-medium text-[#6e6e73] hover:text-[#1d1d1f]">
+                  Go back and edit
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={handleCreate} disabled={loading}
+              className="w-full py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50">
+              {loading ? 'Checking...' : 'Submit for Approval'}
+            </button>
+          )}
         </div>
       </div>
     </div>

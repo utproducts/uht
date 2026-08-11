@@ -402,6 +402,34 @@ organizationRoutes.get('/requests/mine', authMiddleware, async (c) => {
   }
 });
 
+// ==================
+// Public: check whether a requested org name matches an existing organization
+// Used by the request form to warn before submitting a duplicate.
+// ==================
+organizationRoutes.get('/requests/check', async (c) => {
+  const db = c.env.DB;
+  const name = (c.req.query('name') || '').trim();
+  const state = (c.req.query('state') || '').trim();
+  if (name.length < 3) return c.json({ success: true, data: [] });
+
+  const matches = await db.prepare(`
+    SELECT o.id, o.name, o.city, o.state,
+      (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count,
+      EXISTS(SELECT 1 FROM organization_admins oa WHERE oa.organization_id = o.id) as has_owner
+    FROM organizations o
+    WHERE o.is_active = 1 AND (
+      LOWER(o.name) = LOWER(?) OR LOWER(o.name) LIKE LOWER(?) OR LOWER(?) LIKE '%' || LOWER(o.name) || '%'
+    )
+    ORDER BY
+      CASE WHEN LOWER(o.name) = LOWER(?) THEN 0 ELSE 1 END,
+      CASE WHEN ? != '' AND LOWER(o.state) = LOWER(?) THEN 0 ELSE 1 END,
+      o.name ASC
+    LIMIT 5
+  `).bind(name, `%${name}%`, name, name, state, state).all();
+
+  return c.json({ success: true, data: matches.results });
+});
+
 organizationRoutes.post('/requests', async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{
@@ -411,6 +439,7 @@ organizationRoutes.post('/requests', async (c) => {
     requestedByEmail: string;
     requestedByName?: string;
     requestedByUserId?: string;
+    matchedOrgId?: string;
   }>();
 
   if (!body.name || !body.name.trim()) {
@@ -441,9 +470,24 @@ organizationRoutes.post('/requests', async (c) => {
 
   const id = crypto.randomUUID().replace(/-/g, '');
 
+  // Record any existing-org match so the admin can approve-and-merge instead
+  // of creating a duplicate. Use the client-confirmed match if given,
+  // otherwise auto-detect an exact (case-insensitive) name match.
+  let matchedOrgId: string | null = null;
+  try {
+    if (body.matchedOrgId) {
+      const m = await db.prepare('SELECT id FROM organizations WHERE id = ? AND is_active = 1').bind(body.matchedOrgId).first<{ id: string }>();
+      if (m) matchedOrgId = m.id;
+    }
+    if (!matchedOrgId) {
+      const m = await db.prepare('SELECT id FROM organizations WHERE LOWER(name) = LOWER(?) AND is_active = 1 LIMIT 1').bind(body.name.trim()).first<{ id: string }>();
+      if (m) matchedOrgId = m.id;
+    }
+  } catch {}
+
   await db.prepare(`
-    INSERT INTO organization_requests (id, name, city, state, requested_by_email, requested_by_name, requested_by_user_id, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO organization_requests (id, name, city, state, requested_by_email, requested_by_name, requested_by_user_id, status, matched_org_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
   `).bind(
     id,
     body.name.trim(),
@@ -451,10 +495,11 @@ organizationRoutes.post('/requests', async (c) => {
     body.state || null,
     body.requestedByEmail.trim().toLowerCase(),
     body.requestedByName || null,
-    body.requestedByUserId || null
+    body.requestedByUserId || null,
+    matchedOrgId
   ).run();
 
-  return c.json({ success: true, id }, 201);
+  return c.json({ success: true, id, matchedOrgId }, 201);
 });
 
 // ==================
@@ -479,7 +524,33 @@ organizationRoutes.get('/admin/requests', authMiddleware, requireRole('admin'), 
     SELECT * FROM organization_requests ORDER BY created_at DESC
   `).all();
 
-  return c.json({ success: true, data: result.results });
+  // Attach existing-org match info: stored matched_org_id first, otherwise a
+  // live exact-name match (covers requests submitted before matching existed).
+  const requests = (result.results || []) as any[];
+  for (const req of requests) {
+    req.matched_org = null;
+    if (req.status !== 'pending') continue;
+    try {
+      let match: any = null;
+      if (req.matched_org_id) {
+        match = await db.prepare(`
+          SELECT o.id, o.name, o.city, o.state,
+            (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
+          FROM organizations o WHERE o.id = ? AND o.is_active = 1
+        `).bind(req.matched_org_id).first();
+      }
+      if (!match) {
+        match = await db.prepare(`
+          SELECT o.id, o.name, o.city, o.state,
+            (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count
+          FROM organizations o WHERE LOWER(o.name) = LOWER(?) AND o.is_active = 1 LIMIT 1
+        `).bind(req.name).first();
+      }
+      if (match) req.matched_org = match;
+    } catch {}
+  }
+
+  return c.json({ success: true, data: requests });
 });
 
 // ==================
@@ -489,7 +560,7 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
   try {
   const requestId = c.req.param('id');
   const db = c.env.DB;
-  const body = await c.req.json<{ adminNotes?: string }>().catch(() => ({} as { adminNotes?: string }));
+  const body = await c.req.json<{ adminNotes?: string; mode?: 'create' | 'merge'; makeOwner?: boolean; mergeOrgId?: string }>().catch(() => ({} as { adminNotes?: string; mode?: 'create' | 'merge'; makeOwner?: boolean; mergeOrgId?: string }));
 
   // Fetch the request
   const request = await db.prepare(
@@ -503,6 +574,80 @@ organizationRoutes.post('/admin/requests/:id/approve', authMiddleware, requireRo
     return c.json({ error: `Request already ${request.status}` }, 400);
   }
 
+  // ---- MERGE MODE: link the requester to an existing org instead of creating a duplicate ----
+  if (body.mode === 'merge') {
+    const targetOrgId = body.mergeOrgId || request.matched_org_id;
+    if (!targetOrgId) return c.json({ error: 'No existing organization to merge into' }, 400);
+    const targetOrg = await db.prepare('SELECT id, name FROM organizations WHERE id = ? AND is_active = 1').bind(targetOrgId).first<{ id: string; name: string }>();
+    if (!targetOrg) return c.json({ error: 'Target organization not found' }, 404);
+
+    // Resolve the requester's user account (may not exist yet)
+    let requesterUserId: string | null = null;
+    if (request.requested_by_user_id) {
+      const u = await db.prepare('SELECT id FROM users WHERE id = ?').bind(request.requested_by_user_id).first<any>();
+      if (u) requesterUserId = u.id;
+    }
+    if (!requesterUserId && request.requested_by_email) {
+      const u = await db.prepare('SELECT id FROM users WHERE email = ?').bind(request.requested_by_email).first<any>();
+      if (u) requesterUserId = u.id;
+    }
+
+    if (body.makeOwner) {
+      if (requesterUserId) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO organization_admins (organization_id, user_id, created_at)
+          VALUES (?, ?, datetime('now'))
+        `).bind(targetOrg.id, requesterUserId).run();
+        await db.prepare(`
+          INSERT OR IGNORE INTO user_roles (user_id, role, created_at)
+          VALUES (?, 'organization', datetime('now'))
+        `).bind(requesterUserId).run();
+        // Transfer legacy owner_id off placeholder accounts only
+        await db.prepare(`
+          UPDATE organizations SET owner_id = ?, updated_at = datetime('now')
+          WHERE id = ? AND owner_id IN ('chad-owner-001', 'system_migration_user')
+        `).bind(requesterUserId, targetOrg.id).run();
+      } else {
+        // No account yet — pending org invite auto-links ownership at signup
+        await db.prepare(`
+          INSERT INTO organization_invites (organization_id, email, status, invited_by)
+          VALUES (?, ?, 'pending', 'admin_approval')
+          ON CONFLICT(organization_id, email) DO UPDATE SET status = 'pending'
+        `).bind(targetOrg.id, request.requested_by_email).run();
+      }
+    }
+
+    await db.prepare(`
+      UPDATE organization_requests
+      SET status = 'approved', created_org_id = ?, admin_notes = ?, reviewed_at = datetime('now'), reviewed_by = 'admin'
+      WHERE id = ?
+    `).bind(targetOrg.id, body.adminNotes || (body.makeOwner ? 'Merged into existing org as owner' : 'Merged into existing org'), requestId).run();
+
+    // Notify the requester
+    const mergeSiteUrl = (c.env as any).SITE_URL || 'https://ultimatetournaments.com';
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+          to: [request.requested_by_email],
+          subject: `${targetOrg.name} is ready on Ultimate Tournaments`,
+          html: body.makeOwner
+            ? `<p>Good news! <strong>${targetOrg.name}</strong> was already on Ultimate Tournaments, and you've been connected as an organization owner.</p>
+               <p>All of the organization's teams are linked to your account.</p>
+               <p><a href="${mergeSiteUrl}/dashboard/organization" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Open Your Org Dashboard</a></p>`
+            : `<p>Good news! <strong>${targetOrg.name}</strong> is already set up on Ultimate Tournaments.</p>
+               <p>You can create your team and select it from the organization list, or join an existing team with an invite code from your coach or manager.</p>
+               <p><a href="${mergeSiteUrl}/create-team" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Create Your Team</a></p>`,
+        }),
+      });
+    } catch {}
+
+    return c.json({ success: true, merged: true, orgId: targetOrg.id });
+  }
+
+  // ---- CREATE MODE (default): create a brand-new organization ----
   // Determine owner: use requesting user if they have an account, otherwise the approving admin
   const admin = c.get('user') as any;
   let ownerId: string | null = null;

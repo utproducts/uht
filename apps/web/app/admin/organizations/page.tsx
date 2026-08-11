@@ -35,6 +35,7 @@ interface OrgRequest {
   status: string;
   admin_notes: string;
   created_at: string;
+  matched_org: { id: string; name: string; city: string | null; state: string | null; team_count: number } | null;
 }
 
 function getToken(): string {
@@ -112,6 +113,8 @@ export default function OrganizationsPage() {
   const [requests, setRequests] = useState<OrgRequest[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [denyingId, setDenyingId] = useState<string | null>(null);
+  // Request id whose "merge into existing org" owner-choice panel is open
+  const [mergeChoiceId, setMergeChoiceId] = useState<string | null>(null);
 
   // Owner assignment
   const [ownerEditId, setOwnerEditId] = useState<number | null>(null);
@@ -176,16 +179,20 @@ export default function OrganizationsPage() {
     }
   };
 
-  const handleApprove = async (req: OrgRequest) => {
+  const handleApprove = async (req: OrgRequest, options?: { mode: 'merge'; makeOwner: boolean }) => {
     setApprovingId(req.id);
+    setMergeChoiceId(null);
     try {
+      const body = options
+        ? { mode: 'merge', makeOwner: options.makeOwner, mergeOrgId: req.matched_org?.id }
+        : {};
       const res = await fetch(`${API}/organizations/admin/requests/${req.id}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         fetchRequests();
@@ -430,51 +437,101 @@ export default function OrganizationsPage() {
               .map((req) => (
                 <div
                   key={req.id}
-                  className="bg-white rounded-xl border border-amber-200 p-4 flex items-center justify-between"
+                  className="bg-white rounded-xl border border-amber-200 p-4"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-[#1d1d1f]">{req.name}</span>
-                      {req.state && (
-                        <span className="text-xs text-[#6e6e73] bg-[#f5f5f7] px-2 py-0.5 rounded-full">
-                          {req.city ? `${req.city}, ${req.state}` : req.state}
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-[#1d1d1f]">{req.name}</span>
+                        {req.state && (
+                          <span className="text-xs text-[#6e6e73] bg-[#f5f5f7] px-2 py-0.5 rounded-full">
+                            {req.city ? `${req.city}, ${req.state}` : req.state}
+                          </span>
+                        )}
+                        {req.matched_org && (
+                          <span className="text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-full">
+                            ⚠ Matches existing org: {req.matched_org.name}
+                            {req.matched_org.state ? ` (${req.matched_org.state})` : ''}
+                            {` · ${req.matched_org.team_count} team${req.matched_org.team_count !== 1 ? 's' : ''}`}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-[#6e6e73] mt-1">
+                        Requested by{' '}
+                        <span className="font-medium text-[#1d1d1f]">
+                          {req.requested_by_name || req.requested_by_email}
                         </span>
-                      )}
+                        {req.requested_by_name && (
+                          <span className="text-[#86868b]"> ({req.requested_by_email})</span>
+                        )}
+                        <span className="text-[#86868b]">
+                          {' '}&middot;{' '}
+                          {new Date(req.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs text-[#6e6e73] mt-1">
-                      Requested by{' '}
-                      <span className="font-medium text-[#1d1d1f]">
-                        {req.requested_by_name || req.requested_by_email}
-                      </span>
-                      {req.requested_by_name && (
-                        <span className="text-[#86868b]"> ({req.requested_by_email})</span>
+                    <div className="flex items-center gap-2 ml-4">
+                      {req.matched_org ? (
+                        <button
+                          onClick={() => setMergeChoiceId(mergeChoiceId === req.id ? null : req.id)}
+                          disabled={approvingId === req.id}
+                          className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {approvingId === req.id ? 'Approving...' : 'Approve & Merge'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleApprove(req)}
+                          disabled={approvingId === req.id}
+                          className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {approvingId === req.id ? 'Approving...' : 'Approve'}
+                        </button>
                       )}
-                      <span className="text-[#86868b]">
-                        {' '}&middot;{' '}
-                        {new Date(req.created_at).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </span>
+                      <button
+                        onClick={() => handleDeny(req)}
+                        disabled={denyingId === req.id}
+                        className="px-4 py-1.5 bg-white text-red-600 text-xs font-semibold rounded-lg border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      >
+                        {denyingId === req.id ? 'Denying...' : 'Deny'}
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <button
-                      onClick={() => handleApprove(req)}
-                      disabled={approvingId === req.id}
-                      className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                    >
-                      {approvingId === req.id ? 'Approving...' : 'Approve'}
-                    </button>
-                    <button
-                      onClick={() => handleDeny(req)}
-                      disabled={denyingId === req.id}
-                      className="px-4 py-1.5 bg-white text-red-600 text-xs font-semibold rounded-lg border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      {denyingId === req.id ? 'Denying...' : 'Deny'}
-                    </button>
-                  </div>
+
+                  {/* Merge choice panel — decide whether the requester becomes an org owner */}
+                  {req.matched_org && mergeChoiceId === req.id && (
+                    <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-xs text-[#1d1d1f] mb-2">
+                        <span className="font-semibold">{req.matched_org.name}</span> already exists — no new org will be created.
+                        Should <span className="font-semibold">{req.requested_by_name || req.requested_by_email}</span> become an owner of it,
+                        or are they just a coach/manager of a team in the org?
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleApprove(req, { mode: 'merge', makeOwner: true })}
+                          className="px-3 py-1.5 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a] transition-colors"
+                        >
+                          Merge — make them an owner
+                        </button>
+                        <button
+                          onClick={() => handleApprove(req, { mode: 'merge', makeOwner: false })}
+                          className="px-3 py-1.5 bg-white text-[#003e79] text-xs font-semibold rounded-lg border border-[#003e79]/30 hover:bg-[#f0f7ff] transition-colors"
+                        >
+                          Merge — no ownership (they&apos;ll join a team)
+                        </button>
+                        <button
+                          onClick={() => setMergeChoiceId(null)}
+                          className="px-3 py-1.5 text-xs font-medium text-[#6e6e73] hover:text-[#1d1d1f]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
           </div>
