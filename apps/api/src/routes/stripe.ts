@@ -29,6 +29,37 @@ async function stripeGet(path: string, secretKey: string) {
   return res.json() as Promise<any>;
 }
 
+// Helper: after a registration is paid, withdraw any OTHER abandoned-checkout
+// rows for the same team + event so they don't linger as duplicate participants.
+// (Re-registering while a prior attempt sits at 'awaiting_payment' creates a new
+// row by design; only one of them ever gets paid.)
+async function withdrawAbandonedDuplicates(db: D1Database, paidRegId: string) {
+  try {
+    const er = await db.prepare(
+      'SELECT event_id, team_name FROM event_registrations WHERE id = ?'
+    ).bind(paidRegId).first<{ event_id: string; team_name: string }>();
+    if (er) {
+      await db.prepare(
+        `UPDATE event_registrations
+         SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: duplicate abandoned checkout, superseded by paid registration ' || ?
+         WHERE event_id = ? AND team_name = ? AND id != ? AND status = 'awaiting_payment'`
+      ).bind(paidRegId, er.event_id, er.team_name, paidRegId).run();
+    }
+  } catch {}
+  try {
+    const r = await db.prepare(
+      'SELECT event_id, team_id FROM registrations WHERE id = ?'
+    ).bind(paidRegId).first<{ event_id: string; team_id: string }>();
+    if (r && r.team_id) {
+      await db.prepare(
+        `UPDATE registrations
+         SET status = 'withdrawn'
+         WHERE event_id = ? AND team_id = ? AND id != ? AND status = 'awaiting_payment'`
+      ).bind(r.event_id, r.team_id, paidRegId).run();
+    }
+  } catch {}
+}
+
 // ==================
 // PAYMENT INFO LOOKUP (no auth — accessed via shared payment links)
 // ==================
@@ -348,6 +379,8 @@ stripeRoutes.post('/confirm-payment', async (c) => {
         await db.prepare(
           `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
         ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+
+        await withdrawAbandonedDuplicates(db, regId);
       }
 
       // Send confirmation email now that payment has succeeded
@@ -441,6 +474,8 @@ stripeRoutes.post('/webhook', async (c) => {
       await db.prepare(
         `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
       ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+
+      await withdrawAbandonedDuplicates(db, regId);
     }
   }
 

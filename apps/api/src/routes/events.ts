@@ -326,7 +326,7 @@ eventRoutes.get('/admin/list', async (c) => {
   const result = await db.prepare(`
     SELECT e.*,
       t.name as tournament_name, t.location as tournament_location,
-      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status NOT IN ('denied','withdrawn')) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('denied','withdrawn')) as registration_count,
+      (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status NOT IN ('denied','withdrawn','awaiting_payment')) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('denied','withdrawn','awaiting_payment')) as registration_count,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as total_registration_count,
       (SELECT COALESCE(SUM(COALESCE(r2.amount_cents, ed2.price_cents)), 0) FROM registrations r2 LEFT JOIN event_divisions ed2 ON ed2.id = r2.event_division_id WHERE r2.event_id = e.id AND r2.payment_status = 'paid' AND r2.status = 'approved') + (SELECT COALESCE(SUM(COALESCE(er2.payment_amount_cents, 0)), 0) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.payment_status = 'paid' AND er2.status = 'approved') as total_revenue_cents
     FROM events e

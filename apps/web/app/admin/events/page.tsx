@@ -4232,8 +4232,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const ageGroups = event.age_groups ? (event.age_groups.startsWith('[') ? JSON.parse(event.age_groups) : event.age_groups.split(',').map((s: string) => s.trim())) : summary.length > 0 ? summary.map((s: any) => s.age_group) : [];
   const divisions = event.divisions ? JSON.parse(event.divisions) : [];
   const allRegistrations = event.registrations || [];
-  // Show ALL registrations (pending + approved + denied) so admins can manage them all
-  const registrations = allRegistrations.filter((r: any) => r.status !== 'denied' && r.status !== 'withdrawn');
+  // Show ALL registrations (pending + approved + denied) so admins can manage them all.
+  // awaiting_payment = abandoned checkout (never paid) — hidden here to match the Registrations tab.
+  const registrations = allRegistrations.filter((r: any) => r.status !== 'denied' && r.status !== 'withdrawn' && r.status !== 'awaiting_payment');
   const approvedRegistrations = allRegistrations.filter((r: any) => r.status === 'approved');
   const totalRevenue = approvedRegistrations.filter((r: any) => r.payment_status === 'paid').reduce((sum: number, r: any) => sum + (r.payment_amount_cents || 0), 0);
 
