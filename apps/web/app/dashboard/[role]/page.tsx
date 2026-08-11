@@ -14,6 +14,10 @@ export function generateStaticParams() {
 const STATIC_REDIRECTS: Record<string, string> = {
   coach: '/dashboard/coach/teams/',
   manager: '/dashboard/manager/teams/',
+  // Admin overview lives at /admin so the admin area keeps ONE sidebar —
+  // /dashboard/admin used the dashboard layout's different menu, which made
+  // the nav appear to change when clicking Overview.
+  admin: '/admin/',
 };
 
 export default function DashboardPage({ params }: { params: { role: string } }) {

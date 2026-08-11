@@ -245,7 +245,7 @@ function PendingRegistrations() {
   );
 }
 
-function AdminDash() {
+export function AdminDash() {
   const [stats, setStats] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [divisionTotals, setDivisionTotals] = useState<any[]>([]);

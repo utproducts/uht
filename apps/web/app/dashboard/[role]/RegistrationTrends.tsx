@@ -12,7 +12,14 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev
  * red = down. Seasons run June -> May.
  */
 
-type SeasonRow = { season: string; total: number | null; months: Record<number, number>; current: boolean };
+type SeasonRow = {
+  season: string;
+  total: number | null;
+  months: Record<number, number>;
+  approvedMonths?: Record<number, number>;
+  approvedTotal?: number;
+  current: boolean;
+};
 
 // June -> May
 const SEASON_MONTHS = [6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5];
@@ -27,7 +34,6 @@ const MUTED = '#86868b';
 
 export default function RegistrationTrends() {
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
-  const [approvedThisSeason, setApprovedThisSeason] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,7 +45,6 @@ export default function RegistrationTrends() {
       .then(json => {
         if (json.success) {
           setSeasons(json.data.seasons || []);
-          setApprovedThisSeason(json.data.approvedThisSeason || 0);
         }
       })
       .catch(() => {})
@@ -69,12 +74,7 @@ export default function RegistrationTrends() {
         <span className="text-xs" style={{ color: MUTED }}>Season runs June – May</span>
       </div>
       <p className="text-xs mb-4" style={{ color: MUTED }}>
-        Green = ahead of the previous season&apos;s same month · Red = behind
-        {seasons.length > 0 && (() => {
-          const cur = seasons.find(s => s.current);
-          const pending = cur && cur.total !== null ? cur.total - approvedThisSeason : 0;
-          return pending > 0 ? <> · this season: <span className="font-semibold text-[#0ca30c]">{approvedThisSeason} approved</span>, <span className="font-semibold text-amber-600">{pending} awaiting approval</span></> : null;
-        })()}
+        Green = ahead of the previous season&apos;s same month · Red = behind · counts are teams registered
       </p>
 
       <div className="overflow-x-auto">
@@ -97,11 +97,20 @@ export default function RegistrationTrends() {
               {seasons.map((s, i) => {
                 const prev = i > 0 ? seasons[i - 1].total : null;
                 const st = cellStyle(s.total, prev);
+                const approvedT = s.current ? (s.approvedTotal || 0) : null;
+                const pendingT = s.current && s.total !== null ? s.total - (approvedT || 0) : null;
                 return (
-                  <td key={s.season} className="py-1.5 px-2 text-right">
+                  <td key={s.season} className="py-1.5 px-2 text-right align-top">
                     <span className="inline-block min-w-[72px] rounded-lg px-3 py-1 text-lg font-bold" style={{ background: st.bg, color: st.text }}>
                       {s.total === null ? '—' : s.total.toLocaleString()}
                     </span>
+                    {s.current && (approvedT || 0) + (pendingT || 0) > 0 && (
+                      <div className="text-[10px] font-medium mt-0.5 pr-1">
+                        <span style={{ color: '#0ca30c' }}>{approvedT} approved</span>
+                        <span style={{ color: MUTED }}> · </span>
+                        <span className="text-amber-600">{pendingT} pending</span>
+                      </div>
+                    )}
                   </td>
                 );
               })}
@@ -120,11 +129,20 @@ export default function RegistrationTrends() {
                     const prevSeason = i > 0 ? seasons[i - 1] : null;
                     const prevValue = prevSeason ? (prevSeason.months[m] ?? null) : null;
                     const st = cellStyle(value, prevValue);
+                    const approvedM = s.current ? (s.approvedMonths?.[m] || 0) : 0;
+                    const pendingM = s.current && value ? value - approvedM : 0;
                     return (
-                      <td key={s.season} className="py-1 px-2 text-right">
+                      <td key={s.season} className="py-1 px-2 text-right align-top">
                         <span className="inline-block min-w-[72px] rounded-lg px-3 py-1 font-semibold" style={{ background: st.bg, color: st.text }}>
                           {value === null || value === undefined ? '—' : value.toLocaleString()}
                         </span>
+                        {s.current && value !== null && value > 0 && (
+                          <div className="text-[10px] font-medium mt-0.5 pr-1">
+                            <span style={{ color: '#0ca30c' }}>{approvedM} approved</span>
+                            <span style={{ color: MUTED }}> · </span>
+                            <span className="text-amber-600">{pendingM} pending</span>
+                          </div>
+                        )}
                       </td>
                     );
                   })}

@@ -60,7 +60,7 @@ export default function RoleSwitcher() {
   const switchRole = (roleId: string) => {
     if (typeof window !== 'undefined') localStorage.setItem('uht_role', roleId);
     if (roleId === 'admin') {
-      window.location.href = '/admin/events';
+      window.location.href = '/admin';
     } else {
       window.location.href = '/dashboard/' + roleId;
     }

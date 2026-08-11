@@ -377,7 +377,7 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
   // immediately, before admin approval) — matches how the team thinks about
   // monthly numbers. Historical Airtable benchmarks are end-of-season approved
   // counts, which equal total registrations since everything gets approved.
-  const [benchmarks, erActive, rActive, approvedCount] = await Promise.all([
+  const [benchmarks, erActive, rActive, erApproved, rApproved] = await Promise.all([
     db.prepare('SELECT season, month, approved FROM season_benchmarks ORDER BY season, month').all(),
     db.prepare(`
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
@@ -392,10 +392,17 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
       GROUP BY month
     `).bind(seasonStart).all(),
     db.prepare(`
-      SELECT
-        (SELECT COUNT(*) FROM event_registrations WHERE created_at >= ? AND status = 'approved') +
-        (SELECT COUNT(*) FROM registrations WHERE created_at >= ? AND status = 'approved') as n
-    `).bind(seasonStart, seasonStart).first<{ n: number }>(),
+      SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
+      FROM event_registrations
+      WHERE created_at >= ? AND status = 'approved'
+      GROUP BY month
+    `).bind(seasonStart).all(),
+    db.prepare(`
+      SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
+      FROM registrations
+      WHERE created_at >= ? AND status = 'approved'
+      GROUP BY month
+    `).bind(seasonStart).all(),
   ]);
 
   // Prior seasons from benchmarks: { '2025-2026': { total, months: {6: 2, ...} } }
@@ -406,12 +413,17 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
     else s.months[row.month] = row.approved;
   }
 
-  // Current season live months
+  // Current season live months (registered + how many of those are approved)
   const currentMonths: Record<number, number> = {};
   for (const row of [...(erActive.results || []), ...(rActive.results || [])] as any[]) {
     currentMonths[row.month] = (currentMonths[row.month] || 0) + row.n;
   }
+  const approvedMonths: Record<number, number> = {};
+  for (const row of [...(erApproved.results || []), ...(rApproved.results || [])] as any[]) {
+    approvedMonths[row.month] = (approvedMonths[row.month] || 0) + row.n;
+  }
   const currentTotal = Object.values(currentMonths).reduce((s, v) => s + v, 0);
+  const approvedTotal = Object.values(approvedMonths).reduce((s, v) => s + v, 0);
 
   const seasons = [
     ...Object.keys(priorSeasons).sort().map(season => ({
@@ -420,12 +432,12 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
       months: priorSeasons[season].months,
       current: false,
     })),
-    { season: currentSeason, total: currentTotal, months: currentMonths, current: true },
+    { season: currentSeason, total: currentTotal, months: currentMonths, approvedMonths, approvedTotal, current: true },
   ];
 
   return c.json({
     success: true,
-    data: { seasons, approvedThisSeason: approvedCount?.n || 0 },
+    data: { seasons, approvedThisSeason: approvedTotal },
   });
 });
 

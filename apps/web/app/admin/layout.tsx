@@ -34,7 +34,7 @@ function checkAdminAccess(): boolean {
 const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: string }[] }[] = [
   {
     title: null,
-    items: [{ name: 'Overview', href: '/dashboard/admin' }],
+    items: [{ name: 'Overview', href: '/admin' }],
   },
   {
     title: 'Tournaments',
@@ -199,9 +199,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         >
           <nav>
             {ADMIN_NAV_SECTIONS.map((section, si) => {
-              const sectionHasActive = section.items.some(
-                (item) => pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href))
-              );
+              // '/admin' (Overview) must match exactly — startsWith would light it up on every admin page
+              const itemActive = (href: string) =>
+                pathname === href || pathname === `${href}/` || (href !== '/admin' && pathname.startsWith(href));
+              const sectionHasActive = section.items.some((item) => itemActive(item.href));
               // Explicit user choice wins; otherwise default open for the active section
               const isOpen = !section.title
                 || (section.title in openSections ? !!openSections[section.title] : sectionHasActive);
@@ -224,7 +225,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   {isOpen && (
                     <div className="space-y-0.5 mt-0.5">
                       {section.items.map((item) => {
-                        const isActive = pathname === item.href || (item.href !== '/dashboard/admin' && pathname.startsWith(item.href));
+                        const isActive = itemActive(item.href);
                         return (
                           <a
                             key={item.name}
