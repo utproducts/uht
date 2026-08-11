@@ -373,24 +373,28 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
   const currentSeason = `${seasonStartYear}-${seasonStartYear + 1}`;
   const seasonStart = `${seasonStartYear}-06-01`;
 
-  const [benchmarks, erApproved, rApproved, pendingCount] = await Promise.all([
+  // Current season counts ALL active registrations (a team that registered counts
+  // immediately, before admin approval) — matches how the team thinks about
+  // monthly numbers. Historical Airtable benchmarks are end-of-season approved
+  // counts, which equal total registrations since everything gets approved.
+  const [benchmarks, erActive, rActive, approvedCount] = await Promise.all([
     db.prepare('SELECT season, month, approved FROM season_benchmarks ORDER BY season, month').all(),
     db.prepare(`
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
       FROM event_registrations
-      WHERE created_at >= ? AND status = 'approved'
+      WHERE created_at >= ? AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
       GROUP BY month
     `).bind(seasonStart).all(),
     db.prepare(`
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
       FROM registrations
-      WHERE created_at >= ? AND status = 'approved'
+      WHERE created_at >= ? AND status NOT IN ('rejected', 'withdrawn')
       GROUP BY month
     `).bind(seasonStart).all(),
     db.prepare(`
       SELECT
-        (SELECT COUNT(*) FROM event_registrations WHERE created_at >= ? AND status NOT IN ('approved','denied','rejected','withdrawn','awaiting_payment')) +
-        (SELECT COUNT(*) FROM registrations WHERE created_at >= ? AND status NOT IN ('approved','rejected','withdrawn')) as n
+        (SELECT COUNT(*) FROM event_registrations WHERE created_at >= ? AND status = 'approved') +
+        (SELECT COUNT(*) FROM registrations WHERE created_at >= ? AND status = 'approved') as n
     `).bind(seasonStart, seasonStart).first<{ n: number }>(),
   ]);
 
@@ -404,7 +408,7 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
 
   // Current season live months
   const currentMonths: Record<number, number> = {};
-  for (const row of [...(erApproved.results || []), ...(rApproved.results || [])] as any[]) {
+  for (const row of [...(erActive.results || []), ...(rActive.results || [])] as any[]) {
     currentMonths[row.month] = (currentMonths[row.month] || 0) + row.n;
   }
   const currentTotal = Object.values(currentMonths).reduce((s, v) => s + v, 0);
@@ -421,7 +425,7 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
 
   return c.json({
     success: true,
-    data: { seasons, awaitingApproval: pendingCount?.n || 0 },
+    data: { seasons, approvedThisSeason: approvedCount?.n || 0 },
   });
 });
 

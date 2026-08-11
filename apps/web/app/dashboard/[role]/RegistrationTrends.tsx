@@ -27,7 +27,7 @@ const MUTED = '#86868b';
 
 export default function RegistrationTrends() {
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
-  const [awaiting, setAwaiting] = useState(0);
+  const [approvedThisSeason, setApprovedThisSeason] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function RegistrationTrends() {
       .then(json => {
         if (json.success) {
           setSeasons(json.data.seasons || []);
-          setAwaiting(json.data.awaitingApproval || 0);
+          setApprovedThisSeason(json.data.approvedThisSeason || 0);
         }
       })
       .catch(() => {})
@@ -65,12 +65,16 @@ export default function RegistrationTrends() {
   return (
     <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="text-sm font-semibold text-[#1d1d1f]">Approved Teams by Month</h3>
+        <h3 className="text-sm font-semibold text-[#1d1d1f]">Teams Registered by Month</h3>
         <span className="text-xs" style={{ color: MUTED }}>Season runs June – May</span>
       </div>
       <p className="text-xs mb-4" style={{ color: MUTED }}>
         Green = ahead of the previous season&apos;s same month · Red = behind
-        {awaiting > 0 && <> · <span className="font-semibold text-amber-600">{awaiting} team{awaiting !== 1 ? 's' : ''} registered &amp; awaiting approval</span> (not counted below)</>}
+        {seasons.length > 0 && (() => {
+          const cur = seasons.find(s => s.current);
+          const pending = cur && cur.total !== null ? cur.total - approvedThisSeason : 0;
+          return pending > 0 ? <> · this season: <span className="font-semibold text-[#0ca30c]">{approvedThisSeason} approved</span>, <span className="font-semibold text-amber-600">{pending} awaiting approval</span></> : null;
+        })()}
       </p>
 
       <div className="overflow-x-auto">
