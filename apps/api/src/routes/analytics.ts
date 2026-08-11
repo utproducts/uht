@@ -252,6 +252,114 @@ analyticsRoutes.get('/reports/division-totals', authMiddleware, requireRole('adm
 });
 
 // ==================
+// ADMIN: Registration trends — month-over-month teams, approval status,
+// states, and divisions across BOTH registration tables (last 12 months)
+// ==================
+analyticsRoutes.get('/reports/registration-trends', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+
+  // Active registrations only — abandoned checkouts and dead rows excluded
+  const [erRows, rRows] = await Promise.all([
+    db.prepare(`
+      SELECT strftime('%Y-%m', er.created_at) as month, er.status, er.age_group,
+        COALESCE(NULLIF(TRIM(t.state), ''), '') as state
+      FROM event_registrations er
+      LEFT JOIN teams t ON t.id = er.team_id
+      WHERE er.created_at >= date('now', '-12 months')
+        AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
+    `).all(),
+    db.prepare(`
+      SELECT strftime('%Y-%m', r.created_at) as month, r.status,
+        COALESCE(ed.age_group, t.age_group) as age_group,
+        COALESCE(NULLIF(TRIM(t.state), ''), '') as state
+      FROM registrations r
+      LEFT JOIN teams t ON t.id = r.team_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      WHERE r.created_at >= date('now', '-12 months')
+        AND r.status NOT IN ('rejected', 'withdrawn')
+    `).all(),
+  ]);
+
+  const rows = [...(erRows.results || []), ...(rRows.results || [])] as Array<{
+    month: string; status: string; age_group: string | null; state: string;
+  }>;
+
+  // Build the rolling 12-month axis (oldest -> current)
+  const months: string[] = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    months.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+  }
+  const monthSet = new Set(months);
+
+  // Normalize division to its age bucket ("Bantam (14U) ..." -> "14U")
+  const normDivision = (ag: string | null): string => {
+    if (!ag) return 'Other';
+    const m = ag.match(/(\d{1,2})\s*U/i);
+    return m ? `${m[1]}U` : ag.trim();
+  };
+  const normState = (s: string): string => {
+    const t = (s || '').trim().toUpperCase();
+    return t.length === 2 ? t : (t || 'Unknown');
+  };
+
+  const perMonth: Record<string, { total: number; approved: number; pending: number }> = {};
+  for (const m of months) perMonth[m] = { total: 0, approved: 0, pending: 0 };
+  const stateTotals: Record<string, number> = {};
+  const divisionTotals: Record<string, number> = {};
+  const statesByMonth: Record<string, Record<string, number>> = {};
+  const divisionsByMonth: Record<string, Record<string, number>> = {};
+  let total = 0, approved = 0, pending = 0;
+
+  for (const row of rows) {
+    if (!monthSet.has(row.month)) continue;
+    const isApproved = row.status === 'approved';
+    total++;
+    if (isApproved) approved++; else pending++;
+
+    const pm = perMonth[row.month];
+    pm.total++;
+    if (isApproved) pm.approved++; else pm.pending++;
+
+    const st = normState(row.state);
+    const dv = normDivision(row.age_group);
+    stateTotals[st] = (stateTotals[st] || 0) + 1;
+    divisionTotals[dv] = (divisionTotals[dv] || 0) + 1;
+    (statesByMonth[row.month] ||= {})[st] = ((statesByMonth[row.month] ||= {})[st] || 0) + 1;
+    (divisionsByMonth[row.month] ||= {})[dv] = ((divisionsByMonth[row.month] ||= {})[dv] || 0) + 1;
+  }
+
+  // Division order: numeric age ascending, non-numeric at the end
+  const divisions = Object.entries(divisionTotals)
+    .sort((a, b) => {
+      const na = parseInt(a[0]), nb = parseInt(b[0]);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      if (!isNaN(na)) return -1;
+      if (!isNaN(nb)) return 1;
+      return b[1] - a[1];
+    })
+    .map(([division, count]) => ({ division, count }));
+
+  const states = Object.entries(stateTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([state, count]) => ({ state, count }));
+
+  return c.json({
+    success: true,
+    data: {
+      months,
+      totals: { total, approved, pending },
+      perMonth: months.map(m => ({ month: m, ...perMonth[m] })),
+      states,
+      divisions,
+      statesByMonth,
+      divisionsByMonth,
+    },
+  });
+});
+
+// ==================
 // ADMIN: User activity detail (for clicking into a specific user)
 // ==================
 analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRole('admin', 'director'), async (c) => {

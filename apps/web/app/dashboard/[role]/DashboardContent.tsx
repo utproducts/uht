@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 import DirectorDash from './DirectorDash';
 import OrgDashboard from './OrgDashboard';
+import RegistrationTrends from './RegistrationTrends';
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -307,6 +308,10 @@ function AdminDash() {
           <PendingRegistrations />
         </>
       )}
+
+      {/* Registration Trends — month-over-month analytics (replaces Airtable tracking) */}
+      <SectionTitle>Registration Trends</SectionTitle>
+      <RegistrationTrends />
 
       {/* Quick Actions */}
       <SectionTitle>Quick Actions</SectionTitle>
