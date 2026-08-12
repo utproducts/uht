@@ -1509,6 +1509,7 @@ export default function AdminRegistrationsPage() {
   // Hotel selection for non-local approval
   const [hotelModalReg, setHotelModalReg] = useState<Registration | null>(null);
   const [selectedHotelId, setSelectedHotelId] = useState('');
+  const [hotelSearch, setHotelSearch] = useState('');
   const [approving, setApproving] = useState(false);
   // UHT-branded dialogs (replaces browser alert/confirm)
   const [dialog, setDialog] = useState<{ kind: 'success' | 'error'; title: string; message: string } | null>(null);
@@ -1560,6 +1561,7 @@ export default function AdminRegistrationsPage() {
   // the event has any — matching what the iOS admin screen does.
   const handleApproveClick = async (reg: Registration) => {
     setSelectedHotelId('');
+    setHotelSearch('');
     let hotels: EventHotel[] = [];
     try {
       const res = await authFetch(`${API_BASE}/events/admin/event-hotels/${reg.event_id}`);
@@ -2050,8 +2052,8 @@ export default function AdminRegistrationsPage() {
 
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setHotelModalReg(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b border-[#e8e8ed]">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-5 border-b border-[#e8e8ed] flex-shrink-0">
                 <h3 className="text-lg font-bold text-[#1d1d1f]">Approve Team</h3>
                 <p className="text-sm text-[#86868b] mt-1">
                   <span className="font-semibold text-[#1d1d1f]">{hotelModalReg.team_name}</span>
@@ -2067,11 +2069,22 @@ export default function AdminRegistrationsPage() {
                   </p>
                 )}
               </div>
-              <div className="px-6 py-5 space-y-3">
+              {displayHotels.length > 5 && (
+                <div className="px-6 pt-4 pb-1 flex-shrink-0">
+                  <input value={hotelSearch} onChange={e => setHotelSearch(e.target.value)}
+                    placeholder={`Search ${displayHotels.length} hotels…`} autoFocus
+                    className="w-full px-3.5 py-2 rounded-xl border border-[#e8e8ed] text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+              )}
+              <div className="px-6 py-4 space-y-2.5 flex-1 overflow-y-auto min-h-0">
                 {displayHotels.length === 0 ? (
                   <p className="text-sm text-red-600">No hotels configured for this event. Add hotels in Events → Hotels tab first.</p>
                 ) : (
-                  displayHotels.map((h: any) => (
+                  displayHotels
+                    .filter((h: any) => !hotelSearch.trim() ||
+                      `${h.hotel_name} ${h.city || ''}`.toLowerCase().includes(hotelSearch.trim().toLowerCase()) ||
+                      h.rank > 0)
+                    .map((h: any) => (
                     <label key={h.id} className={"flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition " +
                       (selectedHotelId === h.id ? "border-[#00ccff] bg-[#f0f9ff]" : "border-[#e8e8ed] hover:border-[#c8c8cd]")}>
                       <input
@@ -2102,7 +2115,7 @@ export default function AdminRegistrationsPage() {
                   ))
                 )}
               </div>
-              <div className="px-6 py-4 border-t border-[#e8e8ed] flex justify-end gap-3">
+              <div className="px-6 py-4 border-t border-[#e8e8ed] flex justify-end gap-3 flex-shrink-0">
                 <button
                   onClick={() => setHotelModalReg(null)}
                   className="px-5 py-2.5 rounded-full text-sm font-semibold text-[#6e6e73] bg-[#f5f5f7] hover:bg-[#e8e8ed] transition"
