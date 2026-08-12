@@ -4018,6 +4018,27 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     }
     setNotesSaving(false);
   };
+  const deleteNote = async () => {
+    if (!notesModalReg) return;
+    setNotesSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/registration/${notesModalReg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
+        body: JSON.stringify({ notes: null }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        handleRegSaved({ ...notesModalReg, notes: null });
+        setNotesModalReg(null);
+      } else {
+        alert(json.error || 'Failed to delete note');
+      }
+    } catch {
+      alert('Failed to delete note');
+    }
+    setNotesSaving(false);
+  };
   const [hotelReport, setHotelReport] = useState<any>(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
@@ -4258,7 +4279,14 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                   placeholder="Schedule requests, conflicts, anything the schedule builder should know..."
                   className="w-full p-3 border-2 border-[#e8e8ed] rounded-xl text-sm text-[#1d1d1f] focus:border-[#003e79] focus:outline-none resize-y"
                 />
-                <div className="flex justify-end gap-2 mt-4">
+                <div className="flex items-center gap-2 mt-4">
+                  {notesModalReg.notes && (
+                    <button onClick={deleteNote} disabled={notesSaving}
+                      className="px-4 py-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-100 transition disabled:opacity-50">
+                      Delete Note
+                    </button>
+                  )}
+                  <div className="flex-1" />
                   <button onClick={() => setNotesModalReg(null)} disabled={notesSaving}
                     className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f7] transition">
                     Cancel
@@ -4305,9 +4333,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[5%]">Roster</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[6%]">Status</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[9%]">Payment</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[9%]">Hotel</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[5%]">Notes</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[3%]"></th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[8%]">Hotel</th>
+                      <th className="px-2 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[5%]">Notes</th>
+                      <th className="px-1 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[4%]"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4453,22 +4481,22 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                             <span className="text-xs text-[#86868b]">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-2 py-3">
                           <button
                             onClick={() => { setNotesModalReg(reg); setNotesDraft(reg.notes || ''); }}
                             className={reg.notes
-                              ? 'p-1.5 rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-100 transition'
-                              : 'p-1.5 rounded-lg text-[#c7c7cc] hover:bg-[#f0f7ff] hover:text-[#003e79] transition'}
+                              ? 'p-1 rounded-md bg-amber-50 border border-amber-200 hover:bg-amber-100 transition'
+                              : 'p-1 rounded-md text-[#c7c7cc] hover:bg-[#f0f7ff] hover:text-[#003e79] transition'}
                             title={reg.notes ? `Schedule request: ${String(reg.notes).slice(0, 140)}` : 'Add a note / schedule request'}
                           >
                             {reg.notes ? (
-                              <span className="text-sm leading-none">📝</span>
+                              <span className="text-[11px] leading-none">📝</span>
                             ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                             )}
                           </button>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-1 py-3">
                           <button
                             onClick={() => openFullEditor(reg)}
                             disabled={editOpening === reg.id}
