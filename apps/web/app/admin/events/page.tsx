@@ -4173,6 +4173,33 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const [event, setEvent] = useState<any>(null);
   // Which email was just copied to the clipboard (shows a brief "Copied!")
   const [copiedEmail, setCopiedEmail] = useState('');
+  const [mhrRefreshing, setMhrRefreshing] = useState(false);
+  const [mhrResult, setMhrResult] = useState<string>('');
+  const refreshMhr = async () => {
+    setMhrRefreshing(true);
+    setMhrResult('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/${eventId}/refresh-mhr`, {
+        method: 'POST',
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        const d = json.data;
+        setMhrResult(d.linked_teams === 0 ? 'No teams have MHR links yet' : `Updated ${d.updated} of ${d.linked_teams} linked team${d.linked_teams !== 1 ? 's' : ''}`);
+        // Re-pull the event detail so the new ratings render
+        try {
+          const evRes = await fetch(`${API_BASE}/admin/detail/${eventId}`);
+          const evJson = await evRes.json() as any;
+          if (evJson.success) setEvent(evJson.data);
+        } catch {}
+      } else {
+        setMhrResult('Refresh failed');
+      }
+    } catch { setMhrResult('Refresh failed'); }
+    setMhrRefreshing(false);
+    setTimeout(() => setMhrResult(''), 6000);
+  };
   const copyEmail = (email: string) => {
     try { navigator.clipboard.writeText(email); } catch {}
     setCopiedEmail(email);
@@ -4392,6 +4419,14 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'participants' && (
         <div className="space-y-4">
+          <div className="flex items-center justify-end gap-3">
+            {mhrResult && <span className="text-xs font-medium text-[#6e6e73]">{mhrResult}</span>}
+            <button onClick={refreshMhr} disabled={mhrRefreshing}
+              title="Re-pull every linked team's current MyHockeyRankings rating"
+              className="px-4 py-2 rounded-xl bg-white border border-[#e8e8ed] text-[#003e79] text-xs font-semibold hover:bg-[#f0f7ff] hover:border-[#003e79]/30 transition disabled:opacity-50">
+              {mhrRefreshing ? 'Refreshing MHR…' : '↻ Refresh MHR'}
+            </button>
+          </div>
           {editingReg && (
             <EditRegistrationModal
               reg={editingReg}
@@ -4427,11 +4462,12 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 <table className="w-full text-sm table-fixed">
                   <thead className="bg-[#f5f5f7] text-left">
                     <tr>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[19%]">Team</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[18%]">Coach</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[18%]">Manager</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[10%]">Division</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[7%]">Roster</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[18%]">Team</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[17%]">Coach</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[17%]">Manager</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">MHR</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">Roster</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">Status</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Payment</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Hotel</th>
@@ -4488,6 +4524,19 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                               {reg.division}
                             </span>
                           ) : null}
+                        </td>
+                        <td className="px-4 py-3">
+                          {reg.mhr_rating != null ? (
+                            <a href={reg.mhr_url ? (String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`) : '#'}
+                              target="_blank" rel="noopener noreferrer" title="Open MyHockeyRankings"
+                              className="text-xs font-bold text-[#003e79] hover:underline">
+                              {Number(reg.mhr_rating).toFixed(1)}
+                            </a>
+                          ) : reg.mhr_url ? (
+                            <span className="text-xs text-amber-600" title="Link on file — hit Refresh MHR to pull the rating">…</span>
+                          ) : (
+                            <span className="text-xs text-[#c7c7cc]">n/a</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {reg.team_id && reg.roster_count > 0 ? (

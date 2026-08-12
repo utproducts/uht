@@ -367,7 +367,7 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
       COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = t.organization_id), t.name) || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END) as display_name,
       t.head_coach_name, t.head_coach_email, t.head_coach_phone,
       t.manager_name, t.manager_email, t.manager_phone,
-      t.mhr_url,
+      t.mhr_url, t.mhr_rating,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = r.team_id AND tp.status = 'active') as roster_count,
       COALESCE(ed.age_group, t.age_group) as age_group,
       COALESCE(ed.division_level, t.division_level) as division,
@@ -402,6 +402,7 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
       COALESCE(ct.manager_email, er.email1) as manager_email,
       COALESCE(ct.manager_phone, er.phone) as manager_phone,
       COALESCE(ct.mhr_url, (SELECT t8.mhr_url FROM teams t8 WHERE LOWER(t8.name) = LOWER(er.team_name) AND t8.mhr_url IS NOT NULL AND t8.mhr_url != '' LIMIT 1)) as mhr_url,
+      COALESCE(ct.mhr_rating, (SELECT t6.mhr_rating FROM teams t6 WHERE LOWER(t6.name) = LOWER(er.team_name) AND t6.mhr_rating IS NOT NULL LIMIT 1)) as mhr_rating,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.status = 'active' AND tp.team_id = COALESCE(er.team_id, (SELECT t7.id FROM teams t7 WHERE LOWER(t7.name) = LOWER(er.team_name) AND t7.is_active = 1 LIMIT 1))) as roster_count,
       er.hotel_assigned,
       ha.hotel_name as hotel_assigned_name,
@@ -1481,6 +1482,60 @@ async function computeAndApplyPaymentStatus(db: D1Database, regId: string) {
     payment_status: newStatus || reg.payment_status,
   };
 }
+
+// ── MHR ratings refresh: pull each linked team's current MyHockeyRankings
+// rating. MHR sits behind a bot challenge, so pages are fetched through the
+// r.jina.ai reader proxy; failures leave the stored rating untouched.
+eventRoutes.post('/admin/:eventId/refresh-mhr', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Distinct teams registered for this event that have an MHR link
+  const teams = await db.prepare(`
+    SELECT DISTINCT t.id, t.mhr_url FROM teams t
+    WHERE t.mhr_url IS NOT NULL AND t.mhr_url != '' AND t.id IN (
+      SELECT r.team_id FROM registrations r WHERE r.event_id = ? AND r.team_id IS NOT NULL
+      UNION
+      SELECT er.team_id FROM event_registrations er WHERE er.event_id = ? AND er.team_id IS NOT NULL
+      UNION
+      SELECT t2.id FROM event_registrations er2 JOIN teams t2 ON LOWER(t2.name) = LOWER(er2.team_name)
+      WHERE er2.event_id = ? AND er2.team_id IS NULL
+    )
+  `).bind(eventId, eventId, eventId).all<any>();
+
+  let updated = 0, failed = 0;
+  const results: any[] = [];
+  for (const team of (teams.results || [])) {
+    try {
+      const url = String(team.mhr_url).trim();
+      const target = url.startsWith('http') ? url : `https://${url}`;
+      const res = await fetch(`https://r.jina.ai/${target}`, {
+        headers: { 'Accept': 'text/plain' },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) { failed++; results.push({ team_id: team.id, ok: false, status: res.status }); continue; }
+      const text = await res.text();
+      const m = text.match(/#+\s*Rating\s*\n+\s*([0-9]+(?:\.[0-9]+)?)/i) || text.match(/\bRating\b[^0-9]{0,40}([0-9]{1,3}\.[0-9])/i);
+      if (m) {
+        const rating = parseFloat(m[1]);
+        if (rating > 0 && rating < 200) {
+          await db.prepare("UPDATE teams SET mhr_rating = ?, mhr_rating_updated_at = datetime('now') WHERE id = ?")
+            .bind(rating, team.id).run();
+          updated++;
+          results.push({ team_id: team.id, ok: true, rating });
+          continue;
+        }
+      }
+      failed++;
+      results.push({ team_id: team.id, ok: false, reason: 'rating not found on page' });
+    } catch (err: any) {
+      failed++;
+      results.push({ team_id: team.id, ok: false, reason: err?.message || 'fetch failed' });
+    }
+  }
+
+  return c.json({ success: true, data: { linked_teams: (teams.results || []).length, updated, failed, results } });
+});
 
 eventRoutes.get('/admin/registration/:regId/payments', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const regId = c.req.param('regId');
