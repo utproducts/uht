@@ -1148,6 +1148,7 @@ const consumerRegisterSchema = z.object({
   hotelChoice2: z.string().optional(),
   hotelChoice3: z.string().optional(),
   needsHotel: z.boolean().optional(),
+  scheduleRequests: z.string().max(2000).optional(),
 });
 
 eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async (c) => {
@@ -1296,8 +1297,8 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   }
 
   await db.prepare(`
-    INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     regId, data.eventId, resolvedTeamId, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
@@ -1305,7 +1306,8 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     initialStatus, initialPaymentStatus,
     data.hotelChoice1 || null, data.hotelChoice2 || null, data.hotelChoice3 || null,
     matchedDivisionId,
-    data.needsHotel ? 1 : 0
+    data.needsHotel ? 1 : 0,
+    (data.scheduleRequests || '').trim() || null
   ).run();
 
   // Create registrations for additional events
@@ -1316,14 +1318,15 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     const addMatchedDivId = await findMatchingDivision(addEvent.id, data.ageGroup);
 
     await db.prepare(`
-      INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      addRegId, addEvent.id, data.teamId || null, data.teamName, data.ageGroup, data.division || null,
+      addRegId, addEvent.id, resolvedTeamId, data.teamName, data.ageGroup, data.division || null,
       data.managerFirstName || null, data.managerLastName || null,
       data.email, data.phone || null,
       initialStatus, initialPaymentStatus,
-      addMatchedDivId
+      addMatchedDivId,
+      (data.scheduleRequests || '').trim() || null
     ).run();
   }
 

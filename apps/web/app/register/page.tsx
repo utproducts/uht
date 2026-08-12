@@ -113,6 +113,8 @@ export default function RegisterPage() {
   const [loadingHotels, setLoadingHotels] = useState(false);
   const [isLocalTeam, setIsLocalTeam] = useState(false);
   const [needsHotel, setNeedsHotel] = useState(false);
+  // Optional schedule requests / notes, keyed by team id (per team in multi-team mode)
+  const [teamScheduleRequests, setTeamScheduleRequests] = useState<Record<string, string>>({});
 
   // Steps: team → hotels → payment → card_form → submitting → confirmed (upsell is now post-registration on confirmed page)
   const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'card_form' | 'submitting' | 'confirmed'>('team');
@@ -638,6 +640,7 @@ export default function RegisterPage() {
             return isLocalTeam ? undefined : hotelPicks[2] || undefined;
           })(),
           needsHotel: needsHotel,
+          scheduleRequests: (teamScheduleRequests[team.id] || '').trim() || undefined,
         };
         const res = await fetch(`${API}/events/register`, {
           method: 'POST',
@@ -1407,6 +1410,33 @@ export default function RegisterPage() {
                 </div>
               </div>
             )}
+
+            {/* Schedule requests / notes — optional, one per team */}
+            {(() => {
+              const notesTeams = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
+              if (notesTeams.length === 0) return null;
+              return (
+                <div className="mb-6">
+                  <p className="text-sm font-semibold text-[#1d1d1f]">Schedule Requests <span className="font-normal text-[#86868b]">(optional)</span></p>
+                  <p className="text-xs text-[#6e6e73] mt-0.5 mb-2">Anything we should know when building the game schedule — arrival times, coaches with multiple teams, conflicts, etc.</p>
+                  <div className="space-y-2">
+                    {notesTeams.map(t => (
+                      <div key={t.id}>
+                        {notesTeams.length > 1 && <p className="text-xs font-medium text-[#6e6e73] mb-1">{t.name}</p>}
+                        <textarea
+                          value={teamScheduleRequests[t.id] || ''}
+                          onChange={e => setTeamScheduleRequests(prev => ({ ...prev, [t.id]: e.target.value }))}
+                          maxLength={2000}
+                          rows={2}
+                          placeholder="Type any schedule requests or notes for this team..."
+                          className="w-full p-3 border-2 border-[#e8e8ed] rounded-xl text-sm text-[#1d1d1f] focus:border-[#00ccff] focus:outline-none resize-y"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {regError && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-3">

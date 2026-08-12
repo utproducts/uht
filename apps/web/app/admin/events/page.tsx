@@ -4208,6 +4208,32 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers'>('overview');
   const [editingReg, setEditingReg] = useState<any>(null);
+  // Notes / schedule-request quick editor
+  const [notesModalReg, setNotesModalReg] = useState<any>(null);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const saveNotes = async () => {
+    if (!notesModalReg) return;
+    setNotesSaving(true);
+    const newNotes = notesDraft.trim() || null;
+    try {
+      const res = await fetch(`${API_BASE}/admin/registration/${notesModalReg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
+        body: JSON.stringify({ notes: newNotes }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        handleRegSaved({ ...notesModalReg, notes: newNotes });
+        setNotesModalReg(null);
+      } else {
+        alert(json.error || 'Failed to save note');
+      }
+    } catch {
+      alert('Failed to save note');
+    }
+    setNotesSaving(false);
+  };
   const [hotels, setHotels] = useState<string[]>([]);
   const [hotelReport, setHotelReport] = useState<any>(null);
   const [loadingReport, setLoadingReport] = useState(false);
@@ -4245,7 +4271,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
   const handleRegSaved = (updated: any) => {
     if (!event) return;
-    const newRegs = event.registrations.map((r: any) => r.id === updated.id ? updated : r);
+    // Merge, don't replace — PATCH responses omit enriched fields (display_name,
+    // roster_count, notes, hotel_assigned_name) that only the detail query computes
+    const newRegs = event.registrations.map((r: any) => r.id === updated.id ? { ...r, ...updated } : r);
     setEvent({ ...event, registrations: newRegs });
   };
 
@@ -4436,6 +4464,36 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               onSaved={handleRegSaved}
             />
           )}
+          {notesModalReg && (
+            <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => !notesSaving && setNotesModalReg(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-start justify-between mb-1">
+                  <h3 className="text-lg font-bold text-[#1d1d1f]">Notes / Schedule Requests</h3>
+                  <button onClick={() => setNotesModalReg(null)} disabled={notesSaving} className="text-[#86868b] hover:text-[#1d1d1f] text-xl leading-none">×</button>
+                </div>
+                <p className="text-sm text-[#6e6e73] mb-4">{notesModalReg.display_name || notesModalReg.team_name}</p>
+                <textarea
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  maxLength={2000}
+                  rows={6}
+                  autoFocus
+                  placeholder="Schedule requests, conflicts, anything the schedule builder should know..."
+                  className="w-full p-3 border-2 border-[#e8e8ed] rounded-xl text-sm text-[#1d1d1f] focus:border-[#003e79] focus:outline-none resize-y"
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setNotesModalReg(null)} disabled={notesSaving}
+                    className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-sm font-medium text-[#6e6e73] hover:bg-[#f5f5f7] transition">
+                    Cancel
+                  </button>
+                  <button onClick={saveNotes} disabled={notesSaving}
+                    className="px-5 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#00335f] transition disabled:opacity-50">
+                    {notesSaving ? 'Saving…' : 'Save Note'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {Object.keys(grouped).sort((a, b) => {
             const ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget'];
             const idx = (g: string) => { const i = ORDER.findIndex(o => g.toLowerCase().includes(o)); return i === -1 ? 99 : i; };
@@ -4462,16 +4520,17 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 <table className="w-full text-sm table-fixed">
                   <thead className="bg-[#f5f5f7] text-left">
                     <tr>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[18%]">Team</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[17%]">Coach</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[17%]">Manager</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Division</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">MHR</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">Roster</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">Status</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Payment</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Hotel</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[4%]"></th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[17%]">Team</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[16%]">Coach</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[16%]">Manager</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[9%]">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[5%]">MHR</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[5%]">Roster</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[6%]">Status</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[9%]">Payment</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[9%]">Hotel</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[5%]">Notes</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] text-[11px] w-[3%]"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4616,6 +4675,21 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                           ) : (
                             <span className="text-xs text-[#86868b]">-</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => { setNotesModalReg(reg); setNotesDraft(reg.notes || ''); }}
+                            className={reg.notes
+                              ? 'p-1.5 rounded-lg bg-amber-50 border border-amber-200 hover:bg-amber-100 transition'
+                              : 'p-1.5 rounded-lg text-[#c7c7cc] hover:bg-[#f0f7ff] hover:text-[#003e79] transition'}
+                            title={reg.notes ? `Schedule request: ${String(reg.notes).slice(0, 140)}` : 'Add a note / schedule request'}
+                          >
+                            {reg.notes ? (
+                              <span className="text-sm leading-none">📝</span>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                            )}
+                          </button>
                         </td>
                         <td className="px-4 py-3">
                           <button
