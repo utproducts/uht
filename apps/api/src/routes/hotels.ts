@@ -303,35 +303,39 @@ hotelRoutes.get('/report/:eventId', async (c) => {
     SELECT * FROM event_hotels WHERE event_id = ? AND is_active = 1 ORDER BY sort_order ASC
   `).bind(eventId).all();
 
-  // Get registrations from normalized table (with fallback to legacy event_registrations)
-  let regs = await db.prepare(`
-    SELECT r.id, t.name as team_name, ed.age_group, ed.division_level as division,
-      r.hotel_assigned, NULL as hotel_choice,
-      NULL as manager_first_name, NULL as manager_last_name, NULL as email1, NULL as email2, NULL as phone,
-      0 as roster_count
+  // Registrations from BOTH tables (normalized + consumer form) — hotel
+  // assignments happen in either flow, so the report must see both.
+  const normRegs = await db.prepare(`
+    SELECT r.id, COALESCE(t.schedule_name, t.name) as team_name, ed.age_group, ed.division_level as division,
+      r.hotel_assigned, NULL as hotel_choice, r.hotel_choice_1,
+      t.manager_name as manager_first_name, NULL as manager_last_name,
+      t.manager_email as email1, NULL as email2, t.manager_phone as phone,
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = r.team_id AND tp.status = 'active') as roster_count
     FROM registrations r
     LEFT JOIN teams t ON t.id = r.team_id
     LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
-    WHERE r.event_id = ? AND r.status = 'approved'
+    WHERE r.event_id = ? AND r.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
     ORDER BY t.name ASC
   `).bind(eventId).all();
 
-  // Fallback to legacy table if no normalized registrations
-  if (regs.results.length === 0) {
-    regs = await db.prepare(`
-      SELECT er.id, er.team_name, er.age_group, er.division, er.hotel_assigned, er.hotel_choice,
-        er.manager_first_name, er.manager_last_name, er.email1, er.email2, er.phone,
-        (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = er.id) as roster_count
-      FROM event_registrations er
-      WHERE er.event_id = ? AND er.status = 'approved'
-      ORDER BY er.hotel_assigned ASC, er.team_name ASC
-    `).bind(eventId).all();
-  }
+  const legacyRegs = await db.prepare(`
+    SELECT er.id, er.team_name, er.age_group, er.division, er.hotel_assigned, er.hotel_choice, er.hotel_choice_1,
+      er.manager_first_name, er.manager_last_name, er.email1, er.email2, er.phone,
+      COALESCE((SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = er.team_id AND tp.status = 'active'), 0)
+        + (SELECT COUNT(*) FROM registration_rosters rr WHERE rr.registration_id = er.id) as roster_count
+    FROM event_registrations er
+    WHERE er.event_id = ? AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
+    ORDER BY er.hotel_assigned ASC, er.team_name ASC
+  `).bind(eventId).all();
 
-  // Build hotel summary
+  const regs = { results: [...(normRegs.results || []), ...(legacyRegs.results || [])] };
+
+  // Build hotel summary — hotel_assigned stores the event_hotels ID (older data
+  // stored the hotel name; legacy hotel_choice was a name too), so match all three
   const hotelSummary = hotels.results.map((h: any) => {
     const assignedTeams = regs.results.filter((r: any) =>
-      r.hotel_assigned === h.hotel_name || r.hotel_choice === h.hotel_name
+      r.hotel_assigned === h.id || r.hotel_assigned === h.hotel_name ||
+      (!r.hotel_assigned && r.hotel_choice === h.hotel_name)
     );
     const totalPlayers = assignedTeams.reduce((sum: number, t: any) => sum + (t.roster_count || 15), 0); // default 15 if no roster
     // Estimate: ~4 players per room, event_nights per room
@@ -364,11 +368,10 @@ hotelRoutes.get('/report/:eventId', async (c) => {
     };
   });
 
-  // Unassigned teams
-  const unassigned = regs.results.filter((r: any) => !r.hotel_assigned && !r.hotel_choice);
-  const localTeams = regs.results.filter((r: any) =>
-    r.hotel_assigned === 'Local Team' || r.hotel_choice === 'Local Team'
-  );
+  // Local teams (flagged at registration) and teams still needing an assignment
+  const isLocal = (r: any) => r.hotel_choice === 'Local Team' || r.hotel_choice_1 === 'Local Team' || r.hotel_assigned === 'Local Team';
+  const localTeams = regs.results.filter((r: any) => !r.hotel_assigned && isLocal(r));
+  const unassigned = regs.results.filter((r: any) => !r.hotel_assigned && !r.hotel_choice && !isLocal(r));
 
   return c.json({
     success: true,
@@ -377,7 +380,7 @@ hotelRoutes.get('/report/:eventId', async (c) => {
       event_dates: `${event.start_date} to ${event.end_date}`,
       event_nights: eventNights,
       total_teams: regs.results.length,
-      total_assigned: regs.results.filter((r: any) => r.hotel_assigned || r.hotel_choice).length,
+      total_assigned: regs.results.filter((r: any) => (r.hotel_assigned || r.hotel_choice) && !isLocal(r)).length,
       total_unassigned: unassigned.length,
       total_local: localTeams.length,
       hotels: hotelSummary,

@@ -765,11 +765,12 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
             </select>
           </div>
 
-          {/* ── Notes ── */}
+          {/* ── Notes — schedule requests only (same field the register form fills
+               and the participants Notes column shows) ── */}
           <div>
-            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Admin Notes</label>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Schedule Requests / Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-              placeholder="Internal notes about this registration..."
+              placeholder="Schedule requests only — what the team entered at registration, or anything the schedule builder needs to know..."
               className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none resize-none" />
           </div>
 
