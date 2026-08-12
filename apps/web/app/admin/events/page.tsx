@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import { RegistrationDetailPanel, Registration as FullRegistration, Division as RegDivision, EventHotel as RegEventHotel } from '../../components/RegistrationDetailPanel';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api/events';
 const HOTEL_API = 'https://uht.chad-157.workers.dev/api/hotels';
@@ -2778,275 +2779,6 @@ const paymentStatusLabel = (s: string) => {
   }
 };
 
-// --- Edit Registration Modal ---
-function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
-  reg: any;
-  eventId: string;
-  hotels: string[];
-  onClose: () => void;
-  onSaved: (updated: any) => void;
-}) {
-  const [teamName, setTeamName] = useState(reg.team_name || '');
-  const [ageGroup, setAgeGroup] = useState(reg.age_group || '');
-  const [divisions, setDivisions] = useState<any[]>([]);
-  const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
-  const [paymentAmount, setPaymentAmount] = useState(reg.payment_amount_cents ? (reg.payment_amount_cents / 100).toString() : '');
-  const [paymentMethod, setPaymentMethod] = useState(reg.payment_method || '');
-  const [hotelAssigned, setHotelAssigned] = useState((reg as any).hotel_assigned_name || reg.hotel_assigned || '');
-  const [notes, setNotes] = useState(reg.notes || '');
-  const [saving, setSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const prefs = [reg.hotel_pref_1, reg.hotel_pref_2, reg.hotel_pref_3].filter(Boolean);
-
-  // Load event divisions for age group dropdown
-  useEffect(() => {
-    fetch(`${API_BASE}/admin/${eventId}/divisions`)
-      .then(r => r.json())
-      .then(json => { if (json.success) setDivisions(json.data); })
-      .catch(() => {});
-  }, [eventId]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setSaveResult('idle');
-    setErrorMsg('');
-    try {
-      const body: any = {
-        payment_status: paymentStatus,
-        payment_amount_cents: paymentAmount ? Math.round(parseFloat(paymentAmount) * 100) : null,
-        payment_method: paymentMethod || null,
-        hotel_assigned: hotelAssigned || null,
-        notes: notes || null,
-      };
-      // Include team name if changed
-      if (teamName !== reg.team_name) {
-        body.team_name = teamName;
-      }
-      // Include age group change via event_division_id
-      if (ageGroup !== reg.age_group) {
-        const newDiv = divisions.find(d => d.age_group === ageGroup);
-        if (newDiv) body.event_division_id = newDiv.id;
-      }
-      const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Server error ${res.status}: ${errText}`);
-      }
-      const json = await res.json();
-      if (json.success) {
-        setSaveResult('success');
-        onSaved(json.data);
-        setTimeout(() => onClose(), 800);
-      } else {
-        throw new Error(json.error || 'Save failed');
-      }
-    } catch (e: any) {
-      console.error('Save error:', e);
-      setSaveResult('error');
-      setErrorMsg(e.message || 'Failed to save. Please try again.');
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-[#e8e8ed] px-6 py-4 rounded-t-2xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-[#1d1d1f]">{reg.team_name}</h3>
-              <p className="text-sm text-[#86868b]">{reg.age_group} {reg.division ? `· ${reg.division}` : ''}</p>
-            </div>
-            <button onClick={onClose} className="p-1.5 hover:bg-[#fafafa] rounded-lg transition">
-              <svg className="w-5 h-5 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-        </div>
-
-        <div className="px-6 py-5 space-y-6">
-          {/* Team Info */}
-          <div>
-            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-3">Team Details</div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Team Name</label>
-                <input
-                  type="text"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Age Group</label>
-                <select
-                  value={ageGroup}
-                  onChange={(e) => setAgeGroup(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
-                >
-                  {divisions.length > 0 ? divisions.map((d: any) => (
-                    <option key={d.id} value={d.age_group}>{d.age_group}</option>
-                  )) : (
-                    <option value={ageGroup}>{ageGroup}</option>
-                  )}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Manager Info (read-only) */}
-          {(reg.manager_first_name || reg.email1) && (
-          <div className="bg-[#f5f5f7] rounded-xl p-4">
-            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-2">Contact Info</div>
-            <div className="text-sm text-[#3d3d3d]">
-              <span className="font-medium">{reg.manager_first_name} {reg.manager_last_name}</span>
-              {reg.email1 && <span className="block text-[#86868b]">{reg.email1}</span>}
-              {reg.phone && <span className="block text-[#86868b]">{reg.phone}</span>}
-            </div>
-          </div>
-          )}
-
-          {/* Payment Section */}
-          <div>
-            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-3">Payment</div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Status</label>
-                <select
-                  value={paymentStatus}
-                  onChange={(e) => setPaymentStatus(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
-                >
-                  <option value="unpaid">Unpaid</option>
-                  <option value="paid">Paid</option>
-                  <option value="partial">Partial</option>
-                  <option value="refunded">Refunded</option>
-                  <option value="comp">Comp</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Amount ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
-                />
-              </div>
-            </div>
-            <div className="mt-3">
-              <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Payment Method</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
-              >
-                <option value="">Not specified</option>
-                <option value="credit_card">Credit Card</option>
-                <option value="check">Check</option>
-                <option value="cash">Cash</option>
-                <option value="wire">Wire Transfer</option>
-                <option value="comp">Comp / Free</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Hotel Section */}
-          <div>
-            <div className="text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-3">Hotel Assignment</div>
-
-            {/* Show team preferences */}
-            {prefs.length > 0 && (
-              <div className="bg-[#f0f7ff] rounded-xl p-3 mb-3">
-                <div className="text-xs font-semibold text-[#003e79] mb-1.5">Team Preferences</div>
-                <div className="space-y-1">
-                  {prefs.map((p: string, i: number) => (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-[#e0ecf7] text-[#003e79] text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
-                      <span className="text-[#3d3d3d]">{p}</span>
-                      {!hotelAssigned && (
-                        <button
-                          onClick={() => setHotelAssigned(p)}
-                          className="ml-auto text-[10px] px-2 py-0.5 bg-[#f0f7ff] hover:bg-[#e0ecf7] text-[#003e79] rounded-full font-medium transition"
-                        >
-                          Assign
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {reg.hotel_choice === 'Local Team' && (
-              <div className="bg-[#f5f5f7] rounded-xl p-3 mb-3 text-sm text-[#6e6e73]">
-                <span className="font-medium">Local Team</span> — no hotel needed
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-[#3d3d3d] mb-1">Assigned Hotel</label>
-              <select
-                value={hotelAssigned}
-                onChange={(e) => setHotelAssigned(e.target.value)}
-                className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none"
-              >
-                <option value="">Not assigned</option>
-                {hotels.map((h) => (
-                  <option key={h} value={h}>{h}{prefs.includes(h) ? ` (Choice #${prefs.indexOf(h) + 1})` : ''}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wide mb-2">Admin Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Internal notes about this team..."
-              className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79] outline-none resize-none"
-            />
-          </div>
-        </div>
-
-        {/* Error message */}
-        {saveResult === 'error' && (
-          <div className="mx-6 mb-2 px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">
-            {errorMsg}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-[#e8e8ed] px-6 py-4 rounded-b-2xl flex gap-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-[#fafafa] hover:bg-[#e8e8ed] text-[#3d3d3d] font-semibold rounded-xl text-sm transition">
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || saveResult === 'success'}
-            className={`flex-1 px-4 py-2.5 font-semibold rounded-xl text-sm transition ${
-              saveResult === 'success' ? 'bg-green-500 text-white' : 'bg-[#003e79] hover:bg-[#002d5a] text-white'
-            } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {saveResult === 'success' ? 'Saved! Closing...' : saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════
    VENUES TAB
@@ -4207,7 +3939,59 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   };
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers'>('overview');
-  const [editingReg, setEditingReg] = useState<any>(null);
+  // Full registration editor — the SAME slide-out panel as /admin/registrations,
+  // hitting the same API row, so edits on either page always stay in sync.
+  const [fullEditReg, setFullEditReg] = useState<FullRegistration | null>(null);
+  const [editDivisions, setEditDivisions] = useState<RegDivision[]>([]);
+  const [editHotels, setEditHotels] = useState<RegEventHotel[]>([]);
+  const [editOpening, setEditOpening] = useState<string | null>(null);
+  const API_ROOT = 'https://uht.chad-157.workers.dev/api';
+  const reloadDetail = () => {
+    fetch(`${API_BASE}/admin/detail/${eventId}`)
+      .then((r) => r.json())
+      .then((json) => { if (json.success) setEvent(json.data); })
+      .catch(() => {});
+  };
+  const openFullEditor = async (row: any) => {
+    setEditOpening(row.id);
+    const hdrs: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    try {
+      const [allRes, divRes, hotRes] = await Promise.all([
+        fetch(`${API_ROOT}/registrations/all`, { headers: hdrs }),
+        fetch(`${API_BASE}/admin/${eventId}/divisions`, { headers: hdrs }),
+        fetch(`${API_BASE}/admin/event-hotels/${eventId}`, { headers: hdrs }),
+      ]);
+      const [allJson, divJson, hotJson] = await Promise.all([allRes.json(), divRes.json(), hotRes.json()]) as any[];
+      const full = allJson.success ? (allJson.data || []).find((r: any) => r.id === row.id) : null;
+      if (!full) {
+        alert('Could not load this registration for editing.');
+        setEditOpening(null);
+        return;
+      }
+      setEditDivisions(divJson.success && Array.isArray(divJson.data) ? divJson.data : []);
+      setEditHotels(hotJson.success ? (hotJson.data || []) : []);
+      setFullEditReg(full);
+    } catch {
+      alert('Could not load this registration for editing.');
+    }
+    setEditOpening(null);
+  };
+  const deleteFullReg = async (regId: string) => {
+    if (!window.confirm('Delete this registration permanently? This cannot be undone.')) return;
+    const hdrs: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    try {
+      const res = await fetch(`${API_ROOT}/registrations/${regId}`, { method: 'DELETE', headers: hdrs });
+      const json = await res.json() as any;
+      if (json.success) {
+        setFullEditReg(null);
+        reloadDetail();
+      } else {
+        alert(json.error || 'Failed to delete registration.');
+      }
+    } catch {
+      alert('Failed to delete registration.');
+    }
+  };
   // Notes / schedule-request quick editor
   const [notesModalReg, setNotesModalReg] = useState<any>(null);
   const [notesDraft, setNotesDraft] = useState('');
@@ -4234,7 +4018,6 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     }
     setNotesSaving(false);
   };
-  const [hotels, setHotels] = useState<string[]>([]);
   const [hotelReport, setHotelReport] = useState<any>(null);
   const [loadingReport, setLoadingReport] = useState(false);
 
@@ -4246,13 +4029,6 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
         setLoading(false);
       })
       .catch(() => setLoading(false));
-    // Fetch available hotels for this event
-    fetch(`${API_BASE}/admin/hotels/${eventId}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success) setHotels(json.data);
-      })
-      .catch(() => {});
   }, [eventId]);
 
   // Load hotel report when tab opens
@@ -4455,13 +4231,14 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               {mhrRefreshing ? 'Refreshing MHR…' : '↻ Refresh MHR'}
             </button>
           </div>
-          {editingReg && (
-            <EditRegistrationModal
-              reg={editingReg}
-              eventId={eventId}
-              hotels={hotels}
-              onClose={() => setEditingReg(null)}
-              onSaved={handleRegSaved}
+          {fullEditReg && (
+            <RegistrationDetailPanel
+              reg={fullEditReg}
+              divisions={editDivisions}
+              eventHotels={editHotels}
+              onClose={() => setFullEditReg(null)}
+              onSaved={reloadDetail}
+              onDelete={deleteFullReg}
             />
           )}
           {notesModalReg && (
@@ -4693,11 +4470,16 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                         </td>
                         <td className="px-4 py-3">
                           <button
-                            onClick={() => setEditingReg(reg)}
-                            className="p-1.5 hover:bg-[#f0f7ff] text-[#86868b] hover:text-[#003e79] rounded-lg transition"
+                            onClick={() => openFullEditor(reg)}
+                            disabled={editOpening === reg.id}
+                            className="p-1.5 hover:bg-[#f0f7ff] text-[#86868b] hover:text-[#003e79] rounded-lg transition disabled:opacity-40"
                             title="Edit registration"
                           >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                            {editOpening === reg.id ? (
+                              <span className="block w-4 h-4 border-2 border-[#003e79]/30 border-t-[#003e79] rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                            )}
                           </button>
                         </td>
                       </tr>
