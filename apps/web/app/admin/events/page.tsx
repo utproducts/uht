@@ -1015,9 +1015,21 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Price ($)</label>
+                  <label className={labelCls}>Base Price ($)</label>
                   <input type="number" step="0.01" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: e.target.value })}
                     placeholder="1795.00" className={inputCls} />
+                  {(() => {
+                    const prices = divisionConfigs.map(d => d.price_cents).filter(p => p > 0);
+                    if (!prices.length) return <p className="text-xs text-[#86868b] mt-1">Used until division prices are set</p>;
+                    const lo = Math.min(...prices) / 100;
+                    const hi = Math.max(...prices) / 100;
+                    return (
+                      <p className="text-xs text-[#86868b] mt-1">
+                        Teams pay the <span className="font-semibold">division price</span> for their age group
+                        ({lo === hi ? `$${lo.toLocaleString()}` : `$${lo.toLocaleString()}–$${hi.toLocaleString()}`}) — this field is only the fallback.
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className={labelCls}>Deposit ($)</label>
@@ -2338,9 +2350,21 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className={labelCls}>Price ($)</label>
+                  <label className={labelCls}>Base Price ($)</label>
                   <input type="number" step="0.01" value={form.price_cents} onChange={e => setForm({ ...form, price_cents: e.target.value })}
                     placeholder="1795.00" className={inputCls} />
+                  {(() => {
+                    const prices = divisionConfigs.map(d => d.price_cents).filter(p => p > 0);
+                    if (!prices.length) return <p className="text-xs text-[#86868b] mt-1">Used until division prices are set</p>;
+                    const lo = Math.min(...prices) / 100;
+                    const hi = Math.max(...prices) / 100;
+                    return (
+                      <p className="text-xs text-[#86868b] mt-1">
+                        Teams pay the <span className="font-semibold">division price</span> for their age group
+                        ({lo === hi ? `$${lo.toLocaleString()}` : `$${lo.toLocaleString()}–$${hi.toLocaleString()}`}) — this field is only the fallback.
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className={labelCls}>Deposit ($)</label>
