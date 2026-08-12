@@ -229,8 +229,8 @@ directorRoutes.get('/events/:eventId/games', authMiddleware, requireRole('direct
                 g.start_time, g.status, g.period, g.home_score, g.away_score,
                 g.delay_minutes, g.delay_note, g.checked_in_at, g.checked_in_by,
                 g.event_division_id, g.created_at, g.updated_at,
-                COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-                COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+                COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+                COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
                 vr.name as rink_name, v.name as venue_name,
                 ed.age_group, ed.division_level
          FROM games g
@@ -869,8 +869,8 @@ directorRoutes.get('/events/:eventId/games/live', async (c) => {
                 g.start_time, g.status, g.period, g.home_score, g.away_score,
                 g.delay_minutes, g.delay_note, g.checked_in_at, g.checked_in_by,
                 g.event_division_id, g.created_at, g.updated_at,
-                COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-                COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+                COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+                COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
                 vr.name as rink_name, v.name as venue_name,
                 ed.age_group, ed.division_level
          FROM games g

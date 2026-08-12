@@ -152,7 +152,8 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
   // Normalized registrations
   let q1 = `
     SELECT r.*,
-      t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
+      t.name as team_name, t.schedule_name, (SELECT og.name FROM organizations og WHERE og.id = t.organization_id) as org_name,
+      t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
       t.head_coach_name, t.head_coach_email, t.head_coach_phone,
       t.manager_name, t.manager_email, t.manager_phone,
@@ -187,7 +188,7 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
   // Consumer registrations
   let q2 = `
     SELECT er.*,
-      er.team_name, ct.schedule_name, er.age_group as team_age_group,
+      er.team_name, ct.schedule_name, (SELECT og.name FROM organizations og WHERE og.id = ct.organization_id) as org_name, er.age_group as team_age_group,
       ct.city as team_city, ct.state as team_state, ct.logo_url as team_logo_url,
       ct.head_coach_name, ct.head_coach_email, ct.head_coach_phone,
       ct.manager_name, ct.manager_email, ct.manager_phone,
@@ -255,7 +256,8 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
   // --- Query 1: Normalized registrations (from auth flow) ---
   let query1 = `
     SELECT r.*,
-      t.name as team_name, t.age_group as team_age_group, t.city as team_city, t.state as team_state,
+      t.name as team_name, t.schedule_name, (SELECT og.name FROM organizations og WHERE og.id = t.organization_id) as org_name,
+      t.age_group as team_age_group, t.city as team_city, t.state as team_state,
       t.logo_url as team_logo_url,
       t.head_coach_name, t.head_coach_email, t.head_coach_phone,
       t.manager_name, t.manager_email, t.manager_phone,

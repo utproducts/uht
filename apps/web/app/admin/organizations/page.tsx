@@ -109,6 +109,60 @@ export default function OrganizationsPage() {
   // Delete
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  // Edit org modal
+  const [editOrg, setEditOrg] = useState<Org | null>(null);
+  const [editFields, setEditFields] = useState({ name: '', city: '', state: '', phone: '', email: '', website: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const openEdit = async (org: Org) => {
+    setEditOrg(org);
+    setEditError('');
+    setEditFields({ name: org.name || '', city: '', state: org.state || '', phone: '', email: '', website: '' });
+    try {
+      const res = await fetch(`${API}/organizations/${org.id}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const d = json.data;
+        setEditFields({
+          name: d.name || org.name || '', city: d.city || '', state: d.state || org.state || '',
+          phone: d.phone || '', email: d.email || '', website: d.website || '',
+        });
+      }
+    } catch {}
+  };
+
+  const handleEditSave = async () => {
+    if (!editOrg || !editFields.name.trim()) { setEditError('Name is required'); return; }
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const res = await fetch(`${API}/organizations/${editOrg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({
+          name: editFields.name.trim(),
+          city: editFields.city.trim() || null,
+          state: editFields.state.trim() || null,
+          phone: editFields.phone.trim() || null,
+          email: editFields.email.trim() || null,
+          website: editFields.website.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success !== false && !json.error) {
+        setOrgs(prev => prev.map(o => o.id === editOrg.id ? { ...o, name: editFields.name.trim(), state: editFields.state.trim() || o.state } : o));
+        setEditOrg(null);
+      } else {
+        setEditError(json.error || 'Failed to save');
+      }
+    } catch {
+      setEditError('Network error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   // Org requests (fall teams)
   const [requests, setRequests] = useState<OrgRequest[]>([]);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -776,7 +830,13 @@ export default function OrganizationsPage() {
                                 </button>
                               )}
                             </td>
-                            <td className="px-5 py-2.5 text-right">
+                            <td className="px-5 py-2.5 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => openEdit(org)}
+                                className="text-xs text-[#003e79] hover:text-[#002d5a] font-medium transition-colors mr-3"
+                              >
+                                Edit
+                              </button>
                               <button
                                 onClick={() => handleDelete(org)}
                                 disabled={deletingId === org.id}
@@ -794,6 +854,65 @@ export default function OrganizationsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Edit Organization modal */}
+      {editOrg && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setEditOrg(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-[#e8e8ed]">
+              <h3 className="text-lg font-bold text-[#1d1d1f]">Edit Organization</h3>
+              <p className="text-sm text-[#86868b] mt-0.5">{editOrg.name}</p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              {editError && <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">{editError}</div>}
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Name *</label>
+                <input value={editFields.name} onChange={e => setEditFields(f => ({ ...f, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">City</label>
+                  <input value={editFields.city} onChange={e => setEditFields(f => ({ ...f, city: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">State</label>
+                  <input value={editFields.state} onChange={e => setEditFields(f => ({ ...f, state: e.target.value }))} maxLength={2}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm uppercase focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Phone</label>
+                  <input value={editFields.phone} onChange={e => setEditFields(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Email</label>
+                  <input value={editFields.email} onChange={e => setEditFields(f => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Website</label>
+                <input value={editFields.website} onChange={e => setEditFields(f => ({ ...f, website: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-[#e8e8ed] flex gap-2">
+              <button onClick={() => setEditOrg(null)}
+                className="flex-1 py-2.5 rounded-xl bg-white border border-[#d2d2d7] text-[#3d3d3d] text-sm font-semibold hover:bg-[#f5f5f7] transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleEditSave} disabled={editSaving}
+                className="flex-1 py-2.5 rounded-xl bg-[#003e79] hover:bg-[#002d5a] text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                {editSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -69,8 +69,8 @@ scoringRoutes.post('/scorekeeper/auth', zValidator('json', z.object({ pin: z.str
     // Get today's games for this event (or all if within event window)
     const games = await db.prepare(`
       SELECT g.*,
-        COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-        COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+        COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+        COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
         vr.name as rink_name, v.name as venue_name,
         ed.age_group, ed.division_level
       FROM games g
@@ -156,8 +156,8 @@ scoringRoutes.get('/events/:eventId/games', async (c) => {
 
   let query = `
     SELECT g.*,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
       vr.name as rink_name, v.name as venue_name,
       ed.age_group, ed.division_level
     FROM games g
@@ -189,8 +189,8 @@ scoringRoutes.get('/games/:gameId', async (c) => {
 
   const game = await db.prepare(`
     SELECT g.*,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
       vr.name as rink_name, v.name as venue_name,
       ed.age_group, ed.division_level
     FROM games g
@@ -406,7 +406,7 @@ scoringRoutes.get('/events/:eventId/standings', async (c) => {
       g.event_division_id,
       ed.age_group, ed.division_level,
       g.pool_name,
-      t.id as team_id, COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN t.name || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END) as team_name, t.logo_url as team_logo,
+      t.id as team_id, COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = t.organization_id), t.name) || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END) as team_name, t.logo_url as team_logo,
       COUNT(*) as games_played,
       SUM(CASE WHEN (t.id = g.home_team_id AND g.home_score > g.away_score) OR (t.id = g.away_team_id AND g.away_score > g.home_score) THEN 1 ELSE 0 END) as wins,
       SUM(CASE WHEN (t.id = g.home_team_id AND g.home_score < g.away_score) OR (t.id = g.away_team_id AND g.away_score < g.home_score) THEN 1 ELSE 0 END) as losses,
@@ -448,8 +448,8 @@ scoringRoutes.get('/events/:eventId/live', async (c) => {
 
   const games = await db.prepare(`
     SELECT g.*,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
       vr.name as rink_name, v.name as venue_name,
       ed.age_group, ed.division_level
     FROM games g
@@ -513,7 +513,7 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
       g.home_score, g.away_score, g.period, g.status, g.delay_minutes, g.delay_note,
       g.delay_status, g.delay_reason,
       g.checked_in_at, g.rink_id, g.is_overtime, g.is_shootout,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
       ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
       vr.name as rink_name, v.name as venue_name,
       ed.age_group, ed.division_level,
@@ -703,7 +703,7 @@ scoringRoutes.get('/contests', authMiddleware, requireRole('admin', 'director'),
   let query = `
     SELECT gc.*,
       g.game_number, g.home_score, g.away_score, g.start_time,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
       ct.name as contest_team_name,
       ed.age_group, ed.division_level,
       e.name as event_name
@@ -798,7 +798,7 @@ scoringRoutes.get('/events/:eventId/director-games', authMiddleware, requireRole
   const games = await db.prepare(`
     SELECT g.id, g.game_number, g.start_time, g.status, g.home_score, g.away_score,
       g.period, g.game_type, g.home_team_id, g.away_team_id,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
       ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
       vr.name as rink_name, ed.age_group, ed.division_level
     FROM games g
@@ -823,8 +823,8 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
   // Game info
   const game = await db.prepare(`
     SELECT g.*,
-      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
       vr.name as rink_name, v.name as venue_name,
       ed.age_group, ed.division_level, ed.game_format, ed.period_length_minutes as div_period_length,
       e.name as event_name, e.season
@@ -1258,7 +1258,7 @@ scoringRoutes.put('/games/:gameId/scorekeeper-info', authMiddleware, zValidator(
 // ==========================================
 async function notifyCoachesOnFinal(db: D1Database, env: Env, gameId: string) {
   const game = await db.prepare(`
-    SELECT g.*, COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
+    SELECT g.*, COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
       ed.age_group, ed.division_level, e.name as event_name
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
@@ -1399,8 +1399,8 @@ scoringRoutes.get('/my-events/:eventId/games', authMiddleware, async (c) => {
       // Event-level scorekeeper — show ALL games
       games = await db.prepare(`
         SELECT g.*,
-          COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-          COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+          COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+          COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
           vr.name as rink_name, v.name as venue_name,
           ed.age_group, ed.division_level
         FROM games g
@@ -1416,8 +1416,8 @@ scoringRoutes.get('/my-events/:eventId/games', authMiddleware, async (c) => {
       // Game-level scorekeeper — show only assigned games
       games = await db.prepare(`
         SELECT g.*,
-          COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
-          COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
+          COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
+          COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
           vr.name as rink_name, v.name as venue_name,
           ed.age_group, ed.division_level
         FROM games g

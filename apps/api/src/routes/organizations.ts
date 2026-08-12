@@ -1343,6 +1343,15 @@ organizationRoutes.post('/', authMiddleware, requireRole('admin', 'organization'
 // Update organization
 // ==================
 organizationRoutes.patch('/:id', authMiddleware, async (c) => {
+  // Admins/directors, or the org's own owners, may edit it
+  {
+    const user = c.get('user') as any;
+    const roles: string[] = user?.roles || [];
+    const isAdmin = roles.includes('admin') || roles.includes('director');
+    if (!isAdmin && !(await isOrgAdmin(c.env.DB, c.req.param('id'), user.id))) {
+      return c.json({ success: false, error: 'Access denied' }, 403);
+    }
+  }
   const db = c.env.DB;
   const orgId = c.req.param('id');
   const body = await c.req.json<{ name?: string; city?: string; state?: string; phone?: string; email?: string; website?: string; address?: string; zip?: string; is_active?: number }>();

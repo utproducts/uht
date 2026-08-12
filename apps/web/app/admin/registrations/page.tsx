@@ -791,7 +791,15 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [notes, setNotes] = useState(reg.notes || '');
   // Team & contacts
   const [teamNameEdit, setTeamNameEdit] = useState(reg.team_name || '');
-  const [scheduleName, setScheduleName] = useState((reg as any).schedule_name || '');
+  // Schedule name: prefilled with the automatic "Org Name (Coach Last)" so it's
+  // directly editable; saving an unchanged default keeps automatic behavior.
+  const autoScheduleName = (() => {
+    const base = ((reg as any).org_name || reg.team_name || '').trim();
+    const coach = ((reg as any).head_coach_name || (reg as any).coach_name || '').trim();
+    const last = coach.includes(' ') ? coach.split(/\s+/).slice(-1)[0] : '';
+    return last ? `${base} (${last})` : base;
+  })();
+  const [scheduleName, setScheduleName] = useState((reg as any).schedule_name || autoScheduleName);
   const [coachName, setCoachName] = useState((reg as any).head_coach_name || (reg as any).coach_name || '');
   const [coachEmail, setCoachEmail] = useState((reg as any).head_coach_email || (reg as any).coach_email || '');
   const [coachPhone, setCoachPhone] = useState((reg as any).head_coach_phone || (reg as any).coach_phone || '');
@@ -819,7 +827,10 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       }
       // Team + contact edits — only send what changed
       if (teamNameEdit.trim() && teamNameEdit.trim() !== (reg.team_name || '')) body.team_name = teamNameEdit.trim();
-      if (scheduleName !== ((reg as any).schedule_name || '')) body.schedule_name = scheduleName.trim() || null;
+      // Only send schedule_name when actually changed from what it opened with;
+      // clearing the field reverts to the automatic name.
+      const scheduleInitial = (reg as any).schedule_name || autoScheduleName;
+      if (scheduleName.trim() !== scheduleInitial) body.schedule_name = scheduleName.trim() || null;
       const origCoachName = (reg as any).head_coach_name || (reg as any).coach_name || '';
       const origCoachEmail = (reg as any).head_coach_email || (reg as any).coach_email || '';
       const origCoachPhone = (reg as any).head_coach_phone || (reg as any).coach_phone || '';
@@ -899,15 +910,10 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
               <div>
                 <label className="block text-xs font-medium text-[#6e6e73] mb-1">Schedule Name</label>
                 <input value={scheduleName} onChange={e => setScheduleName(e.target.value)}
-                  placeholder={(() => {
-                    const coach = ((reg as any).head_coach_name || (reg as any).coach_name || '').trim();
-                    const last = coach.includes(' ') ? coach.split(/\s+/).slice(-1)[0] : '';
-                    return last ? `${reg.team_name} (${last})` : (reg.team_name || 'Defaults to team name');
-                  })()}
                   className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
                 <p className="text-[11px] text-[#86868b] mt-1">
                   Shown on schedules, scoreboards &amp; standings only — stats and org rollups stay under the registered team.
-                  Blank = automatic &quot;Team Name (Coach Last Name)&quot;. Type a custom name to override.
+                  Clear the field to go back to the automatic &quot;Org Name (Coach Last Name)&quot;.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
