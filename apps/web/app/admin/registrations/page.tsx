@@ -944,12 +944,17 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       // the matching event division (schedule builder pulls these later)
       const origDivAge = (reg as any).division_age_group || '';
       const origDivLevel = ((reg as any).division_level || '').trim();
-      if (divAgeGroup !== origDivAge || divLevel.trim() !== origDivLevel) {
+      const pairExists = divisions.some(d => d.age_group === divAgeGroup && ((d.division_level || '').trim() === divLevel.trim()));
+      // Only send the division when the admin touched the fields, or the
+      // prefilled pair maps to an existing division (safe auto-assign).
+      // Prefills must never silently CREATE divisions.
+      if ((divTouched.current || pairExists) && (divAgeGroup !== origDivAge || divLevel.trim() !== origDivLevel)) {
         if (!divAgeGroup) {
           body.event_division_id = null;
         } else {
           body.division_age_group = divAgeGroup;
           body.division_level = divLevel.trim() || null;
+          if (divTouched.current && !pairExists) body.allow_create_division = true;
         }
       }
       // Team + contact edits — only send what changed

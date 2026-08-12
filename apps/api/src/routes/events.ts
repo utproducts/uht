@@ -1381,6 +1381,7 @@ const updateRegistrationSchema = z.object({
   event_division_id: z.string().nullable().optional(),
   division_age_group: z.string().nullable().optional(),
   division_level: z.string().nullable().optional(),
+  allow_create_division: z.boolean().optional(),
   team_name: z.string().optional(),
   event_id: z.string().optional(),
   schedule_name: z.string().nullable().optional(),
@@ -1688,7 +1689,18 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
       let div = await db.prepare(
         "SELECT id FROM event_divisions WHERE event_id = ? AND age_group = ? AND COALESCE(TRIM(division_level), '') = ?"
       ).bind(targetEventId, ag, lvl).first<any>();
+      // Fall back to the bare age-group division (no level) before creating anything
+      if (!div && lvl) {
+        div = await db.prepare(
+          "SELECT id FROM event_divisions WHERE event_id = ? AND age_group = ? AND COALESCE(TRIM(division_level), '') = ''"
+        ).bind(targetEventId, ag).first<any>();
+      }
       if (!div) {
+        // Creating a division is an explicit admin action — never a side effect
+        // of prefilled fields (a save once auto-created a \$0 'Pee Wee A Gold').
+        if (!data.allow_create_division) {
+          return c.json({ success: false, error: `No '${ag}${lvl ? ' ' + lvl : ''}' division exists on this event. Adjust the division fields to create it, or pick an existing one.` }, 400);
+        }
         const ev = await db.prepare('SELECT price_cents FROM events WHERE id = ?').bind(targetEventId).first<any>();
         const newDivId = crypto.randomUUID().replace(/-/g, '');
         await db.prepare(
