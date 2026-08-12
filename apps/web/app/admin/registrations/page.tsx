@@ -102,7 +102,8 @@ const statusLabels: Record<string, string> = {
   pending: 'Pending',
   awaiting_payment: 'Awaiting Payment',
   waitlisted: 'Waitlisted',
-  rejected: 'Rejected',
+  rejected: 'Canceled',
+  denied: 'Canceled',
   withdrawn: 'Canceled',
 };
 
@@ -1675,12 +1676,15 @@ export default function AdminRegistrationsPage() {
   };
 
   // Filters
+  const CANCELED = ['withdrawn', 'rejected', 'denied'];
   let filtered = registrations;
-  if (statusFilter) {
+  if (statusFilter === 'canceled') {
+    filtered = filtered.filter(r => CANCELED.includes(r.status));
+  } else if (statusFilter) {
     filtered = filtered.filter(r => r.status === statusFilter);
   } else {
-    // "All" filter excludes awaiting_payment by default
-    filtered = filtered.filter(r => r.status !== 'awaiting_payment');
+    // "All" = active registrations (abandoned checkouts and canceled excluded)
+    filtered = filtered.filter(r => r.status !== 'awaiting_payment' && !CANCELED.includes(r.status));
   }
   if (eventFilter) filtered = filtered.filter(r => r.event_id === eventFilter);
   if (search) {
@@ -1695,10 +1699,9 @@ export default function AdminRegistrationsPage() {
   // Stats
   const approved = registrations.filter(r => r.status === 'approved').length;
   const pending = registrations.filter(r => r.status === 'pending').length;
-  const denied = registrations.filter(r => r.status === 'rejected' || r.status === 'denied').length;
   const waitlisted = registrations.filter(r => r.status === 'waitlisted').length;
-  const awaitingPayment = registrations.filter(r => r.status === 'awaiting_payment').length;
-  const total = registrations.filter(r => r.status !== 'awaiting_payment').length;
+  const canceled = registrations.filter(r => CANCELED.includes(r.status)).length;
+  const total = approved + pending + waitlisted;
 
   // Unique events for event filter dropdown
   const uniqueEvents = Array.from(new Map(registrations.map(r => [r.event_id, { id: r.event_id, name: (r as any).event_name || 'Unknown' }])).values())
@@ -1718,9 +1721,8 @@ export default function AdminRegistrationsPage() {
             { label: 'Registered', value: total, color: 'text-[#003e79]' },
             { label: 'Approved', value: approved, color: 'text-emerald-600' },
             { label: 'Pending', value: pending, color: 'text-amber-600' },
-            { label: 'Awaiting Pay', value: awaitingPayment, color: 'text-orange-500' },
             { label: 'Waitlisted', value: waitlisted, color: 'text-blue-600' },
-            { label: 'Denied', value: denied, color: 'text-red-600' },
+            { label: 'Canceled', value: canceled, color: 'text-red-600' },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-2xl border border-[#e8e8ed] p-4 text-center">
               <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
@@ -1738,9 +1740,8 @@ export default function AdminRegistrationsPage() {
             { key: '', label: 'All', count: total },
             { key: 'approved', label: 'Approved', count: approved },
             { key: 'pending', label: 'Pending', count: pending },
-            { key: 'awaiting_payment', label: 'Awaiting Pay', count: awaitingPayment },
             { key: 'waitlisted', label: 'Waitlisted', count: waitlisted },
-            { key: 'rejected', label: 'Denied', count: denied },
+            { key: 'canceled', label: 'Canceled', count: canceled },
           ].map(s => (
             <button
               key={s.key}
