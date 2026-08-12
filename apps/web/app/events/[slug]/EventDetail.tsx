@@ -757,9 +757,11 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                       {hotels.map(hotel => (
                         <div key={hotel.id} className="group rounded-xl border border-[#e8e8ed] hover:border-[#003e79]/20 transition-all overflow-hidden">
                           <div className="flex flex-col sm:flex-row">
+                            {/* relative + absolute img: the photo crops to the card height
+                                instead of stretching it, so odd-sized uploads stay uniform */}
                             {hotel.image_url && (
-                              <div className="sm:w-48 h-40 sm:h-auto shrink-0">
-                                <img src={hotel.image_url} alt={hotel.hotel_name} className="w-full h-full object-cover" />
+                              <div className="sm:w-48 h-40 sm:h-auto shrink-0 relative">
+                                <img src={hotel.image_url} alt={hotel.hotel_name} className="absolute inset-0 w-full h-full object-cover" />
                               </div>
                             )}
                             <div className="flex-1 p-5">
