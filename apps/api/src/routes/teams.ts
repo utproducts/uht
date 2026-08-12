@@ -535,6 +535,12 @@ teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
   params.push(teamId);
 
   await db.prepare(`UPDATE teams SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run();
+
+  // Changing or clearing the MHR link invalidates the cached rating
+  if (body.mhrUrl !== undefined) {
+    await db.prepare("UPDATE teams SET mhr_rating = NULL, mhr_rating_updated_at = NULL WHERE id = ? AND (mhr_url IS NULL OR mhr_url = '')")
+      .bind(teamId).run().catch(() => {});
+  }
   return c.json({ success: true });
 });
 

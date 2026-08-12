@@ -1759,13 +1759,18 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
           .bind(data.manager_name ?? null, data.manager_email ?? null, data.manager_phone ?? null, teamId).run().catch(() => {});
       }
       if (data.usa_hockey_url !== undefined || data.mhr_url !== undefined) {
-        try { await db.prepare('ALTER TABLE teams ADD COLUMN mhr_url TEXT').run(); } catch {}
+        const newMhr = (data.mhr_url || '').trim() || null;
         await db.prepare(`UPDATE teams SET
           usa_hockey_roster_url = CASE WHEN ? THEN ? ELSE usa_hockey_roster_url END,
           mhr_url = CASE WHEN ? THEN ? ELSE mhr_url END,
           updated_at = datetime('now') WHERE id = ?`)
           .bind(data.usa_hockey_url !== undefined ? 1 : 0, (data.usa_hockey_url || '').trim() || null,
-                data.mhr_url !== undefined ? 1 : 0, (data.mhr_url || '').trim() || null, teamId).run().catch(() => {});
+                data.mhr_url !== undefined ? 1 : 0, newMhr, teamId).run().catch(() => {});
+        // Removing (or changing) the link invalidates the cached rating
+        if (data.mhr_url !== undefined) {
+          await db.prepare("UPDATE teams SET mhr_rating = NULL, mhr_rating_updated_at = NULL WHERE id = ? AND (mhr_url IS NULL OR mhr_url = '' OR mhr_url != COALESCE(?, ''))")
+            .bind(teamId, newMhr).run().catch(() => {});
+        }
       }
     }
   }

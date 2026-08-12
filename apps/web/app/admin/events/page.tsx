@@ -4526,7 +4526,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                           ) : null}
                         </td>
                         <td className="px-4 py-3">
-                          {reg.mhr_rating != null ? (
+                          {reg.mhr_url && reg.mhr_rating != null ? (
                             <a href={reg.mhr_url ? (String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`) : '#'}
                               target="_blank" rel="noopener noreferrer" title="Open MyHockeyRankings"
                               className="text-xs font-bold text-[#003e79] hover:underline">

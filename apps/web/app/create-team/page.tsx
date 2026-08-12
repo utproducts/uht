@@ -369,8 +369,9 @@ export default function CreateTeamPage() {
       city: form.city.trim() || undefined,
       state: form.state || undefined,
       website: form.website.trim() || undefined,
-      usaHockeyRosterUrl: form.usaHockeyUrl.trim() || undefined,
-      mhrUrl: form.mhrUrl.trim() || undefined,
+      // Always send these (empty string clears the link on edit)
+      usaHockeyRosterUrl: form.usaHockeyUrl.trim(),
+      mhrUrl: form.mhrUrl.trim(),
       hometownLeague: form.hometownLeague || undefined,
       teamType: form.teamType || undefined,
       season: form.season || undefined,
