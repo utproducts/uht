@@ -29,6 +29,55 @@ async function stripeGet(path: string, secretKey: string) {
   return res.json() as Promise<any>;
 }
 
+// Helper: what a registration still owes. Accounts for previous card charges
+// AND admin-recorded manual payments (Venmo/check/…), so a deposit-paid team is
+// only ever charged the remainder — never the full price again.
+// Returns null when the registration doesn't exist.
+async function getRegBalance(db: D1Database, regId: string): Promise<{
+  expected: number; alreadyPaid: number; remaining: number; depositCents: number;
+} | null> {
+  try { await db.prepare('ALTER TABLE event_registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
+  try { await db.prepare('ALTER TABLE registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
+
+  let reg = await db.prepare(
+    `SELECT er.id, er.stripe_payment_id, er.payment_amount_cents as charged_cents, er.amount_paid_cents,
+            e.price_cents as event_price_cents, e.deposit_cents as event_deposit_cents,
+            ed.price_cents as division_price_cents
+     FROM event_registrations er
+     JOIN events e ON e.id = er.event_id
+     LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+     WHERE er.id = ?`
+  ).bind(regId).first<any>();
+  if (!reg) {
+    reg = await db.prepare(
+      `SELECT r.id, r.stripe_payment_id, r.amount_cents as charged_cents, r.amount_paid_cents,
+              e.price_cents as event_price_cents, e.deposit_cents as event_deposit_cents,
+              ed.price_cents as division_price_cents
+       FROM registrations r
+       JOIN events e ON e.id = r.event_id
+       LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+       WHERE r.id = ?`
+    ).bind(regId).first<any>();
+  }
+  if (!reg) return null;
+
+  let manualCents = 0;
+  try {
+    const m = await db.prepare(
+      'SELECT COALESCE(SUM(amount_cents), 0) as total FROM registration_payments WHERE registration_id = ?'
+    ).bind(regId).first<{ total: number }>();
+    manualCents = m?.total || 0;
+  } catch {}
+
+  const stripeCents = reg.stripe_payment_id ? (reg.charged_cents || 0) : 0;
+  const alreadyPaid = Math.max(reg.amount_paid_cents || 0, stripeCents + manualCents);
+  const expected = reg.division_price_cents || reg.event_price_cents || reg.charged_cents || 0;
+  const depositCents = reg.event_deposit_cents || Math.round(expected * 0.25);
+  // Unknown price + nothing paid → remaining unknowable; callers fall back to legacy amounts
+  const remaining = expected > 0 ? Math.max(0, expected - alreadyPaid) : (alreadyPaid > 0 ? 0 : -1);
+  return { expected, alreadyPaid, remaining, depositCents };
+}
+
 // Helper: Super Saver auto-credit. When a promo window is active and a team has
 // registered for 2+ distinct events during the window — at least one of them a
 // featured promo event with a hotel selection — apply the promo credit to the
@@ -222,8 +271,18 @@ stripeRoutes.get('/payment-info', async (c) => {
 
     if (!reg) continue;
 
-    const priceCents = reg.division_price_cents || reg.amount_cents || reg.event_price_cents || 0;
-    const depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
+    let priceCents = reg.division_price_cents || reg.amount_cents || reg.event_price_cents || 0;
+    let depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
+
+    // Show the BALANCE when part of the price is already covered
+    // (card deposit and/or admin-recorded Venmo/check payments)
+    let paidCents = 0;
+    const balance = await getRegBalance(db, regId).catch(() => null);
+    if (balance && balance.alreadyPaid > 0 && balance.remaining >= 0) {
+      paidCents = balance.alreadyPaid;
+      priceCents = balance.remaining;
+      depositCents = Math.min(depositCents, balance.remaining);
+    }
 
     registrations.push({
       id: reg.id,
@@ -239,7 +298,8 @@ stripeRoutes.get('/payment-info', async (c) => {
       payment_status: reg.payment_status,
       price_cents: priceCents,
       deposit_cents: depositCents,
-      already_paid: reg.payment_status === 'paid',
+      paid_cents: paidCents,
+      already_paid: reg.payment_status === 'paid' || (balance ? balance.remaining === 0 && balance.alreadyPaid > 0 : false),
     });
   }
 
@@ -271,9 +331,13 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     return c.json({ success: false, error: 'Payment processing not configured' }, 500);
   }
 
-  // Look up registrations and compute total
+  // Look up registrations and compute total. Each registration is charged what
+  // it still OWES — prior card charges and admin-recorded payments (Venmo,
+  // check, …) are deducted so nobody can overpay.
   let totalCents = 0;
   const descriptions: string[] = [];
+  const chargedRegIds: string[] = [];
+  let skippedAlreadyPaid = 0;
 
   for (let i = 0; i < data.registrationIds.length; i++) {
     const regId = data.registrationIds[i];
@@ -309,14 +373,37 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     // Price priority: division price > registration amount > event price
     const priceCents = reg.division_price_cents || reg.amount_cents || reg.price_cents || 0;
     const depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
-    const chargeAmount = data.paymentChoice === 'pay_deposit' ? depositCents : priceCents;
+    let chargeAmount = data.paymentChoice === 'pay_deposit' ? depositCents : priceCents;
 
-    if (chargeAmount <= 0) {
-      return c.json({ success: false, error: `No price set for registration (${teamName})` }, 400);
+    // Deduct what's already been paid (card + manual records)
+    const balance = await getRegBalance(db, regId).catch(() => null);
+    if (balance && balance.alreadyPaid > 0 && balance.remaining >= 0) {
+      chargeAmount = data.paymentChoice === 'pay_deposit'
+        ? Math.min(depositCents, balance.remaining)
+        : balance.remaining;
+      if (chargeAmount <= 0) {
+        // Nothing left to pay on this registration
+        skippedAlreadyPaid++;
+        continue;
+      }
+      descriptions.push(`${teamName} (Balance)`);
+    } else {
+      if (chargeAmount <= 0) {
+        return c.json({ success: false, error: `No price set for registration (${teamName})` }, 400);
+      }
+      descriptions.push(`${teamName}${data.paymentChoice === 'pay_deposit' ? ' (Deposit)' : ''}`);
     }
 
     totalCents += chargeAmount;
-    descriptions.push(`${teamName}${data.paymentChoice === 'pay_deposit' ? ' (Deposit)' : ''}`);
+    chargedRegIds.push(regId);
+  }
+
+  // Everything already covered — no charge to make
+  if (chargedRegIds.length === 0 && skippedAlreadyPaid > 0) {
+    return c.json({
+      success: true,
+      data: { clientSecret: null, paymentIntentId: null, totalCents: 0, discountApplied: 0, fullyDiscounted: true, alreadyPaid: true },
+    });
   }
 
   // Apply discount code if provided (reward codes OR coupon codes)
@@ -363,7 +450,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
         // Look up the event for these registrations
         const regCheck = await db.prepare(
           'SELECT event_id FROM event_registrations WHERE id = ?'
-        ).bind(data.registrationIds[0]).first() as any;
+        ).bind(chargedRegIds[0]).first() as any;
         const regEventId = regCheck?.event_id;
         if (regEventId && coupon.event_id !== regEventId) {
           return c.json({ success: false, error: 'This coupon code is not valid for this event' }, 400);
@@ -390,7 +477,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
   // and never blocks the payment if anything goes wrong.
   let superSaverCents = 0;
   if (!discountCode && data.paymentChoice === 'pay_now') {
-    const ss = await computeSuperSaverCredit(db, data.registrationIds, totalCents);
+    const ss = await computeSuperSaverCredit(db, chargedRegIds, totalCents);
     if (ss) {
       superSaverCents = ss.credit;
       discountCents += ss.credit;
@@ -402,7 +489,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
 
   if (totalCents <= 0) {
     // Fully covered by discount — no charge needed, just update registrations
-    for (const regId of data.registrationIds) {
+    for (const regId of chargedRegIds) {
       await db.prepare(
         `UPDATE event_registrations SET payment_status = 'paid', amount_paid_cents = 0, discount_code = ?, discount_cents = ? WHERE id = ?`
       ).bind(discountCode, discountCents, regId).run().catch(() => {});
@@ -412,7 +499,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     }
     if (superSaverCents > 0) {
       await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')
-        .bind(data.registrationIds[0]).run().catch(() => {});
+        .bind(chargedRegIds[0]).run().catch(() => {});
     }
     return c.json({
       success: true,
@@ -432,7 +519,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       'automatic_payment_methods[enabled]': 'true',
       'description': `${data.eventName} — ${descriptions.join(', ')}${discountCode ? ` (discount: ${discountCode})` : ''}`,
       'receipt_email': data.email,
-      'metadata[registration_ids]': data.registrationIds.join(','),
+      'metadata[registration_ids]': chargedRegIds.join(','),
       'metadata[payment_choice]': data.paymentChoice,
       'metadata[event_name]': data.eventName,
     };
@@ -449,7 +536,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
     }
 
     // Store the PaymentIntent ID on the registrations
-    for (const regId of data.registrationIds) {
+    for (const regId of chargedRegIds) {
       await db.prepare(
         `UPDATE event_registrations SET payment_status = 'pending_payment', stripe_session_id = ? WHERE id = ?`
       ).bind(paymentIntent.id, regId).run().catch(() => {});
@@ -494,6 +581,8 @@ stripeRoutes.post('/confirm-payment', async (c) => {
     }
 
     if (pi.status === 'succeeded') {
+      try { await db.prepare('ALTER TABLE event_registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
+      try { await db.prepare('ALTER TABLE registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
       const regIds = (pi.metadata?.registration_ids || '').split(',').filter(Boolean);
       const paymentChoice = pi.metadata?.payment_choice || 'pay_now';
       const amountCents = pi.amount || 0;
@@ -504,12 +593,20 @@ stripeRoutes.post('/confirm-payment', async (c) => {
 
         // Update payment info AND promote status from 'awaiting_payment' to 'pending' (registered, awaiting admin review)
         await db.prepare(
-          `UPDATE event_registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-        ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+          `UPDATE event_registrations SET
+            status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
+            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
+              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(payment_amount_cents, 0) ELSE 0 END) + ? END,
+            payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
 
         await db.prepare(
-          `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-        ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+          `UPDATE registrations SET
+            status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
+            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
+              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(amount_cents, 0) ELSE 0 END) + ? END,
+            payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
 
         await withdrawAbandonedDuplicates(db, regId);
         // Redeem any Super Saver credit tied to this registration's payment
@@ -592,6 +689,8 @@ stripeRoutes.post('/webhook', async (c) => {
       return c.json({ received: true });
     }
 
+    try { await db.prepare('ALTER TABLE event_registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
+    try { await db.prepare('ALTER TABLE registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
     const regIds = (pi.metadata?.registration_ids || '').split(',').filter(Boolean);
     const paymentChoice = pi.metadata?.payment_choice || 'pay_now';
     const amountCents = pi.amount || 0;
@@ -602,12 +701,20 @@ stripeRoutes.post('/webhook', async (c) => {
 
       // Promote status from 'awaiting_payment' to 'pending' on successful payment
       await db.prepare(
-        `UPDATE event_registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-      ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+          `UPDATE event_registrations SET
+            status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
+            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
+              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(payment_amount_cents, 0) ELSE 0 END) + ? END,
+            payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
 
       await db.prepare(
-        `UPDATE registrations SET status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END, payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-      ).bind(paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+          `UPDATE registrations SET
+            status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
+            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
+              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(amount_cents, 0) ELSE 0 END) + ? END,
+            payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
+        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
 
       await withdrawAbandonedDuplicates(db, regId);
       await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')

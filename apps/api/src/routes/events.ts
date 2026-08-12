@@ -1398,7 +1398,7 @@ const updateRegistrationSchema = z.object({
 async function loadRegPaymentContext(db: D1Database, regId: string) {
   let reg = await db.prepare(`
     SELECT er.id, er.event_id, er.event_division_id, er.payment_status, er.stripe_payment_id,
-      er.payment_amount_cents as charged_cents,
+      er.payment_amount_cents as charged_cents, er.amount_paid_cents,
       ed.price_cents as division_price_cents, e.price_cents as event_price_cents
     FROM event_registrations er
     JOIN events e ON e.id = er.event_id
@@ -1408,7 +1408,7 @@ async function loadRegPaymentContext(db: D1Database, regId: string) {
   if (!reg) {
     reg = await db.prepare(`
       SELECT r.id, r.event_id, r.event_division_id, r.payment_status, r.stripe_payment_id,
-        r.amount_cents as charged_cents,
+        r.amount_cents as charged_cents, r.amount_paid_cents,
         ed.price_cents as division_price_cents, e.price_cents as event_price_cents
       FROM registrations r
       JOIN events e ON e.id = r.event_id
@@ -1428,8 +1428,10 @@ async function computeAndApplyPaymentStatus(db: D1Database, regId: string) {
     'SELECT COALESCE(SUM(amount_cents), 0) as total FROM registration_payments WHERE registration_id = ?'
   ).bind(regId).first<{ total: number }>();
   const manualCents = manual?.total || 0;
-  const stripeCents = reg.stripe_payment_id ? (reg.charged_cents || 0) : 0;
-  const totalPaid = stripeCents + manualCents;
+  const singleStripe = reg.stripe_payment_id ? (reg.charged_cents || 0) : 0;
+  // amount_paid_cents accumulates across multiple card charges; use whichever is larger
+  const totalPaid = Math.max(reg.amount_paid_cents || 0, singleStripe + manualCents);
+  const stripeCents = Math.max(totalPaid - manualCents, singleStripe);
   const expected = reg.division_price_cents || reg.event_price_cents || reg.charged_cents || 0;
 
   // Only auto-move the status when we actually know about money
@@ -1464,7 +1466,9 @@ eventRoutes.get('/admin/registration/:regId/payments', authMiddleware, requireRo
     'SELECT * FROM registration_payments WHERE registration_id = ? ORDER BY created_at ASC'
   ).bind(regId).all();
   const manualCents = (rows.results || []).reduce((s: number, r: any) => s + (r.amount_cents || 0), 0);
-  const stripeCents = ctx.reg.stripe_payment_id ? (ctx.reg.charged_cents || 0) : 0;
+  const singleStripe = ctx.reg.stripe_payment_id ? (ctx.reg.charged_cents || 0) : 0;
+  const totalPaidAll = Math.max(ctx.reg.amount_paid_cents || 0, singleStripe + manualCents);
+  const stripeCents = Math.max(totalPaidAll - manualCents, singleStripe);
   const expected = ctx.reg.division_price_cents || ctx.reg.event_price_cents || ctx.reg.charged_cents || 0;
 
   return c.json({
