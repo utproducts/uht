@@ -792,6 +792,20 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const teamOwnLevel = (((reg as any).team_division_level || '') as string).trim();
   const [divAgeGroup, setDivAgeGroup] = useState((reg as any).division_age_group || '');
   const [divLevel, setDivLevel] = useState((((reg as any).division_level || '') as string).trim() || teamOwnLevel);
+  // The team's state's full division-level list (same list they picked from at team creation)
+  const [stateLevels, setStateLevels] = useState<string[]>([]);
+  useEffect(() => {
+    const st = (reg.team_state || '').trim().toUpperCase();
+    if (!st) return;
+    authFetch(`${API_BASE}/lookups/state-divisions?state=${encodeURIComponent(st.length === 2 ? st : st.slice(0, 2))}`)
+      .then(r => r.json())
+      .then((json: any) => {
+        if (json.success && Array.isArray(json.data)) {
+          setStateLevels(json.data.filter((l: any) => l.is_active !== 0).map((l: any) => l.level_name));
+        }
+      })
+      .catch(() => {});
+  }, [reg.team_state]);
   const divTouched = useRef(false);
   const eventAgeGroups = Array.from(new Set(divisions.map(d => d.age_group)));
   const eventAgeLevels = (ag: string) => Array.from(new Set(divisions.filter(d => d.age_group === ag).map(d => (d.division_level || '').trim())));
@@ -1140,8 +1154,28 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
                     placeholder={eventAgeLevels(divAgeGroup).filter(Boolean).join(', ') || 'e.g. A, B1, Gold'}
                     className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
                   <datalist id="division-level-options">
-                    {Array.from(new Set([...eventAgeLevels(divAgeGroup).filter(Boolean), ...(teamOwnLevel ? [teamOwnLevel] : [])])).map(l => <option key={l} value={l} />)}
+                    {Array.from(new Set([
+                      ...eventAgeLevels(divAgeGroup).filter(Boolean),
+                      ...(teamOwnLevel ? [teamOwnLevel] : []),
+                      ...stateLevels,
+                    ])).map(l => <option key={l} value={l} />)}
                   </datalist>
+                  {stateLevels.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {stateLevels.map(l => (
+                        <button key={l} type="button"
+                          onClick={() => { divTouched.current = true; setDivLevel(l); }}
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition ${
+                            divLevel.trim() === l
+                              ? 'bg-[#003e79] text-white border-[#003e79]'
+                              : 'bg-white text-[#6e6e73] border-[#e8e8ed] hover:border-[#003e79] hover:text-[#003e79]'
+                          }`}>
+                          {l}
+                        </button>
+                      ))}
+                      <span className="text-[10px] text-[#86868b] self-center ml-1">{reg.team_state} levels</span>
+                    </div>
+                  )}
                   <p className="text-[11px] text-[#86868b] mt-1">
                     {(() => {
                       const match = divisions.find(d => d.age_group === divAgeGroup && ((d.division_level || '').trim() === divLevel.trim()));
