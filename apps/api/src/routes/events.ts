@@ -366,6 +366,7 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
       ed.age_group,
       ed.division_level as division,
       r.hotel_assigned,
+      ha.hotel_name as hotel_assigned_name,
       r.notes,
       r.event_division_id,
       r.created_at, r.updated_at,
@@ -373,23 +374,26 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
     FROM registrations r
     LEFT JOIN teams t ON t.id = r.team_id
     LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+    LEFT JOIN event_hotels ha ON ha.id = r.hotel_assigned
     WHERE r.event_id = ?
     ORDER BY ed.age_group ASC, t.name ASC
   `).bind(id).all();
 
   // Also check event_registrations table (consumer registration flow)
   const legacyRegs = await db.prepare(`
-    SELECT id, event_id, team_name, age_group, division,
-      manager_first_name, manager_last_name, email1 as email,
-      phone, status, payment_status,
-      payment_amount_cents,
-      hotel_assigned,
-      notes,
-      event_division_id,
-      created_at, updated_at,
+    SELECT er.id, er.event_id, er.team_name, er.age_group, er.division,
+      er.manager_first_name, er.manager_last_name, er.email1 as email,
+      er.phone, er.status, er.payment_status,
+      er.payment_amount_cents,
+      er.hotel_assigned,
+      ha.hotel_name as hotel_assigned_name,
+      er.notes,
+      er.event_division_id,
+      er.created_at, er.updated_at,
       'consumer' as source
-    FROM event_registrations
-    WHERE event_id = ?
+    FROM event_registrations er
+    LEFT JOIN event_hotels ha ON ha.id = er.hotel_assigned
+    WHERE er.event_id = ?
     ORDER BY age_group ASC, team_name ASC
   `).bind(id).all();
 

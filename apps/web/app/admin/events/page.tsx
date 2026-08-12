@@ -2792,7 +2792,7 @@ function EditRegistrationModal({ reg, eventId, hotels, onClose, onSaved }: {
   const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
   const [paymentAmount, setPaymentAmount] = useState(reg.payment_amount_cents ? (reg.payment_amount_cents / 100).toString() : '');
   const [paymentMethod, setPaymentMethod] = useState(reg.payment_method || '');
-  const [hotelAssigned, setHotelAssigned] = useState(reg.hotel_assigned || '');
+  const [hotelAssigned, setHotelAssigned] = useState((reg as any).hotel_assigned_name || reg.hotel_assigned || '');
   const [notes, setNotes] = useState(reg.notes || '');
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<'idle' | 'success' | 'error'>('idle');
@@ -4493,7 +4493,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                         <td className="px-4 py-3">
                           {reg.hotel_assigned ? (
                             <div>
-                              <span className="text-xs font-medium text-[#003e79]">{reg.hotel_assigned}</span>
+                              <span className="text-xs font-medium text-[#003e79]">{(reg as any).hotel_assigned_name || reg.hotel_assigned}</span>
                               <span className="block text-[10px] text-green-600 font-medium">Assigned</span>
                             </div>
                           ) : reg.hotel_choice === 'Local Team' ? (
