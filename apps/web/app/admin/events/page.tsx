@@ -4401,7 +4401,11 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               onSaved={handleRegSaved}
             />
           )}
-          {Object.keys(grouped).sort().map((ageGroup) => {
+          {Object.keys(grouped).sort((a, b) => {
+            const ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget'];
+            const idx = (g: string) => { const i = ORDER.findIndex(o => g.toLowerCase().includes(o)); return i === -1 ? 99 : i; };
+            return idx(a) - idx(b) || a.localeCompare(b);
+          }).map((ageGroup) => {
             const groupPaid = grouped[ageGroup].filter((r: any) => r.payment_status === 'paid').length;
             const groupHotel = grouped[ageGroup].filter((r: any) => r.hotel_assigned).length;
             const groupApproved = grouped[ageGroup].filter((r: any) => r.status === 'approved').length;
@@ -4420,18 +4424,18 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm table-fixed">
                   <thead className="bg-[#f5f5f7] text-left">
                     <tr>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Team</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Coach</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Manager</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Division</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Roster</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Status</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Payment</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Hotel</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-16"></th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[19%]">Team</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[18%]">Coach</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[18%]">Manager</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[10%]">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[7%]">Roster</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[6%]">Status</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Payment</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[9%]">Hotel</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73] w-[4%]"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4439,7 +4443,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                       <tr key={reg.id} className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-[#1d1d1f]">{reg.display_name || reg.team_name}</span>
+                            <span className="font-medium text-[#1d1d1f] truncate max-w-[180px]" title={reg.team_name}>{reg.display_name || reg.team_name}</span>
                             {reg.mhr_url && (
                               <a href={String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`}
                                 target="_blank" rel="noopener noreferrer" title="MyHockeyRankings"
@@ -4448,9 +4452,6 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                               </a>
                             )}
                           </div>
-                          {reg.display_name && reg.display_name !== reg.team_name && (
-                            <span className="block text-[10px] text-[#86868b]">{reg.team_name}</span>
-                          )}
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {reg.head_coach_name || reg.head_coach_email ? (
@@ -4458,7 +4459,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                               {reg.head_coach_name && <div className="font-medium text-[#1d1d1f]">{reg.head_coach_name}</div>}
                               {reg.head_coach_email && (
                                 <button onClick={() => copyEmail(reg.head_coach_email)} title="Click to copy"
-                                  className="text-[#003e79] hover:underline text-left">
+                                  className="text-[#003e79] hover:underline text-left truncate block max-w-full">
                                   {copiedEmail === reg.head_coach_email ? '✓ Copied!' : reg.head_coach_email}
                                 </button>
                               )}
@@ -4472,7 +4473,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                               {reg.manager_name && <div className="font-medium text-[#1d1d1f]">{reg.manager_name}</div>}
                               {reg.manager_email && (
                                 <button onClick={() => copyEmail(reg.manager_email)} title="Click to copy"
-                                  className="text-[#003e79] hover:underline text-left">
+                                  className="text-[#003e79] hover:underline text-left truncate block max-w-full">
                                   {copiedEmail === reg.manager_email ? '✓ Copied!' : reg.manager_email}
                                 </button>
                               )}
@@ -4500,6 +4501,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                         </td>
                         <td className="px-4 py-3">
                           <select
+                            title={reg.status === 'approved' ? 'Approved' : reg.status === 'denied' ? 'Canceled' : reg.status === 'waitlisted' ? 'Waitlisted' : 'Pending'}
                             value={reg.status || 'pending'}
                             onChange={async (e) => {
                               const newStatus = e.target.value;
@@ -4530,10 +4532,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                               'bg-orange-100 text-orange-700'
                             }`}
                           >
-                            <option value="pending">⏳ Pending</option>
-                            <option value="approved">✅ Approved</option>
-                            <option value="denied">❌ Denied</option>
-                            <option value="waitlisted">📋 Waitlisted</option>
+                            <option value="pending" title="Pending">⏳</option>
+                            <option value="approved" title="Approved">✅</option>
+                            <option value="denied" title="Canceled">❌</option>
+                            <option value="waitlisted" title="Waitlisted">📋</option>
                           </select>
                         </td>
                         <td className="px-4 py-3">
@@ -4549,7 +4551,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                         <td className="px-4 py-3">
                           {reg.hotel_assigned ? (
                             <div>
-                              <span className="text-xs font-medium text-[#003e79]">{(reg as any).hotel_assigned_name || reg.hotel_assigned}</span>
+                              <span className="text-xs font-medium text-[#003e79] truncate block max-w-[110px]" title={(reg as any).hotel_assigned_name || reg.hotel_assigned}>
+                                {(reg as any).hotel_assigned_name || reg.hotel_assigned}
+                              </span>
                               <span className="block text-[10px] text-green-600 font-medium">Assigned</span>
                             </div>
                           ) : reg.hotel_choice === 'Local Team' ? (
