@@ -363,8 +363,14 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
     SELECT r.id, r.event_id, r.status, r.payment_status,
       r.amount_cents as payment_amount_cents,
       t.name as team_name,
-      ed.age_group,
-      ed.division_level as division,
+      r.team_id,
+      COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = t.organization_id), t.name) || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END) as display_name,
+      t.head_coach_name, t.head_coach_email, t.head_coach_phone,
+      t.manager_name, t.manager_email, t.manager_phone,
+      t.mhr_url,
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = r.team_id AND tp.status = 'active') as roster_count,
+      COALESCE(ed.age_group, t.age_group) as age_group,
+      COALESCE(ed.division_level, t.division_level) as division,
       r.hotel_assigned,
       ha.hotel_name as hotel_assigned_name,
       r.notes,
@@ -381,10 +387,22 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
 
   // Also check event_registrations table (consumer registration flow)
   const legacyRegs = await db.prepare(`
-    SELECT er.id, er.event_id, er.team_name, er.age_group, er.division,
+    SELECT er.id, er.event_id, er.team_name,
+      COALESCE(ed2.age_group, er.age_group) as age_group,
+      COALESCE(ed2.division_level, er.division, ct.division_level) as division,
       er.manager_first_name, er.manager_last_name, er.email1 as email,
       er.phone, er.status, er.payment_status,
       er.payment_amount_cents,
+      COALESCE(er.team_id, (SELECT t9.id FROM teams t9 WHERE LOWER(t9.name) = LOWER(er.team_name) AND t9.is_active = 1 LIMIT 1)) as team_id,
+      COALESCE(ct.schedule_name, CASE WHEN ct.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ct.organization_id), ct.name) || ' (' || TRIM(SUBSTR(ct.head_coach_name, INSTR(ct.head_coach_name, ' '))) || ')' ELSE ct.name END, er.team_name) as display_name,
+      COALESCE(ct.head_coach_name, er.coach_name) as head_coach_name,
+      COALESCE(ct.head_coach_email, er.coach_email) as head_coach_email,
+      COALESCE(ct.head_coach_phone, er.coach_phone) as head_coach_phone,
+      COALESCE(ct.manager_name, NULLIF(TRIM(COALESCE(er.manager_first_name, '') || ' ' || COALESCE(er.manager_last_name, '')), '')) as manager_name,
+      COALESCE(ct.manager_email, er.email1) as manager_email,
+      COALESCE(ct.manager_phone, er.phone) as manager_phone,
+      COALESCE(ct.mhr_url, (SELECT t8.mhr_url FROM teams t8 WHERE LOWER(t8.name) = LOWER(er.team_name) AND t8.mhr_url IS NOT NULL AND t8.mhr_url != '' LIMIT 1)) as mhr_url,
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.status = 'active' AND tp.team_id = COALESCE(er.team_id, (SELECT t7.id FROM teams t7 WHERE LOWER(t7.name) = LOWER(er.team_name) AND t7.is_active = 1 LIMIT 1))) as roster_count,
       er.hotel_assigned,
       ha.hotel_name as hotel_assigned_name,
       er.notes,
@@ -392,6 +410,8 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
       er.created_at, er.updated_at,
       'consumer' as source
     FROM event_registrations er
+    LEFT JOIN teams ct ON ct.id = er.team_id
+    LEFT JOIN event_divisions ed2 ON ed2.id = er.event_division_id
     LEFT JOIN event_hotels ha ON ha.id = er.hotel_assigned
     WHERE er.event_id = ?
     ORDER BY age_group ASC, team_name ASC

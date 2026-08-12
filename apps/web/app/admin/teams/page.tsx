@@ -105,6 +105,18 @@ export default function TeamsPage() {
     fetchTeams();
   }, [fetchTeams]);
 
+  // Deep link from event participants: /admin/teams?roster=<teamId>&q=<name>
+  // opens with the team searched and its roster expanded
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const rosterTeam = params.get('roster');
+    const q = params.get('q');
+    if (q) setSearch(q);
+    if (rosterTeam) toggleTeamExpand(rosterTeam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Fetch roster when team is expanded
   const toggleTeamExpand = async (teamId: string) => {
     if (expandedTeamId === teamId) {

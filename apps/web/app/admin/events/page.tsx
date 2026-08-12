@@ -4171,6 +4171,13 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
 // --- Event Detail Overlay ---
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
+  // Which email was just copied to the clipboard (shows a brief "Copied!")
+  const [copiedEmail, setCopiedEmail] = useState('');
+  const copyEmail = (email: string) => {
+    try { navigator.clipboard.writeText(email); } catch {}
+    setCopiedEmail(email);
+    setTimeout(() => setCopiedEmail(c => (c === email ? '' : c)), 1500);
+  };
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers'>('overview');
   const [editingReg, setEditingReg] = useState<any>(null);
@@ -4417,9 +4424,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                   <thead className="bg-[#f5f5f7] text-left">
                     <tr>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Team</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Coach</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Manager</th>
-                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Contact</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Division</th>
+                      <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Roster</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Status</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Payment</th>
                       <th className="px-4 py-2.5 font-semibold text-[#6e6e73]">Hotel</th>
@@ -4429,18 +4437,66 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                   <tbody>
                     {grouped[ageGroup].map((reg: any) => (
                       <tr key={reg.id} className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
-                        <td className="px-4 py-3 font-medium text-[#1d1d1f]">{reg.team_name}</td>
-                        <td className="px-4 py-3 text-[#6e6e73] text-xs">
-                          {reg.manager_first_name ? `${reg.manager_first_name} ${reg.manager_last_name || ''}`.trim() : '-'}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-[#1d1d1f]">{reg.display_name || reg.team_name}</span>
+                            {reg.mhr_url && (
+                              <a href={String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`}
+                                target="_blank" rel="noopener noreferrer" title="MyHockeyRankings"
+                                className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded bg-[#003e79] text-white text-[9px] font-extrabold hover:bg-[#00ccff] hover:text-[#003e79] transition">
+                                MHR
+                              </a>
+                            )}
+                          </div>
+                          {reg.display_name && reg.display_name !== reg.team_name && (
+                            <span className="block text-[10px] text-[#86868b]">{reg.team_name}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {reg.head_coach_name || reg.head_coach_email ? (
+                            <div>
+                              {reg.head_coach_name && <div className="font-medium text-[#1d1d1f]">{reg.head_coach_name}</div>}
+                              {reg.head_coach_email && (
+                                <button onClick={() => copyEmail(reg.head_coach_email)} title="Click to copy"
+                                  className="text-[#003e79] hover:underline text-left">
+                                  {copiedEmail === reg.head_coach_email ? '✓ Copied!' : reg.head_coach_email}
+                                </button>
+                              )}
+                              {reg.head_coach_phone && <div className="text-[#86868b] text-[11px]">{reg.head_coach_phone}</div>}
+                            </div>
+                          ) : <span className="text-[#c7c7cc]">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {reg.manager_name || reg.manager_email ? (
+                            <div>
+                              {reg.manager_name && <div className="font-medium text-[#1d1d1f]">{reg.manager_name}</div>}
+                              {reg.manager_email && (
+                                <button onClick={() => copyEmail(reg.manager_email)} title="Click to copy"
+                                  className="text-[#003e79] hover:underline text-left">
+                                  {copiedEmail === reg.manager_email ? '✓ Copied!' : reg.manager_email}
+                                </button>
+                              )}
+                              {reg.manager_phone && <div className="text-[#86868b] text-[11px]">{reg.manager_phone}</div>}
+                            </div>
+                          ) : <span className="text-[#c7c7cc]">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-[#6e6e73] text-xs">{reg.email1}</div>
-                          {reg.phone && <div className="text-[#86868b] text-[11px]">{reg.phone}</div>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {reg.division ? (
-                            <span className="text-xs font-medium px-2 py-0.5 bg-[#fafafa] text-[#3d3d3d] rounded">{reg.division}</span>
+                          {(reg.age_group || reg.division) ? (
+                            <span className="text-xs font-medium px-2 py-0.5 bg-[#fafafa] text-[#3d3d3d] rounded">
+                              {[reg.age_group, reg.division].filter(Boolean).join(' ')}
+                            </span>
                           ) : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {reg.team_id && reg.roster_count > 0 ? (
+                            <a href={`/admin/teams?roster=${reg.team_id}&q=${encodeURIComponent(reg.team_name || '')}`}
+                              title="View roster"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 hover:bg-emerald-100 transition">
+                              ✓ {reg.roster_count}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-[#c7c7cc]" title="No roster loaded">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <select
