@@ -103,7 +103,7 @@ const statusLabels: Record<string, string> = {
   awaiting_payment: 'Awaiting Payment',
   waitlisted: 'Waitlisted',
   rejected: 'Rejected',
-  withdrawn: 'Withdrawn',
+  withdrawn: 'Canceled',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -972,22 +972,26 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
           <div>
             <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Registration Status</label>
             <div className="flex gap-2 flex-wrap">
-              {['pending', 'approved', 'awaiting_payment', 'waitlisted', 'rejected', 'withdrawn'].map(s => (
+              {/* "Canceled" is stored as 'withdrawn' — excluded from participants, counts, and schedules */}
+              {['pending', 'approved', 'waitlisted', 'withdrawn'].map(s => (
                 <button key={s} onClick={() => setStatus(s)}
                   className={"px-4 py-2 rounded-xl text-sm font-semibold transition border-2 " +
                     (status === s
                       ? s === 'approved' ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                         : s === 'pending' ? 'border-amber-400 bg-amber-50 text-amber-700'
-                        : s === 'awaiting_payment' ? 'border-orange-400 bg-orange-50 text-orange-700'
                         : s === 'waitlisted' ? 'border-blue-400 bg-blue-50 text-blue-700'
-                        : s === 'rejected' ? 'border-red-400 bg-red-50 text-red-700'
-                        : 'border-gray-400 bg-gray-50 text-gray-700'
+                        : 'border-red-400 bg-red-50 text-red-700'
                       : 'border-[#e8e8ed] bg-white text-[#86868b] hover:border-[#c8c8cd]')}
                 >
                   {statusLabels[s] || s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
               ))}
             </div>
+            {!['pending', 'approved', 'waitlisted', 'withdrawn'].includes(status) && (
+              <p className="text-[11px] text-[#86868b] mt-1.5">
+                Current status: <span className="font-semibold">{statusLabels[status] || status}</span> — it stays unchanged unless you pick one above.
+              </p>
+            )}
           </div>
 
           {/* ── Event (transfer) ── */}
