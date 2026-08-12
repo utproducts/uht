@@ -4482,11 +4482,12 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                           ) : <span className="text-[#c7c7cc]">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          {(reg.age_group || reg.division) ? (
+                          {/* Age group lives in the section header — only the level here */}
+                          {reg.division ? (
                             <span className="text-xs font-medium px-2 py-0.5 bg-[#fafafa] text-[#3d3d3d] rounded">
-                              {[reg.age_group, reg.division].filter(Boolean).join(' ')}
+                              {reg.division}
                             </span>
-                          ) : '-'}
+                          ) : null}
                         </td>
                         <td className="px-4 py-3">
                           {reg.team_id && reg.roster_count > 0 ? (
