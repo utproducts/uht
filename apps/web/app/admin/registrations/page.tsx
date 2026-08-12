@@ -789,6 +789,17 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [divisionId, setDivisionId] = useState(reg.event_division_id || '');
   const [hotelAssigned, setHotelAssigned] = useState(reg.hotel_assigned || '');
   const [notes, setNotes] = useState(reg.notes || '');
+  // Team & contacts
+  const [teamNameEdit, setTeamNameEdit] = useState(reg.team_name || '');
+  const [scheduleName, setScheduleName] = useState((reg as any).schedule_name || '');
+  const [coachName, setCoachName] = useState((reg as any).head_coach_name || (reg as any).coach_name || '');
+  const [coachEmail, setCoachEmail] = useState((reg as any).head_coach_email || (reg as any).coach_email || '');
+  const [coachPhone, setCoachPhone] = useState((reg as any).head_coach_phone || (reg as any).coach_phone || '');
+  const [managerName, setManagerName] = useState(
+    (reg as any).manager_name || [(reg as any).manager_first_name, (reg as any).manager_last_name].filter(Boolean).join(' ') || ''
+  );
+  const [managerEmail, setManagerEmail] = useState((reg as any).manager_email || (reg as any).email1 || '');
+  const [managerPhone, setManagerPhone] = useState((reg as any).manager_phone || (reg as any).phone || '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -806,6 +817,21 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       if (divisionId !== (reg.event_division_id || '')) {
         body.event_division_id = divisionId || null;
       }
+      // Team + contact edits — only send what changed
+      if (teamNameEdit.trim() && teamNameEdit.trim() !== (reg.team_name || '')) body.team_name = teamNameEdit.trim();
+      if (scheduleName !== ((reg as any).schedule_name || '')) body.schedule_name = scheduleName.trim() || null;
+      const origCoachName = (reg as any).head_coach_name || (reg as any).coach_name || '';
+      const origCoachEmail = (reg as any).head_coach_email || (reg as any).coach_email || '';
+      const origCoachPhone = (reg as any).head_coach_phone || (reg as any).coach_phone || '';
+      if (coachName !== origCoachName) body.coach_name = coachName.trim() || null;
+      if (coachEmail !== origCoachEmail) body.coach_email = coachEmail.trim() || null;
+      if (coachPhone !== origCoachPhone) body.coach_phone = coachPhone.trim() || null;
+      const origMgrName = (reg as any).manager_name || [(reg as any).manager_first_name, (reg as any).manager_last_name].filter(Boolean).join(' ') || '';
+      const origMgrEmail = (reg as any).manager_email || (reg as any).email1 || '';
+      const origMgrPhone = (reg as any).manager_phone || (reg as any).phone || '';
+      if (managerName !== origMgrName) body.manager_name = managerName.trim() || null;
+      if (managerEmail !== origMgrEmail) body.manager_email = managerEmail.trim() || null;
+      if (managerPhone !== origMgrPhone) body.manager_phone = managerPhone.trim() || null;
 
       const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
         method: 'PATCH',
@@ -860,6 +886,66 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
         </div>
 
         <div className="px-6 py-6 space-y-6">
+
+          {/* ── Team & Contacts ── */}
+          <div>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Team &amp; Contacts</label>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Registered Team Name</label>
+                <input value={teamNameEdit} onChange={e => setTeamNameEdit(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Schedule Name</label>
+                <input value={scheduleName} onChange={e => setScheduleName(e.target.value)}
+                  placeholder={(() => {
+                    const coach = ((reg as any).head_coach_name || (reg as any).coach_name || '').trim();
+                    const last = coach.includes(' ') ? coach.split(/\s+/).slice(-1)[0] : '';
+                    return last ? `${reg.team_name} (${last})` : (reg.team_name || 'Defaults to team name');
+                  })()}
+                  className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                <p className="text-[11px] text-[#86868b] mt-1">
+                  Shown on schedules, scoreboards &amp; standings only — stats and org rollups stay under the registered team.
+                  Blank = automatic &quot;Team Name (Coach Last Name)&quot;. Type a custom name to override.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Coach Name</label>
+                  <input value={coachName} onChange={e => setCoachName(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Coach Email</label>
+                  <input value={coachEmail} onChange={e => setCoachEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Coach Phone</label>
+                  <input value={coachPhone} onChange={e => setCoachPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Manager Name</label>
+                  <input value={managerName} onChange={e => setManagerName(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Manager Email</label>
+                  <input value={managerEmail} onChange={e => setManagerEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Manager Phone</label>
+                  <input value={managerPhone} onChange={e => setManagerPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* ── Registration Status ── */}
           <div>

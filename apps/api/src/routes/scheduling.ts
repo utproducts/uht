@@ -586,8 +586,8 @@ schedulingRoutes.get('/events/:eventId/games', authMiddleware, async (c) => {
 
   const result = await db.prepare(`
     SELECT g.*,
-      ht.name as home_team_name,
-      at.name as away_team_name,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name,
+      COALESCE(at.schedule_name, CASE WHEN at.head_coach_name LIKE '% %' THEN at.name || ' (' || TRIM(SUBSTR(at.head_coach_name, INSTR(at.head_coach_name, ' '))) || ')' ELSE at.name END) as away_team_name,
       vr.name as rink_name,
       v.name as venue_name,
       (sk.first_name || ' ' || sk.last_name) as scorekeeper_name,
@@ -827,7 +827,7 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
 
   // Return updated game with team names and staff names
   const updated = await db.prepare(`
-    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name, v.name as venue_name,
+    SELECT g.*, COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at.schedule_name, CASE WHEN at.head_coach_name LIKE '% %' THEN at.name || ' (' || TRIM(SUBSTR(at.head_coach_name, INSTR(at.head_coach_name, ' '))) || ')' ELSE at.name END) as away_team_name, vr.name as rink_name, v.name as venue_name,
       (sk.first_name || ' ' || sk.last_name) as scorekeeper_name, (dir.first_name || ' ' || dir.last_name) as director_name,
       (r1.first_name || ' ' || r1.last_name) as ref1_name, (r2.first_name || ' ' || r2.last_name) as ref2_name
     FROM games g
@@ -927,7 +927,7 @@ schedulingRoutes.post('/games', authMiddleware, requireRole('admin', 'director')
   ).run();
 
   const created = await db.prepare(`
-    SELECT g.*, ht.name as home_team_name, at.name as away_team_name, vr.name as rink_name, v.name as venue_name
+    SELECT g.*, COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, COALESCE(at.schedule_name, CASE WHEN at.head_coach_name LIKE '% %' THEN at.name || ' (' || TRIM(SUBSTR(at.head_coach_name, INSTR(at.head_coach_name, ' '))) || ')' ELSE at.name END) as away_team_name, vr.name as rink_name, v.name as venue_name
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at ON at.id = g.away_team_id

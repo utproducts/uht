@@ -187,7 +187,7 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
   // Consumer registrations
   let q2 = `
     SELECT er.*,
-      er.team_name, er.age_group as team_age_group,
+      er.team_name, ct.schedule_name, er.age_group as team_age_group,
       ct.city as team_city, ct.state as team_state, ct.logo_url as team_logo_url,
       ct.head_coach_name, ct.head_coach_email, ct.head_coach_phone,
       ct.manager_name, ct.manager_email, ct.manager_phone,

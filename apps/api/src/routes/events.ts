@@ -1380,6 +1380,13 @@ const updateRegistrationSchema = z.object({
   notes: z.string().nullable().optional(),
   event_division_id: z.string().nullable().optional(),
   team_name: z.string().optional(),
+  schedule_name: z.string().nullable().optional(),
+  coach_name: z.string().nullable().optional(),
+  coach_email: z.string().nullable().optional(),
+  coach_phone: z.string().nullable().optional(),
+  manager_name: z.string().nullable().optional(),
+  manager_email: z.string().nullable().optional(),
+  manager_phone: z.string().nullable().optional(),
 });
 
 eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateRegistrationSchema), async (c) => {
@@ -1438,12 +1445,65 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
     setClauses.push('event_division_id = ?');
     params.push(data.event_division_id);
   }
-  // Update team name if provided (normalized only)
-  if (useNormalized && data.team_name !== undefined) {
-    // Get team_id from registration, then update team name
-    const regForTeam = await db.prepare('SELECT team_id FROM registrations WHERE id = ?').bind(regId).first<any>();
-    if (regForTeam?.team_id) {
-      await db.prepare("UPDATE teams SET name = ?, updated_at = datetime('now') WHERE id = ?").bind(data.team_name, regForTeam.team_id).run();
+  // Registered team name — updates the registration row only (form-based regs).
+  // Deliberately does NOT rename the linked team: the org's team identity and
+  // stats attribution must survive schedule renames.
+  if (!useNormalized && data.team_name !== undefined && data.team_name.trim()) {
+    await db.prepare('UPDATE event_registrations SET team_name = ? WHERE id = ?')
+      .bind(data.team_name.trim(), regId).run().catch(() => {});
+  }
+
+  // Coach + manager contact info
+  if (!useNormalized) {
+    if (data.coach_name !== undefined || data.coach_email !== undefined || data.coach_phone !== undefined) {
+      await db.prepare(`UPDATE event_registrations SET
+        coach_name = COALESCE(?, coach_name), coach_email = COALESCE(?, coach_email), coach_phone = COALESCE(?, coach_phone)
+        WHERE id = ?`).bind(data.coach_name ?? null, data.coach_email ?? null, data.coach_phone ?? null, regId).run().catch(() => {});
+    }
+    if (data.manager_name !== undefined || data.manager_email !== undefined || data.manager_phone !== undefined) {
+      const nameParts = (data.manager_name || '').trim().split(/\s+/);
+      const first = nameParts[0] || null;
+      const last = nameParts.slice(1).join(' ') || null;
+      await db.prepare(`UPDATE event_registrations SET
+        manager_first_name = CASE WHEN ? IS NOT NULL THEN ? ELSE manager_first_name END,
+        manager_last_name = CASE WHEN ? IS NOT NULL THEN ? ELSE manager_last_name END,
+        email1 = COALESCE(?, email1), phone = COALESCE(?, phone)
+        WHERE id = ?`).bind(
+          data.manager_name ?? null, first, data.manager_name ?? null, last,
+          data.manager_email ?? null, data.manager_phone ?? null, regId
+        ).run().catch(() => {});
+    }
+  }
+
+  // Team-linked updates: schedule name + coach/manager on the teams row
+  {
+    const teamRow = useNormalized
+      ? await db.prepare('SELECT team_id FROM registrations WHERE id = ?').bind(regId).first<any>()
+      : await db.prepare('SELECT team_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
+    const teamId = teamRow?.team_id;
+    if (teamId) {
+      if (data.schedule_name !== undefined) {
+        // Empty string clears the override (schedules fall back to the team name)
+        const val = (data.schedule_name || '').trim() || null;
+        await db.prepare("UPDATE teams SET schedule_name = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(val, teamId).run().catch(() => {});
+      }
+      if (data.coach_name !== undefined || data.coach_email !== undefined || data.coach_phone !== undefined) {
+        await db.prepare(`UPDATE teams SET
+          head_coach_name = COALESCE(?, head_coach_name),
+          head_coach_email = COALESCE(?, head_coach_email),
+          head_coach_phone = COALESCE(?, head_coach_phone),
+          updated_at = datetime('now') WHERE id = ?`)
+          .bind(data.coach_name ?? null, data.coach_email ?? null, data.coach_phone ?? null, teamId).run().catch(() => {});
+      }
+      if (data.manager_name !== undefined || data.manager_email !== undefined || data.manager_phone !== undefined) {
+        await db.prepare(`UPDATE teams SET
+          manager_name = COALESCE(?, manager_name),
+          manager_email = COALESCE(?, manager_email),
+          manager_phone = COALESCE(?, manager_phone),
+          updated_at = datetime('now') WHERE id = ?`)
+          .bind(data.manager_name ?? null, data.manager_email ?? null, data.manager_phone ?? null, teamId).run().catch(() => {});
+      }
     }
   }
 
@@ -1495,15 +1555,21 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
     }
   }
 
-  if (setClauses.length === 0) {
+  // Contact/name/schedule edits are handled outside the SET clause, so an
+  // empty clause is fine as long as one of those fields was provided.
+  const hasSideEdits = [data.team_name, data.schedule_name, data.coach_name, data.coach_email, data.coach_phone,
+    data.manager_name, data.manager_email, data.manager_phone].some(v => v !== undefined);
+  if (setClauses.length === 0 && !hasSideEdits) {
     return c.json({ success: false, error: 'No fields to update' }, 400);
   }
 
-  setClauses.push("updated_at = datetime('now')");
-  params.push(regId);
+  if (setClauses.length > 0) {
+    setClauses.push("updated_at = datetime('now')");
+    params.push(regId);
 
-  const tableName = useNormalized ? 'registrations' : 'event_registrations';
-  await db.prepare(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+    const tableName = useNormalized ? 'registrations' : 'event_registrations';
+    await db.prepare(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
+  }
 
   // Return updated registration with all fields the frontend needs
   let updated: any;
@@ -2199,8 +2265,8 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
       g.home_score, g.away_score, g.period, g.is_overtime, g.is_shootout,
       g.home_locker_room, g.away_locker_room,
       g.delay_minutes, g.delay_note,
-      ht.name as home_team_name,
-      at2.name as away_team_name,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN ht.name || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name,
+      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN at2.name || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name,
       vr.name as rink_name,
       v.name as venue_name,
       ed.age_group, ed.division_level,
