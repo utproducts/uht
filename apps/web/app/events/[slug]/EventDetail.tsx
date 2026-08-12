@@ -743,6 +743,15 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                   <p className="text-sm text-[#86868b]">Partnered hotels with special tournament rates</p>
                 </div>
                 <div className="px-8 pb-8 mt-4">
+                  {hotels.length > 0 && (
+                    <div className="flex items-start gap-3 p-4 rounded-xl bg-[#f0f7ff] border border-[#003e79]/10 mb-4">
+                      <svg className="w-5 h-5 text-[#003e79] shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <p className="text-sm text-[#1d1d1f] leading-relaxed">
+                        You&apos;ll pick your preferred hotels <span className="font-semibold">during team registration</span> and
+                        we&apos;ll assign your team to one of our partner hotels. Booking details are sent to your team after assignment.
+                      </p>
+                    </div>
+                  )}
                   {hotels.length > 0 ? (
                     <div className="space-y-3">
                       {hotels.map(hotel => (
@@ -777,19 +786,8 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                                   )}
                                 </div>
                               </div>
-                              {hotel.booking_url && (
-                                <div className="mt-4 pt-3 border-t border-[#e8e8ed]">
-                                  <a
-                                    href={hotel.booking_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#f0f7ff] text-[#003e79] text-xs font-semibold hover:bg-[#e0efff] transition-colors"
-                                  >
-                                    Book Now
-                                    <ArrowIcon />
-                                  </a>
-                                </div>
-                              )}
+                              {/* No public booking — teams pick preferences at registration
+                                  and UHT assigns hotels (booking info comes after assignment) */}
                             </div>
                           </div>
                         </div>

@@ -854,8 +854,12 @@ eventRoutes.get('/event-hotels/:eventId', async (c) => {
   const db = c.env.DB;
   // Auto-migrate
   try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN image_url TEXT").run(); } catch (_) { /* already exists */ }
+  // NOTE: booking_url/booking_code are deliberately NOT exposed publicly —
+  // teams pick hotel preferences at registration and UHT assigns them
+  // (hotel partnerships depend on bookings going through assignment).
+  // Assigned teams get their booking link/code in their dashboard.
   const result = await db.prepare(`
-    SELECT id, hotel_name, city, state, rate_description, booking_url, price_per_night as rate_cents, image_url
+    SELECT id, hotel_name, city, state, rate_description, price_per_night as rate_cents, image_url
     FROM event_hotels WHERE event_id = ? AND is_active = 1
     ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
