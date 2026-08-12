@@ -4443,7 +4443,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                       <tr key={reg.id} className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-[#1d1d1f] truncate max-w-[180px]" title={reg.team_name}>{reg.display_name || reg.team_name}</span>
+                            <span className="font-medium text-[#1d1d1f] text-[12.5px] leading-tight" title={reg.team_name}>{reg.display_name || reg.team_name}</span>
                             {reg.mhr_url && (
                               <a href={String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`}
                                 target="_blank" rel="noopener noreferrer" title="MyHockeyRankings"

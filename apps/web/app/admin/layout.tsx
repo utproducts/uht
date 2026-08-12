@@ -99,6 +99,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Mobile: the 224px sidebar eats most of a phone screen, so it becomes a
   // slide-in drawer, hidden by default. Unchanged on md and up.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Desktop: collapsible sidebar for wide tables (participants etc.), remembered
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('uht_admin_nav_collapsed') === '1';
+  });
+  const toggleNavCollapsed = () => {
+    setNavCollapsed(c => {
+      try { localStorage.setItem('uht_admin_nav_collapsed', c ? '0' : '1'); } catch {}
+      return !c;
+    });
+  };
 
   // Collapsible sidebar sections — remembered across visits
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
@@ -188,15 +199,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       <div className="flex">
+        {/* Collapsed rail (desktop): thin strip with an expand chevron */}
+        {navCollapsed && (
+          <div className="hidden md:flex w-8 bg-[#003e79] border-r border-[#00335f] min-h-[calc(100vh-3.5rem)] flex-shrink-0 justify-center pt-4">
+            <button onClick={toggleNavCollapsed} title="Show menu"
+              className="w-6 h-6 rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        )}
         {/* Sidebar — static column on md+, slide-in drawer below that */}
         <aside
           className={
-            "w-56 bg-white border-r border-[#e8e8ed] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0 " +
+            "w-56 bg-[#003e79] border-r border-[#00335f] min-h-[calc(100vh-3.5rem)] py-5 px-3 flex-shrink-0 " +
+            (navCollapsed ? "md:hidden " : "") +
             "max-md:fixed max-md:top-14 max-md:left-0 max-md:bottom-0 max-md:z-40 max-md:overflow-y-auto " +
             "max-md:shadow-xl max-md:transition-transform " +
             (mobileNavOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full")
           }
         >
+          <div className="hidden md:flex justify-end mb-1 -mt-2">
+            <button onClick={toggleNavCollapsed} title="Hide menu (more room for tables)"
+              className="w-6 h-6 rounded-lg text-white/40 hover:bg-white/10 hover:text-white transition flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+          </div>
           <nav>
             {ADMIN_NAV_SECTIONS.map((section, si) => {
               // '/admin' (Overview) must match exactly — startsWith would light it up on every admin page
@@ -211,7 +238,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   {section.title && (
                     <button
                       onClick={() => toggleSection(section.title!, isOpen)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest text-white/50 hover:bg-white/10 hover:text-white transition-colors"
                     >
                       {section.title}
                       <svg
@@ -234,8 +261,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             className={
                               "block px-3 py-1.5 rounded-lg text-sm transition-colors " +
                               (isActive
-                                ? "bg-[#f0f7ff] text-[#003e79] font-semibold"
-                                : "text-[#6e6e73] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]")
+                                ? "bg-white/15 text-white font-semibold"
+                                : "text-white/70 hover:bg-white/10 hover:text-white")
                             }
                           >
                             {item.name}
