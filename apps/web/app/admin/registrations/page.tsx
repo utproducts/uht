@@ -832,6 +832,64 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Manual payments (Venmo / check / … — recorded by admins)
+  const [manualPayments, setManualPayments] = useState<any[]>([]);
+  const [paySummary, setPaySummary] = useState<any | null>(null);
+  const [newPayAmount, setNewPayAmount] = useState('');
+  const [newPayMethod, setNewPayMethod] = useState('venmo');
+  const [newPayRef, setNewPayRef] = useState('');
+  const [payAdding, setPayAdding] = useState(false);
+  const [payError, setPayError] = useState('');
+
+  const loadPayments = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/events/admin/registration/${reg.id}/payments`);
+      const json = await res.json() as any;
+      if (json.success) {
+        setManualPayments(json.data.payments || []);
+        setPaySummary(json.data.summary || null);
+      }
+    } catch {}
+  }, [reg.id]);
+  useEffect(() => { loadPayments(); }, [loadPayments]);
+
+  const addPayment = async () => {
+    const cents = Math.round(parseFloat(newPayAmount) * 100);
+    if (!cents || cents <= 0) return;
+    setPayAdding(true);
+    setPayError('');
+    try {
+      const res = await authFetch(`${API_BASE}/events/admin/registration/${reg.id}/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount_cents: cents, method: newPayMethod, reference: newPayRef.trim() || undefined }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setNewPayAmount('');
+        setNewPayRef('');
+        if (json.data?.summary?.payment_status) setPaymentStatus(json.data.summary.payment_status);
+        await loadPayments();
+        onSaved();
+      } else {
+        setPayError(json.error || 'Failed to add payment');
+      }
+    } catch { setPayError('Network error'); }
+    setPayAdding(false);
+  };
+
+  const removePayment = async (paymentId: string) => {
+    try {
+      const res = await authFetch(`${API_BASE}/events/admin/registration/${reg.id}/payments/${paymentId}`, { method: 'DELETE' });
+      const json = await res.json() as any;
+      if (json.success) {
+        if (json.data?.summary?.payment_status) setPaymentStatus(json.data.summary.payment_status);
+        await loadPayments();
+        onSaved();
+      }
+    } catch {}
+  };
+
   // Event transfer
   const [transferEvents, setTransferEvents] = useState<{ id: string; name: string; city: string; state: string; start_date: string }[]>([]);
   const [transferEventId, setTransferEventId] = useState('');
@@ -1182,6 +1240,76 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             {reg.stripe_payment_intent_id && (
               <p className="text-[10px] text-[#86868b] mt-2">Stripe: {reg.stripe_payment_intent_id}</p>
             )}
+
+            {/* Recorded payments (Venmo / check / … — admin only) */}
+            <div className="mt-4 bg-[#f5f5f7] rounded-xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">Payments Received</span>
+                {paySummary && (
+                  <span className={`text-[11px] font-semibold ${paySummary.balance_cents === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {paySummary.balance_cents === 0
+                      ? 'Paid in full'
+                      : `Balance: $${(paySummary.balance_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {paySummary && paySummary.stripe_paid_cents > 0 && (
+                  <div className="flex items-center justify-between text-xs bg-white rounded-lg px-2.5 py-1.5">
+                    <span className="text-[#1d1d1f]"><span className="font-semibold">Stripe</span> (card)</span>
+                    <span className="font-semibold text-[#1d1d1f]">${(paySummary.stripe_paid_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {manualPayments.map(p => (
+                  <div key={p.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-2.5 py-1.5">
+                    <span className="text-[#1d1d1f]">
+                      <span className="font-semibold capitalize">{p.method}</span>
+                      {p.reference && <span className="text-[#86868b]"> · {p.reference}</span>}
+                      <span className="text-[#86868b]"> · {new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold text-[#1d1d1f]">${(p.amount_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <button onClick={() => removePayment(p.id)} className="text-red-400 hover:text-red-600 font-bold" title="Remove payment">×</button>
+                    </span>
+                  </div>
+                ))}
+                {(!paySummary || (paySummary.stripe_paid_cents === 0 && manualPayments.length === 0)) && (
+                  <p className="text-xs text-[#86868b]">No payments recorded yet.</p>
+                )}
+              </div>
+
+              {/* Add payment */}
+              <div className="mt-2.5 flex items-end gap-2">
+                <div className="w-24">
+                  <label className="block text-[10px] text-[#86868b] mb-0.5">Amount ($)</label>
+                  <input type="number" step="0.01" min="0" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-2 py-1.5 border border-[#e8e8ed] rounded-lg text-xs focus:ring-2 focus:ring-[#003e79]/20 outline-none bg-white" />
+                </div>
+                <div className="w-24">
+                  <label className="block text-[10px] text-[#86868b] mb-0.5">Method</label>
+                  <select value={newPayMethod} onChange={e => setNewPayMethod(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-[#e8e8ed] rounded-lg text-xs focus:ring-2 focus:ring-[#003e79]/20 outline-none bg-white">
+                    <option value="venmo">Venmo</option>
+                    <option value="check">Check</option>
+                    <option value="cash">Cash</option>
+                    <option value="zelle">Zelle</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] text-[#86868b] mb-0.5">Reference (check #, memo…)</label>
+                  <input value={newPayRef} onChange={e => setNewPayRef(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-[#e8e8ed] rounded-lg text-xs focus:ring-2 focus:ring-[#003e79]/20 outline-none bg-white" />
+                </div>
+                <button onClick={addPayment} disabled={payAdding || !newPayAmount || parseFloat(newPayAmount) <= 0}
+                  className="px-3 py-1.5 rounded-lg bg-[#003e79] hover:bg-[#002d5a] text-white text-xs font-semibold transition disabled:opacity-50">
+                  {payAdding ? '…' : 'Add'}
+                </button>
+              </div>
+              <p className="text-[10px] text-[#86868b] mt-1.5">Payment status updates automatically when the balance is covered.</p>
+              {payError && <p className="text-[10px] text-red-600 mt-1">{payError}</p>}
+            </div>
           </div>
 
           {/* ── Hotel Assignment ── */}

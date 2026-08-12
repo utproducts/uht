@@ -1392,6 +1392,131 @@ const updateRegistrationSchema = z.object({
   manager_phone: z.string().nullable().optional(),
 });
 
+// ── Manual payments (Venmo / check / cash …) recorded by admins ──
+// Loads a registration from either table with everything needed to compute
+// the expected price and what's been paid so far.
+async function loadRegPaymentContext(db: D1Database, regId: string) {
+  let reg = await db.prepare(`
+    SELECT er.id, er.event_id, er.event_division_id, er.payment_status, er.stripe_payment_id,
+      er.payment_amount_cents as charged_cents,
+      ed.price_cents as division_price_cents, e.price_cents as event_price_cents
+    FROM event_registrations er
+    JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.id = ?`).bind(regId).first<any>();
+  let table = 'event_registrations';
+  if (!reg) {
+    reg = await db.prepare(`
+      SELECT r.id, r.event_id, r.event_division_id, r.payment_status, r.stripe_payment_id,
+        r.amount_cents as charged_cents,
+        ed.price_cents as division_price_cents, e.price_cents as event_price_cents
+      FROM registrations r
+      JOIN events e ON e.id = r.event_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      WHERE r.id = ?`).bind(regId).first<any>();
+    table = 'registrations';
+  }
+  return reg ? { reg, table } : null;
+}
+
+async function computeAndApplyPaymentStatus(db: D1Database, regId: string) {
+  const ctx = await loadRegPaymentContext(db, regId);
+  if (!ctx) return null;
+  const { reg, table } = ctx;
+
+  const manual = await db.prepare(
+    'SELECT COALESCE(SUM(amount_cents), 0) as total FROM registration_payments WHERE registration_id = ?'
+  ).bind(regId).first<{ total: number }>();
+  const manualCents = manual?.total || 0;
+  const stripeCents = reg.stripe_payment_id ? (reg.charged_cents || 0) : 0;
+  const totalPaid = stripeCents + manualCents;
+  const expected = reg.division_price_cents || reg.event_price_cents || reg.charged_cents || 0;
+
+  // Only auto-move the status when we actually know about money
+  let newStatus: string | null = null;
+  if (totalPaid > 0 && expected > 0) {
+    newStatus = totalPaid >= expected ? 'paid' : 'partial';
+  } else if (totalPaid > 0) {
+    newStatus = 'paid';
+  }
+  if (newStatus) {
+    try { await db.prepare(`ALTER TABLE ${table} ADD COLUMN amount_paid_cents INTEGER`).run(); } catch {}
+    await db.prepare(`UPDATE ${table} SET payment_status = ?, amount_paid_cents = ?, updated_at = datetime('now') WHERE id = ?`)
+      .bind(newStatus, totalPaid, regId).run().catch(() => {});
+  }
+  return {
+    expected_cents: expected,
+    stripe_paid_cents: stripeCents,
+    manual_paid_cents: manualCents,
+    total_paid_cents: totalPaid,
+    balance_cents: Math.max(0, expected - totalPaid),
+    payment_status: newStatus || reg.payment_status,
+  };
+}
+
+eventRoutes.get('/admin/registration/:regId/payments', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const regId = c.req.param('regId');
+  const db = c.env.DB;
+  const ctx = await loadRegPaymentContext(db, regId);
+  if (!ctx) return c.json({ success: false, error: 'Registration not found' }, 404);
+
+  const rows = await db.prepare(
+    'SELECT * FROM registration_payments WHERE registration_id = ? ORDER BY created_at ASC'
+  ).bind(regId).all();
+  const manualCents = (rows.results || []).reduce((s: number, r: any) => s + (r.amount_cents || 0), 0);
+  const stripeCents = ctx.reg.stripe_payment_id ? (ctx.reg.charged_cents || 0) : 0;
+  const expected = ctx.reg.division_price_cents || ctx.reg.event_price_cents || ctx.reg.charged_cents || 0;
+
+  return c.json({
+    success: true,
+    data: {
+      payments: rows.results || [],
+      summary: {
+        expected_cents: expected,
+        stripe_paid_cents: stripeCents,
+        manual_paid_cents: manualCents,
+        total_paid_cents: stripeCents + manualCents,
+        balance_cents: Math.max(0, expected - stripeCents - manualCents),
+        payment_status: ctx.reg.payment_status,
+      },
+    },
+  });
+});
+
+const addPaymentSchema = z.object({
+  amount_cents: z.number().int().positive(),
+  method: z.enum(['venmo', 'check', 'cash', 'zelle', 'other']),
+  reference: z.string().optional(),
+  note: z.string().optional(),
+});
+
+eventRoutes.post('/admin/registration/:regId/payments', authMiddleware, requireRole('admin', 'director'), zValidator('json', addPaymentSchema), async (c) => {
+  const regId = c.req.param('regId');
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+  const ctx = await loadRegPaymentContext(db, regId);
+  if (!ctx) return c.json({ success: false, error: 'Registration not found' }, 404);
+
+  const user = c.get('user') as any;
+  const payId = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO registration_payments (id, registration_id, amount_cents, method, reference, note, recorded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(payId, regId, data.amount_cents, data.method, data.reference || null, data.note || null, user?.email || user?.id || 'admin').run();
+
+  const summary = await computeAndApplyPaymentStatus(db, regId);
+  return c.json({ success: true, data: { id: payId, summary } }, 201);
+});
+
+eventRoutes.delete('/admin/registration/:regId/payments/:paymentId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const regId = c.req.param('regId');
+  const paymentId = c.req.param('paymentId');
+  const db = c.env.DB;
+  await db.prepare('DELETE FROM registration_payments WHERE id = ? AND registration_id = ?').bind(paymentId, regId).run();
+  const summary = await computeAndApplyPaymentStatus(db, regId);
+  return c.json({ success: true, data: { summary } });
+});
+
 eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateRegistrationSchema), async (c) => {
   const regId = c.req.param('regId');
   const data = c.req.valid('json');
