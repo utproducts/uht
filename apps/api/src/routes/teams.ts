@@ -516,6 +516,8 @@ teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
     seasonRecord: 'season_record',
     name: 'name',
     logoUrl: 'logo_url',
+    usaHockeyRosterUrl: 'usa_hockey_roster_url',
+    mhrUrl: 'mhr_url',
   };
 
   for (const [jsKey, dbCol] of Object.entries(allowedFields)) {
@@ -1655,6 +1657,7 @@ const createTeamSchema = z.object({
   organizationId: z.string().optional(),
   usaHockeyTeamId: z.string().optional(),
   usaHockeyRosterUrl: z.string().optional(),
+  mhrUrl: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
   website: z.string().optional(),
@@ -1712,15 +1715,15 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
 
   await db.prepare(`
     INSERT INTO teams (id, organization_id, name, age_group, division_level,
-      usa_hockey_team_id, usa_hockey_roster_url, city, state,
+      usa_hockey_team_id, usa_hockey_roster_url, mhr_url, city, state,
       website, hometown_league, team_type, season_record,
       head_coach_name, head_coach_email, head_coach_phone,
       manager_name, manager_email, manager_phone, created_by, invite_code, parent_invite_code, roster_share_token)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     teamId, data.organizationId || null, data.name, data.ageGroup,
     data.divisionLevel || null, data.usaHockeyTeamId || null,
-    data.usaHockeyRosterUrl || null, data.city || null, data.state || null,
+    data.usaHockeyRosterUrl || null, data.mhrUrl || null, data.city || null, data.state || null,
     data.website || null, data.hometownLeague || null,
     data.teamType || null, data.seasonRecord || null,
     data.headCoachName || null, data.headCoachEmail || null, data.headCoachPhone || null,

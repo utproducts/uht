@@ -849,6 +849,11 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Team links (USA Hockey roster + MyHockeyRankings) — stored on the TEAM, so
+  // they surface on every registration, past and future, once submitted
+  const [usaHockeyUrl, setUsaHockeyUrl] = useState(((reg as any).usa_hockey_roster_url || '') as string);
+  const [mhrUrl, setMhrUrl] = useState(((reg as any).mhr_url || '') as string);
+
   // Manual payments (Venmo / check / … — recorded by admins)
   const [manualPayments, setManualPayments] = useState<any[]>([]);
   const [paySummary, setPaySummary] = useState<any | null>(null);
@@ -958,6 +963,8 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       if (managerName !== origMgrName) body.manager_name = managerName.trim() || null;
       if (managerEmail !== origMgrEmail) body.manager_email = managerEmail.trim() || null;
       if (managerPhone !== origMgrPhone) body.manager_phone = managerPhone.trim() || null;
+      if (usaHockeyUrl.trim() !== (((reg as any).usa_hockey_roster_url || '') as string).trim()) body.usa_hockey_url = usaHockeyUrl.trim() || null;
+      if (mhrUrl.trim() !== (((reg as any).mhr_url || '') as string).trim()) body.mhr_url = mhrUrl.trim() || null;
       if (isTransferring) {
         body.event_id = transferEventId;
         // divisions are per-event; the API auto-matches in the new event
@@ -1072,6 +1079,40 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
                     className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* ── Team Links (USA Hockey + MyHockeyRankings) ── */}
+          <div>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Team Links</label>
+            <div className="space-y-2.5">
+              {[
+                { label: 'USA Hockey Roster', value: usaHockeyUrl, set: setUsaHockeyUrl, placeholder: 'https://…usahockey…' },
+                { label: 'MyHockeyRankings', value: mhrUrl, set: setMhrUrl, placeholder: 'https://myhockeyrankings.com/…' },
+              ].map(link => (
+                <div key={link.label}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-[#6e6e73]">{link.label}</label>
+                    {link.value.trim() ? (
+                      <a href={link.value.trim().startsWith('http') ? link.value.trim() : `https://${link.value.trim()}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-xs font-semibold text-[#003e79] hover:underline flex items-center gap-1">
+                        Open
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">Not submitted yet</span>
+                    )}
+                  </div>
+                  <input value={link.value} onChange={e => link.set(e.target.value)} placeholder={link.placeholder}
+                    className="w-full px-3 py-2 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                </div>
+              ))}
+              <p className="text-[11px] text-[#86868b]">
+                Saved to the team — the links appear on all of this team&apos;s registrations, past and future, as soon as they&apos;re submitted.
+              </p>
             </div>
           </div>
 

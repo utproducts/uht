@@ -1390,6 +1390,8 @@ const updateRegistrationSchema = z.object({
   manager_name: z.string().nullable().optional(),
   manager_email: z.string().nullable().optional(),
   manager_phone: z.string().nullable().optional(),
+  usa_hockey_url: z.string().nullable().optional(),
+  mhr_url: z.string().nullable().optional(),
 });
 
 // ── Manual payments (Venmo / check / cash …) recorded by admins ──
@@ -1658,6 +1660,15 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
           updated_at = datetime('now') WHERE id = ?`)
           .bind(data.manager_name ?? null, data.manager_email ?? null, data.manager_phone ?? null, teamId).run().catch(() => {});
       }
+      if (data.usa_hockey_url !== undefined || data.mhr_url !== undefined) {
+        try { await db.prepare('ALTER TABLE teams ADD COLUMN mhr_url TEXT').run(); } catch {}
+        await db.prepare(`UPDATE teams SET
+          usa_hockey_roster_url = CASE WHEN ? THEN ? ELSE usa_hockey_roster_url END,
+          mhr_url = CASE WHEN ? THEN ? ELSE mhr_url END,
+          updated_at = datetime('now') WHERE id = ?`)
+          .bind(data.usa_hockey_url !== undefined ? 1 : 0, (data.usa_hockey_url || '').trim() || null,
+                data.mhr_url !== undefined ? 1 : 0, (data.mhr_url || '').trim() || null, teamId).run().catch(() => {});
+      }
     }
   }
 
@@ -1743,7 +1754,7 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
   // Contact/name/schedule edits are handled outside the SET clause, so an
   // empty clause is fine as long as one of those fields was provided.
   const hasSideEdits = transferredEvent || [data.team_name, data.schedule_name, data.coach_name, data.coach_email, data.coach_phone,
-    data.manager_name, data.manager_email, data.manager_phone].some(v => v !== undefined);
+    data.manager_name, data.manager_email, data.manager_phone, data.usa_hockey_url, data.mhr_url].some(v => v !== undefined);
   if (setClauses.length === 0 && !hasSideEdits) {
     return c.json({ success: false, error: 'No fields to update' }, 400);
   }

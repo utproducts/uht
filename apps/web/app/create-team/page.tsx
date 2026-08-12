@@ -55,6 +55,8 @@ interface FormData {
   city: string;
   state: string;
   website: string;
+  usaHockeyUrl: string;
+  mhrUrl: string;
   hometownLeague: string;
   teamType: string;
   // Head Coach
@@ -77,7 +79,7 @@ interface FormData {
 
 const initialForm: FormData = {
   orgId: '', orgName: '',
-  ageGroup: '', divisionLevel: '', city: '', state: '', website: '',
+  ageGroup: '', divisionLevel: '', city: '', state: '', website: '', usaHockeyUrl: '', mhrUrl: '',
   hometownLeague: '', teamType: '', season: '',
   headCoachName: '', headCoachEmail: '', headCoachPhone: '',
   managerName: '', managerEmail: '', managerPhone: '',
@@ -208,6 +210,8 @@ export default function CreateTeamPage() {
               city: t.city || '',
               state: t.state || '',
               website: t.website || '',
+              usaHockeyUrl: t.usa_hockey_roster_url || '',
+              mhrUrl: t.mhr_url || '',
               hometownLeague: t.hometown_league || '',
               teamType: t.team_type || '',
               season: t.season || '',
@@ -365,6 +369,8 @@ export default function CreateTeamPage() {
       city: form.city.trim() || undefined,
       state: form.state || undefined,
       website: form.website.trim() || undefined,
+      usaHockeyRosterUrl: form.usaHockeyUrl.trim() || undefined,
+      mhrUrl: form.mhrUrl.trim() || undefined,
       hometownLeague: form.hometownLeague || undefined,
       teamType: form.teamType || undefined,
       season: form.season || undefined,
@@ -1083,6 +1089,21 @@ export default function CreateTeamPage() {
                     <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">Hometown League</label>
                     <input type="text" value={form.hometownLeague} onChange={e => set('hometownLeague', e.target.value)}
                       placeholder="e.g. COHL, NIHL, AHAI"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">USA Hockey Roster Link</label>
+                    <input type="text" value={form.usaHockeyUrl} onChange={e => set('usaHockeyUrl', e.target.value)}
+                      placeholder="https://…usahockey…"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#1d1d1f] mb-1.5">MyHockeyRankings Link</label>
+                    <input type="text" value={form.mhrUrl} onChange={e => set('mhrUrl', e.target.value)}
+                      placeholder="https://myhockeyrankings.com/…"
                       className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition-all text-sm" />
                   </div>
                 </div>
