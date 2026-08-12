@@ -786,7 +786,27 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [status, setStatus] = useState(reg.status);
   const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
   const [amountCents, setAmountCents] = useState(reg.amount_cents ? (reg.amount_cents / 100).toString() : '');
-  const [divisionId, setDivisionId] = useState(reg.event_division_id || '');
+  // Division as age group + level (split selectors; resolves/creates an event division on save)
+  const [divAgeGroup, setDivAgeGroup] = useState((reg as any).division_age_group || '');
+  const [divLevel, setDivLevel] = useState(((reg as any).division_level || '').trim());
+  const divTouched = useRef(false);
+  const eventAgeGroups = Array.from(new Set(divisions.map(d => d.age_group)));
+  const eventAgeLevels = (ag: string) => Array.from(new Set(divisions.filter(d => d.age_group === ag).map(d => (d.division_level || '').trim())));
+  // Default the age group to what the team chose at registration once divisions load
+  useEffect(() => {
+    if (divTouched.current || divAgeGroup || !divisions.length || !reg.team_age_group) return;
+    const team = reg.team_age_group.toLowerCase();
+    const code = (reg.team_age_group.match(/\(([^)]+)\)/) || [])[1]?.toLowerCase();
+    const match = divisions.find(d => {
+      const ag = d.age_group.toLowerCase();
+      return ag === team || (code && (ag === code || ag.includes(code))) || team.includes(ag) || ag.includes(team.split(' ')[0]);
+    });
+    if (match) {
+      setDivAgeGroup(match.age_group);
+      setDivLevel(((reg as any).division_level || '').trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [divisions]);
   const [hotelAssigned, setHotelAssigned] = useState(reg.hotel_assigned || '');
   const [notes, setNotes] = useState(reg.notes || '');
   // Team & contacts
@@ -833,8 +853,17 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
         hotel_assigned: hotelAssigned || null,
         notes: notes || null,
       };
-      if (divisionId !== (reg.event_division_id || '')) {
-        body.event_division_id = divisionId || null;
+      // Division: send the age group + level pair; the API resolves or creates
+      // the matching event division (schedule builder pulls these later)
+      const origDivAge = (reg as any).division_age_group || '';
+      const origDivLevel = ((reg as any).division_level || '').trim();
+      if (divAgeGroup !== origDivAge || divLevel.trim() !== origDivLevel) {
+        if (!divAgeGroup) {
+          body.event_division_id = null;
+        } else {
+          body.division_age_group = divAgeGroup;
+          body.division_level = divLevel.trim() || null;
+        }
       }
       // Team + contact edits — only send what changed
       if (teamNameEdit.trim() && teamNameEdit.trim() !== (reg.team_name || '')) body.team_name = teamNameEdit.trim();
@@ -856,7 +885,10 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       if (managerPhone !== origMgrPhone) body.manager_phone = managerPhone.trim() || null;
       if (isTransferring) {
         body.event_id = transferEventId;
-        delete body.event_division_id; // divisions are per-event; the API auto-matches in the new event
+        // divisions are per-event; the API auto-matches in the new event
+        delete body.event_division_id;
+        delete body.division_age_group;
+        delete body.division_level;
       }
 
       const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
@@ -1022,26 +1054,50 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             )}
           </div>
 
-          {/* ── Division ── */}
+          {/* ── Division: age group + level (feeds the schedule builder) ── */}
           <div className={isTransferring ? 'opacity-50 pointer-events-none' : ''}>
             <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Event Division{isTransferring ? ' (auto-matches in new event)' : ''}</label>
-            <select value={divisionId} onChange={e => setDivisionId(e.target.value)}
-              className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
-              <option value="">Unassigned</option>
-              {divisions.map(d => (
-                <option key={d.id} value={d.id}>{d.age_group} {d.division_level} ({d.current_team_count} teams)</option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs font-medium text-[#6e6e73] mb-1">Age Group</label>
+                <select value={divAgeGroup} onChange={e => { divTouched.current = true; setDivAgeGroup(e.target.value); const lvls = eventAgeLevels(e.target.value); if (!lvls.includes(divLevel)) setDivLevel(lvls[0] || ''); }}
+                  className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
+                  <option value="">Unassigned</option>
+                  {eventAgeGroups.map(ag => (
+                    <option key={ag} value={ag}>{ag}</option>
+                  ))}
+                  {reg.team_age_group && !eventAgeGroups.includes(reg.team_age_group) && (
+                    <option value={reg.team_age_group}>{reg.team_age_group} (new for this event)</option>
+                  )}
+                </select>
+              </div>
+              {divAgeGroup && (
+                <div>
+                  <label className="block text-xs font-medium text-[#6e6e73] mb-1">Division Level</label>
+                  <input value={divLevel} onChange={e => { divTouched.current = true; setDivLevel(e.target.value); }}
+                    list="division-level-options"
+                    placeholder={eventAgeLevels(divAgeGroup).filter(Boolean).join(', ') || 'e.g. A, B1, Gold'}
+                    className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                  <datalist id="division-level-options">
+                    {eventAgeLevels(divAgeGroup).filter(Boolean).map(l => <option key={l} value={l} />)}
+                  </datalist>
+                  <p className="text-[11px] text-[#86868b] mt-1">
+                    {(() => {
+                      const match = divisions.find(d => d.age_group === divAgeGroup && ((d.division_level || '').trim() === divLevel.trim()));
+                      return match
+                        ? `Existing division — ${match.current_team_count} team${match.current_team_count !== 1 ? 's' : ''}${match.max_teams ? ` of ${match.max_teams}` : ''}`
+                        : 'New division — it will be created for this event when you save (used by the schedule builder).';
+                    })()}
+                  </p>
+                </div>
+              )}
+            </div>
             {reg.team_age_group && (
               <p className="text-xs text-[#86868b] mt-1.5">
-                Team profile: <span className="font-semibold text-[#1d1d1f]">{reg.team_age_group}</span>
-                {divisionId && (() => {
-                  const selectedDiv = divisions.find(d => d.id === divisionId);
-                  if (selectedDiv && selectedDiv.age_group !== reg.team_age_group) {
-                    return <span className="ml-1.5 text-amber-600 font-medium">(playing up/down)</span>;
-                  }
-                  return null;
-                })()}
+                Team registered as: <span className="font-semibold text-[#1d1d1f]">{reg.team_age_group}</span>
+                {divAgeGroup && divAgeGroup !== reg.team_age_group && (
+                  <span className="ml-1.5 text-amber-600 font-medium">(playing up/down)</span>
+                )}
               </p>
             )}
           </div>
@@ -1270,11 +1326,11 @@ export default function AdminRegistrationsPage() {
         setEventHotels(hotelsJson.data || []);
       }
     } catch {}
-    // Load divisions from event detail
+    // Load the event's divisions (drives the Age Group / Division Level selectors)
     try {
-      const evRes = await authFetch(`${API_BASE}/events/admin/${eventId}`);
-      const evJson = await evRes.json() as any;
-      if (evJson.success && evJson.data?.divisions) setDetailDivisions(evJson.data.divisions);
+      const divRes = await authFetch(`${API_BASE}/events/admin/${eventId}/divisions`);
+      const divJson = await divRes.json() as any;
+      if (divJson.success && Array.isArray(divJson.data)) setDetailDivisions(divJson.data);
     } catch {}
   };
 

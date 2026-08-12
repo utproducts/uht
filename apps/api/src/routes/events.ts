@@ -1379,6 +1379,8 @@ const updateRegistrationSchema = z.object({
   hotel_assigned: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   event_division_id: z.string().nullable().optional(),
+  division_age_group: z.string().nullable().optional(),
+  division_level: z.string().nullable().optional(),
   team_name: z.string().optional(),
   event_id: z.string().optional(),
   schedule_name: z.string().nullable().optional(),
@@ -1530,8 +1532,34 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
     }
   }
 
+  // ── Age group + level assignment (from the split selectors) ──
+  // Resolves to an existing event_division row, or creates one so the schedule
+  // builder can pull it later. Runs against the (possibly just-transferred) event.
+  if (data.division_age_group !== undefined && data.division_age_group) {
+    const tbl = useNormalized ? 'registrations' : 'event_registrations';
+    const regRow = await db.prepare(`SELECT event_id FROM ${tbl} WHERE id = ?`).bind(regId).first<any>();
+    const targetEventId = regRow?.event_id;
+    if (targetEventId) {
+      const ag = data.division_age_group.trim();
+      const lvl = (data.division_level || '').trim();
+      let div = await db.prepare(
+        "SELECT id FROM event_divisions WHERE event_id = ? AND age_group = ? AND COALESCE(TRIM(division_level), '') = ?"
+      ).bind(targetEventId, ag, lvl).first<any>();
+      if (!div) {
+        const ev = await db.prepare('SELECT price_cents FROM events WHERE id = ?').bind(targetEventId).first<any>();
+        const newDivId = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(
+          'INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents) VALUES (?, ?, ?, ?, ?)'
+        ).bind(newDivId, targetEventId, ag, lvl || null, ev?.price_cents || 0).run();
+        div = { id: newDivId };
+      }
+      setClauses.push('event_division_id = ?');
+      params.push(div.id);
+    }
+  }
+
   // Auto-assign division if not set and we have an age_group to match
-  if (!data.event_division_id) {
+  if (!data.event_division_id && data.division_age_group === undefined) {
     const fullReg = useNormalized
       ? await db.prepare('SELECT event_id, event_division_id FROM registrations WHERE id = ?').bind(regId).first<any>()
       : await db.prepare('SELECT event_id, age_group, event_division_id FROM event_registrations WHERE id = ?').bind(regId).first<any>();
