@@ -812,6 +812,17 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Event transfer
+  const [transferEvents, setTransferEvents] = useState<{ id: string; name: string; city: string; state: string; start_date: string }[]>([]);
+  const [transferEventId, setTransferEventId] = useState('');
+  useEffect(() => {
+    authFetch(`${API_BASE}/events/admin/list?filter=upcoming`)
+      .then(r => r.json())
+      .then((json: any) => { if (json.success && Array.isArray(json.data)) setTransferEvents(json.data); })
+      .catch(() => {});
+  }, []);
+  const isTransferring = !!transferEventId && transferEventId !== reg.event_id;
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -843,6 +854,10 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       if (managerName !== origMgrName) body.manager_name = managerName.trim() || null;
       if (managerEmail !== origMgrEmail) body.manager_email = managerEmail.trim() || null;
       if (managerPhone !== origMgrPhone) body.manager_phone = managerPhone.trim() || null;
+      if (isTransferring) {
+        body.event_id = transferEventId;
+        delete body.event_division_id; // divisions are per-event; the API auto-matches in the new event
+      }
 
       const res = await fetch(`https://uht.chad-157.workers.dev/api/events/admin/registration/${reg.id}`, {
         method: 'PATCH',
@@ -975,9 +990,37 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             </div>
           </div>
 
-          {/* ── Division ── */}
+          {/* ── Event (transfer) ── */}
           <div>
-            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Event Division</label>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Event</label>
+            <select value={transferEventId || reg.event_id} onChange={e => setTransferEventId(e.target.value)}
+              className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
+              {!transferEvents.some(ev => ev.id === reg.event_id) && (
+                <option value={reg.event_id}>{(reg as any).event_name || 'Current event'}</option>
+              )}
+              {transferEvents.map(ev => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.name} — {ev.city}, {ev.state}{ev.id === reg.event_id ? ' (current)' : ''}
+                </option>
+              ))}
+            </select>
+            {isTransferring ? (
+              <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-xs text-amber-800 font-medium">
+                  Saving will transfer this registration to{' '}
+                  <span className="font-bold">{transferEvents.find(ev => ev.id === transferEventId)?.name}</span>.
+                  Payment moves with it — no refund needed. Division and hotel assignment reset and
+                  auto-match in the new event.
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-[#86868b] mt-1">Pick a different event to transfer this registration — payment follows, no refund needed.</p>
+            )}
+          </div>
+
+          {/* ── Division ── */}
+          <div className={isTransferring ? 'opacity-50 pointer-events-none' : ''}>
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Event Division{isTransferring ? ' (auto-matches in new event)' : ''}</label>
             <select value={divisionId} onChange={e => setDivisionId(e.target.value)}
               className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
               <option value="">Unassigned</option>

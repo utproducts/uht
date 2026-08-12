@@ -1380,6 +1380,7 @@ const updateRegistrationSchema = z.object({
   notes: z.string().nullable().optional(),
   event_division_id: z.string().nullable().optional(),
   team_name: z.string().optional(),
+  event_id: z.string().optional(),
   schedule_name: z.string().nullable().optional(),
   coach_name: z.string().nullable().optional(),
   coach_email: z.string().nullable().optional(),
@@ -1409,6 +1410,28 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
     return c.json({ success: false, error: 'Registration not found' }, 404);
   }
   const previousStatus = existing.status;
+
+  // ── EVENT TRANSFER: move the registration to a different event ──
+  // Payment rides along (no refund needed). Division and hotel assignment are
+  // event-specific, so they reset — the auto-assign below then tries to place
+  // the team in a matching division of the NEW event.
+  let transferredEvent = false;
+  if (data.event_id !== undefined && data.event_id && data.event_id !== existing.event_id) {
+    const newEvent = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(data.event_id).first<{ id: string; name: string }>();
+    if (!newEvent) {
+      return c.json({ success: false, error: 'Target event not found' }, 404);
+    }
+    const tbl = useNormalized ? 'registrations' : 'event_registrations';
+    // Free up the old division's slot
+    const oldDiv = await db.prepare(`SELECT event_division_id FROM ${tbl} WHERE id = ?`).bind(regId).first<any>();
+    if (oldDiv?.event_division_id) {
+      await db.prepare('UPDATE event_divisions SET current_team_count = MAX(0, current_team_count - 1) WHERE id = ?')
+        .bind(oldDiv.event_division_id).run().catch(() => {});
+    }
+    await db.prepare(`UPDATE ${tbl} SET event_id = ?, event_division_id = NULL, hotel_assigned = NULL, updated_at = datetime('now') WHERE id = ?`)
+      .bind(data.event_id, regId).run();
+    transferredEvent = true;
+  }
 
   // Build dynamic SET clause
   const setClauses: string[] = [];
@@ -1550,6 +1573,11 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
         if (div) {
           setClauses.push('event_division_id = ?');
           params.push(div.id);
+          // A transferred team takes a slot in the new event's division
+          if (transferredEvent) {
+            await db.prepare('UPDATE event_divisions SET current_team_count = current_team_count + 1 WHERE id = ?')
+              .bind(div.id).run().catch(() => {});
+          }
         }
       }
     }
@@ -1557,7 +1585,7 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
 
   // Contact/name/schedule edits are handled outside the SET clause, so an
   // empty clause is fine as long as one of those fields was provided.
-  const hasSideEdits = [data.team_name, data.schedule_name, data.coach_name, data.coach_email, data.coach_phone,
+  const hasSideEdits = transferredEvent || [data.team_name, data.schedule_name, data.coach_name, data.coach_email, data.coach_phone,
     data.manager_name, data.manager_email, data.manager_phone].some(v => v !== undefined);
   if (setClauses.length === 0 && !hasSideEdits) {
     return c.json({ success: false, error: 'No fields to update' }, 400);
