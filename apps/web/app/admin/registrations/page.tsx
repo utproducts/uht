@@ -786,9 +786,12 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
   const [status, setStatus] = useState(reg.status);
   const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
   const [amountCents, setAmountCents] = useState(reg.amount_cents ? (reg.amount_cents / 100).toString() : '');
-  // Division as age group + level (split selectors; resolves/creates an event division on save)
+  // Division as age group + level (split selectors; resolves/creates an event division on save).
+  // Level defaults to the assigned division's level, else the level the team
+  // chose at creation (state-based list) — always editable.
+  const teamOwnLevel = (((reg as any).team_division_level || '') as string).trim();
   const [divAgeGroup, setDivAgeGroup] = useState((reg as any).division_age_group || '');
-  const [divLevel, setDivLevel] = useState(((reg as any).division_level || '').trim());
+  const [divLevel, setDivLevel] = useState((((reg as any).division_level || '') as string).trim() || teamOwnLevel);
   const divTouched = useRef(false);
   const eventAgeGroups = Array.from(new Set(divisions.map(d => d.age_group)));
   const eventAgeLevels = (ag: string) => Array.from(new Set(divisions.filter(d => d.age_group === ag).map(d => (d.division_level || '').trim())));
@@ -803,7 +806,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
     });
     if (match) {
       setDivAgeGroup(match.age_group);
-      setDivLevel(((reg as any).division_level || '').trim());
+      setDivLevel((((reg as any).division_level || '') as string).trim() || teamOwnLevel);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [divisions]);
@@ -1118,7 +1121,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
             <div className="space-y-2">
               <div>
                 <label className="block text-xs font-medium text-[#6e6e73] mb-1">Age Group</label>
-                <select value={divAgeGroup} onChange={e => { divTouched.current = true; setDivAgeGroup(e.target.value); const lvls = eventAgeLevels(e.target.value); if (!lvls.includes(divLevel)) setDivLevel(lvls[0] || ''); }}
+                <select value={divAgeGroup} onChange={e => { divTouched.current = true; setDivAgeGroup(e.target.value); if (!divLevel) setDivLevel(teamOwnLevel); }}
                   className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none">
                   <option value="">Unassigned</option>
                   {eventAgeGroups.map(ag => (
@@ -1137,7 +1140,7 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
                     placeholder={eventAgeLevels(divAgeGroup).filter(Boolean).join(', ') || 'e.g. A, B1, Gold'}
                     className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
                   <datalist id="division-level-options">
-                    {eventAgeLevels(divAgeGroup).filter(Boolean).map(l => <option key={l} value={l} />)}
+                    {Array.from(new Set([...eventAgeLevels(divAgeGroup).filter(Boolean), ...(teamOwnLevel ? [teamOwnLevel] : [])])).map(l => <option key={l} value={l} />)}
                   </datalist>
                   <p className="text-[11px] text-[#86868b] mt-1">
                     {(() => {
