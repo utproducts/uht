@@ -1400,7 +1400,7 @@ const updateRegistrationSchema = z.object({
 async function loadRegPaymentContext(db: D1Database, regId: string) {
   let reg = await db.prepare(`
     SELECT er.id, er.event_id, er.event_division_id, er.payment_status, er.stripe_payment_id,
-      er.payment_amount_cents as charged_cents, er.amount_paid_cents,
+      er.payment_amount_cents as charged_cents, er.amount_paid_cents, er.card_paid_cents,
       ed.price_cents as division_price_cents, e.price_cents as event_price_cents
     FROM event_registrations er
     JOIN events e ON e.id = er.event_id
@@ -1410,7 +1410,7 @@ async function loadRegPaymentContext(db: D1Database, regId: string) {
   if (!reg) {
     reg = await db.prepare(`
       SELECT r.id, r.event_id, r.event_division_id, r.payment_status, r.stripe_payment_id,
-        r.amount_cents as charged_cents, r.amount_paid_cents,
+        r.amount_cents as charged_cents, r.amount_paid_cents, r.card_paid_cents,
         ed.price_cents as division_price_cents, e.price_cents as event_price_cents
       FROM registrations r
       JOIN events e ON e.id = r.event_id
@@ -1430,21 +1430,20 @@ async function computeAndApplyPaymentStatus(db: D1Database, regId: string) {
     'SELECT COALESCE(SUM(amount_cents), 0) as total FROM registration_payments WHERE registration_id = ?'
   ).bind(regId).first<{ total: number }>();
   const manualCents = manual?.total || 0;
-  const singleStripe = reg.stripe_payment_id ? (reg.charged_cents || 0) : 0;
-  // amount_paid_cents accumulates across multiple card charges; use whichever is larger
-  const totalPaid = Math.max(reg.amount_paid_cents || 0, singleStripe + manualCents);
-  const stripeCents = Math.max(totalPaid - manualCents, singleStripe);
+  // Card money lives in its own accumulator so manual payments can never be
+  // misattributed to the card line, and removals correctly lower the total.
+  const stripeCents = reg.card_paid_cents ?? (reg.stripe_payment_id ? (reg.charged_cents || 0) : 0);
+  const totalPaid = stripeCents + manualCents;
   const expected = reg.division_price_cents || reg.event_price_cents || reg.charged_cents || 0;
 
-  // Only auto-move the status when we actually know about money
   let newStatus: string | null = null;
-  if (totalPaid > 0 && expected > 0) {
-    newStatus = totalPaid >= expected ? 'paid' : 'partial';
-  } else if (totalPaid > 0) {
-    newStatus = 'paid';
+  if (totalPaid > 0) {
+    newStatus = expected > 0 && totalPaid < expected ? 'partial' : 'paid';
+  } else if (reg.payment_status === 'paid' || reg.payment_status === 'partial') {
+    // Everything was removed — nothing is actually paid anymore
+    newStatus = 'unpaid';
   }
   if (newStatus) {
-    try { await db.prepare(`ALTER TABLE ${table} ADD COLUMN amount_paid_cents INTEGER`).run(); } catch {}
     await db.prepare(`UPDATE ${table} SET payment_status = ?, amount_paid_cents = ?, updated_at = datetime('now') WHERE id = ?`)
       .bind(newStatus, totalPaid, regId).run().catch(() => {});
   }
@@ -1468,9 +1467,7 @@ eventRoutes.get('/admin/registration/:regId/payments', authMiddleware, requireRo
     'SELECT * FROM registration_payments WHERE registration_id = ? ORDER BY created_at ASC'
   ).bind(regId).all();
   const manualCents = (rows.results || []).reduce((s: number, r: any) => s + (r.amount_cents || 0), 0);
-  const singleStripe = ctx.reg.stripe_payment_id ? (ctx.reg.charged_cents || 0) : 0;
-  const totalPaidAll = Math.max(ctx.reg.amount_paid_cents || 0, singleStripe + manualCents);
-  const stripeCents = Math.max(totalPaidAll - manualCents, singleStripe);
+  const stripeCents = ctx.reg.card_paid_cents ?? (ctx.reg.stripe_payment_id ? (ctx.reg.charged_cents || 0) : 0);
   const expected = ctx.reg.division_price_cents || ctx.reg.event_price_cents || ctx.reg.charged_cents || 0;
 
   return c.json({
@@ -1511,7 +1508,10 @@ eventRoutes.post('/admin/registration/:regId/payments', authMiddleware, requireR
   `).bind(payId, regId, data.amount_cents, data.method, data.reference || null, data.note || null, user?.email || user?.id || 'admin').run();
 
   const summary = await computeAndApplyPaymentStatus(db, regId);
-  return c.json({ success: true, data: { id: payId, summary } }, 201);
+  const fresh = await db.prepare(
+    'SELECT * FROM registration_payments WHERE registration_id = ? ORDER BY created_at ASC'
+  ).bind(regId).all();
+  return c.json({ success: true, data: { id: payId, summary, payments: fresh.results || [] } }, 201);
 });
 
 eventRoutes.delete('/admin/registration/:regId/payments/:paymentId', authMiddleware, requireRole('admin', 'director'), async (c) => {
@@ -1520,7 +1520,10 @@ eventRoutes.delete('/admin/registration/:regId/payments/:paymentId', authMiddlew
   const db = c.env.DB;
   await db.prepare('DELETE FROM registration_payments WHERE id = ? AND registration_id = ?').bind(paymentId, regId).run();
   const summary = await computeAndApplyPaymentStatus(db, regId);
-  return c.json({ success: true, data: { summary } });
+  const fresh = await db.prepare(
+    'SELECT * FROM registration_payments WHERE registration_id = ? ORDER BY created_at ASC'
+  ).bind(regId).all();
+  return c.json({ success: true, data: { summary, payments: fresh.results || [] } });
 });
 
 eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateRegistrationSchema), async (c) => {

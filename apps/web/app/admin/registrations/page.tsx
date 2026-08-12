@@ -890,9 +890,13 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       if (json.success) {
         setNewPayAmount('');
         setNewPayRef('');
-        if (json.data?.summary?.payment_status) setPaymentStatus(json.data.summary.payment_status);
-        await loadPayments();
-        onSaved();
+        // Update instantly from the response — no extra round trips
+        if (json.data?.payments) setManualPayments(json.data.payments);
+        if (json.data?.summary) {
+          setPaySummary(json.data.summary);
+          if (json.data.summary.payment_status) setPaymentStatus(json.data.summary.payment_status);
+        }
+        onSaved(); // refresh the list in the background
       } else {
         setPayError(json.error || 'Failed to add payment');
       }
@@ -905,8 +909,11 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
       const res = await authFetch(`${API_BASE}/events/admin/registration/${reg.id}/payments/${paymentId}`, { method: 'DELETE' });
       const json = await res.json() as any;
       if (json.success) {
-        if (json.data?.summary?.payment_status) setPaymentStatus(json.data.summary.payment_status);
-        await loadPayments();
+        if (json.data?.payments) setManualPayments(json.data.payments);
+        if (json.data?.summary) {
+          setPaySummary(json.data.summary);
+          if (json.data.summary.payment_status) setPaymentStatus(json.data.summary.payment_status);
+        }
         onSaved();
       }
     } catch {}

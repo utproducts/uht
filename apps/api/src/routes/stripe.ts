@@ -36,11 +36,8 @@ async function stripeGet(path: string, secretKey: string) {
 async function getRegBalance(db: D1Database, regId: string): Promise<{
   expected: number; alreadyPaid: number; remaining: number; depositCents: number;
 } | null> {
-  try { await db.prepare('ALTER TABLE event_registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
-  try { await db.prepare('ALTER TABLE registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
-
   let reg = await db.prepare(
-    `SELECT er.id, er.stripe_payment_id, er.payment_amount_cents as charged_cents, er.amount_paid_cents,
+    `SELECT er.id, er.stripe_payment_id, er.payment_amount_cents as charged_cents, er.card_paid_cents,
             e.price_cents as event_price_cents, e.deposit_cents as event_deposit_cents,
             ed.price_cents as division_price_cents
      FROM event_registrations er
@@ -50,7 +47,7 @@ async function getRegBalance(db: D1Database, regId: string): Promise<{
   ).bind(regId).first<any>();
   if (!reg) {
     reg = await db.prepare(
-      `SELECT r.id, r.stripe_payment_id, r.amount_cents as charged_cents, r.amount_paid_cents,
+      `SELECT r.id, r.stripe_payment_id, r.amount_cents as charged_cents, r.card_paid_cents,
               e.price_cents as event_price_cents, e.deposit_cents as event_deposit_cents,
               ed.price_cents as division_price_cents
        FROM registrations r
@@ -69,8 +66,10 @@ async function getRegBalance(db: D1Database, regId: string): Promise<{
     manualCents = m?.total || 0;
   } catch {}
 
-  const stripeCents = reg.stripe_payment_id ? (reg.charged_cents || 0) : 0;
-  const alreadyPaid = Math.max(reg.amount_paid_cents || 0, stripeCents + manualCents);
+  // Card money = the dedicated accumulator (falls back to the last charge for
+  // rows predating it); manual money = the recorded payments. Never mixed.
+  const stripeCents = reg.card_paid_cents ?? (reg.stripe_payment_id ? (reg.charged_cents || 0) : 0);
+  const alreadyPaid = stripeCents + manualCents;
   const expected = reg.division_price_cents || reg.event_price_cents || reg.charged_cents || 0;
   const depositCents = reg.event_deposit_cents || Math.round(expected * 0.25);
   // Unknown price + nothing paid → remaining unknowable; callers fall back to legacy amounts
@@ -581,8 +580,6 @@ stripeRoutes.post('/confirm-payment', async (c) => {
     }
 
     if (pi.status === 'succeeded') {
-      try { await db.prepare('ALTER TABLE event_registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
-      try { await db.prepare('ALTER TABLE registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
       const regIds = (pi.metadata?.registration_ids || '').split(',').filter(Boolean);
       const paymentChoice = pi.metadata?.payment_choice || 'pay_now';
       const amountCents = pi.amount || 0;
@@ -595,18 +592,28 @@ stripeRoutes.post('/confirm-payment', async (c) => {
         await db.prepare(
           `UPDATE event_registrations SET
             status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
-            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
-              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(payment_amount_cents, 0) ELSE 0 END) + ? END,
+            card_paid_cents = CASE WHEN stripe_payment_id = ? THEN COALESCE(card_paid_cents, ?)
+              ELSE COALESCE(card_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(payment_amount_cents, 0) ELSE 0 END) + ? END,
             payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        ).bind(pi.id, perRegAmount, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        await db.prepare(
+          `UPDATE event_registrations SET amount_paid_cents = COALESCE(card_paid_cents, 0) +
+            (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = event_registrations.id)
+           WHERE id = ?`
+        ).bind(regId).run().catch(() => {});
 
         await db.prepare(
           `UPDATE registrations SET
             status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
-            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
-              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(amount_cents, 0) ELSE 0 END) + ? END,
+            card_paid_cents = CASE WHEN stripe_payment_id = ? THEN COALESCE(card_paid_cents, ?)
+              ELSE COALESCE(card_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(amount_cents, 0) ELSE 0 END) + ? END,
             payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        ).bind(pi.id, perRegAmount, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        await db.prepare(
+          `UPDATE registrations SET amount_paid_cents = COALESCE(card_paid_cents, 0) +
+            (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = registrations.id)
+           WHERE id = ?`
+        ).bind(regId).run().catch(() => {});
 
         await withdrawAbandonedDuplicates(db, regId);
         // Redeem any Super Saver credit tied to this registration's payment
@@ -689,8 +696,6 @@ stripeRoutes.post('/webhook', async (c) => {
       return c.json({ received: true });
     }
 
-    try { await db.prepare('ALTER TABLE event_registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
-    try { await db.prepare('ALTER TABLE registrations ADD COLUMN amount_paid_cents INTEGER').run(); } catch {}
     const regIds = (pi.metadata?.registration_ids || '').split(',').filter(Boolean);
     const paymentChoice = pi.metadata?.payment_choice || 'pay_now';
     const amountCents = pi.amount || 0;
@@ -703,18 +708,28 @@ stripeRoutes.post('/webhook', async (c) => {
       await db.prepare(
           `UPDATE event_registrations SET
             status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
-            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
-              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(payment_amount_cents, 0) ELSE 0 END) + ? END,
+            card_paid_cents = CASE WHEN stripe_payment_id = ? THEN COALESCE(card_paid_cents, ?)
+              ELSE COALESCE(card_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(payment_amount_cents, 0) ELSE 0 END) + ? END,
             payment_status = ?, payment_amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        ).bind(pi.id, perRegAmount, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        await db.prepare(
+          `UPDATE event_registrations SET amount_paid_cents = COALESCE(card_paid_cents, 0) +
+            (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = event_registrations.id)
+           WHERE id = ?`
+        ).bind(regId).run().catch(() => {});
 
       await db.prepare(
           `UPDATE registrations SET
             status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END,
-            amount_paid_cents = CASE WHEN stripe_payment_id = ? THEN amount_paid_cents
-              ELSE COALESCE(amount_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(amount_cents, 0) ELSE 0 END) + ? END,
+            card_paid_cents = CASE WHEN stripe_payment_id = ? THEN COALESCE(card_paid_cents, ?)
+              ELSE COALESCE(card_paid_cents, CASE WHEN stripe_payment_id IS NOT NULL THEN COALESCE(amount_cents, 0) ELSE 0 END) + ? END,
             payment_status = ?, amount_cents = ?, payment_method = 'stripe', stripe_payment_id = ? WHERE id = ?`
-        ).bind(pi.id, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        ).bind(pi.id, perRegAmount, perRegAmount, paymentStatus, perRegAmount, pi.id, regId).run().catch(() => {});
+        await db.prepare(
+          `UPDATE registrations SET amount_paid_cents = COALESCE(card_paid_cents, 0) +
+            (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = registrations.id)
+           WHERE id = ?`
+        ).bind(regId).run().catch(() => {});
 
       await withdrawAbandonedDuplicates(db, regId);
       await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')
