@@ -401,8 +401,8 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
       COALESCE(ct.manager_name, NULLIF(TRIM(COALESCE(er.manager_first_name, '') || ' ' || COALESCE(er.manager_last_name, '')), '')) as manager_name,
       COALESCE(ct.manager_email, er.email1) as manager_email,
       COALESCE(ct.manager_phone, er.phone) as manager_phone,
-      COALESCE(ct.mhr_url, (SELECT t8.mhr_url FROM teams t8 WHERE LOWER(t8.name) = LOWER(er.team_name) AND t8.mhr_url IS NOT NULL AND t8.mhr_url != '' LIMIT 1)) as mhr_url,
-      COALESCE(ct.mhr_rating, (SELECT t6.mhr_rating FROM teams t6 WHERE LOWER(t6.name) = LOWER(er.team_name) AND t6.mhr_rating IS NOT NULL LIMIT 1)) as mhr_rating,
+      CASE WHEN er.team_id IS NOT NULL THEN ct.mhr_url ELSE (SELECT t8.mhr_url FROM teams t8 WHERE LOWER(t8.name) = LOWER(er.team_name) AND t8.mhr_url IS NOT NULL AND t8.mhr_url != '' LIMIT 1) END as mhr_url,
+      CASE WHEN er.team_id IS NOT NULL THEN ct.mhr_rating ELSE (SELECT t6.mhr_rating FROM teams t6 WHERE LOWER(t6.name) = LOWER(er.team_name) AND t6.mhr_rating IS NOT NULL LIMIT 1) END as mhr_rating,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.status = 'active' AND tp.team_id = COALESCE(er.team_id, (SELECT t7.id FROM teams t7 WHERE LOWER(t7.name) = LOWER(er.team_name) AND t7.is_active = 1 LIMIT 1))) as roster_count,
       er.hotel_assigned,
       ha.hotel_name as hotel_assigned_name,
@@ -1280,11 +1280,26 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   // Auto-match division
   const matchedDivisionId = await findMatchingDivision(data.eventId, data.ageGroup);
 
+  // Sanity-check the submitted team link: if the selected team's name doesn't
+  // match the registered team name, the client likely had a stale selection
+  // (e.g. registering two teams back-to-back). Prefer the exact-name team.
+  let resolvedTeamId = data.teamId || null;
+  if (resolvedTeamId) {
+    try {
+      const linked = await db.prepare('SELECT name FROM teams WHERE id = ?').bind(resolvedTeamId).first<{ name: string }>();
+      if (!linked || linked.name.trim().toLowerCase() !== data.teamName.trim().toLowerCase()) {
+        const exact = await db.prepare('SELECT id FROM teams WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND is_active = 1 LIMIT 1')
+          .bind(data.teamName).first<{ id: string }>();
+        if (exact) resolvedTeamId = exact.id;
+      }
+    } catch {}
+  }
+
   await db.prepare(`
     INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    regId, data.eventId, data.teamId || null, data.teamName, data.ageGroup, data.division || null,
+    regId, data.eventId, resolvedTeamId, data.teamName, data.ageGroup, data.division || null,
     data.managerFirstName || null, data.managerLastName || null,
     data.email, data.phone || null,
     initialStatus, initialPaymentStatus,
