@@ -1331,11 +1331,19 @@ function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, onSaved
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">Payments Received</span>
                 {paySummary && (
-                  <span className={`text-[11px] font-semibold ${paySummary.balance_cents === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {paySummary.balance_cents === 0
-                      ? 'Paid in full'
-                      : `Balance: $${(paySummary.balance_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                  </span>
+                  paySummary.expected_cents > 0 ? (
+                    <span className={`text-[11px] font-semibold ${paySummary.balance_cents === 0 && paySummary.total_paid_cents > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {paySummary.balance_cents === 0 && paySummary.total_paid_cents > 0
+                        ? 'Paid in full'
+                        : `Balance: $${(paySummary.balance_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold text-[#86868b]">
+                      {paySummary.total_paid_cents > 0
+                        ? `$${(paySummary.total_paid_cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })} received · no price set`
+                        : 'No price set on this event'}
+                    </span>
+                  )
                 )}
               </div>
               <div className="space-y-1.5">
