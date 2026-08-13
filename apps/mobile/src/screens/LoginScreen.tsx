@@ -25,6 +25,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState('');
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [checkingBiometric, setCheckingBiometric] = useState(true);
 
@@ -87,6 +89,32 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
     } finally {
       setBiometricLoading(false);
     }
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setError('Enter your email above first, then tap Forgot Password.');
+      return;
+    }
+    setForgotLoading(true);
+    setError('');
+    setForgotMessage('');
+    try {
+      const res = await fetch('https://uht.chad-157.workers.dev/api/auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      const json: any = await res.json();
+      if (json.success) {
+        setForgotMessage('Check your email — we sent you a sign-in link. Open it to sign in and set a new password, then come back and sign in here.');
+      } else {
+        setError(typeof json.error === 'string' ? json.error : 'Could not send the reset email. Please try again.');
+      }
+    } catch {
+      setError('Could not send the reset email. Please check your connection and try again.');
+    }
+    setForgotLoading(false);
   }
 
   async function handleLogin() {
@@ -207,6 +235,23 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
             )}
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.linkContainer}
+            onPress={handleForgotPassword}
+            disabled={forgotLoading}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.linkText}>
+              {forgotLoading ? 'Sending reset email…' : 'Forgot password?'}
+            </Text>
+          </TouchableOpacity>
+
+          {forgotMessage ? (
+            <View style={styles.successBanner}>
+              <Text style={styles.successBannerText}>{forgotMessage}</Text>
+            </View>
+          ) : null}
+
           {biometricAvailable ? (
             <TouchableOpacity
               style={styles.biometricButton}
@@ -279,6 +324,17 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     color: colors.error,
+    fontSize: 14,
+    ...fonts.medium,
+  },
+  successBanner: {
+    backgroundColor: '#e7f7ee',
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  successBannerText: {
+    color: '#1a7f4b',
     fontSize: 14,
     ...fonts.medium,
   },
