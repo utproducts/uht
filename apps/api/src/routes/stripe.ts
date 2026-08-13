@@ -427,7 +427,33 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
         "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
       ).bind(data.email, reward.id).run();
     } else {
-      // 2) Check coupon_codes table (admin-created coupon codes)
+      // 2) Check discount_codes (UHT-XXXXXX next-event reward codes earned at registration)
+      const dc = await db.prepare(
+        'SELECT * FROM discount_codes WHERE UPPER(code) = UPPER(?)'
+      ).bind(codeTrimmed).first() as any;
+
+      if (dc) {
+        if (dc.is_used) {
+          return c.json({ success: false, error: 'This code has already been used' }, 409);
+        }
+        // The reward is for the team's NEXT event — not the registration that
+        // earned it, and not any other registration for that same event
+        const reg0 = await db.prepare(
+          'SELECT event_id, hotel_choice, hotel_choice_1 FROM event_registrations WHERE id = ?'
+        ).bind(chargedRegIds[0]).first() as any;
+        if (chargedRegIds.includes(dc.registration_id) || (reg0?.event_id && reg0.event_id === dc.event_id)) {
+          return c.json({ success: false, error: 'This code was earned from this event — it applies when you register for your next event.' }, 400);
+        }
+        // $200 off when staying at a partner hotel, $100 off for local teams
+        const hasHotel = reg0?.hotel_choice_1 && reg0.hotel_choice_1 !== 'Local Team';
+        discountCents = hasHotel ? (dc.discount_hotel_cents || 20000) : (dc.discount_local_cents || 10000);
+        discountCode = dc.code;
+        await db.prepare(
+          "UPDATE discount_codes SET is_used = 1, used_registration_id = ?, used_at = datetime('now') WHERE id = ?"
+        ).bind(chargedRegIds[0], dc.id).run();
+      } else {
+
+      // 3) Check coupon_codes table (admin-created coupon codes)
       const coupon = await db.prepare(
         'SELECT * FROM coupon_codes WHERE UPPER(code) = UPPER(?)'
       ).bind(codeTrimmed).first() as any;
@@ -469,6 +495,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       await db.prepare(
         'UPDATE coupon_codes SET current_uses = current_uses + 1 WHERE id = ?'
       ).bind(coupon.id).run();
+      }
     }
   }
 

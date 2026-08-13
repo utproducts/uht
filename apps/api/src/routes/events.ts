@@ -2884,8 +2884,8 @@ eventRoutes.post('/admin/fix-age-groups', authMiddleware, requireRole('admin'), 
 // ==================
 eventRoutes.post('/validate-discount-code', async (c) => {
   const db = c.env.DB;
-  const body = await c.req.json() as { code: string; teamId?: string };
-  const { code } = body;
+  const body = await c.req.json() as { code: string; teamId?: string; eventId?: string };
+  const { code, eventId } = body;
 
   if (!code) {
     return c.json({ success: false, error: 'Code is required' }, 400);
@@ -2903,12 +2903,16 @@ eventRoutes.post('/validate-discount-code', async (c) => {
   } catch {}
 
   const dc = await db.prepare(
-    'SELECT id, code, team_name, team_id, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE code = ?'
+    'SELECT id, code, team_name, team_id, event_id, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE code = ?'
   ).bind(code.trim().toUpperCase()).first<any>();
 
   if (dc) {
     if (dc.is_used) {
       return c.json({ success: false, error: 'This code has already been used' }, 400);
+    }
+    // Reward codes apply to the team's NEXT event, never the one that earned them
+    if (eventId && dc.event_id === eventId) {
+      return c.json({ success: false, error: 'This code was earned from this event — it applies when you register for your next event.' }, 400);
     }
     return c.json({
       success: true,
@@ -2999,7 +3003,7 @@ eventRoutes.post('/redeem-discount-code', async (c) => {
   }
 
   const dc = await db.prepare(
-    'SELECT id, is_used FROM discount_codes WHERE code = ?'
+    'SELECT id, is_used, event_id, registration_id FROM discount_codes WHERE code = ?'
   ).bind(code.trim().toUpperCase()).first<any>();
 
   if (!dc) {
@@ -3007,6 +3011,13 @@ eventRoutes.post('/redeem-discount-code', async (c) => {
   }
   if (dc.is_used) {
     return c.json({ success: false, error: 'This code has already been used' }, 400);
+  }
+  // Never redeemable on the event that earned it (or the earning registration)
+  const redeemReg = await db.prepare(
+    'SELECT event_id FROM event_registrations WHERE id = ?'
+  ).bind(registrationId).first<any>();
+  if (registrationId === dc.registration_id || (redeemReg?.event_id && redeemReg.event_id === dc.event_id)) {
+    return c.json({ success: false, error: 'This code was earned from this event — it applies when you register for your next event.' }, 400);
   }
 
   await db.prepare(

@@ -566,7 +566,7 @@ export default function RegisterPage() {
       const res = await fetch(`${API}/events/validate-discount-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: discountCode.trim().toUpperCase(), teamId }),
+        body: JSON.stringify({ code: discountCode.trim().toUpperCase(), teamId, eventId: event?.id }),
       });
       const json = await res.json() as any;
       if (json.success) {
