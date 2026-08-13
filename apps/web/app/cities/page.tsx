@@ -61,6 +61,14 @@ const CITIES = [
     description: "One of America's great college hockey towns. Home to incredible facilities and a deep-rooted hockey culture that runs year-round.",
     image: 'https://images.unsplash.com/photo-1508760215803-36f2ec2b7713?w=800&q=80',
   },
+  {
+    name: 'Indianapolis',
+    state: 'IN',
+    slug: 'indianapolis',
+    tagline: 'Big-league energy in the Circle City',
+    description: "Indiana's capital joins the UHT lineup — top-notch facilities, easy interstate access from every direction, and a downtown built for team weekends.",
+    image: 'https://images.unsplash.com/photo-1579031151544-529281a75b18?w=800&q=80',
+  },
 ];
 
 export default function CitiesPage() {

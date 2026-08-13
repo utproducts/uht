@@ -8,7 +8,7 @@ const STATE_INFO: Record<string, { name: string; cities: string[]; events: numbe
   IL: { name: 'Illinois', cities: ['Chicago'], events: 8 },
   WI: { name: 'Wisconsin', cities: ['WI Dells', 'Madison'], events: 6 },
   MO: { name: 'Missouri', cities: ['St. Louis'], events: 3 },
-  IN: { name: 'Indiana', cities: ['South Bend'], events: 3 },
+  IN: { name: 'Indiana', cities: ['South Bend', 'Indianapolis'], events: 5 },
   MI: { name: 'Michigan', cities: ['Holland', 'Ann Arbor'], events: 4 },
 };
 

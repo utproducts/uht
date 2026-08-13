@@ -78,6 +78,7 @@ const CITY_SHOWCASE = [
   { name: 'Madison', state: 'WI', image: 'https://images.unsplash.com/photo-1748276122946-bbbd8f1d4f94?w=600&q=80', tagline: 'Big Ten Hockey Town' },
   { name: 'Holland', state: 'MI', image: 'https://images.unsplash.com/photo-1602076693004-ba674acf4389?w=600&q=80', tagline: 'Lake Michigan Charm' },
   { name: 'Ann Arbor', state: 'MI', image: 'https://images.unsplash.com/photo-1508760215803-36f2ec2b7713?w=600&q=80', tagline: 'Wolverine Hockey Excellence' },
+  { name: 'Indianapolis', state: 'IN', image: 'https://images.unsplash.com/photo-1579031151544-529281a75b18?w=600&q=80', tagline: 'The Circle City Takes the Ice' },
 ];
 
 /* ---------- Testimonials ---------- */
@@ -141,7 +142,7 @@ export default function HomePage() {
   /* Counter refs — hardcoded stats for social proof */
   const eventsCounter = useCountUp(totalEvents || 36, 2000);
   const teamsCounter = useCountUp(1900, 2000);
-  const citiesCounter = useCountUp(7, 1500);
+  const citiesCounter = useCountUp(8, 1500);
   const statesCounter = useCountUp(4, 1200);
 
   return (
@@ -183,7 +184,7 @@ export default function HomePage() {
 
             <p className="mt-6 sm:mt-8 text-lg sm:text-xl text-white/60 max-w-xl leading-relaxed">
               The Midwest&apos;s premier youth and adult hockey tournament series.
-              7 cities. 36+ events. One mission — the best tournament experience in hockey.
+              8 cities. 36+ events. One mission — the best tournament experience in hockey.
             </p>
 
             <div className="mt-10 flex items-center gap-4 flex-wrap">
@@ -498,7 +499,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
           <div className="text-center mb-12">
             <p className="text-[#00ccff] text-sm font-bold uppercase tracking-widest mb-2">Our Locations</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">7 Cities. Endless Memories.</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#1d1d1f]">8 Cities. Endless Memories.</h2>
             <p className="mt-3 text-lg text-[#6e6e73]">Premier tournaments in the best hockey markets across the Midwest.</p>
           </div>
 
@@ -572,7 +573,7 @@ export default function HomePage() {
                   </svg>
                 ),
                 title: 'Premier Venues',
-                desc: 'Top-tier arenas across 7 cities with multiple sheets, pro-level ice, and great spectator facilities.',
+                desc: 'Top-tier arenas across 8 cities with multiple sheets, pro-level ice, and great spectator facilities.',
               },
               {
                 icon: (
