@@ -1114,17 +1114,26 @@ organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zVali
     return c.json({ success: true, message: 'User linked to team', linked: true });
   }
 
-  // Create invite
+  // Create invite (schema: email + NOT NULL invite_code — a prior version used
+  // a nonexistent invited_email column and 500'd on every new-user invite)
   const invId = crypto.randomUUID().replace(/-/g, '');
-  await db.prepare(`
-    INSERT INTO team_invites (id, team_id, invited_email, invited_role, invited_by, status)
-    VALUES (?, ?, ?, ?, ?, 'pending')
-  `).bind(invId, teamId, email, data.role, user.id).run();
+  const inviteCode = team.invite_code || Math.random().toString(36).substring(2, 8).toUpperCase();
+  try {
+    await db.prepare(`
+      INSERT INTO team_invites (id, team_id, email, invited_role, invite_code, status, invited_by)
+      VALUES (?, ?, ?, ?, ?, 'pending', ?)
+    `).bind(invId, teamId, email, data.role, inviteCode, user.id).run();
+  } catch (e: any) {
+    if (e.message?.includes('UNIQUE')) {
+      return c.json({ success: false, error: 'This person has already been invited to this team' }, 409);
+    }
+    throw e;
+  }
 
   // Send invite email via Resend
   try {
     const siteUrl = c.env.SITE_URL || 'https://ultimatetournaments.com';
-    const signupUrl = `${siteUrl}/signup?invite=${team.invite_code}&email=${encodeURIComponent(email)}&role=${data.role}`;
+    const signupUrl = `${siteUrl}/signup?invite=${inviteCode}&email=${encodeURIComponent(email)}&role=${data.role}`;
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
@@ -1134,7 +1143,7 @@ organizationRoutes.post('/:id/teams/:teamId/invite-staff', authMiddleware, zVali
         subject: `You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} ${team.name}`,
         html: `<p>You've been invited to ${data.role === 'coach' ? 'coach' : 'manage'} <strong>${team.name}</strong> on Ultimate Tournaments.</p>
             <p><a href="${signupUrl}" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Accept Invite</a></p>
-            <p>Or use invite code: <strong>${team.invite_code}</strong></p>`,
+            <p>Or use invite code: <strong>${inviteCode}</strong></p>`,
       }),
     });
   } catch {}

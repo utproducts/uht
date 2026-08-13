@@ -1003,12 +1003,13 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
     return c.json({ success: false, error: 'name, email, and role (coach/manager) are required' }, 400);
   }
 
-  // Verify user owns or coaches this team
+  // Verify user owns, coaches, or manages this team
   const team = await db.prepare(`
     SELECT t.id, t.name, t.invite_code, t.age_group FROM teams t
     LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
-    WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ?)
-  `).bind(user.id, teamId, user.id, user.id).first<{
+    LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
+    WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
+  `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first<{
     id: string; name: string; invite_code: string | null; age_group: string;
   }>();
 
