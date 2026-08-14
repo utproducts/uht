@@ -1437,8 +1437,14 @@ export default function RegisterPage() {
             {/* Super Saver upsell — only while a promo window is live */}
             {superSaver && event && (() => {
               const discount = Math.round((superSaver.discount_cents || 40000) / 100);
+              // The pair must include a this-year event (the qualifying one) —
+              // when registering a next-year event, only offer this-year add-ons
+              const yearEnd = `${new Date().getFullYear()}-12-31`;
+              const currentQualifies = (event.start_date || '') <= yearEnd;
               const eligible = upsellEvents.filter(e =>
-                e.id !== event.id && (!superSaver.min_event_start || e.start_date >= superSaver.min_event_start));
+                e.id !== event.id &&
+                (!superSaver.min_event_start || e.start_date >= superSaver.min_event_start) &&
+                (currentQualifies || e.start_date <= yearEnd));
               if (!eligible.length) return null;
               const endsStr = new Date(superSaver.ends_at.replace(' ', 'T')).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
               const chosen = eligible.find(e => e.id === ssAddEventId);

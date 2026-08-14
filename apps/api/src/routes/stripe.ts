@@ -168,29 +168,30 @@ async function computeSuperSaverCredit(
       const distinctEvents = new Set(teamRegs.map(r => r.event_id));
       if (distinctEvents.size < 2) continue;
 
-      // Which paying registration receives the credit: with min_event_start set
-      // (register now, credit applies to events starting e.g. Jan 1 2027+) it
-      // must be a paying reg for an event on/after that date.
-      let creditedReg = payingRegs[0];
-      if (promo.min_event_start) {
-        let found: any = null;
-        for (const r of payingRegs) {
-          const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?')
-            .bind(r.event_id).first<{ start_date: string }>();
-          if (ev?.start_date && ev.start_date >= promo.min_event_start) { found = r; break; }
-        }
-        if (!found) continue;
-        creditedReg = found;
-      }
+      // Hotel requirement: at least ONE of the team's window registrations is
+      // a hotel event (either event of the pair; 'Local Team' doesn't count)
+      if (!teamRegs.some(r => hotelOk(r))) continue;
 
-      // Hotel requirement: any 2 distinct events qualify as long as at least
-      // ONE of the team's window registrations is a hotel event (either event,
-      // including the one being credited; featured-list check only if set)
-      const qualifying = teamRegs.find(r =>
-        (featuredIds.length === 0 || featuredIds.includes(r.event_id)) &&
-        hotelOk(r)
+      // The pair rule: the FIRST (qualifying) event must take place within the
+      // promo's calendar year; the credited event is any DIFFERENT event —
+      // this year or later (further restricted by min_event_start if set).
+      const eventStarts = new Map<string, string>();
+      for (const eid of Array.from(new Set(teamRegs.map(r => r.event_id)))) {
+        const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?')
+          .bind(eid).first<{ start_date: string }>();
+        if (ev?.start_date) eventStarts.set(eid, ev.start_date);
+      }
+      const promoYearEnd = String(promo.starts_at || '').slice(0, 4) + '-12-31';
+      const isQualifyingEvent = (eid: string) =>
+        (eventStarts.get(eid) || '9999') <= promoYearEnd &&
+        (featuredIds.length === 0 || featuredIds.includes(eid));
+
+      const creditedReg = payingRegs.find(c =>
+        (!promo.min_event_start || (eventStarts.get(c.event_id) || '') >= promo.min_event_start) &&
+        teamRegs.some(q => q.event_id !== c.event_id && isQualifyingEvent(q.event_id))
       );
-      if (!qualifying) continue;
+      if (!creditedReg) continue;
+      const qualifying = teamRegs.find(q => q.event_id !== creditedReg.event_id && isQualifyingEvent(q.event_id))!;
 
       const credit = Math.min(promo.discount_cents || 40000, totalCents);
       if (credit <= 0) continue;

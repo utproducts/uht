@@ -577,8 +577,9 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
       break;
     }
     case 'super_saver': {
-      // No picked events = feature every upcoming public event before the
-      // credit cutoff (i.e. the rest of this year's events)
+      // No picked events = feature the rest of THIS YEAR's public events only
+      // (the qualifying first registration must be for a this-year event; the
+      // credited 2nd event can be any event, this year or next)
       let ssEvents;
       if (data.eventIds && data.eventIds.length > 0) {
         const placeholders = data.eventIds.map(() => '?').join(',');
@@ -592,9 +593,10 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
           SELECT id, name, slug, city, state, start_date, end_date, logo_url
           FROM events
           WHERE status IN ('published', 'registration_open', 'active')
-            AND start_date >= date('now') AND start_date < ?
+            AND start_date >= date('now')
+            AND start_date <= strftime('%Y', 'now') || '-12-31'
           ORDER BY start_date ASC
-        `).bind(data.minEventStart || '9999-12-31').all<any>();
+        `).all<any>();
       }
 
       const promoDays = data.promoDays || 7;
@@ -602,12 +604,14 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
       const deadline = data.promoEndDate
         ? new Date(`${data.promoEndDate}T23:59:59`)
         : new Date(Date.now() + promoDays * 24 * 60 * 60 * 1000);
-      const deadlineStr = deadline.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-      const minEventStartStr = data.minEventStart
-        ? new Date(`${data.minEventStart}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-        : null;
+      // Manual date strings — Workers' toLocaleDateString is unreliable
+      const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const deadlineStr = `${DAY_NAMES[deadline.getDay()]}, ${MONTH_NAMES[deadline.getMonth()]} ${deadline.getDate()}, ${deadline.getFullYear()}`;
+      const mes = data.minEventStart ? new Date(`${data.minEventStart}T12:00:00`) : null;
+      const minEventStartStr = mes ? `${MONTH_NAMES[mes.getMonth()]} ${mes.getDate()}, ${mes.getFullYear()}` : null;
 
-      subject = `\u{1F6A8} Super Saver: $${discount} Off Your 2nd Tournament — Register by ${deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      subject = `\u{1F6A8} Super Saver: $${discount} Off Your 2nd Tournament — Register by ${MONTH_NAMES[deadline.getMonth()].slice(0, 3)} ${deadline.getDate()}`;
       html = generateSuperSaverEmail(ssEvents.results || [], deadlineStr, discount, promoDays, minEventStartStr);
       break;
     }
@@ -1415,13 +1419,15 @@ function generateAllEventsEmail(events: any[]): string {
 }
 
 function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: number, promoDays: number, minEventStartStr?: string | null): string {
+  // Manual formatting — the Workers runtime mangles partial toLocaleDateString
+  // option sets (day+year came out as "2026 (day: 18)")
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const fmtRange = (start: string, end: string) => {
     const s = new Date(start + 'T12:00:00');
     const e = new Date(end + 'T12:00:00');
-    const sameMonth = s.getMonth() === e.getMonth();
-    const sStr = s.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-    const eStr = e.toLocaleDateString('en-US', sameMonth ? { day: 'numeric', year: 'numeric' } : { month: 'long', day: 'numeric', year: 'numeric' });
-    return `${sStr}–${eStr}`;
+    const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
+    if (sameMonth) return `${MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${e.getFullYear()}`;
+    return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
   };
 
   // Event cards: two per row (stack naturally on mobile-width clients)
@@ -1462,11 +1468,11 @@ function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: n
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">1</div></td>
-        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for <b>any UHT event</b> below by <b>${deadlineStr}</b></td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for any <b>${new Date().getFullYear()} UHT event</b> below by <b>${deadlineStr}</b></td>
       </tr>
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">2</div></td>
-        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for a <b>2nd UHT tournament</b>${minEventStartStr ? ` starting <b>${minEventStartStr} or later</b> — any event, any city` : ' — any event, any city'}</td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for a <b>2nd UHT tournament</b>${minEventStartStr ? ` starting <b>${minEventStartStr} or later</b> — any city` : ' — any event this year or next, any city'}</td>
       </tr>
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#00a86b;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">3</div></td>
