@@ -289,34 +289,29 @@ const sendCampaignSchema = z.object({
   batchLimit: z.number().min(1).max(500).optional(),
 });
 
-emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json', sendCampaignSchema), async (c) => {
-  const data = c.req.valid('json');
-  const db = c.env.DB;
-  const env = c.env;
-
-  const campaign = await db.prepare('SELECT * FROM email_campaigns WHERE id = ?').bind(data.campaignId).first<any>();
-  if (!campaign) return c.json({ success: false, error: 'Campaign not found' }, 404);
+// Shared wave processor — used by the /send route (UI-driven fast path) AND
+// the scheduled cron (background pickup when the sending screen is closed).
+// Resume-safe: recorded sends are never re-emailed.
+export async function processSendWave(env: any, campaign: any, audience: any, batchLimit: number): Promise<{ sent: number; failed: number; remaining: number; done: boolean; total: number; totalSent: number; invalidSkipped: number } | { error: string }> {
+  const db: D1Database = env.DB;
 
   // Build audience — either from registrations query or manual email list
   let uniqueRecipients: { email: string; name: string }[] = [];
 
-  if (data.audience.scope === 'manual_emails' && data.audience.manualEmails?.length) {
-    // Manual email list — deduplicate and use as-is
+  if (audience.scope === 'manual_emails' && audience.manualEmails?.length) {
     const seen = new Set<string>();
-    uniqueRecipients = data.audience.manualEmails
-      .filter(email => {
+    uniqueRecipients = audience.manualEmails
+      .filter((email: string) => {
         const lower = email.toLowerCase().trim();
         if (!lower || seen.has(lower)) return false;
         seen.add(lower);
         return true;
       })
-      .map(email => ({ email: email.trim(), name: '' }));
+      .map((email: string) => ({ email: email.trim(), name: '' }));
   } else {
-    const { query, params } = buildAudienceQuery(data.audience);
+    const { query, params } = buildAudienceQuery(audience);
     const result = await db.prepare(query).bind(...params).all<any>();
     const recipients = result.results || [];
-
-    // Deduplicate by email
     const seen = new Set<string>();
     uniqueRecipients = recipients.filter((r: any) => {
       if (!r.email || seen.has(r.email.toLowerCase())) return false;
@@ -325,16 +320,21 @@ emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json
     });
   }
 
-  if (uniqueRecipients.length === 0) {
-    return c.json({ success: false, error: 'No recipients found for this audience filter' }, 400);
-  }
+  // Drop malformed addresses — ONE bad address 422s its entire Resend batch
+  const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+  const validEmail = (e: string) => emailRe.test(e) && !e.includes('..');
+  const beforeFilter = uniqueRecipients.length;
+  uniqueRecipients = uniqueRecipients
+    .map(r => ({ ...r, email: (r.email || '').trim() }))
+    .filter(r => validEmail(r.email));
+  const invalidSkipped = beforeFilter - uniqueRecipients.length;
 
-  // Update campaign status to sending
+  if (uniqueRecipients.length === 0) return { error: 'No recipients found for this audience filter' };
+
   await db.prepare(`UPDATE email_campaigns SET status = 'sending', audience_filter = ?, updated_at = datetime('now') WHERE id = ?`)
-    .bind(JSON.stringify(data.audience), data.campaignId).run();
+    .bind(JSON.stringify(audience), campaign.id).run();
 
-  // Resolve all recipients to contact ids in BULK (chunked lookups; missing
-  // contacts created via db.batch) — one query per ~90 instead of per recipient
+  // Resolve recipients to contact ids in bulk
   const emailToContact = new Map<string, string>();
   const emails = uniqueRecipients.map(r => r.email.toLowerCase());
   for (let i = 0; i < emails.length; i += 90) {
@@ -356,21 +356,19 @@ emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json
     await db.batch(stmts);
   }
 
-  // Resume-safe: contacts already recorded for this campaign are skipped
+  // Resume-safe skip of already-recorded sends
   const sentAlready = new Set<string>();
-  const sentRows = await db.prepare('SELECT contact_id FROM email_sends WHERE campaign_id = ?').bind(data.campaignId).all<any>();
+  const sentRows = await db.prepare('SELECT contact_id FROM email_sends WHERE campaign_id = ?').bind(campaign.id).all<any>();
   for (const r of (sentRows.results || [])) sentAlready.add(r.contact_id);
 
   const pending = uniqueRecipients.filter(r => !sentAlready.has(emailToContact.get(r.email.toLowerCase()) as string));
-  const slice = pending.slice(0, data.batchLimit || 400);
+  const slice = pending.slice(0, batchLimit);
 
   const fromEmail = campaign.from_email || 'info@ultimatetournaments.com';
   const fromName = campaign.from_name || 'Ultimate Hockey Tournaments';
 
   let sent = 0;
   let failed = 0;
-  // Resend batch endpoint: up to 100 emails per API call, paced under the
-  // ~2 requests/second rate limit
   for (let i = 0; i < slice.length; i += 100) {
     const chunk = slice.slice(i, i + 100);
     let ok = false;
@@ -391,6 +389,38 @@ emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json
         const j = await resp.json() as any;
         ids = j?.data || [];
         ok = true;
+      } else if (resp.status === 422) {
+        // A bad address poisoned the batch — isolate it with individual sends
+        console.error('Resend batch 422 — falling back to individual sends for this chunk');
+        for (const r of chunk) {
+          try {
+            const single = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                from: `${fromName} <${fromEmail}>`,
+                to: [r.email],
+                subject: campaign.subject,
+                html: campaign.body_html,
+                ...(campaign.body_text ? { text: campaign.body_text } : {}),
+              }),
+            });
+            if (single.ok) {
+              const sj = await single.json() as any;
+              await db.prepare(`INSERT INTO email_sends (id, campaign_id, contact_id, sendgrid_message_id, status) VALUES (?, ?, ?, ?, 'sent')`)
+                .bind(crypto.randomUUID().replace(/-/g, ''), campaign.id, emailToContact.get(r.email.toLowerCase()), sj?.id || null).run();
+              sent++;
+            } else if (single.status === 422) {
+              await db.prepare(`INSERT INTO email_sends (id, campaign_id, contact_id, sendgrid_message_id, status) VALUES (?, ?, ?, NULL, 'dropped')`)
+                .bind(crypto.randomUUID().replace(/-/g, ''), campaign.id, emailToContact.get(r.email.toLowerCase())).run();
+              console.error('Dropped invalid address:', r.email);
+            } else {
+              failed++;
+            }
+          } catch { failed++; }
+          await new Promise(res => setTimeout(res, 550));
+        }
+        continue;
       } else {
         console.error('Resend batch error:', resp.status, await resp.text().catch(() => ''));
       }
@@ -399,17 +429,15 @@ emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json
     }
 
     if (ok) {
-      // Record sends so a re-run never emails the same contact twice
       const stmts = chunk.map((r, idx) => db.prepare(
         `INSERT INTO email_sends (id, campaign_id, contact_id, sendgrid_message_id, status) VALUES (?, ?, ?, ?, 'sent')`
       ).bind(
-        crypto.randomUUID().replace(/-/g, ''), data.campaignId,
+        crypto.randomUUID().replace(/-/g, ''), campaign.id,
         emailToContact.get(r.email.toLowerCase()), ids[idx]?.id || null
       ));
       await db.batch(stmts);
       sent += chunk.length;
     } else {
-      // No rows recorded — the next call retries these recipients
       failed += chunk.length;
     }
 
@@ -419,16 +447,73 @@ emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json
   const remaining = pending.length - slice.length + (failed > 0 ? failed : 0);
   const totalSentRow = await db.prepare(
     "SELECT COUNT(*) as n FROM email_sends WHERE campaign_id = ? AND status != 'dropped'"
-  ).bind(data.campaignId).first<any>();
+  ).bind(campaign.id).first<any>();
   const totalSent = totalSentRow?.n || 0;
   const done = remaining <= 0;
 
   await db.prepare(`
     UPDATE email_campaigns SET status = ?, ${done ? "sent_at = datetime('now')," : ''} total_sent = ?, updated_at = datetime('now')
     WHERE id = ?
-  `).bind(done ? 'sent' : 'sending', totalSent, data.campaignId).run();
+  `).bind(done ? 'sent' : 'sending', totalSent, campaign.id).run();
 
-  return c.json({ success: true, data: { sent, failed, remaining, done, total: uniqueRecipients.length, totalSent } });
+  return { sent, failed, remaining, done, total: uniqueRecipients.length, totalSent, invalidSkipped };
+}
+
+// Enable open + click tracking on all Resend domains via their API (the
+// dashboard toggle sometimes fails to persist)
+emailRoutes.post('/admin/enable-tracking', authMiddleware, requireRole('admin'), async (c) => {
+  const env = c.env;
+  const list = await fetch('https://api.resend.com/domains', {
+    headers: { 'Authorization': `Bearer ${env.RESEND_API}` },
+  });
+  const lj = await list.json().catch(() => null) as any;
+  const domains = lj?.data || [];
+  if (!domains.length) return c.json({ success: false, error: 'No domains found on the Resend account' }, 404);
+
+  // Tracking only applies once a tracking_subdomain is configured AND verified
+  // — set one, then enable, then return each domain's DNS records so the
+  // required CNAME can be added.
+  let body: any = {};
+  try { body = await c.req.json(); } catch {}
+  const subdomain = (body?.subdomain || 'track').replace(/[^a-z0-9-]/gi, '');
+  const only = (body?.domain || '').toLowerCase();
+
+  const results: any[] = [];
+  for (const d of domains) {
+    if (only && d.name.toLowerCase() !== only) continue;
+    const patch = await fetch(`https://api.resend.com/domains/${d.id}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tracking_subdomain: subdomain, open_tracking: true, click_tracking: true }),
+    });
+    const pj = await patch.json().catch(() => null) as any;
+    const detail = await fetch(`https://api.resend.com/domains/${d.id}`, {
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}` },
+    });
+    const dj = await detail.json().catch(() => null) as any;
+    results.push({
+      domain: d.name,
+      patch_status: patch.status,
+      patch_error: patch.ok ? undefined : pj,
+      open_tracking: dj?.open_tracking ?? null,
+      click_tracking: dj?.click_tracking ?? null,
+      tracking_subdomain: dj?.tracking_subdomain ?? null,
+      records: (dj?.records || []).filter((r: any) => /track/i.test(r.record || '') || /track/i.test(r.name || '')),
+    });
+  }
+  return c.json({ success: true, data: results });
+});
+
+emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json', sendCampaignSchema), async (c) => {
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const campaign = await db.prepare('SELECT * FROM email_campaigns WHERE id = ?').bind(data.campaignId).first<any>();
+  if (!campaign) return c.json({ success: false, error: 'Campaign not found' }, 404);
+
+  const result = await processSendWave(c.env, campaign, data.audience, data.batchLimit || 400);
+  if ('error' in result) return c.json({ success: false, error: result.error }, 400);
+  return c.json({ success: true, data: result });
 });
 
 // ==================

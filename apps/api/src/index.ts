@@ -1166,4 +1166,41 @@ app.onError((err, c) => {
   }, 500);
 });
 
-export default app;
+// Cron: background campaign sending. If a campaign is stuck in 'sending' and
+// nothing has driven it for 2+ minutes (admin closed the sending screen), the
+// cron takes over and pushes waves until it finishes. The 2-minute staleness
+// check prevents racing an active UI/driver loop (which updates the campaign
+// every ~20s), so no contact can ever be double-sent.
+async function runScheduled(env: any) {
+  const { processSendWave } = await import('./routes/email');
+  const db: D1Database = env.DB;
+  const stale = await db.prepare(`
+    SELECT * FROM email_campaigns
+    WHERE status = 'sending' AND audience_filter IS NOT NULL
+      AND updated_at < datetime('now', '-2 minutes')
+    ORDER BY updated_at ASC LIMIT 1
+  `).first<any>();
+  if (!stale) return;
+
+  let audience: any = null;
+  try { audience = JSON.parse(stale.audience_filter); } catch { return; }
+  if (!audience?.scope) return;
+
+  console.log(`Cron: resuming campaign ${stale.id} (${stale.name})`);
+  const startedAt = Date.now();
+  // Push waves for up to ~40s per cron tick; the next tick continues
+  while (Date.now() - startedAt < 40_000) {
+    const result = await processSendWave(env, stale, audience, 400);
+    if ('error' in result) { console.error('Cron send error:', result.error); break; }
+    console.log(`Cron wave: sent=${result.sent} remaining=${result.remaining} totalSent=${result.totalSent}`);
+    if (result.done) break;
+    if (result.sent === 0 && result.failed > 0) break; // stalled — retry next tick
+  }
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled: (_event: any, env: any, ctx: any) => {
+    ctx.waitUntil(runScheduled(env));
+  },
+};

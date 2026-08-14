@@ -47,3 +47,8 @@ API_URL = "https://uht.chad-157.workers.dev"
 routes = [
   { pattern = "api.ultimatetournaments.com", custom_domain = true }
 ]
+
+# Background campaign sending — picks up 'sending' campaigns that have gone
+# quiet (admin closed the sending screen) and finishes them server-side
+[triggers]
+crons = ["* * * * *"]
