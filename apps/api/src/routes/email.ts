@@ -271,6 +271,9 @@ emailRoutes.post('/test-send', authMiddleware, requireRole('admin', 'director'),
 const sendCampaignSchema = z.object({
   campaignId: z.string(),
   audience: audienceFilterSchema,
+  // Recipients processed per call — the admin UI keeps calling until done
+  // (keeps each Worker request well under subrequest limits)
+  batchLimit: z.number().min(1).max(500).optional(),
 });
 
 emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json', sendCampaignSchema), async (c) => {
@@ -317,64 +320,102 @@ emailRoutes.post('/send', authMiddleware, requireRole('admin'), zValidator('json
   await db.prepare(`UPDATE email_campaigns SET status = 'sending', audience_filter = ?, updated_at = datetime('now') WHERE id = ?`)
     .bind(JSON.stringify(data.audience), data.campaignId).run();
 
+  // Resolve all recipients to contact ids in BULK (chunked lookups; missing
+  // contacts created via db.batch) — one query per ~90 instead of per recipient
+  const emailToContact = new Map<string, string>();
+  const emails = uniqueRecipients.map(r => r.email.toLowerCase());
+  for (let i = 0; i < emails.length; i += 90) {
+    const chunk = emails.slice(i, i + 90);
+    const ph = chunk.map(() => '?').join(',');
+    const rows = await db.prepare(`SELECT id, LOWER(email) as em FROM contacts WHERE LOWER(email) IN (${ph})`).bind(...chunk).all<any>();
+    for (const row of (rows.results || [])) emailToContact.set(row.em, row.id);
+  }
+  const missing = uniqueRecipients.filter(r => !emailToContact.has(r.email.toLowerCase()));
+  for (let i = 0; i < missing.length; i += 40) {
+    const chunk = missing.slice(i, i + 40);
+    const stmts = chunk.map(r => {
+      const id = crypto.randomUUID().replace(/-/g, '');
+      emailToContact.set(r.email.toLowerCase(), id);
+      const nameParts = (r.name || '').split(' ');
+      return db.prepare(`INSERT INTO contacts (id, email, first_name, last_name, source) VALUES (?, ?, ?, ?, 'registration')`)
+        .bind(id, r.email.toLowerCase(), nameParts[0] || null, nameParts.slice(1).join(' ') || null);
+    });
+    await db.batch(stmts);
+  }
+
+  // Resume-safe: contacts already recorded for this campaign are skipped
+  const sentAlready = new Set<string>();
+  const sentRows = await db.prepare('SELECT contact_id FROM email_sends WHERE campaign_id = ?').bind(data.campaignId).all<any>();
+  for (const r of (sentRows.results || [])) sentAlready.add(r.contact_id);
+
+  const pending = uniqueRecipients.filter(r => !sentAlready.has(emailToContact.get(r.email.toLowerCase()) as string));
+  const slice = pending.slice(0, data.batchLimit || 400);
+
+  const fromEmail = campaign.from_email || 'info@ultimatetournaments.com';
+  const fromName = campaign.from_name || 'Ultimate Hockey Tournaments';
+
   let sent = 0;
   let failed = 0;
-
-  for (const recipient of uniqueRecipients) {
-    // Ensure contact exists in contacts table for tracking
-    let contactId = await ensureContact(db, recipient);
-
-    // Check if already sent to this contact for this campaign
-    const existing = await db.prepare(
-      'SELECT id FROM email_sends WHERE campaign_id = ? AND contact_id = ?'
-    ).bind(data.campaignId, contactId).first();
-    if (existing) continue;
-
+  // Resend batch endpoint: up to 100 emails per API call, paced under the
+  // ~2 requests/second rate limit
+  for (let i = 0; i < slice.length; i += 100) {
+    const chunk = slice.slice(i, i + 100);
+    let ok = false;
+    let ids: any[] = [];
     try {
-      const fromEmail = campaign.from_email || 'info@ultimatetournaments.com';
-      const fromName = campaign.from_name || 'Ultimate Hockey Tournaments';
-
-      const response = await fetch('https://api.resend.com/emails', {
+      const resp = await fetch('https://api.resend.com/emails/batch', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.RESEND_API}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk.map(r => ({
           from: `${fromName} <${fromEmail}>`,
-          to: [recipient.email],
+          to: [r.email],
           subject: campaign.subject,
           html: campaign.body_html,
           ...(campaign.body_text ? { text: campaign.body_text } : {}),
-        }),
+        }))),
       });
-
-      const resendData = response.ok ? await response.json() as any : null;
-      const messageId = resendData?.id || null;
-
-      await db.prepare(`
-        INSERT INTO email_sends (id, campaign_id, contact_id, sendgrid_message_id, status)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(
-        crypto.randomUUID().replace(/-/g, ''), data.campaignId, contactId,
-        messageId, response.ok ? 'sent' : 'dropped'
-      ).run();
-
-      if (response.ok) sent++;
-      else failed++;
+      if (resp.ok) {
+        const j = await resp.json() as any;
+        ids = j?.data || [];
+        ok = true;
+      } else {
+        console.error('Resend batch error:', resp.status, await resp.text().catch(() => ''));
+      }
     } catch (err) {
-      console.error('Resend error:', err);
-      failed++;
+      console.error('Resend batch error:', err);
     }
+
+    if (ok) {
+      // Record sends so a re-run never emails the same contact twice
+      const stmts = chunk.map((r, idx) => db.prepare(
+        `INSERT INTO email_sends (id, campaign_id, contact_id, sendgrid_message_id, status) VALUES (?, ?, ?, ?, 'sent')`
+      ).bind(
+        crypto.randomUUID().replace(/-/g, ''), data.campaignId,
+        emailToContact.get(r.email.toLowerCase()), ids[idx]?.id || null
+      ));
+      await db.batch(stmts);
+      sent += chunk.length;
+    } else {
+      // No rows recorded — the next call retries these recipients
+      failed += chunk.length;
+    }
+
+    if (i + 100 < slice.length) await new Promise(res => setTimeout(res, 650));
   }
 
-  // Update campaign stats
-  await db.prepare(`
-    UPDATE email_campaigns SET status = 'sent', sent_at = datetime('now'), total_sent = ?, updated_at = datetime('now')
-    WHERE id = ?
-  `).bind(sent, data.campaignId).run();
+  const remaining = pending.length - slice.length + (failed > 0 ? failed : 0);
+  const totalSentRow = await db.prepare(
+    "SELECT COUNT(*) as n FROM email_sends WHERE campaign_id = ? AND status != 'dropped'"
+  ).bind(data.campaignId).first<any>();
+  const totalSent = totalSentRow?.n || 0;
+  const done = remaining <= 0;
 
-  return c.json({ success: true, data: { sent, failed, total: uniqueRecipients.length } });
+  await db.prepare(`
+    UPDATE email_campaigns SET status = ?, ${done ? "sent_at = datetime('now')," : ''} total_sent = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).bind(done ? 'sent' : 'sending', totalSent, data.campaignId).run();
+
+  return c.json({ success: true, data: { sent, failed, remaining, done, total: uniqueRecipients.length, totalSent } });
 });
 
 // ==================

@@ -263,6 +263,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   const [campaignName, setCampaignName] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
+  const [sendProgress, setSendProgress] = useState<{ sentSoFar: number; total: number } | null>(null);
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
@@ -499,18 +500,41 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
       const createData = await createRes.json() as any;
       if (!createData.success) throw new Error('Failed to create campaign');
 
-      // 2. Send it
-      const sendRes = await authFetch(`${API_BASE}/email/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId: createData.data.id, audience: filter }),
-      });
-      const sendData = await sendRes.json() as any;
-      if (sendData.success) {
-        setSendResult(sendData.data);
-      } else {
-        alert(sendData.error || 'Send failed');
+      // 2. Send in waves — each call processes up to 400 recipients and
+      // reports progress; already-sent contacts are never re-emailed
+      let totals = { sent: 0, failed: 0, remaining: 0, total: 0, totalSent: 0 };
+      let consecutiveFailures = 0;
+      for (let round = 0; round < 200; round++) {
+        const sendRes = await authFetch(`${API_BASE}/email/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaignId: createData.data.id, audience: filter, batchLimit: 400 }),
+        });
+        const sendData = await sendRes.json() as any;
+        if (!sendData.success) {
+          alert(sendData.error || 'Send failed');
+          break;
+        }
+        totals = { ...sendData.data };
+        setSendProgress({ sentSoFar: sendData.data.totalSent, total: sendData.data.total });
+        if (sendData.data.done) {
+          setSendResult(sendData.data);
+          break;
+        }
+        // If a whole round sends nothing, back off; stop after 3 dead rounds
+        if (sendData.data.sent === 0 && sendData.data.failed > 0) {
+          consecutiveFailures++;
+          if (consecutiveFailures >= 3) {
+            alert(`Sending stalled with ${sendData.data.remaining} recipients left — check the campaign page and click Send again to resume. Nobody gets duplicate emails.`);
+            setSendResult(sendData.data);
+            break;
+          }
+          await new Promise(r => setTimeout(r, 5000));
+        } else {
+          consecutiveFailures = 0;
+        }
       }
+      setSendProgress(null);
     } catch (e: any) {
       alert(e.message || 'Something went wrong');
     }
@@ -1156,7 +1180,8 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
               <button onClick={handleSend} disabled={sending || generatingTemplate || (!subject && templateType !== 'custom') || (templateType === 'custom' && !customMessage)}
                 className="px-8 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
                 {sending ? (
-                  <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> Sending...</>
+                  <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                    {sendProgress ? `Sending… ${sendProgress.sentSoFar.toLocaleString()} of ${sendProgress.total.toLocaleString()}` : 'Sending...'}</>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
