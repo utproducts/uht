@@ -201,7 +201,7 @@ emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'),
 
   // Sending a Super Saver campaign activates the auto-credit promo window.
   // Only one promo is active at a time — a new send supersedes the previous one.
-  if (data.templateType === 'super_saver' && data.eventIds && data.eventIds.length > 0) {
+  if (data.templateType === 'super_saver') {
     try {
       const promoDays = data.promoDays || 7;
       // Explicit deadline date wins over the day count; window closes end of that day
@@ -211,7 +211,7 @@ emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'),
       await db.prepare(`
         INSERT INTO super_saver_promos (name, discount_cents, starts_at, ends_at, event_ids, is_active, min_event_start)
         VALUES (?, 40000, datetime('now'), COALESCE(?, datetime('now', '+' || ? || ' days')), ?, 1, ?)
-      `).bind(data.name, endsAt, promoDays, JSON.stringify(data.eventIds), data.minEventStart || null).run();
+      `).bind(data.name, endsAt, promoDays, JSON.stringify(data.eventIds || []), data.minEventStart || null).run();
     } catch (err: any) {
       console.error('Super Saver promo activation failed:', err?.message || String(err));
     }
@@ -577,15 +577,25 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
       break;
     }
     case 'super_saver': {
-      if (!data.eventIds || data.eventIds.length === 0) {
-        return c.json({ success: false, error: 'eventIds required for the Super Saver template' }, 400);
+      // No picked events = feature every upcoming public event before the
+      // credit cutoff (i.e. the rest of this year's events)
+      let ssEvents;
+      if (data.eventIds && data.eventIds.length > 0) {
+        const placeholders = data.eventIds.map(() => '?').join(',');
+        ssEvents = await db.prepare(`
+          SELECT id, name, slug, city, state, start_date, end_date, logo_url
+          FROM events WHERE id IN (${placeholders})
+          ORDER BY start_date ASC
+        `).bind(...data.eventIds).all<any>();
+      } else {
+        ssEvents = await db.prepare(`
+          SELECT id, name, slug, city, state, start_date, end_date, logo_url
+          FROM events
+          WHERE status IN ('published', 'registration_open', 'active')
+            AND start_date >= date('now') AND start_date < ?
+          ORDER BY start_date ASC
+        `).bind(data.minEventStart || '9999-12-31').all<any>();
       }
-      const placeholders = data.eventIds.map(() => '?').join(',');
-      const ssEvents = await db.prepare(`
-        SELECT id, name, slug, city, state, start_date, end_date, logo_url
-        FROM events WHERE id IN (${placeholders})
-        ORDER BY start_date ASC
-      `).bind(...data.eventIds).all<any>();
 
       const promoDays = data.promoDays || 7;
       const discount = data.discountAmount || 400;
@@ -1452,7 +1462,7 @@ function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: n
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">1</div></td>
-        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for any <b>Super Saver event</b> below by <b>${deadlineStr}</b></td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for <b>any UHT event</b> below by <b>${deadlineStr}</b></td>
       </tr>
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">2</div></td>

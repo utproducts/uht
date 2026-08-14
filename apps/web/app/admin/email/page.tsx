@@ -544,7 +544,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
     return msg; // The API will wrap it
   }
 
-  const canProceedStep1 = !!templateType && (templateType !== 'super_saver' || superSaverEventIds.length > 0);
+  const canProceedStep1 = !!templateType;
   const needsEvent = templateType === 'market_specific_event' || templateType === 'find_team';
   const canProceedStep2 = audienceScope === 'everyone' ||
     audienceScope === 'all_coaches' ||
@@ -631,7 +631,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                   { value: 'market_all_events', icon: '📅', label: 'Market All Events', desc: 'Promote all upcoming tournaments to your contact list' },
                   { value: 'market_specific_event', icon: '🏒', label: 'Market a Specific Event', desc: 'Send details about one tournament' },
                   { value: 'find_team', icon: '🔍', label: 'Find a Team for an Event', desc: 'Let teams know about open spots in divisions' },
-                  { value: 'super_saver', icon: '💰', label: 'Super Saver Promo', desc: '$400 off their 2nd event — pick the featured events, valid for a set number of days' },
+                  { value: 'super_saver', icon: '💰', label: 'Super Saver Promo', desc: '$400 off their 2nd event — register any event by the deadline, credit applies to next year' },
                   { value: 'custom', icon: '✏️', label: 'Custom Email', desc: 'Write your own message from scratch' },
                 ].map(opt => (
                   <button key={opt.value} onClick={() => setTemplateType(opt.value)}
@@ -655,7 +655,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
               {templateType === 'super_saver' && (
                 <div className="mt-6">
                   <label className="block text-sm font-semibold text-[#3d3d3d] mb-2">
-                    Which events are in the Super Saver? <span className="font-normal text-[#86868b]">({superSaverEventIds.length} selected)</span>
+                    Feature specific events? <span className="font-normal text-[#86868b]">(optional — leave empty to feature ALL upcoming events before the credit date; any event qualifies either way{superSaverEventIds.length > 0 ? ` · ${superSaverEventIds.length} selected` : ''})</span>
                   </label>
                   <div className="max-h-56 overflow-y-auto rounded-xl border border-[#e8e8ed] divide-y divide-[#f0f0f2]">
                     {events.map(ev => {

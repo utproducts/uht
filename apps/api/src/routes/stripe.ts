@@ -122,9 +122,9 @@ async function computeSuperSaverCredit(
       (r.hotel_choice_1 && String(r.hotel_choice_1).trim() !== '' && String(r.hotel_choice_1).trim().toLowerCase() !== 'hotels coming soon');
 
     for (const promo of promos.results as any[]) {
+      // Featured events are optional — an empty list means ANY event qualifies
       let featuredIds: string[] = [];
       try { featuredIds = JSON.parse(promo.event_ids || '[]'); } catch {}
-      if (!featuredIds.length) continue;
 
       // The registration being paid must have been created during the window
       const inWindow = (createdAt: string) => createdAt >= promo.starts_at && createdAt <= promo.ends_at;
@@ -165,7 +165,13 @@ async function computeSuperSaverCredit(
       const distinctEvents = new Set(teamRegs.map(r => r.event_id));
       if (distinctEvents.size < 2) continue;
 
-      const qualifying = teamRegs.find(r => featuredIds.includes(r.event_id) && hotelOk(r));
+      // Qualifying = a DIFFERENT registration than the one being credited,
+      // made in the window, with hotel (featured-list check only if one is set)
+      const qualifying = teamRegs.find(r =>
+        !payingRegIds.includes(r.id) &&
+        (featuredIds.length === 0 || featuredIds.includes(r.event_id)) &&
+        hotelOk(r)
+      );
       if (!qualifying) continue;
 
       // When the promo restricts WHICH event gets the credit (e.g. register in
