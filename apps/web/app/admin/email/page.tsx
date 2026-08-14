@@ -1218,6 +1218,19 @@ function CampaignDetailView({ campaignId, onBack }: { campaignId: string; onBack
 
   useEffect(() => { loadCampaign(); }, [loadCampaign]);
 
+  // Live refresh: stats-only poll (fast while sending, slower after so
+  // opens/clicks tick up without hammering the API)
+  useEffect(() => {
+    const iv = setInterval(async () => {
+      try {
+        const r = await authFetch(`${API_BASE}/email/campaigns/${campaignId}?light=1`);
+        const d = await r.json() as any;
+        if (d.success) setCampaign(prev => prev ? { ...prev, ...d.data, recipients: prev.recipients } : prev);
+      } catch {}
+    }, campaign?.status === 'sending' ? 4000 : 15000);
+    return () => clearInterval(iv);
+  }, [campaignId, campaign?.status]);
+
   const handleResendNonOpeners = async () => {
     if (!confirm('Resend this campaign to everyone who hasn\'t opened it yet?')) return;
     setResending(true);
@@ -1305,7 +1318,12 @@ function CampaignDetailView({ campaignId, onBack }: { campaignId: string; onBack
       {/* Recipients table */}
       <div className="bg-white rounded-xl border border-[#e8e8ed] overflow-hidden">
         <div className="px-5 py-4 border-b border-[#e8e8ed] flex items-center justify-between">
-          <h3 className="font-semibold text-[#1d1d1f]">Recipients ({campaign.recipients.length})</h3>
+          <h3 className="font-semibold text-[#1d1d1f]">
+            Recipients ({((campaign as any).recipients_total || campaign.recipients.length).toLocaleString()})
+            {(campaign as any).recipients_truncated && (
+              <span className="ml-2 text-xs font-normal text-[#86868b]">showing latest 1,000</span>
+            )}
+          </h3>
           <div className="flex gap-1.5">
             {['all', 'opened', 'clicked', 'delivered', 'sent', 'bounced'].map(f => (
               <button key={f} onClick={() => setRecipientFilter(f)}
@@ -1375,6 +1393,22 @@ export default function EmailPage() {
 
   useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
+  // Live refresh: every 5s while a campaign is actively sending, every 30s
+  // otherwise (opens/clicks keep ticking up as the webhook reports them)
+  useEffect(() => {
+    const anySending = campaigns.some(c => c.status === 'sending');
+    const iv = setInterval(async () => {
+      try {
+        let url = `${API_BASE}/email/campaigns`;
+        if (filterStatus) url += `?status=${filterStatus}`;
+        const r = await authFetch(url);
+        const d = await r.json() as any;
+        if (d.success) setCampaigns(d.data);
+      } catch {}
+    }, anySending ? 5000 : 30000);
+    return () => clearInterval(iv);
+  }, [campaigns, filterStatus]);
+
   // If viewing a campaign detail
   if (selectedCampaignId) {
     return (
@@ -1395,8 +1429,16 @@ export default function EmailPage() {
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#1d1d1f]">Email Campaigns</h1>
-          <p className="text-sm text-[#86868b] mt-1">Create, send, and track email campaigns</p>
+          <h1 className="text-2xl font-bold text-[#1d1d1f] flex items-center gap-3">
+            Email Campaigns
+            {campaigns.some(c => c.status === 'sending') && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2.5 py-1">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                LIVE — sending in progress
+              </span>
+            )}
+          </h1>
+          <p className="text-sm text-[#86868b] mt-1">Create, send, and track email campaigns — stats refresh automatically</p>
         </div>
         <div className="flex items-center gap-3">
           <a href="/admin/email/automated"

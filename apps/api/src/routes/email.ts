@@ -93,20 +93,33 @@ emailRoutes.get('/campaigns/:id', authMiddleware, requireRole('admin', 'director
   `).bind(id).first<any>();
   if (!campaign) return c.json({ success: false, error: 'Campaign not found' }, 404);
 
-  // Get per-recipient send data
+  // ?light=1 → stats only (used by the live-refresh poll; skips the heavy
+  // recipient list so big campaigns can refresh every few seconds)
+  if (c.req.query('light') === '1') {
+    const counts = await db.prepare(
+      "SELECT COUNT(*) as total, SUM(CASE WHEN status != 'dropped' THEN 1 ELSE 0 END) as sent_ok FROM email_sends WHERE campaign_id = ?"
+    ).bind(id).first<any>();
+    return c.json({ success: true, data: { ...campaign, send_rows: counts?.total || 0, send_rows_ok: counts?.sent_ok || 0 } });
+  }
+
+  // Per-recipient send data — capped so huge campaigns stay loadable
   const sends = await db.prepare(`
     SELECT es.*, c.email, c.first_name, c.last_name
     FROM email_sends es
     LEFT JOIN contacts c ON c.id = es.contact_id
     WHERE es.campaign_id = ?
     ORDER BY es.created_at DESC
+    LIMIT 1000
   `).bind(id).all();
+  const countRow = await db.prepare('SELECT COUNT(*) as n FROM email_sends WHERE campaign_id = ?').bind(id).first<any>();
 
   return c.json({
     success: true,
     data: {
       ...campaign,
       recipients: sends.results || [],
+      recipients_total: countRow?.n || 0,
+      recipients_truncated: (countRow?.n || 0) > 1000,
     },
   });
 });
