@@ -169,6 +169,37 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
   const [usaHockeyUrl, setUsaHockeyUrl] = useState(((reg as any).usa_hockey_roster_url || '') as string);
   const [mhrUrl, setMhrUrl] = useState(((reg as any).mhr_url || '') as string);
 
+  // Reward code earned by this registration (UHT-XXXXXX — next-event discount)
+  const [rewardCode, setRewardCode] = useState<any | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState('');
+  useEffect(() => {
+    authFetch(`${API_BASE}/events/discount-codes/${reg.id}`)
+      .then(r => r.json())
+      .then((json: any) => {
+        const codes = json.success ? (json.data || []) : [];
+        setRewardCode(codes[0] || null);
+      })
+      .catch(() => {});
+  }, [reg.id]);
+  const resendCode = async () => {
+    setResending(true);
+    setResendMsg('');
+    try {
+      const res = await authFetch(`${API_BASE}/events/admin/registration/${reg.id}/resend-discount-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json() as any;
+      setResendMsg(json.success ? (json.message || 'Sent!') : (json.error || 'Failed to send'));
+    } catch {
+      setResendMsg('Failed to send');
+    }
+    setResending(false);
+  };
+
   // Manual payments (Venmo / check / … — recorded by admins)
   const [manualPayments, setManualPayments] = useState<any[]>([]);
   const [paySummary, setPaySummary] = useState<any | null>(null);
@@ -442,6 +473,39 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
               </p>
             </div>
           </div>
+
+          {/* ── Reward Code (earned by this registration, for their next event) ── */}
+          {rewardCode && (
+            <div>
+              <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-widest mb-2">Reward Code (for their next event)</label>
+              <div className="bg-[#f0f7ff] border border-[#003e79]/10 rounded-xl p-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <button
+                    onClick={() => {
+                      try { navigator.clipboard.writeText(rewardCode.code); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 1500); } catch {}
+                    }}
+                    title="Click to copy"
+                    className="font-mono text-lg font-bold text-[#003e79] tracking-widest hover:underline">
+                    {codeCopied ? '✓ Copied!' : rewardCode.code}
+                  </button>
+                  {rewardCode.is_used ? (
+                    <span className="text-[11px] font-semibold text-[#86868b] bg-[#e8e8ed] rounded-full px-2.5 py-1">
+                      Redeemed{rewardCode.used_at ? ` ${new Date(rewardCode.used_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                    </span>
+                  ) : (
+                    <button onClick={resendCode} disabled={resending}
+                      className="px-3 py-1.5 rounded-lg bg-[#003e79] text-white text-xs font-semibold hover:bg-[#002d5a] transition disabled:opacity-50">
+                      {resending ? 'Sending…' : '✉ Email code to team'}
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-[#6e6e73] mt-2">
+                  ${Math.round((rewardCode.discount_local_cents || 10000) / 100)} off local · ${Math.round((rewardCode.discount_hotel_cents || 20000) / 100)} off with partner hotel — one-time use on a different event.
+                </p>
+                {resendMsg && <p className="text-[11px] font-medium text-[#003e79] mt-1">{resendMsg}</p>}
+              </div>
+            </div>
+          )}
 
           {/* ── Registration Status ── */}
           <div>

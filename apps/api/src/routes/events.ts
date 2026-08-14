@@ -1505,6 +1505,69 @@ async function computeAndApplyPaymentStatus(db: D1Database, regId: string) {
   };
 }
 
+// ── Resend a registration's earned reward code (UHT-XXXXXX) by email.
+// Teams lose these constantly; admins re-send from the registration editor.
+eventRoutes.post('/admin/registration/:regId/resend-discount-code', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const regId = c.req.param('regId');
+  const db = c.env.DB;
+  let overrideEmail: string | null = null;
+  try {
+    const body = await c.req.json<{ email?: string }>();
+    if (body?.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email)) overrideEmail = body.email.trim();
+  } catch {}
+
+  const dc = await db.prepare(
+    'SELECT code, team_name, email, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE registration_id = ?'
+  ).bind(regId).first<any>();
+  if (!dc) return c.json({ success: false, error: 'No reward code exists for this registration' }, 404);
+  if (dc.is_used) return c.json({ success: false, error: 'This code has already been redeemed — nothing to resend' }, 400);
+
+  const to = overrideEmail || dc.email;
+  if (!to) return c.json({ success: false, error: 'No email on file — pass one in the request' }, 400);
+
+  const local = Math.round((dc.discount_local_cents || 10000) / 100);
+  const hotel = Math.round((dc.discount_hotel_cents || 20000) / 100);
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+        to: [to],
+        subject: `Your UHT discount code for ${dc.team_name}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 30px;">
+            <div style="background: linear-gradient(135deg, #003e79, #005599); padding: 25px 30px; border-radius: 16px 16px 0 0; text-align: center;">
+              <h1 style="color: white; font-size: 22px; margin: 0;">Ultimate Hockey Tournaments</h1>
+            </div>
+            <div style="background: white; padding: 30px; border: 1px solid #e8e8ed; border-top: none; border-radius: 0 0 16px 16px;">
+              <p style="color: #6e6e73; font-size: 15px; line-height: 1.6;">
+                Here's your discount code for <strong>${dc.team_name}</strong> — good for your next UHT event registration:
+              </p>
+              <div style="background: #f5f5f7; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+                <p style="color: #003e79; font-size: 30px; font-weight: bold; font-family: monospace; letter-spacing: 3px; margin: 0;">${dc.code}</p>
+              </div>
+              <p style="color: #1d1d1f; font-size: 14px; line-height: 1.7;">
+                💵 <strong>$${local} off</strong> for local teams<br/>
+                🏨 <strong>$${hotel} off</strong> when your team stays at a partner hotel<br/><br/>
+                Enter the code in the discount box when you register (or pay) for your next tournament.
+                It's one-time use and applies to a different event than the one it was earned from.
+              </p>
+            </div>
+          </div>`,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error('Resend discount-code email failed:', res.status, errText);
+      return c.json({ success: false, error: 'Email service rejected the send — try again' }, 502);
+    }
+  } catch (err: any) {
+    return c.json({ success: false, error: 'Failed to send the email — try again' }, 502);
+  }
+  return c.json({ success: true, message: `Code ${dc.code} sent to ${to}` });
+});
+
 // ── MHR ratings refresh: pull each linked team's current MyHockeyRankings
 // rating. MHR sits behind a bot challenge, so pages are fetched through the
 // r.jina.ai reader proxy; failures leave the stored rating untouched.
