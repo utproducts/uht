@@ -90,7 +90,7 @@ async function computeSuperSaverCredit(
   try {
     // Active + recently-ended promos (registrations must fall inside the window)
     const promos = await db.prepare(
-      "SELECT id, discount_cents, starts_at, ends_at, event_ids FROM super_saver_promos WHERE is_active = 1"
+      "SELECT id, discount_cents, starts_at, ends_at, event_ids, min_event_start FROM super_saver_promos WHERE is_active = 1"
     ).all<any>();
     if (!promos.results?.length) return null;
 
@@ -167,6 +167,19 @@ async function computeSuperSaverCredit(
 
       const qualifying = teamRegs.find(r => featuredIds.includes(r.event_id) && hotelOk(r));
       if (!qualifying) continue;
+
+      // When the promo restricts WHICH event gets the credit (e.g. register in
+      // 2026, credit applies to events starting Jan 1 2027+), the payment being
+      // discounted must include an event on/after that start date.
+      if (promo.min_event_start) {
+        let eligible = false;
+        for (const r of payingRegs) {
+          const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?')
+            .bind(r.event_id).first<{ start_date: string }>();
+          if (ev?.start_date && ev.start_date >= promo.min_event_start) { eligible = true; break; }
+        }
+        if (!eligible) continue;
+      }
 
       const credit = Math.min(promo.discount_cents || 40000, totalCents);
       if (credit <= 0) continue;

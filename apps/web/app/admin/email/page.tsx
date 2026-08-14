@@ -233,6 +233,9 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   // Super Saver: featured events + promo window
   const [superSaverEventIds, setSuperSaverEventIds] = useState<string[]>([]);
   const [promoDays, setPromoDays] = useState(7);
+  // Registration deadline + earliest event the credit applies to
+  const [promoEndDate, setPromoEndDate] = useState('2026-12-31');
+  const [minEventStart, setMinEventStart] = useState('2027-01-01');
 
   // Step 2: Audience
   const [audienceScope, setAudienceScope] = useState('everyone');
@@ -339,6 +342,8 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
       if (templateType === 'super_saver') {
         body.eventIds = superSaverEventIds;
         body.promoDays = promoDays;
+        if (promoEndDate) body.promoEndDate = promoEndDate;
+        if (minEventStart) body.minEventStart = minEventStart;
       }
       const r = await authFetch(`${API_BASE}/email/templates/generate`, {
         method: 'POST',
@@ -378,7 +383,7 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
       }
     } catch (e) { console.error(e); }
     setGeneratingTemplate(false);
-  }, [templateType, selectedEventId, divisions, superSaverEventIds, promoDays]);
+  }, [templateType, selectedEventId, divisions, superSaverEventIds, promoDays, promoEndDate, minEventStart]);
 
   // Preview audience
   const loadPreview = useCallback(async () => {
@@ -485,6 +490,8 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
           // Super Saver: activates the auto-credit promo window on send
           eventIds: templateType === 'super_saver' ? superSaverEventIds : undefined,
           promoDays: templateType === 'super_saver' ? promoDays : undefined,
+          promoEndDate: templateType === 'super_saver' && promoEndDate ? promoEndDate : undefined,
+          minEventStart: templateType === 'super_saver' && minEventStart ? minEventStart : undefined,
         }),
       });
       const createData = await createRes.json() as any;
@@ -664,12 +671,21 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                       );
                     })}
                   </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    <label className="text-sm font-semibold text-[#3d3d3d]">Offer valid for</label>
-                    <input type="number" min={1} max={60} value={promoDays}
-                      onChange={e => setPromoDays(Math.max(1, Math.min(60, parseInt(e.target.value) || 7)))}
-                      className="w-20 px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm text-center focus:ring-2 focus:ring-[#003e79] outline-none" />
-                    <span className="text-sm text-[#6e6e73]">days (the deadline date is written into the email)</span>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-[#3d3d3d] mb-1">Register by (deadline)</label>
+                      <input type="date" value={promoEndDate}
+                        onChange={e => setPromoEndDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm focus:ring-2 focus:ring-[#003e79] outline-none" />
+                      <p className="text-xs text-[#86868b] mt-1">Registrations must happen on or before this date</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-[#3d3d3d] mb-1">Credit valid for events starting on/after</label>
+                      <input type="date" value={minEventStart}
+                        onChange={e => setMinEventStart(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm focus:ring-2 focus:ring-[#003e79] outline-none" />
+                      <p className="text-xs text-[#86868b] mt-1">The $400 comes off a registration for an event starting on/after this date</p>
+                    </div>
                   </div>
                 </div>
               )}

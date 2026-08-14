@@ -180,6 +180,10 @@ const createCampaignSchema = z.object({
   // Super Saver: featured events + promo window (activates the auto-credit)
   eventIds: z.array(z.string()).optional(),
   promoDays: z.number().min(1).max(60).optional(),
+  // Registration deadline (YYYY-MM-DD, end of day) — overrides promoDays
+  promoEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // The credit only applies to events STARTING on/after this date (YYYY-MM-DD)
+  minEventStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'), zValidator('json', createCampaignSchema), async (c) => {
@@ -200,11 +204,14 @@ emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'),
   if (data.templateType === 'super_saver' && data.eventIds && data.eventIds.length > 0) {
     try {
       const promoDays = data.promoDays || 7;
+      // Explicit deadline date wins over the day count; window closes end of that day
+      const endsAt = data.promoEndDate ? `${data.promoEndDate} 23:59:59` : null;
+      try { await db.prepare('ALTER TABLE super_saver_promos ADD COLUMN min_event_start TEXT').run(); } catch { /* exists */ }
       await db.prepare('UPDATE super_saver_promos SET is_active = 0 WHERE is_active = 1').run();
       await db.prepare(`
-        INSERT INTO super_saver_promos (name, discount_cents, starts_at, ends_at, event_ids, is_active)
-        VALUES (?, 40000, datetime('now'), datetime('now', '+' || ? || ' days'), ?, 1)
-      `).bind(data.name, promoDays, JSON.stringify(data.eventIds)).run();
+        INSERT INTO super_saver_promos (name, discount_cents, starts_at, ends_at, event_ids, is_active, min_event_start)
+        VALUES (?, 40000, datetime('now'), COALESCE(?, datetime('now', '+' || ? || ' days')), ?, 1, ?)
+      `).bind(data.name, endsAt, promoDays, JSON.stringify(data.eventIds), data.minEventStart || null).run();
     } catch (err: any) {
       console.error('Super Saver promo activation failed:', err?.message || String(err));
     }
@@ -479,6 +486,8 @@ const templateSchema = z.object({
   eventId: z.string().optional(),
   eventIds: z.array(z.string()).optional(),
   promoDays: z.number().min(1).max(60).optional(),
+  promoEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  minEventStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   discountAmount: z.number().min(1).optional(),
   customMessage: z.string().optional(),
 });
@@ -580,11 +589,16 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
 
       const promoDays = data.promoDays || 7;
       const discount = data.discountAmount || 400;
-      const deadline = new Date(Date.now() + promoDays * 24 * 60 * 60 * 1000);
-      const deadlineStr = deadline.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const deadline = data.promoEndDate
+        ? new Date(`${data.promoEndDate}T23:59:59`)
+        : new Date(Date.now() + promoDays * 24 * 60 * 60 * 1000);
+      const deadlineStr = deadline.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      const minEventStartStr = data.minEventStart
+        ? new Date(`${data.minEventStart}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+        : null;
 
-      subject = `\u{1F6A8} Super Saver: $${discount} Off Your 2nd Tournament — ${promoDays} Days Only`;
-      html = generateSuperSaverEmail(ssEvents.results || [], deadlineStr, discount, promoDays);
+      subject = `\u{1F6A8} Super Saver: $${discount} Off Your 2nd Tournament — Register by ${deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      html = generateSuperSaverEmail(ssEvents.results || [], deadlineStr, discount, promoDays, minEventStartStr);
       break;
     }
     case 'custom':
@@ -1390,7 +1404,7 @@ function generateAllEventsEmail(events: any[]): string {
   `);
 }
 
-function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: number, promoDays: number): string {
+function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: number, promoDays: number, minEventStartStr?: string | null): string {
   const fmtRange = (start: string, end: string) => {
     const s = new Date(start + 'T12:00:00');
     const e = new Date(end + 'T12:00:00');
@@ -1438,15 +1452,15 @@ function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: n
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">1</div></td>
-        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for any <b>Super Saver event</b> below within the next ${promoDays} days</td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for any <b>Super Saver event</b> below by <b>${deadlineStr}</b></td>
       </tr>
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#003e79;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">2</div></td>
-        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for a <b>2nd UHT tournament</b> — any event, any city</td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">Register for a <b>2nd UHT tournament</b>${minEventStartStr ? ` starting <b>${minEventStartStr} or later</b> — any event, any city` : ' — any event, any city'}</td>
       </tr>
       <tr>
         <td style="width:34px;vertical-align:top;padding:6px 0;"><div style="width:26px;height:26px;border-radius:13px;background-color:#00a86b;color:#ffffff;font-size:14px;font-weight:800;text-align:center;line-height:26px;">3</div></td>
-        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">A <b style="color:#00a86b;">$${discount} credit</b> is applied to that 2nd registration</td>
+        <td style="vertical-align:middle;padding:6px 0;color:#1d1d1f;font-size:14px;">A <b style="color:#00a86b;">$${discount} credit</b> is applied to that 2nd registration${minEventStartStr ? ' automatically' : ''}</td>
       </tr>
     </table>
 
@@ -1472,8 +1486,8 @@ function generateSuperSaverEmail(events: any[], deadlineStr: string, discount: n
 
     <!-- Deadline urgency -->
     <div style="border:2px solid #e34948;border-radius:14px;padding:18px 22px;text-align:center;margin-bottom:26px;">
-      <p style="margin:0 0 4px;color:#e34948;font-size:16px;font-weight:800;">⚠️ Only ${promoDays} days to claim this deal</p>
-      <p style="margin:0;color:#6e6e73;font-size:13px;">Lock in your team's spot now — offer ends <b>${deadlineStr}</b>.</p>
+      <p style="margin:0 0 4px;color:#e34948;font-size:16px;font-weight:800;">⚠️ Register by ${deadlineStr} to claim this deal</p>
+      <p style="margin:0;color:#6e6e73;font-size:13px;">Lock in your team's spot now — the offer ends <b>${deadlineStr}</b>${minEventStartStr ? `, and your $${discount} credit is good for any event starting <b>${minEventStartStr} or later</b>` : ''}.</p>
     </div>
 
     <div style="text-align:center;">
