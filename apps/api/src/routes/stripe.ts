@@ -117,9 +117,12 @@ async function computeSuperSaverCredit(
     if (!teamId && !teamName) return null;
     const teamKey = teamId || teamName.toLowerCase();
 
-    const hotelOk = (r: any) =>
-      r.needs_hotel === 1 ||
-      (r.hotel_choice_1 && String(r.hotel_choice_1).trim() !== '' && String(r.hotel_choice_1).trim().toLowerCase() !== 'hotels coming soon');
+    const hotelOk = (r: any) => {
+      if (r.needs_hotel === 1) return true;
+      const c1 = String(r.hotel_choice_1 || '').trim().toLowerCase();
+      // A real hotel preference — local teams don't meet the hotel requirement
+      return c1 !== '' && c1 !== 'hotels coming soon' && c1 !== 'local team';
+    };
 
     for (const promo of promos.results as any[]) {
       // Featured events are optional — an empty list means ANY event qualifies
@@ -165,27 +168,29 @@ async function computeSuperSaverCredit(
       const distinctEvents = new Set(teamRegs.map(r => r.event_id));
       if (distinctEvents.size < 2) continue;
 
-      // Qualifying = a DIFFERENT registration than the one being credited,
-      // made in the window, with hotel (featured-list check only if one is set)
+      // Which paying registration receives the credit: with min_event_start set
+      // (register now, credit applies to events starting e.g. Jan 1 2027+) it
+      // must be a paying reg for an event on/after that date.
+      let creditedReg = payingRegs[0];
+      if (promo.min_event_start) {
+        let found: any = null;
+        for (const r of payingRegs) {
+          const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?')
+            .bind(r.event_id).first<{ start_date: string }>();
+          if (ev?.start_date && ev.start_date >= promo.min_event_start) { found = r; break; }
+        }
+        if (!found) continue;
+        creditedReg = found;
+      }
+
+      // Hotel requirement: any 2 distinct events qualify as long as at least
+      // ONE of the team's window registrations is a hotel event (either event,
+      // including the one being credited; featured-list check only if set)
       const qualifying = teamRegs.find(r =>
-        !payingRegIds.includes(r.id) &&
         (featuredIds.length === 0 || featuredIds.includes(r.event_id)) &&
         hotelOk(r)
       );
       if (!qualifying) continue;
-
-      // When the promo restricts WHICH event gets the credit (e.g. register in
-      // 2026, credit applies to events starting Jan 1 2027+), the payment being
-      // discounted must include an event on/after that start date.
-      if (promo.min_event_start) {
-        let eligible = false;
-        for (const r of payingRegs) {
-          const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?')
-            .bind(r.event_id).first<{ start_date: string }>();
-          if (ev?.start_date && ev.start_date >= promo.min_event_start) { eligible = true; break; }
-        }
-        if (!eligible) continue;
-      }
 
       const credit = Math.min(promo.discount_cents || 40000, totalCents);
       if (credit <= 0) continue;

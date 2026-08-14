@@ -141,6 +141,24 @@ eventRoutes.get('/my-registered', authMiddleware, async (c) => {
 // ==================
 // PUBLIC: Get single event by slug OR id
 // ==================
+// PUBLIC: is a Super Saver promo currently running? (Drives the register-page
+// upsell banner — promos run in short windows a few times a year.)
+eventRoutes.get('/super-saver-active', async (c) => {
+  const db = c.env.DB;
+  try {
+    const promo = await db.prepare(
+      "SELECT discount_cents, ends_at, min_event_start FROM super_saver_promos WHERE is_active = 1 AND datetime('now') <= ends_at ORDER BY created_at DESC LIMIT 1"
+    ).first<any>();
+    if (!promo) return c.json({ success: true, data: { active: false } });
+    return c.json({
+      success: true,
+      data: { active: true, discount_cents: promo.discount_cents || 40000, ends_at: promo.ends_at, min_event_start: promo.min_event_start || null },
+    });
+  } catch {
+    return c.json({ success: true, data: { active: false } });
+  }
+});
+
 eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
   const slugOrId = c.req.param('slugOrId');
   const db = c.env.DB;

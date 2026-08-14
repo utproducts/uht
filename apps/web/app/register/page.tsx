@@ -115,6 +115,11 @@ export default function RegisterPage() {
   const [needsHotel, setNeedsHotel] = useState(false);
   // Optional schedule requests / notes, keyed by team id (per team in multi-team mode)
   const [teamScheduleRequests, setTeamScheduleRequests] = useState<Record<string, string>>({});
+  // Super Saver promo (short windows, a few times a year): when active, the
+  // payment step offers adding a 2nd event with the credit auto-applied
+  const [superSaver, setSuperSaver] = useState<{ discount_cents: number; ends_at: string; min_event_start: string | null } | null>(null);
+  const [ssAddEventId, setSsAddEventId] = useState('');
+  const [ssAppliedCents, setSsAppliedCents] = useState(0);
 
   // Steps: team → hotels → payment → card_form → submitting → confirmed (upsell is now post-registration on confirmed page)
   const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'card_form' | 'submitting' | 'confirmed'>('team');
@@ -555,6 +560,19 @@ export default function RegisterPage() {
     setLoadingUpsell(false);
   };
 
+  // Super Saver: check for an active promo, and preload the event list the
+  // upsell banner offers (reuses the confirmed-page upsell feed)
+  useEffect(() => {
+    fetch(`${API}/events/super-saver-active`)
+      .then(r => r.json())
+      .then((j: any) => { if (j.success && j.data?.active) setSuperSaver(j.data); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (superSaver && event && upsellEvents.length === 0) loadUpsellEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [superSaver, event]);
+
   // Validate discount code (checks event discount codes AND meeting reward codes)
   const validateDiscountCode = async () => {
     if (!discountCode.trim()) return;
@@ -641,6 +659,8 @@ export default function RegisterPage() {
           })(),
           needsHotel: needsHotel,
           scheduleRequests: (teamScheduleRequests[team.id] || '').trim() || undefined,
+          // Super Saver upsell: also register this team for the chosen 2nd event
+          ...(ssAddEventId ? { additionalEventIds: [ssAddEventId] } : {}),
         };
         const res = await fetch(`${API}/events/register`, {
           method: 'POST',
@@ -660,7 +680,9 @@ export default function RegisterPage() {
       // If paying now or deposit, create PaymentIntent and show card form
       if (paymentChoice === 'pay_now' || paymentChoice === 'pay_deposit') {
         const allRegIds = results.flatMap((r: any) => r.allRegistrationIds || [r.primaryRegistrationId]);
-        const teamNames = teamsToRegister.map(t => t.name);
+        // One name per registration id (a team registering 2 events = 2 ids)
+        const teamNames = results.flatMap((r: any, i: number) =>
+          (r.allRegistrationIds || [r.primaryRegistrationId]).map(() => teamsToRegister[i]?.name || 'Team'));
 
         try {
           const stripeRes = await fetch(`${API}/stripe/create-payment-intent`, {
@@ -692,6 +714,7 @@ export default function RegisterPage() {
             setClientSecret(stripeJson.data.clientSecret);
             setPaymentIntentId(stripeJson.data.paymentIntentId);
             setPaymentAmountCents(stripeJson.data.totalCents || 0);
+            setSsAppliedCents(stripeJson.data.superSaverCents || 0);
             setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
             setStep('card_form');
             return;
@@ -1411,6 +1434,44 @@ export default function RegisterPage() {
               </div>
             )}
 
+            {/* Super Saver upsell — only while a promo window is live */}
+            {superSaver && event && (() => {
+              const discount = Math.round((superSaver.discount_cents || 40000) / 100);
+              const eligible = upsellEvents.filter(e =>
+                e.id !== event.id && (!superSaver.min_event_start || e.start_date >= superSaver.min_event_start));
+              if (!eligible.length) return null;
+              const endsStr = new Date(superSaver.ends_at.replace(' ', 'T')).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+              const chosen = eligible.find(e => e.id === ssAddEventId);
+              return (
+                <div className="mb-6 rounded-2xl border-2 border-[#00ccff] bg-gradient-to-br from-[#f0fbff] to-white p-5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🔥</span>
+                    <p className="font-bold text-[#003e79]">Super Saver: ${discount} off a 2nd tournament</p>
+                  </div>
+                  <p className="text-sm text-[#6e6e73] mt-1 mb-3">
+                    Add a second event now and <span className="font-semibold text-[#1d1d1f]">${discount} comes off it automatically</span> when
+                    you pay in full. Offer ends <span className="font-semibold text-[#e34948]">{endsStr}</span>.
+                    <span className="text-xs text-[#86868b]"> At least one of your events must include a partner-hotel stay.</span>
+                  </p>
+                  <select value={ssAddEventId} onChange={e => setSsAddEventId(e.target.value)}
+                    className="w-full px-3 py-2.5 border-2 border-[#e8e8ed] rounded-xl text-sm text-[#1d1d1f] focus:border-[#00ccff] outline-none bg-white">
+                    <option value="">No thanks — just this event</option>
+                    {eligible.map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} — {e.city}, {e.state} · {formatDateRange(e.start_date, e.end_date)}
+                      </option>
+                    ))}
+                  </select>
+                  {chosen && (
+                    <p className="text-xs text-emerald-700 font-medium mt-2">
+                      ✓ {chosen.name} will be added to your registration{multiTeamMode && selectedTeams.length > 1 ? ' for each team' : ''} —
+                      the ${discount} Super Saver Discount applies at payment.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Schedule requests / notes — optional, one per team */}
             {(() => {
               const notesTeams = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
@@ -1674,6 +1735,11 @@ export default function RegisterPage() {
                   {paymentAmountCents > 0 ? `$${(paymentAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : formatPrice(paymentChoice === 'pay_deposit' ? depositCents : basePriceCents)}
                 </span>
               </div>
+              {ssAppliedCents > 0 && (
+                <p className="mt-2 text-sm font-semibold text-emerald-600">
+                  🔥 Super Saver Discount applied: −${(ssAppliedCents / 100).toLocaleString('en-US')}
+                </p>
+              )}
             </div>
 
             {/* Card error */}

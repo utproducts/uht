@@ -233,9 +233,11 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
   // Super Saver: featured events + promo window
   const [superSaverEventIds, setSuperSaverEventIds] = useState<string[]>([]);
   const [promoDays, setPromoDays] = useState(7);
-  // Registration deadline + earliest event the credit applies to
-  const [promoEndDate, setPromoEndDate] = useState('2026-12-31');
-  const [minEventStart, setMinEventStart] = useState('2027-01-01');
+  // Registration deadline (promos run ~7 days). minEventStart optional: leave
+  // empty = the $400 applies to any 2nd event; set a date to restrict the
+  // credit to events starting on/after it (e.g. next season only)
+  const [promoEndDate, setPromoEndDate] = useState(() => new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+  const [minEventStart, setMinEventStart] = useState('');
 
   // Step 2: Audience
   const [audienceScope, setAudienceScope] = useState('everyone');
@@ -680,11 +682,11 @@ function ComposeWizard({ onClose, onSent }: { onClose: () => void; onSent: () =>
                       <p className="text-xs text-[#86868b] mt-1">Registrations must happen on or before this date</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-[#3d3d3d] mb-1">Credit valid for events starting on/after</label>
+                      <label className="block text-sm font-semibold text-[#3d3d3d] mb-1">Credit valid for events starting on/after <span className="font-normal text-[#86868b]">(optional)</span></label>
                       <input type="date" value={minEventStart}
                         onChange={e => setMinEventStart(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm focus:ring-2 focus:ring-[#003e79] outline-none" />
-                      <p className="text-xs text-[#86868b] mt-1">The $400 comes off a registration for an event starting on/after this date</p>
+                      <p className="text-xs text-[#86868b] mt-1">Leave empty = $400 off any 2nd event. Set a date to restrict the credit (e.g. next season only)</p>
                     </div>
                   </div>
                 </div>
