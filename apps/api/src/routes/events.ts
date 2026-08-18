@@ -876,8 +876,10 @@ eventRoutes.get('/event-hotels/:eventId', async (c) => {
   // teams pick hotel preferences at registration and UHT assigns them
   // (hotel partnerships depend on bookings going through assignment).
   // Assigned teams get their booking link/code in their dashboard.
+  try { await db.prepare("ALTER TABLE event_hotels ADD COLUMN sold_out INTEGER DEFAULT 0").run(); } catch (_) { /* already exists */ }
   const result = await db.prepare(`
-    SELECT id, hotel_name, city, state, rate_description, price_per_night as rate_cents, image_url
+    SELECT id, hotel_name, city, state, rate_description, price_per_night as rate_cents, image_url,
+      COALESCE(sold_out, 0) as sold_out
     FROM event_hotels WHERE event_id = ? AND is_active = 1
     ORDER BY sort_order ASC, hotel_name ASC
   `).bind(eventId).all();
@@ -2325,6 +2327,7 @@ const updateHotelSchema = z.object({
   price_per_night: z.number().nullable().optional(),
   sort_order: z.number().optional(),
   is_active: z.number().optional(),
+  sold_out: z.number().optional(),
   image_url: z.string().nullable().optional(),
   booking_cutoff_date: z.string().nullable().optional(),
   important_notes: z.string().nullable().optional(),

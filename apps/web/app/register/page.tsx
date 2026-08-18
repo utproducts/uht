@@ -1340,35 +1340,41 @@ export default function RegisterPage() {
                         const pickedSlot = currentPicks.indexOf(hotel.hotel_name);
                         const isPicked = pickedSlot !== -1;
                         const nextEmpty = currentPicks.findIndex(p => !p);
+                        const soldOut = !!(hotel as any).sold_out;
 
                         return (
                           <button
                             key={hotel.id}
                             onClick={() => {
+                              if (soldOut) return;
                               if (isPicked) {
                                 removeHotel(pickedSlot as 0 | 1 | 2);
                               } else if (nextEmpty !== -1) {
                                 selectHotel(nextEmpty as 0 | 1 | 2, hotel.hotel_name);
                               }
                             }}
-                            disabled={!isPicked && nextEmpty === -1}
+                            disabled={soldOut || (!isPicked && nextEmpty === -1)}
                             className={`w-full text-left p-3.5 rounded-xl border transition-all ${
-                              isPicked
-                                ? 'border-[#003e79] bg-[#003e79]/5'
-                                : nextEmpty === -1
-                                  ? 'border-[#e8e8ed] bg-[#f5f5f7] opacity-50 cursor-not-allowed'
-                                  : 'border-[#e8e8ed] hover:border-[#003e79]/40 hover:bg-[#f5f5f7]'
+                              soldOut
+                                ? 'border-[#e8e8ed] bg-[#f5f5f7] opacity-60 cursor-not-allowed'
+                                : isPicked
+                                  ? 'border-[#003e79] bg-[#003e79]/5'
+                                  : nextEmpty === -1
+                                    ? 'border-[#e8e8ed] bg-[#f5f5f7] opacity-50 cursor-not-allowed'
+                                    : 'border-[#e8e8ed] hover:border-[#003e79]/40 hover:bg-[#f5f5f7]'
                             }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-[#1d1d1f] text-sm">{hotel.hotel_name}</p>
+                                <p className={`font-semibold text-sm ${soldOut ? 'text-[#86868b] line-through' : 'text-[#1d1d1f]'}`}>{hotel.hotel_name}</p>
                                 <p className="text-xs text-[#6e6e73] mt-0.5">
                                   {hotel.city}, {hotel.state}
                                   {hotel.rate_description ? ` · ${hotel.rate_description}` : ''}
                                 </p>
                               </div>
-                              {isPicked ? (
+                              {soldOut ? (
+                                <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 flex-shrink-0">SOLD OUT</span>
+                              ) : isPicked ? (
                                 <span className="w-6 h-6 rounded-full bg-[#003e79] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                                   {pickedSlot + 1}
                                 </span>

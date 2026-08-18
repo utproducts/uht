@@ -290,29 +290,34 @@ export default function UpdateHotelPage() {
                       const pickedSlot = picks.indexOf(hotel.hotel_name);
                       const isPicked = pickedSlot !== -1;
                       const nextEmpty = picks.findIndex(p => !p);
+                      const soldOut = !!(hotel as any).sold_out;
 
                       return (
                         <button
                           key={hotel.id}
-                          onClick={() => pickHotel(hotel.hotel_name)}
-                          disabled={!isPicked && nextEmpty === -1}
+                          onClick={() => { if (!soldOut) pickHotel(hotel.hotel_name); }}
+                          disabled={soldOut || (!isPicked && nextEmpty === -1)}
                           className={`w-full text-left p-4 rounded-xl border transition-all ${
-                            isPicked
-                              ? 'border-[#00ccff] bg-[#00ccff]/5'
-                              : nextEmpty === -1
-                                ? 'border-[#e8e8ed] bg-[#fafafa] opacity-50 cursor-not-allowed'
-                                : 'border-[#e8e8ed] hover:border-[#00ccff]/40 hover:bg-[#fafafa]'
+                            soldOut
+                              ? 'border-[#e8e8ed] bg-[#fafafa] opacity-60 cursor-not-allowed'
+                              : isPicked
+                                ? 'border-[#00ccff] bg-[#00ccff]/5'
+                                : nextEmpty === -1
+                                  ? 'border-[#e8e8ed] bg-[#fafafa] opacity-50 cursor-not-allowed'
+                                  : 'border-[#e8e8ed] hover:border-[#00ccff]/40 hover:bg-[#fafafa]'
                           }`}
                         >
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-semibold text-[#1d1d1f] text-sm">{hotel.hotel_name}</p>
+                              <p className={`font-semibold text-sm ${soldOut ? 'text-[#86868b] line-through' : 'text-[#1d1d1f]'}`}>{hotel.hotel_name}</p>
                               <p className="text-xs text-[#6e6e73]">
                                 {hotel.city}, {hotel.state}
                                 {hotel.rate_description ? ` · ${hotel.rate_description}` : ''}
                               </p>
                             </div>
-                            {isPicked ? (
+                            {soldOut ? (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">SOLD OUT</span>
+                            ) : isPicked ? (
                               <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                                 pickedSlot === 0 ? 'bg-[#00ccff] text-white' :
                                 pickedSlot === 1 ? 'bg-blue-400 text-white' :

@@ -67,6 +67,7 @@ interface EventHotel {
   price_per_night: number | null;
   important_notes: string | null;
   sort_order: number;
+  sold_out?: number;
   image_url: string | null;
 }
 
@@ -1978,6 +1979,17 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                               {h.phone && <span className="text-xs text-[#86868b]">{h.phone}</span>}
                             </div>
                           </div>
+                          <button
+                            onClick={() => handleUpdateHotel(h.id, { sold_out: h.sold_out ? 0 : 1 })}
+                            className={h.sold_out
+                              ? 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200 shrink-0 hover:bg-red-200 transition'
+                              : 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-[#86868b] border border-[#e8e8ed] hover:border-red-300 hover:text-red-600 shrink-0 transition'}
+                            title={h.sold_out
+                              ? "Sold out — customers can't pick this hotel at registration. Click to reopen."
+                              : 'Mark sold out — removes it from customer hotel choices'}
+                          >
+                            {h.sold_out ? 'SOLD OUT' : 'Mark Sold Out'}
+                          </button>
                           <button onClick={() => handleDeleteHotel(h.id)} className="p-1.5 hover:bg-red-50 rounded-lg transition text-red-400 hover:text-red-600 shrink-0" title="Remove from event">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>

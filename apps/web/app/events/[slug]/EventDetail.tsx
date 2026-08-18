@@ -769,6 +769,9 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
                                     <h3 className="font-semibold text-[#1d1d1f] text-sm">{hotel.hotel_name}</h3>
+                                    {!!(hotel as any).sold_out && (
+                                      <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">SOLD OUT</span>
+                                    )}
                                   </div>
                                   {(hotel.city || hotel.state) && (
                                     <p className="text-xs text-[#86868b] mt-1">{[hotel.city, hotel.state].filter(Boolean).join(', ')}</p>
