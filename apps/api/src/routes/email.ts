@@ -487,6 +487,11 @@ emailRoutes.post('/admin/enable-tracking', authMiddleware, requireRole('admin'),
       body: JSON.stringify({ tracking_subdomain: subdomain, open_tracking: true, click_tracking: true }),
     });
     const pj = await patch.json().catch(() => null) as any;
+    // Kick a verification pass so newly-added DNS records get checked now
+    await fetch(`https://api.resend.com/domains/${d.id}/verify`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}` },
+    }).catch(() => null);
     const detail = await fetch(`https://api.resend.com/domains/${d.id}`, {
       headers: { 'Authorization': `Bearer ${env.RESEND_API}` },
     });
