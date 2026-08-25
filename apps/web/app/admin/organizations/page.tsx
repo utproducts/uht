@@ -169,6 +169,16 @@ export default function OrganizationsPage() {
   const [denyingId, setDenyingId] = useState<string | null>(null);
   // Request id whose "merge into existing org" owner-choice panel is open
   const [mergeChoiceId, setMergeChoiceId] = useState<string | null>(null);
+  // Which org the open panel will merge into (defaults to the auto-match, but
+  // any club can be picked — auto-matching only catches close names)
+  const [mergeTargetId, setMergeTargetId] = useState<string>('');
+  const [mergeSearch, setMergeSearch] = useState('');
+  const openMergePanel = (req: OrgRequest) => {
+    if (mergeChoiceId === req.id) { setMergeChoiceId(null); return; }
+    setMergeChoiceId(req.id);
+    setMergeTargetId(req.matched_org?.id ? String(req.matched_org.id) : '');
+    setMergeSearch('');
+  };
 
   // Owner assignment
   const [ownerEditId, setOwnerEditId] = useState<number | null>(null);
@@ -233,12 +243,12 @@ export default function OrganizationsPage() {
     }
   };
 
-  const handleApprove = async (req: OrgRequest, options?: { mode: 'merge'; makeOwner: boolean }) => {
+  const handleApprove = async (req: OrgRequest, options?: { mode: 'merge'; makeOwner: boolean; mergeOrgId?: string | number }) => {
     setApprovingId(req.id);
     setMergeChoiceId(null);
     try {
       const body = options
-        ? { mode: 'merge', makeOwner: options.makeOwner, mergeOrgId: req.matched_org?.id }
+        ? { mode: 'merge', makeOwner: options.makeOwner, mergeOrgId: options.mergeOrgId ?? req.matched_org?.id }
         : {};
       const res = await fetch(`${API}/organizations/admin/requests/${req.id}/approve`, {
         method: 'POST',
@@ -531,20 +541,30 @@ export default function OrganizationsPage() {
                     <div className="flex items-center gap-2 ml-4">
                       {req.matched_org ? (
                         <button
-                          onClick={() => setMergeChoiceId(mergeChoiceId === req.id ? null : req.id)}
+                          onClick={() => openMergePanel(req)}
                           disabled={approvingId === req.id}
                           className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                         >
                           {approvingId === req.id ? 'Approving...' : 'Approve & Merge'}
                         </button>
                       ) : (
-                        <button
-                          onClick={() => handleApprove(req)}
-                          disabled={approvingId === req.id}
-                          className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                        >
-                          {approvingId === req.id ? 'Approving...' : 'Approve'}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleApprove(req)}
+                            disabled={approvingId === req.id}
+                            className="px-4 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                          >
+                            {approvingId === req.id ? 'Approving...' : 'Approve'}
+                          </button>
+                          <button
+                            onClick={() => openMergePanel(req)}
+                            disabled={approvingId === req.id}
+                            title="Don't create a new org — link this request to a club that already exists"
+                            className="px-4 py-1.5 bg-white text-green-700 text-xs font-semibold rounded-lg border border-green-300 hover:bg-green-50 transition-colors disabled:opacity-50"
+                          >
+                            Merge into existing…
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => handleDeny(req)}
@@ -556,36 +576,80 @@ export default function OrganizationsPage() {
                     </div>
                   </div>
 
-                  {/* Merge choice panel — decide whether the requester becomes an org owner */}
-                  {req.matched_org && mergeChoiceId === req.id && (
-                    <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                      <p className="text-xs text-[#1d1d1f] mb-2">
-                        <span className="font-semibold">{req.matched_org.name}</span> already exists — no new org will be created.
-                        Should <span className="font-semibold">{req.requested_by_name || req.requested_by_email}</span> become an owner of it,
-                        or are they just a coach/manager of a team in the org?
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleApprove(req, { mode: 'merge', makeOwner: true })}
-                          className="px-3 py-1.5 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a] transition-colors"
-                        >
-                          Merge — make them an owner
-                        </button>
-                        <button
-                          onClick={() => handleApprove(req, { mode: 'merge', makeOwner: false })}
-                          className="px-3 py-1.5 bg-white text-[#003e79] text-xs font-semibold rounded-lg border border-[#003e79]/30 hover:bg-[#f0f7ff] transition-colors"
-                        >
-                          Merge — no ownership (they&apos;ll join a team)
-                        </button>
-                        <button
-                          onClick={() => setMergeChoiceId(null)}
-                          className="px-3 py-1.5 text-xs font-medium text-[#6e6e73] hover:text-[#1d1d1f]"
-                        >
-                          Cancel
-                        </button>
+                  {/* Merge choice panel — pick the target club, then decide ownership */}
+                  {mergeChoiceId === req.id && (() => {
+                    const target = orgs.find(o => String(o.id) === mergeTargetId);
+                    const q = mergeSearch.trim().toLowerCase();
+                    const results = q.length >= 2
+                      ? orgs.filter(o => (o.is_active ?? 1) === 1 && o.name.toLowerCase().includes(q)).slice(0, 8)
+                      : [];
+                    return (
+                      <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                        <p className="text-xs font-semibold text-[#1d1d1f] mb-1.5">Merge into which club? <span className="font-normal text-[#6e6e73]">(no new org will be created)</span></p>
+                        {target ? (
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-semibold text-[#003e79] bg-white border border-[#003e79]/30 rounded-full px-3 py-1">
+                              {target.name}{target.state ? ` (${target.state})` : ''}{typeof target.team_count === 'number' ? ` · ${target.team_count} team${target.team_count !== 1 ? 's' : ''}` : ''}
+                            </span>
+                            <button onClick={() => { setMergeTargetId(''); setMergeSearch(''); }}
+                              className="text-xs text-[#6e6e73] hover:text-[#1d1d1f] underline">
+                              change
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mb-2">
+                            <input
+                              value={mergeSearch}
+                              onChange={e => setMergeSearch(e.target.value)}
+                              placeholder="Search clubs by name…"
+                              autoFocus
+                              className="w-full sm:w-80 px-3 py-1.5 text-xs border border-[#e8e8ed] rounded-lg bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none"
+                            />
+                            {results.length > 0 && (
+                              <div className="mt-1 bg-white border border-[#e8e8ed] rounded-lg divide-y divide-[#f0f0f2] sm:w-80 max-h-52 overflow-y-auto">
+                                {results.map(o => (
+                                  <button key={o.id} onClick={() => setMergeTargetId(String(o.id))}
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-[#f0f7ff] transition-colors">
+                                    <span className="font-medium text-[#1d1d1f]">{o.name}</span>
+                                    <span className="text-[#86868b]"> {o.state ? `· ${o.state}` : ''}{typeof o.team_count === 'number' ? ` · ${o.team_count} team${o.team_count !== 1 ? 's' : ''}` : ''}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {q.length >= 2 && results.length === 0 && (
+                              <p className="text-[11px] text-[#86868b] mt-1">No clubs match &quot;{mergeSearch}&quot;</p>
+                            )}
+                          </div>
+                        )}
+                        <p className="text-xs text-[#1d1d1f] mb-2">
+                          Should <span className="font-semibold">{req.requested_by_name || req.requested_by_email}</span> become an owner of it,
+                          or are they just a coach/manager of a team in the org?
+                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => handleApprove(req, { mode: 'merge', makeOwner: true, mergeOrgId: mergeTargetId })}
+                            disabled={!mergeTargetId}
+                            className="px-3 py-1.5 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Merge — make them an owner
+                          </button>
+                          <button
+                            onClick={() => handleApprove(req, { mode: 'merge', makeOwner: false, mergeOrgId: mergeTargetId })}
+                            disabled={!mergeTargetId}
+                            className="px-3 py-1.5 bg-white text-[#003e79] text-xs font-semibold rounded-lg border border-[#003e79]/30 hover:bg-[#f0f7ff] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Merge — no ownership (they&apos;ll join a team)
+                          </button>
+                          <button
+                            onClick={() => setMergeChoiceId(null)}
+                            className="px-3 py-1.5 text-xs font-medium text-[#6e6e73] hover:text-[#1d1d1f]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ))}
           </div>
