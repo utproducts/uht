@@ -38,6 +38,7 @@ export default function PayPage() {
   const [email, setEmail] = useState('');
   const [discountCode, setDiscountCode] = useState('');
   const [totalCents, setTotalCents] = useState(0);
+  const [codeDeferred, setCodeDeferred] = useState('');
   const [stripeInstance, setStripeInstance] = useState<any>(null);
   const [stripeElements, setStripeElements] = useState<any>(null);
   const [paying, setPaying] = useState(false);
@@ -156,6 +157,7 @@ export default function PayPage() {
       setTotalCents(data.data.totalCents);
       setPaymentIntentId(data.data.paymentIntentId);
       setClientSecret(data.data.clientSecret);
+      setCodeDeferred(data.data.codeDeferredToFinal || '');
       setStep('card');
       setPaying(false);
     } catch {
@@ -345,6 +347,12 @@ export default function PayPage() {
               <p style={{ fontSize: 22, fontWeight: 800, color: '#003e79', margin: '0 0 20px' }}>
                 {formatPrice(totalCents)}
               </p>
+
+              {codeDeferred && (
+                <p style={{ fontSize: 13, color: '#8a6100', background: '#fff8e6', border: '1px solid #f5d88f', borderRadius: 10, padding: '10px 14px', margin: '0 0 16px' }}>
+                  Discount codes don&apos;t apply to deposits — your code <strong>{codeDeferred}</strong> stays unused. Enter it again when you pay your final balance and it&apos;ll come off then.
+                </p>
+              )}
 
               <div ref={paymentElementRef} style={{ marginBottom: 20, minHeight: 100 }} />
 

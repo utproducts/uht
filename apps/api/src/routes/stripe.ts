@@ -71,7 +71,7 @@ async function getRegBalance(db: D1Database, regId: string): Promise<{
   const stripeCents = reg.card_paid_cents ?? (reg.stripe_payment_id ? (reg.charged_cents || 0) : 0);
   const alreadyPaid = stripeCents + manualCents;
   const expected = reg.division_price_cents || reg.event_price_cents || reg.charged_cents || 0;
-  const depositCents = reg.event_deposit_cents || Math.round(expected * 0.25);
+  const depositCents = reg.event_deposit_cents || 35000; // standard $350 deposit when the event has none configured
   // Unknown price + nothing paid → remaining unknowable; callers fall back to legacy amounts
   const remaining = expected > 0 ? Math.max(0, expected - alreadyPaid) : (alreadyPaid > 0 ? 0 : -1);
   return { expected, alreadyPaid, remaining, depositCents };
@@ -319,7 +319,7 @@ stripeRoutes.get('/payment-info', async (c) => {
     if (!reg) continue;
 
     let priceCents = reg.division_price_cents || reg.amount_cents || reg.event_price_cents || 0;
-    let depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
+    let depositCents = reg.deposit_cents || 35000; // standard $350 deposit when the event has none configured
 
     // Show the BALANCE when part of the price is already covered
     // (card deposit and/or admin-recorded Venmo/check payments)
@@ -419,7 +419,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
 
     // Price priority: division price > registration amount > event price
     const priceCents = reg.division_price_cents || reg.amount_cents || reg.price_cents || 0;
-    const depositCents = reg.deposit_cents || Math.round(priceCents * 0.25);
+    const depositCents = reg.deposit_cents || 35000; // standard $350 deposit when the event has none configured
     let chargeAmount = data.paymentChoice === 'pay_deposit' ? depositCents : priceCents;
 
     // Deduct what's already been paid (card + manual records)
@@ -456,6 +456,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
   // Apply discount code if provided (reward codes OR coupon codes)
   let discountCents = 0;
   let discountCode = '';
+  let codeDeferredToFinal = ''; // reward code entered on a deposit — saved for the final payment
   if (data.discountCode) {
     const codeTrimmed = data.discountCode.trim();
 
@@ -481,6 +482,11 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       ).bind(codeTrimmed).first() as any;
 
       if (dc) {
+        if (data.paymentChoice === 'pay_deposit') {
+          // Reward codes only reduce the FINAL payment — deposits stay full
+          // price and the code is NOT burned; they use it when settling up.
+          codeDeferredToFinal = dc.code;
+        } else {
         if (dc.is_used && !(await discountCodeBurnedByAbandonedCheckout(db, dc))) {
           return c.json({ success: false, error: 'This code has already been used' }, 409);
         }
@@ -499,6 +505,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
         await db.prepare(
           "UPDATE discount_codes SET is_used = 1, used_registration_id = ?, used_at = datetime('now') WHERE id = ?"
         ).bind(chargedRegIds[0], dc.id).run();
+        }
       } else {
 
       // 3) Check coupon_codes table (admin-created coupon codes)
@@ -627,6 +634,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
         totalCents,
         discountApplied: discountCents,
         superSaverCents,
+        ...(codeDeferredToFinal ? { codeDeferredToFinal } : {}),
       },
     });
   } catch (err: any) {

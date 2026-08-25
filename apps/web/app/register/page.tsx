@@ -120,6 +120,7 @@ export default function RegisterPage() {
   const [superSaver, setSuperSaver] = useState<{ discount_cents: number; ends_at: string; min_event_start: string | null } | null>(null);
   const [ssAddEventId, setSsAddEventId] = useState('');
   const [ssAppliedCents, setSsAppliedCents] = useState(0);
+  const [codeDeferred, setCodeDeferred] = useState('');
 
   // Steps: team → hotels → payment → card_form → submitting → confirmed (upsell is now post-registration on confirmed page)
   const [step, setStep] = useState<'team' | 'hotels' | 'payment' | 'card_form' | 'submitting' | 'confirmed'>('team');
@@ -715,6 +716,7 @@ export default function RegisterPage() {
             setPaymentIntentId(stripeJson.data.paymentIntentId);
             setPaymentAmountCents(stripeJson.data.totalCents || 0);
             setSsAppliedCents(stripeJson.data.superSaverCents || 0);
+            setCodeDeferred(stripeJson.data.codeDeferredToFinal || '');
             setRegResult(results.length === 1 ? results[0] : { registrations: results, teamCount: results.length });
             setStep('card_form');
             return;
@@ -1750,6 +1752,11 @@ export default function RegisterPage() {
               {ssAppliedCents > 0 && (
                 <p className="mt-2 text-sm font-semibold text-emerald-600">
                   🔥 Super Saver Discount applied: −${(ssAppliedCents / 100).toLocaleString('en-US')}
+                </p>
+              )}
+              {codeDeferred && (
+                <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Discount codes don&apos;t apply to deposits — your code <span className="font-semibold">{codeDeferred}</span> stays unused. Enter it when you pay your final balance.
                 </p>
               )}
             </div>
