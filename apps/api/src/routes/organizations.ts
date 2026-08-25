@@ -499,6 +499,35 @@ organizationRoutes.post('/requests', async (c) => {
     matchedOrgId
   ).run();
 
+  // Notify the admin team so requests get reviewed quickly (never blocks the request)
+  try {
+    const siteUrl = (c.env as any).SITE_URL || 'https://ultimatetournaments.com';
+    let matchNote = '';
+    if (matchedOrgId) {
+      const m = await db.prepare('SELECT name, state FROM organizations WHERE id = ?').bind(matchedOrgId).first<{ name: string; state: string }>();
+      if (m) matchNote = `<p style="color:#8a6100;background:#fff8e6;border:1px solid #f5d88f;border-radius:8px;padding:10px 14px;">⚠️ Likely matches an existing org: <strong>${m.name}</strong>${m.state ? ` (${m.state})` : ''} — use <strong>Approve &amp; Merge</strong> instead of creating a duplicate.</p>`;
+    }
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Ultimate Tournaments <noreply@ultimatetournaments.com>',
+        to: ['john@ultimatetournaments.com'],
+        subject: `New org request: ${body.name.trim()}${body.state ? ` (${body.state})` : ''}`,
+        html: `
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+            <h2 style="color:#1d1d1f;margin:0 0 12px;">New organization request</h2>
+            <p style="color:#3d3d3d;margin:0 0 4px;"><strong>${body.name.trim()}</strong>${body.city || body.state ? ` — ${[body.city, body.state].filter(Boolean).join(', ')}` : ''}</p>
+            <p style="color:#6e6e73;margin:0 0 16px;">Requested by ${body.requestedByName || body.requestedByEmail} (${body.requestedByEmail})</p>
+            ${matchNote}
+            <p style="margin:20px 0 0;">
+              <a href="${siteUrl}/admin/organizations" style="background:#003e79;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Review Requests</a>
+            </p>
+          </div>`,
+      }),
+    });
+  } catch {}
+
   return c.json({ success: true, id, matchedOrgId }, 201);
 });
 
