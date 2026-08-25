@@ -91,10 +91,25 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
   },
 ];
 
+// Sections/items hidden from data-restricted staff (server enforces the real
+// block — this just avoids dead links and confusing 403s)
+const RESTRICTED_HIDDEN_ITEMS = ['Contacts', 'Users', 'Communications', 'Email Campaigns', 'Financials'];
+
+function readDataRestricted(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const u = JSON.parse(localStorage.getItem('uht_user') || '{}');
+    return u.data_restricted === 1;
+  } catch {}
+  return false;
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState(readUserName);
+  const [dataRestricted, setDataRestricted] = useState(false);
+  useEffect(() => { setDataRestricted(readDataRestricted()); }, []);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   // Mobile: the 224px sidebar eats most of a phone screen, so it becomes a
   // slide-in drawer, hidden by default. Unchanged on md and up.
@@ -225,7 +240,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
           </div>
           <nav>
-            {ADMIN_NAV_SECTIONS.map((section, si) => {
+            {ADMIN_NAV_SECTIONS
+              .map(s => dataRestricted
+                ? { ...s, items: s.items.filter(i => !RESTRICTED_HIDDEN_ITEMS.includes(i.name)) }
+                : s)
+              .filter(s => s.items.length > 0)
+              .map((section, si) => {
               // '/admin' (Overview) must match exactly — startsWith would light it up on every admin page
               const itemActive = (href: string) =>
                 pathname === href || pathname === `${href}/` || (href !== '/admin' && pathname.startsWith(href));

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, blockDataRestricted } from '../middleware/auth';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { sendApprovalEmail } from '../lib/approval-email';
 import { TEMPLATE_DEFINITIONS, getDefaults, getOverridesFromDB, getResolvedFields, replaceVars } from '../lib/template-overrides';
@@ -54,7 +54,7 @@ emailRoutes.post('/lists/bulk-import', authMiddleware, requireRole('admin'), asy
 // ==================
 // Get email lists
 // ==================
-emailRoutes.get('/lists', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/lists', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const db = c.env.DB;
   const result = await db.prepare('SELECT * FROM email_lists WHERE is_active = 1 ORDER BY created_at DESC').all();
   return c.json({ success: true, data: result.results });
@@ -63,7 +63,7 @@ emailRoutes.get('/lists', authMiddleware, requireRole('admin', 'director'), asyn
 // ==================
 // List campaigns
 // ==================
-emailRoutes.get('/campaigns', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/campaigns', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const db = c.env.DB;
   const { event_id, status } = c.req.query();
 
@@ -81,7 +81,7 @@ emailRoutes.get('/campaigns', authMiddleware, requireRole('admin', 'director'), 
 // ==================
 // Get single campaign with per-recipient detail
 // ==================
-emailRoutes.get('/campaigns/:id', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/campaigns/:id', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -136,7 +136,7 @@ const audienceFilterSchema = z.object({
   excludeRegisteredForEvent: z.string().optional(), // Exclude teams already registered for this event
 });
 
-emailRoutes.post('/audience/preview', authMiddleware, requireRole('admin', 'director'), zValidator('json', audienceFilterSchema), async (c) => {
+emailRoutes.post('/audience/preview', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), zValidator('json', audienceFilterSchema), async (c) => {
   const filter = c.req.valid('json');
   const db = c.env.DB;
 
@@ -199,7 +199,7 @@ const createCampaignSchema = z.object({
   minEventStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
-emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'), zValidator('json', createCampaignSchema), async (c) => {
+emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), zValidator('json', createCampaignSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
@@ -244,7 +244,7 @@ const testSendSchema = z.object({
   fromName: z.string().optional(),
 });
 
-emailRoutes.post('/test-send', authMiddleware, requireRole('admin', 'director'), zValidator('json', testSendSchema), async (c) => {
+emailRoutes.post('/test-send', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), zValidator('json', testSendSchema), async (c) => {
   const data = c.req.valid('json');
   const env = c.env;
 
@@ -595,7 +595,7 @@ emailRoutes.post('/campaigns/:id/resend-non-openers', authMiddleware, requireRol
 // ==================
 // Get available events for email targeting
 // ==================
-emailRoutes.get('/audience/events', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/audience/events', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const db = c.env.DB;
   const events = await db.prepare(`
     SELECT e.id, e.name, e.city, e.state, e.start_date, e.status,
@@ -610,7 +610,7 @@ emailRoutes.get('/audience/events', authMiddleware, requireRole('admin', 'direct
 // ==================
 // Get divisions for an event (for audience targeting)
 // ==================
-emailRoutes.get('/audience/events/:eventId/divisions', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/audience/events/:eventId/divisions', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
   const divisions = await db.prepare(`
@@ -636,7 +636,7 @@ const templateSchema = z.object({
   customMessage: z.string().optional(),
 });
 
-emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'director'), zValidator('json', templateSchema), async (c) => {
+emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), zValidator('json', templateSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
 
@@ -774,7 +774,7 @@ emailRoutes.post('/templates/generate', authMiddleware, requireRole('admin', 'di
 // ==================
 
 // List all automated email templates (with editable field definitions)
-emailRoutes.get('/automated', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/automated', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const db = c.env.DB;
 
   // For each template, check if there are DB overrides
@@ -797,7 +797,7 @@ emailRoutes.get('/automated', authMiddleware, requireRole('admin', 'director'), 
 });
 
 // Get current overrides for a template (returns defaults merged with any DB overrides)
-emailRoutes.get('/automated/:templateId/overrides', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/automated/:templateId/overrides', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const templateId = c.req.param('templateId');
   const def = TEMPLATE_DEFINITIONS.find(t => t.id === templateId);
   if (!def) return c.json({ success: false, error: 'Template not found' }, 404);
@@ -875,7 +875,7 @@ emailRoutes.delete('/automated/:templateId/overrides', authMiddleware, requireRo
 });
 
 // Preview a specific automated email template (returns HTML with overrides applied)
-emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const templateId = c.req.param('templateId');
   const template = TEMPLATE_DEFINITIONS.find(t => t.id === templateId);
   if (!template) return c.json({ success: false, error: 'Template not found' }, 404);

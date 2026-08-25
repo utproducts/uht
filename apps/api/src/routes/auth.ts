@@ -340,7 +340,7 @@ authRoutes.post('/login', rateLimit(10, 60_000), zValidator('json', loginSchema)
 
   // Find user
   const user = await db.prepare(`
-    SELECT id, email, password_hash, first_name, last_name, is_active
+    SELECT id, email, password_hash, first_name, last_name, is_active, COALESCE(data_restricted, 0) as data_restricted
     FROM users WHERE email = ?
   `).bind(email.toLowerCase()).first<{
     id: string; email: string; password_hash: string;
@@ -384,6 +384,7 @@ authRoutes.post('/login', rateLimit(10, 60_000), zValidator('json', loginSchema)
         firstName: user.first_name,
         lastName: user.last_name,
         roles,
+        data_restricted: (user as any).data_restricted === 1 ? 1 : 0,
       },
     },
   });
@@ -528,7 +529,7 @@ authRoutes.post('/magic-link/verify', zValidator('json', verifyMagicLinkSchema),
   // Find the magic link
   const link = await db.prepare(`
     SELECT ml.id, ml.user_id, ml.expires_at, ml.used_at,
-           u.email, u.first_name, u.last_name, u.is_active, u.password_hash
+           u.email, u.first_name, u.last_name, u.is_active, u.password_hash, COALESCE(u.data_restricted, 0) as data_restricted
     FROM magic_links ml
     JOIN users u ON u.id = ml.user_id
     WHERE ml.token = ?
@@ -591,6 +592,7 @@ authRoutes.post('/magic-link/verify', zValidator('json', verifyMagicLinkSchema),
         firstName: link.first_name,
         lastName: link.last_name,
         roles,
+        data_restricted: (link as any).data_restricted === 1 ? 1 : 0,
       },
     },
   });
@@ -697,6 +699,7 @@ authRoutes.post('/admin-pin', rateLimit(10, 60_000), zValidator('json', adminPin
         firstName: user.first_name,
         lastName: user.last_name,
         roles,
+        data_restricted: (user as any).data_restricted === 1 ? 1 : 0,
       },
     },
   });

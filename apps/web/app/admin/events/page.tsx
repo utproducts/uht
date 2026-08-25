@@ -3957,7 +3957,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
         setMhrResult(d.linked_teams === 0 ? 'No teams have MHR links yet' : `Updated ${d.updated} of ${d.linked_teams} linked team${d.linked_teams !== 1 ? 's' : ''}`);
         // Re-pull the event detail so the new ratings render
         try {
-          const evRes = await fetch(`${API_BASE}/admin/detail/${eventId}`);
+          const evRes = await fetch(`${API_BASE}/admin/detail/${eventId}`, { headers: adminHeaders() });
           const evJson = await evRes.json() as any;
           if (evJson.success) setEvent(evJson.data);
         } catch {}
@@ -3983,7 +3983,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const [editOpening, setEditOpening] = useState<string | null>(null);
   const API_ROOT = 'https://uht.chad-157.workers.dev/api';
   const reloadDetail = () => {
-    fetch(`${API_BASE}/admin/detail/${eventId}`)
+    fetch(`${API_BASE}/admin/detail/${eventId}`, { headers: adminHeaders() })
       .then((r) => r.json())
       .then((json) => { if (json.success) setEvent(json.data); })
       .catch(() => {});
@@ -4079,7 +4079,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const [loadingReport, setLoadingReport] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_BASE}/admin/detail/${eventId}`)
+    fetch(`${API_BASE}/admin/detail/${eventId}`, { headers: adminHeaders() })
       .then((r) => r.json())
       .then((json) => {
         if (json.success) setEvent(json.data);
@@ -4092,7 +4092,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   useEffect(() => {
     if (tab === 'hotels' && !hotelReport && !loadingReport) {
       setLoadingReport(true);
-      fetch(`${HOTEL_API}/report/${eventId}`)
+      fetch(`${HOTEL_API}/report/${eventId}`, { headers: adminHeaders() })
         .then(r => r.json())
         .then(json => {
           if (json.success) setHotelReport(json.data);
@@ -4560,7 +4560,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {tab === 'venues' && (
         <VenuesTab eventId={eventId} eventState={event.state} onVenueChanged={() => {
           // Reload event data
-          fetch(`${API_BASE}/admin/detail/${eventId}`).then(r => r.json()).then(json => {
+          fetch(`${API_BASE}/admin/detail/${eventId}`, { headers: adminHeaders() }).then(r => r.json()).then(json => {
             if (json.success) setEvent(json.data);
           });
         }} />

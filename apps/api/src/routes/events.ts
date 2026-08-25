@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, isDataRestricted, redactContactInfo } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
 import { discountCodeBurnedByAbandonedCheckout } from './stripe';
 import { sendApprovalEmail } from '../lib/approval-email';
@@ -361,7 +361,7 @@ eventRoutes.get('/admin/list', async (c) => {
 // ==================
 // ADMIN: Get single event detail with registrations
 // ==================
-eventRoutes.get('/admin/detail/:id', async (c) => {
+eventRoutes.get('/admin/detail/:id', authMiddleware, requireRole('admin', 'director'), async (c) => {
   try {
   const id = c.req.param('id');
   const db = c.env.DB;
@@ -465,11 +465,13 @@ eventRoutes.get('/admin/detail/:id', async (c) => {
     ORDER BY ev.is_primary DESC, ev.sort_order ASC
   `).bind(id).all().catch(() => ({ results: [] }));
 
+  // Restricted staff see participants WITHOUT contact info
+  const detailRestricted = await isDataRestricted(c);
   return c.json({
     success: true,
     data: {
       ...event,
-      registrations: allRegs,
+      registrations: detailRestricted ? redactContactInfo(allRegs) : allRegs,
       registration_summary: summary,
       venues: assignedVenues.results,
     },

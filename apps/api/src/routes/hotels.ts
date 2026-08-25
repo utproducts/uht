@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, isDataRestricted, redactContactInfo } from '../middleware/auth';
 
 export const hotelRoutes = new Hono<{ Bindings: Env }>();
 
@@ -285,7 +285,7 @@ hotelRoutes.post('/link/:eventId', authMiddleware, requireRole('admin', 'directo
 // ==================
 // ADMIN: Hotel report for an event (teams assigned, roster sizes, expected nights)
 // ==================
-hotelRoutes.get('/report/:eventId', async (c) => {
+hotelRoutes.get('/report/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
 
@@ -373,9 +373,8 @@ hotelRoutes.get('/report/:eventId', async (c) => {
   const localTeams = regs.results.filter((r: any) => !r.hotel_assigned && isLocal(r));
   const unassigned = regs.results.filter((r: any) => !r.hotel_assigned && !r.hotel_choice && !isLocal(r));
 
-  return c.json({
-    success: true,
-    data: {
+  const reportRestricted = await isDataRestricted(c);
+  const reportData = {
       event_name: event.name,
       event_dates: `${event.start_date} to ${event.end_date}`,
       event_nights: eventNights,
@@ -391,8 +390,8 @@ hotelRoutes.get('/report/:eventId', async (c) => {
         manager_email: t.email1,
         manager_phone: t.phone,
       })),
-    },
-  });
+  };
+  return c.json({ success: true, data: reportRestricted ? redactContactInfo(reportData) : reportData });
 });
 
 // ==================

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, isDataRestricted, redactContactInfo } from '../middleware/auth';
 
 export const teamRoutes = new Hono<{ Bindings: Env }>();
 
@@ -71,7 +71,7 @@ teamRoutes.post('/admin/merge-org', authMiddleware, requireRole('admin'), async 
 // ==================
 // ADMIN: List all teams with filters
 // ==================
-teamRoutes.get('/admin/list', async (c) => {
+teamRoutes.get('/admin/list', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const { search, state, age_group, active, has_contact, season, event_id, page = '1', per_page = '50', sort = 'name', order = 'asc' } = c.req.query();
 
@@ -163,9 +163,10 @@ teamRoutes.get('/admin/list', async (c) => {
     stats = statsResult;
   }
 
+  const listRestricted = await isDataRestricted(c);
   return c.json({
     success: true,
-    data: result.results,
+    data: listRestricted ? redactContactInfo(result.results) : result.results,
     pagination: { page: pageNum, perPage, total, totalPages: Math.ceil(total / perPage) },
     stats,
   });
@@ -174,7 +175,7 @@ teamRoutes.get('/admin/list', async (c) => {
 // ==================
 // ADMIN: Data export for cleanup matching
 // ==================
-teamRoutes.get('/admin/export-for-cleanup', async (c) => {
+teamRoutes.get('/admin/export-for-cleanup', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { season } = c.req.query();
 
@@ -343,7 +344,7 @@ teamRoutes.get('/admin/org-teams/:orgKey', async (c) => {
 // ==================
 // ADMIN: Get team roster (players + guardians) for expand view
 // ==================
-teamRoutes.get('/admin/team-roster/:teamId', async (c) => {
+teamRoutes.get('/admin/team-roster/:teamId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param('teamId');
 

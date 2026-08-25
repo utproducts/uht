@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, isDataRestricted, redactContactInfo } from '../middleware/auth';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { sendApprovalEmail } from '../lib/approval-email';
 import { sendHotelConfirmationEmail } from '../lib/hotel-confirmation-email';
@@ -238,7 +238,9 @@ registrationRoutes.get('/all', authMiddleware, requireRole('admin', 'director'),
 
   all.sort((a: any, b: any) => (b.created_at || '').localeCompare(a.created_at || ''));
 
-  return c.json({ success: true, data: all, total: all.length });
+  // Restricted staff see registrations WITHOUT contact info
+ const restrictedAll = await isDataRestricted(c);
+ return c.json({ success: true, data: restrictedAll ? redactContactInfo(all) : all, total: all.length });
 });
 
 // ==================

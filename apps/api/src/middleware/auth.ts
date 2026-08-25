@@ -176,3 +176,50 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 
   return hashHex === expectedHash;
 }
+
+/**
+ * Data-restriction support: users flagged `data_restricted` (users table) get
+ * registration access with contact info REDACTED and bulk/export surfaces
+ * blocked — for staff roles where data exfiltration is a concern.
+ * Enforced server-side; the flag is read from the DB so it applies instantly
+ * without re-login and can't be forged via an old JWT.
+ */
+export async function isDataRestricted(c: Context<{ Bindings: Env }>): Promise<boolean> {
+  const user = (c as any).get('user') as AuthUser | undefined;
+  if (!user?.id) return false;
+  if (user.roles?.includes('admin')) return false; // admins are never restricted
+  try {
+    const row = await c.env.DB.prepare('SELECT data_restricted FROM users WHERE id = ?')
+      .bind(user.id).first<{ data_restricted: number }>();
+    return row?.data_restricted === 1;
+  } catch {
+    return false;
+  }
+}
+
+/** 403 for data-restricted users — for bulk-contact and export endpoints */
+export function blockDataRestricted() {
+  return async (c: Context<{ Bindings: Env }>, next: Next) => {
+    if (await isDataRestricted(c)) {
+      return c.json({ success: false, error: 'Not available for your role' }, 403);
+    }
+    await next();
+  };
+}
+
+/** Deep-redact contact fields (any string under a key containing email/phone) */
+export function redactContactInfo<T>(data: T): T {
+  const sensitive = /email|phone/i;
+  const walk = (v: any): any => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object') {
+      const out: any = {};
+      for (const [k, val] of Object.entries(v)) {
+        out[k] = sensitive.test(k) && typeof val === 'string' && val ? null : walk(val);
+      }
+      return out;
+    }
+    return v;
+  };
+  return walk(data);
+}
