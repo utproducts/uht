@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
+import { discountCodeBurnedByAbandonedCheckout } from './stripe';
 import { sendApprovalEmail } from '../lib/approval-email';
 import { sendHotelConfirmationEmail } from '../lib/hotel-confirmation-email';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
@@ -2987,11 +2988,11 @@ eventRoutes.post('/validate-discount-code', async (c) => {
   } catch {}
 
   const dc = await db.prepare(
-    'SELECT id, code, team_name, team_id, event_id, discount_local_cents, discount_hotel_cents, is_used FROM discount_codes WHERE code = ?'
+    'SELECT id, code, team_name, team_id, event_id, discount_local_cents, discount_hotel_cents, is_used, used_registration_id FROM discount_codes WHERE code = ?'
   ).bind(code.trim().toUpperCase()).first<any>();
 
   if (dc) {
-    if (dc.is_used) {
+    if (dc.is_used && !(await discountCodeBurnedByAbandonedCheckout(db, dc))) {
       return c.json({ success: false, error: 'This code has already been used' }, 400);
     }
     // Reward codes apply to the team's NEXT event, never the one that earned them
@@ -3087,13 +3088,13 @@ eventRoutes.post('/redeem-discount-code', async (c) => {
   }
 
   const dc = await db.prepare(
-    'SELECT id, is_used, event_id, registration_id FROM discount_codes WHERE code = ?'
+    'SELECT id, is_used, event_id, registration_id, used_registration_id FROM discount_codes WHERE code = ?'
   ).bind(code.trim().toUpperCase()).first<any>();
 
   if (!dc) {
     return c.json({ success: false, error: 'Invalid discount code' }, 404);
   }
-  if (dc.is_used) {
+  if (dc.is_used && !(await discountCodeBurnedByAbandonedCheckout(db, dc))) {
     return c.json({ success: false, error: 'This code has already been used' }, 400);
   }
   // Never redeemable on the event that earned it (or the earning registration)

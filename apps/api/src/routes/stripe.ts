@@ -82,15 +82,38 @@ async function getRegBalance(db: D1Database, regId: string): Promise<{
 // featured promo event with a hotel selection — apply the promo credit to the
 // payment. One credit per team per promo. Fully isolated: any error here means
 // "no credit" and the payment proceeds untouched.
+// A reward code marked used whose redeeming registration never actually got
+// paid was burned by an abandoned checkout (code applied at intent creation,
+// card never completed). Treat it as available again — Tracy Poll case, 8/25.
+export async function discountCodeBurnedByAbandonedCheckout(db: D1Database, dc: any): Promise<boolean> {
+  if (!dc?.is_used || !dc.used_registration_id) return false;
+  try {
+    let reg = await db.prepare('SELECT payment_status FROM event_registrations WHERE id = ?')
+      .bind(dc.used_registration_id).first<{ payment_status: string }>();
+    if (!reg) {
+      reg = await db.prepare('SELECT payment_status FROM registrations WHERE id = ?')
+        .bind(dc.used_registration_id).first<{ payment_status: string }>();
+    }
+    if (!reg) return true; // redeeming registration was deleted — free the code
+    const gotValue = ['paid', 'partial', 'deposit_paid'].includes((reg.payment_status || '').toLowerCase());
+    return !gotValue;
+  } catch {
+    return false; // can't verify — keep the code locked
+  }
+}
+
 async function computeSuperSaverCredit(
   db: D1Database,
   payingRegIds: string[],
   totalCents: number
 ): Promise<{ credit: number; promoId: string } | null> {
   try {
-    // Active + recently-ended promos (registrations must fall inside the window)
+    // ALL promos, including ended/superseded ones: the deadline governs when a
+    // team must REGISTER, but pay-later teams settle up weeks afterward — a
+    // registration made inside any promo's window keeps its credit at payment
+    // time. (One credit per team per promo still applies.)
     const promos = await db.prepare(
-      "SELECT id, discount_cents, starts_at, ends_at, event_ids, min_event_start FROM super_saver_promos WHERE is_active = 1"
+      "SELECT id, discount_cents, starts_at, ends_at, event_ids, min_event_start FROM super_saver_promos ORDER BY starts_at DESC"
     ).all<any>();
     if (!promos.results?.length) return null;
 
@@ -458,7 +481,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       ).bind(codeTrimmed).first() as any;
 
       if (dc) {
-        if (dc.is_used) {
+        if (dc.is_used && !(await discountCodeBurnedByAbandonedCheckout(db, dc))) {
           return c.json({ success: false, error: 'This code has already been used' }, 409);
         }
         // The reward is for the team's NEXT event — not the registration that
