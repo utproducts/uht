@@ -169,7 +169,7 @@ socialRoutes.get('/card/:regId', async (c) => {
 
   const [bgUri, eventLogoUri] = await Promise.all([
     imageToDataUri('r2:social/were-in-bg.png'),
-    reg.logo_url ? imageToDataUri(String(reg.logo_url), true) : Promise.resolve(null),
+    reg.logo_url ? imageToDataUri(String(reg.logo_url)) : Promise.resolve(null),
   ]);
   if (!bgUri) return c.json({ success: false, error: 'Template background missing' }, 503);
 
@@ -183,7 +183,7 @@ socialRoutes.get('/card/:regId', async (c) => {
 
       ${eventLogoUri
         ? `<div style="display: flex; position: absolute; top: 500px; left: 0; right: 0; justify-content: center;">
-             <img src="${eventLogoUri}" width="290" height="290" style="object-fit: contain;" />
+             <img src="${eventLogoUri}" width="290" height="290" style="object-fit: contain; border-radius: 32px; box-shadow: 0 14px 44px rgba(0,0,0,0.55);" />
            </div>`
         : ''}
 
