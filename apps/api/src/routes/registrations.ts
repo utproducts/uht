@@ -606,6 +606,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
           contactPhone: hotelInfo.contact_phone,
           contactEmail: hotelInfo.contact_email,
         } : undefined,
+        socialCardUrl: `${(c.env as any).API_URL || 'https://uht.chad-157.workers.dev'}/api/social/card/${regId}.png`,
         _overrides: approvalOverrides,
       } as any);
       emailSent = result.success;

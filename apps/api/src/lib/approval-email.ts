@@ -34,6 +34,8 @@ interface ApprovalEmailParams {
   priceCents?: number;
   hotelInfo?: HotelInfo;
   noHotelNeeded?: boolean;
+  /** "WE'RE IN!" shareable graphic (1080x1080 PNG) for this registration */
+  socialCardUrl?: string;
   /** Admin-customized field overrides from DB */
   _overrides?: Record<string, string>;
 }
@@ -144,6 +146,38 @@ export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { tea
     </div>` : ''}
             </td>
           </tr>
+
+
+          <!-- Share the news: WE'RE IN! social graphic -->
+          ${params.socialCardUrl ? `
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #001d3d; border-radius: 12px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 26px 30px; text-align: center;">
+                    <p style="margin: 0 0 4px; font-size: 20px; font-weight: 800; color: #00ccff;">📣 Share the news!</p>
+                    <p style="margin: 0 0 16px; font-size: 14px; color: #9fd8ff;">We made your team a graphic for Instagram &amp; Facebook — post it and tag us!</p>
+                    <a href="${params.socialCardUrl}"><img src="${params.socialCardUrl}" width="320" alt="We're in! ${params.teamName}" style="width: 320px; max-width: 100%; border-radius: 12px; border: 3px solid #00ccff;" /></a>
+                    <p style="margin: 16px 0 0;">
+                      <a href="${params.socialCardUrl}" style="display: inline-block; padding: 12px 28px; background-color: #00ccff; color: #00294f; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 14px;">Download Your Graphic</a>
+                    </p>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 18px;">
+                      <tr>
+                        <td style="background-color: rgba(255,255,255,0.08); border: 1px dashed rgba(0,204,255,0.5); border-radius: 8px; padding: 14px 16px; text-align: left;">
+                          <p style="margin: 0 0 6px; font-size: 11px; font-weight: 700; color: #9fd8ff; text-transform: uppercase; letter-spacing: 1px;">Copy this caption</p>
+                          <p style="margin: 0; font-size: 14px; color: #ffffff; line-height: 1.5;">We're IN! 🏒 ${params.teamName} is headed to the ${params.eventName} in ${params.eventCity}! @ultimatehockeytournaments #UHTHockey</p>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin: 14px 0 0; font-size: 13px; color: #9fd8ff;">
+                      Tag us: <a href="https://www.instagram.com/ultimatehockeytournaments/" style="color: #00ccff; text-decoration: none; font-weight: 700;">Instagram</a>
+                      &nbsp;·&nbsp; <a href="https://www.facebook.com/ultimatehockeytournaments/" style="color: #00ccff; text-decoration: none; font-weight: 700;">Facebook</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>` : ''}
 
           <!-- App Download -->
           <tr>
