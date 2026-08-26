@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 import { ImageResponse } from 'workers-og';
+// @ts-ignore — no types shipped
+import { decode as jpegDecode } from 'jpeg-js';
+// @ts-ignore — no types shipped
+import UPNG from 'upng-js';
 import type { Env } from '../types';
 
 // "WE'RE IN!" social graphics — 1080x1080 PNG generated per registration for
@@ -34,6 +38,37 @@ async function loadFont(family: string, weight: number, italic = false): Promise
     const buf = await fontRes.arrayBuffer();
     await cache.put(cacheKey, new Response(buf.slice(0), { headers: { 'Cache-Control': 'public, max-age=31536000' } }));
     return buf;
+  } catch {
+    return null;
+  }
+}
+
+// Make a JPEG logo's white BACKGROUND transparent: flood-fill near-white
+// pixels from the outer edges only, so white inside the artwork survives.
+function stripWhiteBackground(jpegBytes: ArrayBuffer): ArrayBuffer | null {
+  try {
+    const img = jpegDecode(new Uint8Array(jpegBytes), { useTArray: true, maxMemoryUsageInMB: 128 });
+    const { width, height } = img;
+    const data: Uint8Array = img.data;
+    const isWhite = (px: number) => data[px * 4] > 230 && data[px * 4 + 1] > 230 && data[px * 4 + 2] > 230;
+    const visited = new Uint8Array(width * height);
+    const stack: number[] = [];
+    const push = (x: number, y: number) => {
+      const p = y * width + x;
+      if (!visited[p] && isWhite(p)) { visited[p] = 1; stack.push(p); }
+    };
+    for (let x = 0; x < width; x++) { push(x, 0); push(x, height - 1); }
+    for (let y = 0; y < height; y++) { push(0, y); push(width - 1, y); }
+    while (stack.length) {
+      const p = stack.pop() as number;
+      data[p * 4 + 3] = 0;
+      const x = p % width, y = (p / width) | 0;
+      if (x > 0) push(x - 1, y);
+      if (x < width - 1) push(x + 1, y);
+      if (y > 0) push(x, y - 1);
+      if (y < height - 1) push(x, y + 1);
+    }
+    return (UPNG as any).encode([data.buffer], width, height, 256);
   } catch {
     return null;
   }
@@ -97,7 +132,7 @@ socialRoutes.get('/card/:regId', async (c) => {
   // Load an image as a data URI. Our own URLs can't be fetched from inside the
   // worker (self-request), so /api/upload/images/* and /api/assets/* are read
   // straight from R2; external URLs are fetched normally. PNG/JPEG only.
-  const imageToDataUri = async (url: string): Promise<string | null> => {
+  const imageToDataUri = async (url: string, stripWhite = false): Promise<string | null> => {
     try {
       let bytes: ArrayBuffer | null = null;
       let ctype = '';
@@ -118,6 +153,11 @@ socialRoutes.get('/card/:regId', async (c) => {
         }
       }
       if (!bytes || !/image\/(png|jpe?g)/i.test(ctype) || bytes.byteLength > 4_000_000) return null;
+      // JPEG logos carry a solid white box — knock the background out
+      if (/jpe?g/i.test(ctype) && stripWhite) {
+        const png = stripWhiteBackground(bytes);
+        if (png) { bytes = png; ctype = 'image/png'; }
+      }
       let bin = '';
       const u8 = new Uint8Array(bytes);
       for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode(...u8.subarray(i, i + 8192));
@@ -129,7 +169,7 @@ socialRoutes.get('/card/:regId', async (c) => {
 
   const [bgUri, eventLogoUri] = await Promise.all([
     imageToDataUri('r2:social/were-in-bg.png'),
-    reg.logo_url ? imageToDataUri(String(reg.logo_url)) : Promise.resolve(null),
+    reg.logo_url ? imageToDataUri(String(reg.logo_url), true) : Promise.resolve(null),
   ]);
   if (!bgUri) return c.json({ success: false, error: 'Template background missing' }, 503);
 
@@ -141,21 +181,21 @@ socialRoutes.get('/card/:regId', async (c) => {
     <div style="display: flex; width: 1080px; height: 1080px; position: relative; font-family: 'Barlow Condensed';">
       <img src="${bgUri}" width="1080" height="1080" style="position: absolute; top: 0; left: 0;" />
 
-      <div style="display: flex; position: absolute; top: 508px; left: 40px; right: 40px; justify-content: center;">
-        <div style="display: flex; font-size: ${teamSize}px; font-weight: 600; font-style: italic; color: #ffffff; letter-spacing: 5px; text-align: center; justify-content: center; text-shadow: 0 3px 10px rgba(0,0,0,0.85);">${esc(teamName)}${divChip && !teamName.includes(divChip) ? '' : ''}</div>
-      </div>
-
       ${eventLogoUri
-        ? `<div style="display: flex; position: absolute; top: 582px; left: 0; right: 0; justify-content: center;">
-             <img src="${eventLogoUri}" width="264" height="264" style="border-radius: 26px; object-fit: contain;" />
+        ? `<div style="display: flex; position: absolute; top: 500px; left: 0; right: 0; justify-content: center;">
+             <img src="${eventLogoUri}" width="290" height="290" style="object-fit: contain;" />
            </div>`
         : ''}
 
-      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 852 : 700}px; left: 0; right: 0; justify-content: center;">
-        <div style="display: flex; font-family: 'Teko'; font-size: ${eventLogoUri ? 92 : 120}px; font-weight: 700; color: #ffffff; letter-spacing: 4px; line-height: 1; text-shadow: 0 4px 12px rgba(0,0,0,0.9);">${esc(dates)}</div>
+      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 812 : 560}px; left: 40px; right: 40px; justify-content: center;">
+        <div style="display: flex; font-size: ${eventLogoUri ? teamSize : teamSize + 10}px; font-weight: 600; font-style: italic; color: #ffffff; letter-spacing: 5px; text-align: center; justify-content: center; text-shadow: 0 3px 10px rgba(0,0,0,0.85);">${esc(teamName)}</div>
       </div>
 
-      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 952 : 830}px; left: 0; right: 0; justify-content: center;">
+      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 872 : 680}px; left: 0; right: 0; justify-content: center;">
+        <div style="display: flex; font-family: 'Teko'; font-size: ${eventLogoUri ? 90 : 116}px; font-weight: 700; color: #ffffff; letter-spacing: 4px; line-height: 1; text-shadow: 0 4px 12px rgba(0,0,0,0.9);">${esc(dates)}</div>
+      </div>
+
+      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 968 : 806}px; left: 0; right: 0; justify-content: center;">
         <div style="display: flex; font-size: 37px; font-weight: 700; font-style: italic; color: #6ecbff; letter-spacing: 10px; text-shadow: 0 3px 10px rgba(0,0,0,0.85);">${esc(city)}</div>
       </div>
     </div>`;
