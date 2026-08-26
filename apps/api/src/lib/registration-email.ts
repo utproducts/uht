@@ -152,7 +152,7 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
           ${discountCode ? `<!-- Discount Code Section -->
           <tr>
             <td style="padding: 0 32px 24px 32px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(135deg, #059669, #10b981); border-radius: 12px; overflow: hidden;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #059669; border-radius: 12px; overflow: hidden;">
                 <tr>
                   <td style="padding: 20px 24px;">
                     <p style="margin: 0 0 4px 0; font-size: 11px; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">DISCOUNT CODE FOR ${teamName}${ageGroup ? ` · ${ageGroup}` : ''}</p>

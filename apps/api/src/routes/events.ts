@@ -1215,7 +1215,7 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   if (data.additionalEventIds && data.additionalEventIds.length > 0) {
     for (const addEventId of data.additionalEventIds) {
       const addEvent = await db.prepare(
-        'SELECT id, name, city, state, start_date, end_date, status FROM events WHERE id = ?'
+        'SELECT id, name, city, state, start_date, end_date, status, logo_url, price_cents, deposit_cents FROM events WHERE id = ?'
       ).bind(addEventId).first<any>();
 
       if (!addEvent) {
@@ -1419,6 +1419,35 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
       } as any);
     } catch (err: any) {
       console.error('Registration confirmation email error:', err);
+    }
+
+    // Also confirm each ADDITIONAL event (Super Saver upsell / multi-event
+    // registrations previously only emailed for the primary event)
+    for (const addEvent of additionalEvents) {
+      try {
+        const aStart = new Date(addEvent.start_date + 'T12:00:00');
+        const aEnd = new Date(addEvent.end_date + 'T12:00:00');
+        const aDateStr = `${aStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${aEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        await sendRegistrationConfirmationEmail(c.env, {
+          recipientEmail: data.email,
+          recipientName: data.managerFirstName
+            ? `${data.managerFirstName} ${data.managerLastName || ''}`.trim()
+            : data.teamName,
+          teamName: data.teamName,
+          ageGroup: data.ageGroup,
+          division: data.division || undefined,
+          eventName: addEvent.name,
+          eventDate: aDateStr,
+          eventCity: `${addEvent.city}, ${addEvent.state}`,
+          headCoachName: data.headCoachName || undefined,
+          priceCents: addEvent.price_cents || undefined,
+          depositCents: addEvent.deposit_cents || undefined,
+          eventLogoUrl: addEvent.logo_url || undefined,
+          _overrides: await getResolvedFields(db, 'registration_confirmation'),
+        } as any);
+      } catch (err: any) {
+        console.error('Additional-event confirmation email error:', err);
+      }
     }
   }
 
