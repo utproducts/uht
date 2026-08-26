@@ -17,9 +17,10 @@ function fmtRange(start: string, end: string): string {
 }
 
 // Load a Google font's TTF (cached at the edge) for satori rendering
-async function loadFont(family: string, weight: number): Promise<ArrayBuffer | null> {
+async function loadFont(family: string, weight: number, italic = false): Promise<ArrayBuffer | null> {
   try {
-    const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@${weight}`;
+    const axis = italic ? `ital,wght@1,${weight}` : `wght@${weight}`;
+    const cssUrl = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:${axis}`;
     const cacheKey = new Request(cssUrl + '#ttf');
     const cache = (caches as any).default;
     const cached = await cache.match(cacheKey);
@@ -75,19 +76,23 @@ socialRoutes.get('/card/:regId', async (c) => {
   }
   if (!reg) return c.json({ success: false, error: 'Not found' }, 404);
 
-  const teamName = String(reg.display_name || 'Our Team');
-  const divChip = [reg.div_age, reg.div_level].filter(Boolean).join(' ');
-  const dates = fmtRange(reg.start_date, reg.end_date);
-  const city = `${reg.city}, ${reg.state}`;
-  // Team names vary wildly in length — scale the headline down for long ones
-  const teamSize = teamName.length > 34 ? 44 : teamName.length > 24 ? 56 : 68;
+  const teamName = String(reg.display_name || 'Our Team').toUpperCase();
+  const divChip = [reg.div_age, reg.div_level].filter(Boolean).join(' ').toUpperCase();
+  const dates = fmtRange(reg.start_date, reg.end_date).toUpperCase();
+  const city = `${reg.city}, ${reg.state}`.toUpperCase();
+  // Full-width team band — auto-fit long names
+  const teamSize = teamName.length > 42 ? 30 : teamName.length > 32 ? 36 : teamName.length > 22 ? 42 : 48;
 
-  const [black, bold] = await Promise.all([loadFont('Archivo Black', 400), loadFont('Inter', 700)]);
+  const [barlowSemiIt, barlowBoldIt, teko] = await Promise.all([
+    loadFont('Barlow Condensed', 600, true),
+    loadFont('Barlow Condensed', 700, true),
+    loadFont('Teko', 700),
+  ]);
   const fonts: any[] = [];
-  if (black) fonts.push({ name: 'Archivo Black', data: black, weight: 400, style: 'normal' });
-  if (bold) fonts.push({ name: 'Inter', data: bold, weight: 700, style: 'normal' });
+  if (barlowSemiIt) fonts.push({ name: 'Barlow Condensed', data: barlowSemiIt, weight: 600, style: 'italic' });
+  if (barlowBoldIt) fonts.push({ name: 'Barlow Condensed', data: barlowBoldIt, weight: 700, style: 'italic' });
+  if (teko) fonts.push({ name: 'Teko', data: teko, weight: 700, style: 'normal' });
   if (!fonts.length) return c.json({ success: false, error: 'Font load failed — try again' }, 503);
-  const heading = black ? 'Archivo Black' : 'Inter';
 
   // Load an image as a data URI. Our own URLs can't be fetched from inside the
   // worker (self-request), so /api/upload/images/* and /api/assets/* are read
@@ -98,7 +103,7 @@ socialRoutes.get('/card/:regId', async (c) => {
       let ctype = '';
       const mUpload = url.match(/\/api\/upload\/images\/([^?]+)/);
       const mAsset = url.match(/\/api\/assets\/([^?]+)/);
-      const r2Key = mUpload ? `images/${mUpload[1]}` : mAsset ? mAsset[1] : null;
+      const r2Key = url.startsWith('r2:') ? url.slice(3) : mUpload ? `images/${mUpload[1]}` : mAsset ? mAsset[1] : null;
       if (r2Key) {
         const obj = await (c.env as any).STORAGE.get(r2Key);
         if (obj) {
@@ -112,7 +117,7 @@ socialRoutes.get('/card/:regId', async (c) => {
           bytes = await r.arrayBuffer();
         }
       }
-      if (!bytes || !/image\/(png|jpe?g)/i.test(ctype) || bytes.byteLength > 3_000_000) return null;
+      if (!bytes || !/image\/(png|jpe?g)/i.test(ctype) || bytes.byteLength > 4_000_000) return null;
       let bin = '';
       const u8 = new Uint8Array(bytes);
       for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode(...u8.subarray(i, i + 8192));
@@ -122,59 +127,36 @@ socialRoutes.get('/card/:regId', async (c) => {
     }
   };
 
-  const [eventLogoUri, uhtLogoUri] = await Promise.all([
+  const [bgUri, eventLogoUri] = await Promise.all([
+    imageToDataUri('r2:social/were-in-bg.png'),
     reg.logo_url ? imageToDataUri(String(reg.logo_url)) : Promise.resolve(null),
-    imageToDataUri('https://ultimatetournaments.com/uht-logo.png'),
   ]);
+  if (!bgUri) return c.json({ success: false, error: 'Template background missing' }, 503);
 
-  const eventBlock = eventLogoUri
-    ? `<div style="display: flex; align-items: center; gap: 44px;">
-         <img src="${eventLogoUri}" width="200" height="200" style="border-radius: 28px; object-fit: contain;" />
-         <div style="display: flex; flex-direction: column;">
-           <div style="display: flex; font-family: '${heading}'; font-size: 52px; color: #ffffff; line-height: 1.12; max-width: 620px;">${String(reg.event_name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
-           <div style="display: flex; margin-top: 16px; font-size: 33px; font-weight: 700; color: #7cc4ef; white-space: nowrap;">${dates}</div>
-           <div style="display: flex; margin-top: 6px; font-size: 33px; font-weight: 700; color: #7cc4ef; white-space: nowrap;">${city}</div>
-         </div>
-       </div>`
-    : `<div style="display: flex; flex-direction: column; align-items: center;">
-         <div style="display: flex; font-family: '${heading}'; font-size: 54px; color: #ffffff; line-height: 1.12; max-width: 880px; text-align: center; justify-content: center;">${String(reg.event_name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
-         <div style="display: flex; align-items: center; gap: 20px; margin-top: 18px;">
-             <div style="display: flex; font-size: 33px; font-weight: 700; color: #7cc4ef; white-space: nowrap;">${dates}</div>
-             <div style="display: flex; width: 8px; height: 8px; border-radius: 4px; background: #00ccff;"></div>
-             <div style="display: flex; font-size: 33px; font-weight: 700; color: #7cc4ef; white-space: nowrap;">${city}</div>
-           </div>
-       </div>`;
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
+  // Chad's designed template as the background; only the four dynamic pieces
+  // are overlaid: team band, event logo, date, city (footer/hero are baked in)
   const html = `
-    <div style="display: flex; flex-direction: column; align-items: center; width: 1080px; height: 1080px; background: linear-gradient(155deg, #001730 0%, #002a56 48%, #004a8c 100%); font-family: 'Inter'; position: relative;">
-      <div style="display: flex; position: absolute; top: 0; left: 0; right: 0; height: 10px; background: linear-gradient(90deg, #00ccff 0%, #7cf5ff 50%, #00ccff 100%);"></div>
-      <div style="display: flex; position: absolute; top: 220px; left: -220px; width: 900px; height: 3px; background: rgba(0,204,255,0.25); transform: rotate(-18deg);"></div>
-      <div style="display: flex; position: absolute; top: 260px; left: -220px; width: 700px; height: 2px; background: rgba(0,204,255,0.15); transform: rotate(-18deg);"></div>
-      <div style="display: flex; position: absolute; bottom: 240px; right: -260px; width: 900px; height: 3px; background: rgba(0,204,255,0.22); transform: rotate(-18deg);"></div>
-      <div style="display: flex; position: absolute; bottom: 200px; right: -260px; width: 700px; height: 2px; background: rgba(0,204,255,0.13); transform: rotate(-18deg);"></div>
+    <div style="display: flex; width: 1080px; height: 1080px; position: relative; font-family: 'Barlow Condensed';">
+      <img src="${bgUri}" width="1080" height="1080" style="position: absolute; top: 0; left: 0;" />
 
-      ${uhtLogoUri ? `<img src="${uhtLogoUri}" width="150" height="150" style="margin-top: 54px; object-fit: contain;" />` : `<div style="display: flex; margin-top: 74px; font-family: '${heading}'; font-size: 26px; color: #7cc4ef; letter-spacing: 7px;">ULTIMATE HOCKEY TOURNAMENTS</div>`}
-
-      <div style="display: flex; margin-top: 40px; font-size: 30px; font-weight: 700; color: #7cc4ef; letter-spacing: 12px;">IT'S OFFICIAL</div>
-      <div style="display: flex; margin-top: 10px; font-family: '${heading}'; font-size: 168px; color: #00ccff; line-height: 1;">WE'RE IN!</div>
-
-      <div style="display: flex; width: 120px; height: 6px; border-radius: 3px; background: #00ccff; margin-top: 44px;"></div>
-
-      <div style="display: flex; flex-direction: column; align-items: center; margin-top: 40px; padding: 0 80px;">
-        <div style="display: flex; font-family: '${heading}'; font-size: ${teamSize}px; color: #ffffff; text-align: center; justify-content: center; line-height: 1.15;">${teamName.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
-        ${divChip ? `<div style="display: flex; margin-top: 20px; font-size: 34px; font-weight: 700; color: #7cc4ef; letter-spacing: 8px;">${divChip.toUpperCase()}</div>` : ''}
+      <div style="display: flex; position: absolute; top: 508px; left: 40px; right: 40px; justify-content: center;">
+        <div style="display: flex; font-size: ${teamSize}px; font-weight: 600; font-style: italic; color: #ffffff; letter-spacing: 5px; text-align: center; justify-content: center; text-shadow: 0 3px 10px rgba(0,0,0,0.85);">${esc(teamName)}${divChip && !teamName.includes(divChip) ? '' : ''}</div>
       </div>
 
-      <div style="display: flex; flex-grow: 1;"></div>
+      ${eventLogoUri
+        ? `<div style="display: flex; position: absolute; top: 582px; left: 0; right: 0; justify-content: center;">
+             <img src="${eventLogoUri}" width="264" height="264" style="border-radius: 26px; object-fit: contain;" />
+           </div>`
+        : ''}
 
-      <div style="display: flex; justify-content: center; width: 100%; margin-bottom: 120px; padding: 0 70px;">
-        ${eventBlock}
+      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 852 : 700}px; left: 0; right: 0; justify-content: center;">
+        <div style="display: flex; font-family: 'Teko'; font-size: ${eventLogoUri ? 92 : 120}px; font-weight: 700; color: #ffffff; letter-spacing: 4px; line-height: 1; text-shadow: 0 4px 12px rgba(0,0,0,0.9);">${esc(dates)}</div>
       </div>
 
-      <div style="display: flex; position: absolute; bottom: 44px; left: 0; right: 0; align-items: center; justify-content: center; gap: 30px; font-size: 27px; font-weight: 700; color: rgba(255,255,255,0.72);">
-        <div style="display: flex;">@ultimatehockeytournaments</div>
-        <div style="display: flex; width: 7px; height: 7px; border-radius: 4px; background: #00ccff;"></div>
-        <div style="display: flex;">#UHTHockey</div>
+      <div style="display: flex; position: absolute; top: ${eventLogoUri ? 952 : 830}px; left: 0; right: 0; justify-content: center;">
+        <div style="display: flex; font-size: 37px; font-weight: 700; font-style: italic; color: #6ecbff; letter-spacing: 10px; text-shadow: 0 3px 10px rgba(0,0,0,0.85);">${esc(city)}</div>
       </div>
     </div>`;
 
