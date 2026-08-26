@@ -2042,5 +2042,8 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
     await db.batch(gameStmts.slice(i, i + 40));
   }
 
+  // Uploading a schedule IS publishing it — flip the app/site visibility flag
+  await db.prepare("UPDATE events SET schedule_published = 1, updated_at = datetime('now') WHERE id = ?").bind(eventId).run().catch(() => {});
+
   return c.json({ success: true, data: { ...summary, committed: true } });
 });
