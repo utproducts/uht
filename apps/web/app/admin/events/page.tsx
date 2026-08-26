@@ -3116,6 +3116,103 @@ function VenuesTab({ eventId, eventState, onVenueChanged }: {
 }
 
 // --- Schedule Games Tab with Delay Controls ---
+
+// CSV schedule upload — dry-run preview, then commit (optionally replacing)
+function ScheduleCsvUpload({ eventId, hasGames, onDone }: { eventId: string; hasGames: boolean; onDone: () => void }) {
+  const [preview, setPreview] = useState<any | null>(null);
+  const [csvText, setCsvText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState<any | null>(null);
+
+  const hdrs = () => ({ 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
+  const SCHED_API = API_BASE.replace('/api/events', '/api/scheduling');
+
+  const pickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setError(''); setDone(null); setPreview(null); setBusy(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const text = String(reader.result || '');
+      setCsvText(text);
+      try {
+        const res = await fetch(`${SCHED_API}/admin/${eventId}/upload-csv`, {
+          method: 'POST', headers: hdrs(), body: JSON.stringify({ csv: text, commit: false }),
+        });
+        const json = await res.json();
+        if (json.success) setPreview(json.data);
+        else setError(json.error || 'Could not read that CSV');
+      } catch { setError('Upload failed — try again'); }
+      setBusy(false);
+    };
+    reader.readAsText(f);
+    e.target.value = '';
+  };
+
+  const commit = async () => {
+    setBusy(true); setError('');
+    try {
+      const res = await fetch(`${SCHED_API}/admin/${eventId}/upload-csv`, {
+        method: 'POST', headers: hdrs(), body: JSON.stringify({ csv: csvText, commit: true, replace: hasGames }),
+      });
+      const json = await res.json();
+      if (json.success) { setDone(json.data); setPreview(null); onDone(); }
+      else setError(json.error || 'Import failed');
+    } catch { setError('Import failed — try again'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-sm p-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="font-semibold text-[#1d1d1f] text-sm">Upload Schedule CSV</p>
+          <p className="text-xs text-[#6e6e73] mt-0.5">Pool + bracket games from your scheduler export. You&apos;ll see a preview before anything is saved.{hasGames ? ' Importing replaces the existing schedule (and its scores).' : ''}</p>
+        </div>
+        <label className={`px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer transition ${busy ? 'bg-[#e8e8ed] text-[#86868b]' : 'bg-[#003e79] text-white hover:bg-[#002d5a]'}`}>
+          {busy ? 'Working…' : hasGames ? 'Re-upload CSV…' : 'Choose CSV…'}
+          <input type="file" accept=".csv,text/csv" className="hidden" onChange={pickFile} disabled={busy} />
+        </label>
+      </div>
+
+      {error && <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+
+      {done && (
+        <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+          ✓ Imported {done.games} games ({done.poolGames} pool, {done.bracketGames} bracket). They&apos;re live in the app now.
+        </p>
+      )}
+
+      {preview && (
+        <div className="mt-4 border border-[#e8e8ed] rounded-xl p-4 bg-[#fafafa]">
+          <p className="text-sm font-semibold text-[#1d1d1f] mb-2">
+            Ready to import: {preview.games} games <span className="font-normal text-[#6e6e73]">({preview.poolGames} pool · {preview.bracketGames} bracket)</span>
+          </p>
+          <div className="space-y-1.5 text-xs text-[#3d3d3d]">
+            {preview.createdDivisions.length > 0 && <p><span className="font-semibold">Divisions used:</span> {preview.createdDivisions.join(', ')}</p>}
+            {preview.createdVenues.length > 0 && <p><span className="font-semibold">New venues to create:</span> {preview.createdVenues.join(', ')}</p>}
+            {preview.createdRinks.length > 0 && <p><span className="font-semibold">New rinks to create:</span> {preview.createdRinks.join(', ')}</p>}
+            {preview.unmatchedTeams.length > 0 && (
+              <p className="text-amber-700"><span className="font-semibold">⚠ {preview.unmatchedTeams.length} team name{preview.unmatchedTeams.length !== 1 ? 's' : ''} not linked to registrations</span> (they&apos;ll still display exactly as written): {preview.unmatchedTeams.slice(0, 12).join(', ')}{preview.unmatchedTeams.length > 12 ? '…' : ''}</p>
+            )}
+            {preview.warnings.length > 0 && (
+              <p className="text-red-600"><span className="font-semibold">Warnings:</span> {preview.warnings.slice(0, 5).join(' · ')}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <button onClick={commit} disabled={busy}
+              className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">
+              {busy ? 'Importing…' : hasGames ? `Replace schedule with ${preview.games} games` : `Import ${preview.games} games`}
+            </button>
+            <button onClick={() => setPreview(null)} className="px-3 py-2 text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScheduleGamesTab({ eventId }: { eventId: string }) {
   const [games, setGames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3188,6 +3285,8 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
 
   if (games.length === 0) {
     return (
+      <div className="space-y-4">
+      <ScheduleCsvUpload eventId={eventId} hasGames={false} onDone={loadGames} />
       <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
         <svg className="w-14 h-14 mx-auto text-[#003e79] mb-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
         <p className="font-semibold text-[#1d1d1f] text-lg">No schedule yet</p>
@@ -3196,6 +3295,7 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
           Open Schedule Builder
         </a>
+      </div>
       </div>
     );
   }
@@ -3213,6 +3313,7 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-4">
+      <ScheduleCsvUpload eventId={eventId} hasGames={true} onDone={loadGames} />
       {/* Header row */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">

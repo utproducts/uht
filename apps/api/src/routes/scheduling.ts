@@ -1756,3 +1756,291 @@ function getEventDays(start: Date, end: Date): Date[] {
   if (days.length === 0) days.push(new Date(start));
   return days;
 }
+
+// ==========================================
+// ADMIN: Upload a schedule CSV for an event
+// Columns: Date, Time, End Time, Time Zone, Visitor Division, Visitor Team,
+//          Home Division, Home Team, Location, Game Number, Game Type
+// Game Type "Tournament" = pool play; "Playoff" = bracket. Bracket seeds come
+// in as "TBD - 1st blue" etc. and become display placeholders until decided.
+// commit=false returns a dry-run preview; commit=true writes everything.
+// ==========================================
+const uploadCsvSchema = z.object({
+  csv: z.string().min(10),
+  commit: z.boolean().optional(),
+  replace: z.boolean().optional(),
+});
+
+schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole('admin', 'director'), zValidator('json', uploadCsvSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { csv, commit, replace } = c.req.valid('json');
+  const db = c.env.DB;
+
+  const event = await db.prepare('SELECT id, name, city, state FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  // ---- tiny CSV parser (handles quoted fields) ----
+  const parseCsv = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let row: string[] = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+        else field += ch;
+      } else if (ch === '"') inQuotes = true;
+      else if (ch === ',') { row.push(field); field = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); field = '';
+        if (row.some(f => f.trim() !== '')) rows.push(row);
+        row = [];
+      } else field += ch;
+    }
+    row.push(field);
+    if (row.some(f => f.trim() !== '')) rows.push(row);
+    return rows;
+  };
+
+  const rows = parseCsv(csv);
+  if (rows.length < 2) return c.json({ success: false, error: 'CSV has no data rows' }, 400);
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const col = (name: string) => header.indexOf(name.toLowerCase());
+  const ci = {
+    date: col('Date'), time: col('Time'), endTime: col('End Time'),
+    visDiv: col('Visitor Division'), visTeam: col('Visitor Team'),
+    homeDiv: col('Home Division'), homeTeam: col('Home Team'),
+    location: col('Location'), gameNumber: col('Game Number'), gameType: col('Game Type'),
+  };
+  for (const [k, v] of Object.entries(ci)) {
+    if (v === -1) return c.json({ success: false, error: `CSV is missing the "${k}" column` }, 400);
+  }
+
+  const norm = (s: string) => String(s || '').toLowerCase().replace(/[().\-–—_/]/g, ' ').replace(/\s+/g, ' ').trim();
+  const normDiv = (s: string) => norm(s).replace(/^peewee/, 'pee wee').replace(/^pee wee/, 'pee wee');
+
+  // ---- existing divisions, registrations (team names), venues, rinks ----
+  const divisions = (await db.prepare('SELECT id, age_group, division_level FROM event_divisions WHERE event_id = ?').bind(eventId).all<any>()).results || [];
+
+  const regTeams: { team_id: string | null; names: string[] }[] = [];
+  const er = await db.prepare(`
+    SELECT er.team_id, er.team_name,
+      COALESCE(ct.schedule_name, CASE WHEN ct.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ct.organization_id), ct.name) || ' (' || TRIM(SUBSTR(ct.head_coach_name, INSTR(ct.head_coach_name, ' '))) || ')' ELSE ct.name END) as display_name
+    FROM event_registrations er LEFT JOIN teams ct ON ct.id = er.team_id
+    WHERE er.event_id = ? AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
+  `).bind(eventId).all<any>();
+  for (const r of (er.results || [])) {
+    regTeams.push({ team_id: r.team_id || null, names: [r.display_name, r.team_name].filter(Boolean) });
+  }
+  const nr = await db.prepare(`
+    SELECT r.team_id, t.name as team_name, COALESCE(t.schedule_name, t.name) as display_name
+    FROM registrations r LEFT JOIN teams t ON t.id = r.team_id
+    WHERE r.event_id = ? AND r.status NOT IN ('rejected', 'withdrawn')
+  `).bind(eventId).all<any>();
+  for (const r of (nr.results || [])) {
+    regTeams.push({ team_id: r.team_id || null, names: [r.display_name, r.team_name].filter(Boolean) });
+  }
+
+  const venues = (await db.prepare('SELECT id, name FROM venues WHERE is_active = 1').all<any>()).results || [];
+  const rinks = (await db.prepare('SELECT id, venue_id, name FROM venue_rinks').all<any>()).results || [];
+
+  // ---- resolvers (create-on-miss, tracked for the report) ----
+  const createdDivisions: string[] = [];
+  const createdVenues: string[] = [];
+  const createdRinks: string[] = [];
+  const unmatchedTeams = new Set<string>();
+  const warnings: string[] = [];
+  const stmts: any[] = [];
+
+  const AGE_PREFIXES: [string, string][] = [
+    ['pee wee', 'Pee Wee'], ['peewee', 'Pee Wee'], ['mite', 'Mite'], ['squirt', 'Squirt'],
+    ['bantam', 'Bantam'], ['midget', 'Midget'], ['varsity', 'Varsity'], ['high school', 'High School'], ['girls', 'Girls'],
+  ];
+  const divCache = new Map<string, string>();
+  const resolveDivision = (raw: string): string => {
+    const key = normDiv(raw);
+    if (divCache.has(key)) return divCache.get(key) as string;
+    let found = divisions.find((d: any) => normDiv(`${d.age_group} ${d.division_level || ''}`) === key)
+      || divisions.find((d: any) => normDiv(d.age_group) === key);
+    if (!found) {
+      // Parse "Peewee B2" → Pee Wee / B2 ; "Pee Wee MHR 81-84" → Pee Wee / MHR 81-84
+      let ageGroup = raw.trim(); let level: string | null = null;
+      for (const [pfx, canonical] of AGE_PREFIXES) {
+        if (key === pfx || key.startsWith(pfx + ' ')) {
+          ageGroup = canonical;
+          const rest = key.slice(pfx.length).trim();
+          level = rest ? raw.trim().slice(-(rest.length)).trim() || rest.toUpperCase() : null;
+          // Best effort: take the original text minus the matched prefix
+          const m = raw.trim().match(new RegExp(`^${pfx.replace(' ', '\\s*')}\\s*(.*)$`, 'i'));
+          if (m && m[1]) level = m[1].trim();
+          break;
+        }
+      }
+      const id = crypto.randomUUID().replace(/-/g, '');
+      // status 'cancelled' keeps schedule-only divisions OFF public pricing +
+      // registration matching; games/standings work regardless
+      stmts.push(db.prepare(
+        "INSERT INTO event_divisions (id, event_id, age_group, division_level, price_cents, status) VALUES (?, ?, ?, ?, 0, 'cancelled')"
+      ).bind(id, eventId, ageGroup, level || null, ));
+      found = { id, age_group: ageGroup, division_level: level };
+      divisions.push(found);
+      createdDivisions.push(`${ageGroup}${level ? ' ' + level : ''}`);
+    }
+    divCache.set(key, found.id);
+    return found.id;
+  };
+
+  const teamCache = new Map<string, { team_id: string | null; placeholder: string | null }>();
+  const resolveTeam = (raw: string): { team_id: string | null; placeholder: string | null } => {
+    const trimmed = String(raw || '').trim();
+    const key = norm(trimmed);
+    if (teamCache.has(key)) return teamCache.get(key) as any;
+    let out: { team_id: string | null; placeholder: string | null };
+    if (/^tbd\b/i.test(trimmed)) {
+      // "TBD - 2nd blue" → "2nd Place Blue"
+      const rest = trimmed.replace(/^tbd\s*[-–]?\s*/i, '').trim();
+      const seed = rest.match(/(\d+)\s*(st|nd|rd|th)/i);
+      const pool = rest.replace(/(\d+)\s*(st|nd|rd|th)/i, '').trim();
+      const poolLabel = pool ? ' ' + pool.charAt(0).toUpperCase() + pool.slice(1).toLowerCase() : '';
+      out = { team_id: null, placeholder: seed ? `${seed[1]}${seed[2].toLowerCase()} Place${poolLabel}` : (rest || 'TBD') };
+    } else {
+      const exact = regTeams.find(t => t.names.some(n => norm(n) === key));
+      const partial = exact || regTeams.find(t => t.names.some(n => norm(n).includes(key) || key.includes(norm(n))));
+      if (partial?.team_id) {
+        out = { team_id: partial.team_id, placeholder: null };
+      } else {
+        out = { team_id: null, placeholder: trimmed };
+        unmatchedTeams.add(trimmed);
+      }
+    }
+    teamCache.set(key, out);
+    return out;
+  };
+
+  const venueCache = new Map<string, { venueId: string; rinkId: string | null }>();
+  const linkedVenues = new Set<string>();
+  const resolveLocation = (raw: string): { venueId: string; rinkId: string | null } => {
+    const key = norm(raw);
+    if (venueCache.has(key)) return venueCache.get(key) as any;
+    const dash = raw.indexOf(' - ');
+    const venueName = (dash > 0 ? raw.slice(0, dash) : raw).trim();
+    const rinkName = dash > 0 ? raw.slice(dash + 3).trim() : null;
+    let venue = venues.find((v: any) => norm(v.name) === norm(venueName));
+    if (!venue) {
+      const id = crypto.randomUUID().replace(/-/g, '');
+      stmts.push(db.prepare('INSERT INTO venues (id, name, city, state) VALUES (?, ?, ?, ?)')
+        .bind(id, venueName, event.city || '', event.state || ''));
+      venue = { id, name: venueName };
+      venues.push(venue);
+      createdVenues.push(venueName);
+    }
+    if (!linkedVenues.has(venue.id)) {
+      stmts.push(db.prepare('INSERT OR IGNORE INTO event_venues (id, event_id, venue_id) VALUES (?, ?, ?)')
+        .bind(crypto.randomUUID().replace(/-/g, ''), eventId, venue.id));
+      linkedVenues.add(venue.id);
+    }
+    let rinkId: string | null = null;
+    if (rinkName) {
+      let rink = rinks.find((r: any) => r.venue_id === venue.id && norm(r.name) === norm(rinkName));
+      if (!rink) {
+        const id = crypto.randomUUID().replace(/-/g, '');
+        stmts.push(db.prepare('INSERT OR IGNORE INTO venue_rinks (id, venue_id, name) VALUES (?, ?, ?)')
+          .bind(id, venue.id, rinkName));
+        rink = { id, venue_id: venue.id, name: rinkName };
+        rinks.push(rink);
+        createdRinks.push(`${venueName} — ${rinkName}`);
+      }
+      rinkId = rink.id;
+    }
+    const out = { venueId: venue.id, rinkId };
+    venueCache.set(key, out);
+    return out;
+  };
+
+  const parseWhen = (dateStr: string, timeStr: string): string | null => {
+    const d = String(dateStr || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const t = String(timeStr || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!d || !t) return null;
+    let hh = parseInt(t[1], 10) % 12;
+    if (/pm/i.test(t[3])) hh += 12;
+    return `${d[3]}-${d[1].padStart(2, '0')}-${d[2].padStart(2, '0')} ${String(hh).padStart(2, '0')}:${t[2]}:00`;
+  };
+
+  // ---- build the games ----
+  type GameRow = any;
+  const games: GameRow[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const visDivRaw = (r[ci.visDiv] || '').trim();
+    const homeDivRaw = (r[ci.homeDiv] || '').trim();
+    const divRaw = homeDivRaw || visDivRaw;
+    if (!divRaw) { warnings.push(`Row ${i + 1}: no division — skipped`); continue; }
+    if (visDivRaw && homeDivRaw && normDiv(visDivRaw) !== normDiv(homeDivRaw)) {
+      warnings.push(`Row ${i + 1}: visitor/home division mismatch ("${visDivRaw}" vs "${homeDivRaw}") — used home division`);
+    }
+    const startTime = parseWhen(r[ci.date], r[ci.time]);
+    if (!startTime) { warnings.push(`Row ${i + 1}: bad date/time ("${r[ci.date]} ${r[ci.time]}") — skipped`); continue; }
+    const endTime = parseWhen(r[ci.date], r[ci.endTime]);
+    const divisionId = resolveDivision(divRaw);
+    const home = resolveTeam(r[ci.homeTeam]);
+    const away = resolveTeam(r[ci.visTeam]);
+    const loc = resolveLocation((r[ci.location] || '').trim());
+    const typeRaw = (r[ci.gameType] || '').trim().toLowerCase();
+    let gameType = 'pool';
+    if (typeRaw && typeRaw !== 'tournament') {
+      const labels = `${home.placeholder || ''} ${away.placeholder || ''}`.toLowerCase();
+      if (/3rd|4th/.test(labels)) gameType = 'placement';
+      else if (/1st/.test(labels) && /2nd/.test(labels)) gameType = 'championship';
+      else gameType = 'semifinal';
+    }
+    games.push({
+      id: crypto.randomUUID().replace(/-/g, ''),
+      divisionId, startTime, endTime,
+      homeTeamId: home.team_id, homePlaceholder: home.placeholder,
+      awayTeamId: away.team_id, awayPlaceholder: away.placeholder,
+      venueId: loc.venueId, rinkId: loc.rinkId,
+      gameNumber: parseInt(r[ci.gameNumber], 10) || null,
+      gameType,
+    });
+  }
+
+  const summary = {
+    totalRows: rows.length - 1,
+    games: games.length,
+    poolGames: games.filter(g => g.gameType === 'pool').length,
+    bracketGames: games.filter(g => g.gameType !== 'pool').length,
+    matchedTeamGames: games.filter(g => g.homeTeamId || g.awayTeamId).length,
+    createdDivisions, createdVenues, createdRinks,
+    unmatchedTeams: [...unmatchedTeams].sort(),
+    warnings,
+  };
+
+  if (!commit) return c.json({ success: true, data: { ...summary, committed: false } });
+
+  // ---- commit ----
+  const existing = await db.prepare('SELECT COUNT(*) as n FROM games WHERE event_id = ?').bind(eventId).first<any>();
+  if ((existing?.n || 0) > 0) {
+    if (!replace) return c.json({ success: false, error: `This event already has ${existing.n} games. Re-upload with "replace" checked to wipe and rebuild them (scores on existing games are deleted).` }, 409);
+    const childTables = ['game_events', 'game_shots', 'game_contests', 'game_locker_rooms', 'game_status_log', 'referee_game_assignments', 'game_lineups', 'game_three_stars', 'goalie_game_stats', 'shootout_rounds', 'game_period_scores', 'game_notes', 'game_coaches', 'game_officials'];
+    for (const t of childTables) {
+      await db.prepare(`DELETE FROM ${t} WHERE game_id IN (SELECT id FROM games WHERE event_id = ?)`).bind(eventId).run().catch(() => {});
+    }
+    await db.prepare('DELETE FROM games WHERE event_id = ?').bind(eventId).run();
+  }
+
+  // creations (divisions/venues/rinks/links) first, in order
+  for (let i = 0; i < stmts.length; i += 20) {
+    await db.batch(stmts.slice(i, i + 20));
+  }
+  const gameStmts = games.map(g => db.prepare(`
+    INSERT INTO games (id, event_id, event_division_id, home_team_id, away_team_id, home_placeholder, away_placeholder,
+      venue_id, rink_id, game_number, start_time, end_time, game_type, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+  `).bind(g.id, eventId, g.divisionId, g.homeTeamId, g.awayTeamId, g.homePlaceholder, g.awayPlaceholder,
+    g.venueId, g.rinkId, g.gameNumber, g.startTime, g.endTime, g.gameType));
+  for (let i = 0; i < gameStmts.length; i += 40) {
+    await db.batch(gameStmts.slice(i, i + 40));
+  }
+
+  return c.json({ success: true, data: { ...summary, committed: true } });
+});
