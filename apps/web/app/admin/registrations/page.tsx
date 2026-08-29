@@ -791,6 +791,9 @@ interface EventHotel {
 
 export default function AdminRegistrationsPage() {
   const [registrations, setRegistrations] = useState<(Registration & { event_name?: string; event_city?: string; event_state?: string; event_start_date?: string })[]>([]);
+  // Super Saver credits keyed by the registration the $400 is pinned to, so
+  // support can answer "am I getting my discount?" without reading the code.
+  const [superSaverByReg, setSuperSaverByReg] = useState<Record<string, any>>({});
   const [regLoading, setRegLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -822,6 +825,24 @@ export default function AdminRegistrationsPage() {
   }, []);
 
   useEffect(() => { loadAllRegistrations(); }, [loadAllRegistrations]);
+
+  useEffect(() => {
+    const teamIds = Array.from(new Set(registrations.map(r => r.team_id).filter(Boolean)));
+    if (!teamIds.length) return;
+    let cancelled = false;
+    Promise.all(teamIds.slice(0, 250).map(id =>
+      fetch(`${API_BASE}/events/super-saver-status?teamId=${encodeURIComponent(id)}`)
+        .then(r => r.json()).then(j => j?.data).catch(() => null)
+    )).then(list => {
+      if (cancelled) return;
+      const next: Record<string, any> = {};
+      for (const d of list) {
+        if (d?.eligible && d.applied?.registration_id) next[d.applied.registration_id] = d;
+      }
+      setSuperSaverByReg(next);
+    });
+    return () => { cancelled = true; };
+  }, [registrations]);
 
   // Load divisions + hotels for a specific event (for detail panel)
   const loadEventContext = async (eventId: string, slug?: string) => {
@@ -1107,9 +1128,14 @@ export default function AdminRegistrationsPage() {
                     </svg>
                   </button>
                 </div>
-                <div className="flex items-center gap-2 mt-2.5">
+                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                   <StatusBadge status={reg.status} />
                   <PaymentBadge status={reg.payment_status || 'unpaid'} />
+                  {superSaverByReg[reg.id] && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#e8f9ee] text-[#1d7a34] border-[#34c759]">
+                      {superSaverByReg[reg.id].confirmed ? '\u2713 ' : ''}&#36;{Math.round((superSaverByReg[reg.id].credit_cents || 0) / 100)} Super Saver
+                    </span>
+                  )}
                 </div>
                 {(reg.status === 'pending' || reg.status === 'waitlisted') && (
                   <div className="flex gap-2 mt-3" onClick={e => e.stopPropagation()}>
@@ -1196,7 +1222,14 @@ export default function AdminRegistrationsPage() {
                       <StatusBadge status={reg.status} />
                     </td>
                     <td className="px-4 py-3 text-center hidden md:table-cell">
-                      <PaymentBadge status={reg.payment_status || 'unpaid'} />
+                      <div className="flex flex-col items-center gap-1">
+                        <PaymentBadge status={reg.payment_status || 'unpaid'} />
+                        {superSaverByReg[reg.id] && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#e8f9ee] text-[#1d7a34] border-[#34c759]">
+                      {superSaverByReg[reg.id].confirmed ? '\u2713 ' : ''}&#36;{Math.round((superSaverByReg[reg.id].credit_cents || 0) / 100)} Super Saver
+                    </span>
+                  )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center hidden lg:table-cell">
                       <span className="text-xs text-[#86868b]">{formatDate(reg.created_at)}</span>

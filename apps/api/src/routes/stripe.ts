@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { getResolvedFields } from '../lib/template-overrides';
+import { evaluateSuperSaver } from '../lib/super-saver';
 
 export const stripeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -102,142 +103,6 @@ export async function discountCodeBurnedByAbandonedCheckout(db: D1Database, dc: 
   }
 }
 
-async function computeSuperSaverCredit(
-  db: D1Database,
-  payingRegIds: string[],
-  totalCents: number
-): Promise<{ credit: number; promoId: string } | null> {
-  try {
-    // ALL promos, including ended/superseded ones: the deadline governs when a
-    // team must REGISTER, but pay-later teams settle up weeks afterward — a
-    // registration made inside any promo's window keeps its credit at payment
-    // time. (One credit per team per promo still applies.)
-    const promos = await db.prepare(
-      "SELECT id, discount_cents, starts_at, ends_at, event_ids, min_event_start FROM super_saver_promos ORDER BY starts_at DESC"
-    ).all<any>();
-    if (!promos.results?.length) return null;
-
-    // Identify the paying registration(s) and their team
-    const payingRegs: any[] = [];
-    for (const regId of payingRegIds) {
-      let reg = await db.prepare(
-        `SELECT id, event_id, team_id, team_name, created_at, status,
-                COALESCE(needs_hotel, 0) as needs_hotel, hotel_choice_1
-         FROM event_registrations WHERE id = ?`
-      ).bind(regId).first<any>();
-      if (!reg) {
-        reg = await db.prepare(
-          `SELECT r.id, r.event_id, r.team_id, t.name as team_name, r.created_at, r.status,
-                  COALESCE(r.needs_hotel, 0) as needs_hotel, NULL as hotel_choice_1
-           FROM registrations r LEFT JOIN teams t ON t.id = r.team_id WHERE r.id = ?`
-        ).bind(regId).first<any>();
-      }
-      if (reg) payingRegs.push(reg);
-    }
-    if (!payingRegs.length) return null;
-    const teamId = payingRegs[0].team_id || null;
-    const teamName = (payingRegs[0].team_name || '').trim();
-    if (!teamId && !teamName) return null;
-    const teamKey = teamId || teamName.toLowerCase();
-
-    const hotelOk = (r: any) => {
-      if (r.needs_hotel === 1) return true;
-      const c1 = String(r.hotel_choice_1 || '').trim().toLowerCase();
-      // A real hotel preference — local teams don't meet the hotel requirement
-      return c1 !== '' && c1 !== 'hotels coming soon' && c1 !== 'local team';
-    };
-
-    for (const promo of promos.results as any[]) {
-      // Featured events are optional — an empty list means ANY event qualifies
-      let featuredIds: string[] = [];
-      try { featuredIds = JSON.parse(promo.event_ids || '[]'); } catch {}
-
-      // The registration being paid must have been created during the window
-      const inWindow = (createdAt: string) => createdAt >= promo.starts_at && createdAt <= promo.ends_at;
-      if (!payingRegs.some(r => inWindow(r.created_at))) continue;
-
-      // One credit per team per promo (confirmed = redeemed)
-      const existing = await db.prepare(
-        'SELECT confirmed FROM super_saver_credits WHERE promo_id = ? AND team_key = ?'
-      ).bind(promo.id, teamKey).first<{ confirmed: number }>();
-      if (existing?.confirmed === 1) continue;
-
-      // All of this team's active registrations created during the window
-      const teamRegs: any[] = [...payingRegs.filter(r => inWindow(r.created_at))];
-      const er = await db.prepare(
-        `SELECT id, event_id, created_at, COALESCE(needs_hotel, 0) as needs_hotel, hotel_choice_1
-         FROM event_registrations
-         WHERE (team_id = ? OR LOWER(team_name) = LOWER(?))
-           AND created_at >= ? AND created_at <= ?
-           AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')`
-      ).bind(teamId || '', teamName, promo.starts_at, promo.ends_at).all<any>();
-      for (const r of (er.results || [])) {
-        if (!teamRegs.some(x => x.id === r.id)) teamRegs.push(r);
-      }
-      try {
-        if (teamId) {
-          const rr = await db.prepare(
-            `SELECT id, event_id, created_at, COALESCE(needs_hotel, 0) as needs_hotel, NULL as hotel_choice_1
-             FROM registrations
-             WHERE team_id = ? AND created_at >= ? AND created_at <= ?
-               AND status NOT IN ('rejected', 'withdrawn')`
-          ).bind(teamId, promo.starts_at, promo.ends_at).all<any>();
-          for (const r of (rr.results || [])) {
-            if (!teamRegs.some(x => x.id === r.id)) teamRegs.push(r);
-          }
-        }
-      } catch {}
-
-      const distinctEvents = new Set(teamRegs.map(r => r.event_id));
-      if (distinctEvents.size < 2) continue;
-
-      // Hotel requirement: at least ONE of the team's window registrations is
-      // a hotel event (either event of the pair; 'Local Team' doesn't count)
-      if (!teamRegs.some(r => hotelOk(r))) continue;
-
-      // The pair rule: the FIRST (qualifying) event must take place within the
-      // promo's calendar year; the credited event is any DIFFERENT event —
-      // this year or later (further restricted by min_event_start if set).
-      const eventStarts = new Map<string, string>();
-      for (const eid of Array.from(new Set(teamRegs.map(r => r.event_id)))) {
-        const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?')
-          .bind(eid).first<{ start_date: string }>();
-        if (ev?.start_date) eventStarts.set(eid, ev.start_date);
-      }
-      const promoYearEnd = String(promo.starts_at || '').slice(0, 4) + '-12-31';
-      const isQualifyingEvent = (eid: string) =>
-        (eventStarts.get(eid) || '9999') <= promoYearEnd &&
-        (featuredIds.length === 0 || featuredIds.includes(eid));
-
-      const creditedReg = payingRegs.find(c =>
-        (!promo.min_event_start || (eventStarts.get(c.event_id) || '') >= promo.min_event_start) &&
-        teamRegs.some(q => q.event_id !== c.event_id && isQualifyingEvent(q.event_id))
-      );
-      if (!creditedReg) continue;
-      const qualifying = teamRegs.find(q => q.event_id !== creditedReg.event_id && isQualifyingEvent(q.event_id))!;
-
-      const credit = Math.min(promo.discount_cents || 40000, totalCents);
-      if (credit <= 0) continue;
-
-      // Record (or refresh) the pending credit for this team
-      await db.prepare(`
-        INSERT INTO super_saver_credits (promo_id, team_key, qualifying_reg_id, applied_reg_id, amount_cents, confirmed)
-        VALUES (?, ?, ?, ?, ?, 0)
-        ON CONFLICT(promo_id, team_key) DO UPDATE SET
-          qualifying_reg_id = excluded.qualifying_reg_id,
-          applied_reg_id = excluded.applied_reg_id,
-          amount_cents = excluded.amount_cents
-        WHERE confirmed = 0
-      `).bind(promo.id, teamKey, qualifying.id, payingRegIds[0], credit).run();
-
-      return { credit, promoId: promo.id };
-    }
-  } catch (err: any) {
-    console.error('Super Saver credit check failed (payment unaffected):', err?.message || String(err));
-  }
-  return null;
-}
-
 // Helper: after a registration is paid, withdraw any OTHER abandoned-checkout
 // rows for the same team + event so they don't linger as duplicate participants.
 // (Re-registering while a prior attempt sits at 'awaiting_payment' creates a new
@@ -272,6 +137,19 @@ async function withdrawAbandonedDuplicates(db: D1Database, paidRegId: string) {
 // ==================
 // PAYMENT INFO LOOKUP (no auth — accessed via shared payment links)
 // ==================
+// Discount bookkeeping columns. The payment path has always tried to write
+// these; without them the writes failed silently and no admin could tell
+// whether a discount had been applied.
+let discountColumnsChecked = false;
+async function ensureDiscountColumns(db: D1Database) {
+  if (discountColumnsChecked) return;
+  discountColumnsChecked = true;
+  for (const table of ['event_registrations', 'registrations']) {
+    try { await db.prepare(`ALTER TABLE ${table} ADD COLUMN discount_code TEXT`).run(); } catch { /* exists */ }
+    try { await db.prepare(`ALTER TABLE ${table} ADD COLUMN discount_cents INTEGER`).run(); } catch { /* exists */ }
+  }
+}
+
 stripeRoutes.get('/payment-info', async (c) => {
   const idsParam = c.req.query('ids');
   if (!idsParam) return c.json({ success: false, error: 'ids parameter required' }, 400);
@@ -354,7 +232,11 @@ stripeRoutes.get('/payment-info', async (c) => {
     return c.json({ success: false, error: 'No registrations found' }, 404);
   }
 
-  return c.json({ success: true, data: { registrations } });
+  // Super Saver: show the team the $400 before they pick a payment option
+  const superSaver = await evaluateSuperSaver(db, { regIds: ids }, { persist: true })
+    .catch(() => null);
+
+  return c.json({ success: true, data: { registrations, super_saver: superSaver } });
 });
 
 // ==================
@@ -373,6 +255,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
   const data = c.req.valid('json');
   const db = c.env.DB;
   const stripeKey = c.env.STRIPE_SECRET_KEY;
+  await ensureDiscountColumns(db);
 
   if (!stripeKey) {
     return c.json({ success: false, error: 'Payment processing not configured' }, 500);
@@ -557,12 +440,22 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
   // Super Saver auto-credit — applies only to full payments with no other code,
   // and never blocks the payment if anything goes wrong.
   let superSaverCents = 0;
-  if (!discountCode && data.paymentChoice === 'pay_now') {
-    const ss = await computeSuperSaverCredit(db, chargedRegIds, totalCents);
-    if (ss) {
-      superSaverCents = ss.credit;
-      discountCents += ss.credit;
-      discountCode = 'SUPER SAVER';
+  let superSaverReservedFor = '';
+  if (!discountCode) {
+    // The credit is pinned to the team's 2nd registered event so that what we
+    // SHOW them ahead of time and what we CHARGE can never disagree. We
+    // evaluate on deposits too — not to discount them, but so the checkout can
+    // say the $400 is waiting rather than going quiet about it.
+    const ss = await evaluateSuperSaver(db, { regIds: chargedRegIds }, { persist: true });
+    if (ss.eligible && !ss.confirmed && ss.applied) {
+      const onThisCharge = chargedRegIds.includes(ss.applied.registration_id);
+      if (onThisCharge && data.paymentChoice === 'pay_now') {
+        superSaverCents = Math.min(ss.credit_cents, totalCents);
+        discountCents += superSaverCents;
+        discountCode = 'SUPER SAVER';
+      } else {
+        superSaverReservedFor = ss.applied.event_name;
+      }
     }
   }
 
@@ -608,6 +501,9 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       params['metadata[discount_code]'] = discountCode;
       params['metadata[discount_cents]'] = String(discountCents);
     }
+    if (superSaverCents > 0) {
+      params['metadata[super_saver_cents]'] = String(superSaverCents);
+    }
 
     const paymentIntent = await stripeRequest('/payment_intents', stripeKey, params);
 
@@ -621,6 +517,11 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       await db.prepare(
         `UPDATE event_registrations SET payment_status = 'pending_payment', stripe_session_id = ? WHERE id = ?`
       ).bind(paymentIntent.id, regId).run().catch(() => {});
+      if (discountCode) {
+        await db.prepare(
+          `UPDATE event_registrations SET discount_code = ?, discount_cents = ? WHERE id = ?`
+        ).bind(discountCode, discountCents, regId).run().catch(() => {});
+      }
       await db.prepare(
         `UPDATE registrations SET payment_status = 'pending_payment', stripe_session_id = ? WHERE id = ?`
       ).bind(paymentIntent.id, regId).run().catch(() => {});
@@ -634,6 +535,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
         totalCents,
         discountApplied: discountCents,
         superSaverCents,
+        ...(superSaverReservedFor ? { superSaverReservedFor } : {}),
         ...(codeDeferredToFinal ? { codeDeferredToFinal } : {}),
       },
     });
@@ -699,9 +601,12 @@ stripeRoutes.post('/confirm-payment', async (c) => {
         ).bind(regId).run().catch(() => {});
 
         await withdrawAbandonedDuplicates(db, regId);
-        // Redeem any Super Saver credit tied to this registration's payment
-        await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')
-          .bind(regId).run().catch(() => {});
+        // Redeem the Super Saver credit ONLY when this charge actually carried
+        // it. Deposits and ordinary balance payments leave the credit pinned.
+        if (Number(pi.metadata?.super_saver_cents || 0) > 0) {
+          await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')
+            .bind(regId).run().catch(() => {});
+        }
       }
 
       // Send confirmation email now that payment has succeeded
@@ -815,8 +720,10 @@ stripeRoutes.post('/webhook', async (c) => {
         ).bind(regId).run().catch(() => {});
 
       await withdrawAbandonedDuplicates(db, regId);
-      await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')
-        .bind(regId).run().catch(() => {});
+      if (Number(pi.metadata?.super_saver_cents || 0) > 0) {
+        await db.prepare('UPDATE super_saver_credits SET confirmed = 1 WHERE applied_reg_id = ?')
+          .bind(regId).run().catch(() => {});
+      }
     }
   }
 

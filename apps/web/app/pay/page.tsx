@@ -39,6 +39,7 @@ export default function PayPage() {
   const [discountCode, setDiscountCode] = useState('');
   const [totalCents, setTotalCents] = useState(0);
   const [codeDeferred, setCodeDeferred] = useState('');
+  const [superSaver, setSuperSaver] = useState<any>(null);
   const [stripeInstance, setStripeInstance] = useState<any>(null);
   const [stripeElements, setStripeElements] = useState<any>(null);
   const [paying, setPaying] = useState(false);
@@ -65,6 +66,7 @@ export default function PayPage() {
           return;
         }
         const regs: Registration[] = data.data.registrations;
+        setSuperSaver(data.data.super_saver || null);
         const unpaid = regs.filter(r => !r.already_paid);
         if (unpaid.length === 0) {
           setRegistrations(regs);
@@ -115,8 +117,19 @@ export default function PayPage() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  // The Super Saver credit is pinned to one registration and only comes off a
+  // full payment — mirror the API's rule exactly so the button matches the charge.
+  const superSaverOnThisPage = (choice: 'pay_now' | 'pay_deposit') => {
+    if (choice !== 'pay_now') return 0;
+    if (!superSaver?.eligible || superSaver.confirmed || discountCode) return 0;
+    const pinned = superSaver.applied?.registration_id;
+    if (!pinned || !registrations.some(r => r.id === pinned)) return 0;
+    return superSaver.credit_cents || 0;
+  };
+
   const computeTotal = (choice: 'pay_now' | 'pay_deposit') => {
-    return registrations.reduce((sum, r) => sum + (choice === 'pay_deposit' ? r.deposit_cents : r.price_cents), 0);
+    const gross = registrations.reduce((sum, r) => sum + (choice === 'pay_deposit' ? r.deposit_cents : r.price_cents), 0);
+    return Math.max(0, gross - superSaverOnThisPage(choice));
   };
 
   const handleCreatePaymentIntent = async () => {
@@ -274,6 +287,31 @@ export default function PayPage() {
                   </div>
                 </div>
               ))}
+
+              {/* Super Saver — always visible once earned, so nobody has to
+                  reach the card screen to find out whether they're getting it */}
+              {superSaver?.eligible && superSaver.applied && (
+                <div style={{ margin: '16px 0', padding: '14px 16px', borderRadius: 12, border: '2px solid #34c759', backgroundColor: '#f1fbf3' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: '#1d7a34' }}>
+                    &#127881; ${Math.round((superSaver.credit_cents || 0) / 100)} Super Saver Discount earned
+                  </p>
+                  {superSaver.confirmed ? (
+                    <p style={{ margin: 0, fontSize: 13, color: '#1d1d1f', lineHeight: 1.5 }}>
+                      Already applied to <strong>{superSaver.applied.event_name}</strong>.
+                    </p>
+                  ) : registrations.some(r => r.id === superSaver.applied.registration_id) ? (
+                    <p style={{ margin: 0, fontSize: 13, color: '#1d1d1f', lineHeight: 1.5 }}>
+                      Comes off <strong>{superSaver.applied.event_name}</strong> below when you pay in full.
+                      {' '}Earned by also registering for {superSaver.qualifying?.event_name}.
+                    </p>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 13, color: '#1d1d1f', lineHeight: 1.5 }}>
+                      Reserved for <strong>{superSaver.applied.event_name}</strong> &mdash; it comes off that
+                      registration when you pay it in full, not this one.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Payment choice */}
               <div style={{ margin: '20px 0', display: 'flex', gap: 10 }}>

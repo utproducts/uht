@@ -29,6 +29,9 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
   const [rosterLinkCopied, setRosterLinkCopied] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  // Super Saver credit per team, keyed by team id — so a coach can see the $400
+  // sitting on their 2nd event without going to a payment screen.
+  const [superSaver, setSuperSaver] = useState<Record<string, any>>({});
 
   const loadTeams = useCallback(() => {
     const token = localStorage.getItem('uht_token');
@@ -48,6 +51,23 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
   }, []);
 
   useEffect(() => { loadTeams(); }, [loadTeams]);
+
+  useEffect(() => {
+    if (!teams.length) return;
+    let cancelled = false;
+    Promise.all(teams.map((t: any) =>
+      fetch(`${API}/api/events/super-saver-status?teamId=${encodeURIComponent(t.id)}`)
+        .then(r => r.json())
+        .then(j => [t.id, j?.data] as const)
+        .catch(() => [t.id, null] as const)
+    )).then(pairs => {
+      if (cancelled) return;
+      const next: Record<string, any> = {};
+      for (const [id, data] of pairs) if (data?.eligible) next[id] = data;
+      setSuperSaver(next);
+    });
+    return () => { cancelled = true; };
+  }, [teams]);
 
   // Auto-accept pending invites on mount
   useEffect(() => {
@@ -271,6 +291,11 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                               </p>
                             </div>
                             <span className="flex items-center gap-1.5 shrink-0">
+                              {superSaver[team.id]?.applied?.registration_id === ev.reg_id && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#e8f9ee] text-[#1d7a34] border-[#34c759]">
+                                  {superSaver[team.id].confirmed ? '\u2713 ' : ''}&#36;{Math.round((superSaver[team.id].credit_cents || 0) / 100)} off
+                                </span>
+                              )}
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                                 isApproved ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
                               }`}>
@@ -287,6 +312,13 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                           </a>
                         );
                       })}
+                      {superSaver[team.id]?.applied && (
+                        <p className="text-[11px] text-[#1d7a34] pl-2 leading-relaxed">
+                          {superSaver[team.id].confirmed
+                            ? `Super Saver applied — $${Math.round((superSaver[team.id].credit_cents || 0) / 100)} came off ${superSaver[team.id].applied.event_name}.`
+                            : `Super Saver: $${Math.round((superSaver[team.id].credit_cents || 0) / 100)} comes off ${superSaver[team.id].applied.event_name} when you pay it in full.`}
+                        </p>
+                      )}
                       {pastEvents.length > 0 && (
                         <p className="text-[11px] text-[#86868b] pl-2">{pastEvents.length} past event{pastEvents.length !== 1 ? 's' : ''}</p>
                       )}

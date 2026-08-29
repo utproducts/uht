@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
+import { evaluateSuperSaver } from '../lib/super-saver';
 import { authMiddleware, requireRole, isDataRestricted, redactContactInfo } from '../middleware/auth';
 import { optionalAuth } from '../middleware/auth';
 import { discountCodeBurnedByAbandonedCheckout } from './stripe';
@@ -158,6 +159,25 @@ eventRoutes.get('/super-saver-active', async (c) => {
   } catch {
     return c.json({ success: true, data: { active: false } });
   }
+});
+
+// PUBLIC: has THIS team earned the Super Saver credit, and which registration
+// does it come off? Read-only from the caller's point of view — it pins the
+// credit so the number we show is the number we charge, but it never takes
+// money. Drives the register page, the pay page, the dashboard and admin.
+eventRoutes.get('/super-saver-status', async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.query('teamId') || null;
+  const teamName = c.req.query('teamName') || null;
+  const regIds = (c.req.query('registrationIds') || c.req.query('registrationId') || '')
+    .split(',').map(s => s.trim()).filter(Boolean).slice(0, 20);
+
+  if (!teamId && !teamName && regIds.length === 0) {
+    return c.json({ success: false, error: 'teamId, teamName or registrationId required' }, 400);
+  }
+
+  const status = await evaluateSuperSaver(db, { teamId, teamName, regIds }, { persist: true });
+  return c.json({ success: true, data: status });
 });
 
 eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
