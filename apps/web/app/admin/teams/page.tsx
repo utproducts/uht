@@ -73,6 +73,14 @@ export default function TeamsPage() {
   const [rosterLoading, setRosterLoading] = useState(false);
 
   // Delete modal state
+  // Move-team-to-organization state
+  const [orgs, setOrgs] = useState<{ id: string; name: string; state: string | null }[]>([]);
+  const [moveModal, setMoveModal] = useState<{ team: Team } | null>(null);
+  const [moveOrgId, setMoveOrgId] = useState('');
+  const [moveSearch, setMoveSearch] = useState('');
+  const [moveSaving, setMoveSaving] = useState(false);
+  const [moveError, setMoveError] = useState('');
+
   const [deleteModal, setDeleteModal] = useState<{ team: Team } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -81,18 +89,42 @@ export default function TeamsPage() {
   const fetchTeams = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ new_only: 'true', per_page: '500' });
-      if (search) params.set('search', search);
-      if (stateFilter) params.set('state', stateFilter);
-      if (seasonFilter) params.set('season', seasonFilter);
+      const authHeaders = {
+        'X-Dev-Bypass': 'true',
+        ...(typeof window !== 'undefined' && localStorage.getItem('uht_token')
+          ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` }
+          : {}),
+      };
+      const buildParams = (page: number) => {
+        const p = new URLSearchParams({ new_only: 'true', per_page: '500', page: String(page) });
+        if (search) p.set('search', search);
+        if (stateFilter) p.set('state', stateFilter);
+        if (seasonFilter) p.set('season', seasonFilter);
+        return p;
+      };
 
-      const res = await fetch(`${API}/api/teams/admin/list?${params}`, {
-        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
-      });
+      const res = await fetch(`${API}/api/teams/admin/list?${buildParams(1)}`, { headers: authHeaders });
       const data = await res.json();
       if (data.success) {
-        setTeams(data.data || []);
-        setTotal(data.pagination?.total || 0);
+        let all = data.data || [];
+        // The API caps per_page, so a large team count comes back paginated.
+        // This page renders one scrollable list, so pull the rest — otherwise
+        // teams past the cap silently disappear from the scroll while still
+        // being findable by search.
+        const totalPages = data.pagination?.totalPages || 1;
+        if (totalPages > 1) {
+          const rest = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) =>
+              fetch(`${API}/api/teams/admin/list?${buildParams(i + 2)}`, { headers: authHeaders })
+                .then(r => r.json())
+                .then(j => (j.success ? j.data || [] : []))
+                .catch(() => [])
+            )
+          );
+          all = all.concat(...rest);
+        }
+        setTeams(all);
+        setTotal(data.pagination?.total || all.length);
       }
     } catch (err) {
       console.error('Failed to load teams:', err);
@@ -104,6 +136,48 @@ export default function TeamsPage() {
   useEffect(() => {
     fetchTeams();
   }, [fetchTeams]);
+
+  // Organizations for the move picker
+  useEffect(() => {
+    fetch(`${API}/api/organizations/admin/list`, {
+      headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
+    })
+      .then(r => r.json())
+      .then(j => { if (j.success) setOrgs(j.data || []); })
+      .catch(() => {});
+  }, []);
+
+  const handleMoveOrg = async () => {
+    if (!moveModal) return;
+    setMoveSaving(true);
+    setMoveError('');
+    try {
+      const res = await fetch(`${API}/api/teams/admin/${moveModal.team.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Dev-Bypass': 'true',
+          ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}),
+        },
+        body: JSON.stringify({ organization_id: moveOrgId || null }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const org = orgs.find(o => o.id === moveOrgId);
+        setTeams(prev => prev.map(t => t.id === moveModal.team.id
+          ? { ...t, organization_id: moveOrgId || null, organization_name: org?.name || null }
+          : t));
+        setMoveModal(null);
+        setMoveSearch('');
+      } else {
+        setMoveError(data.error || 'Failed to change organization');
+      }
+    } catch {
+      setMoveError('Network error — please try again');
+    } finally {
+      setMoveSaving(false);
+    }
+  };
 
   // Deep link from event participants: /admin/teams?roster=<teamId>&q=<name>
   // opens with the team searched and its roster expanded
@@ -260,6 +334,15 @@ export default function TeamsPage() {
             {team.season || <span className="text-[#c7c7cc]">{'—'}</span>}
           </td>
           <td className="px-5 py-3 text-right">
+            <button
+              onClick={(e) => { e.stopPropagation(); setMoveModal({ team }); setMoveOrgId(team.organization_id || ''); setMoveSearch(''); setMoveError(''); }}
+              className="p-1.5 rounded-lg text-[#c7c7cc] hover:text-[#003e79] hover:bg-blue-50 transition mr-1"
+              title="Change organization"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); setDeleteModal({ team }); setDeleteConfirm(''); setDeleteError(''); }}
               className="p-1.5 rounded-lg text-[#c7c7cc] hover:text-red-500 hover:bg-red-50 transition"
@@ -584,6 +667,89 @@ export default function TeamsPage() {
       )}
 
       {/* Delete Confirmation Modal */}
+      {/* Change organization */}
+      {moveModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={() => !moveSaving && setMoveModal(null)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[#f0f0f0]">
+              <h3 className="text-lg font-semibold text-[#1d1d1f]">Change Organization</h3>
+              <p className="text-sm text-[#6e6e73] mt-0.5">{moveModal.team.name}</p>
+              <p className="text-xs text-[#86868b] mt-1">
+                Currently: <span className="font-medium text-[#1d1d1f]">{moveModal.team.organization_name || 'Unaffiliated'}</span>
+              </p>
+            </div>
+
+            <div className="px-5 py-3 border-b border-[#f0f0f0]">
+              <input
+                value={moveSearch}
+                onChange={e => setMoveSearch(e.target.value)}
+                placeholder="Search organizations..."
+                className="w-full px-3 py-2.5 rounded-xl border border-[#e0e0e5] text-sm focus:outline-none focus:border-[#003e79]"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-2">
+              <button
+                onClick={() => setMoveOrgId('')}
+                className={`w-full text-left px-3 py-2.5 rounded-xl mb-1 transition ${moveOrgId === '' ? 'bg-[#f0f7ff] border border-[#003e79]' : 'hover:bg-[#fafafa] border border-transparent'}`}
+              >
+                <span className="text-sm font-medium text-[#1d1d1f]">Unaffiliated</span>
+                <span className="block text-xs text-[#86868b]">Remove from any organization</span>
+              </button>
+              {(() => {
+                const matches = orgs.filter(o => !moveSearch || o.name.toLowerCase().includes(moveSearch.toLowerCase()));
+                // ~1,500 organizations exist — rendering them all locks up the
+                // modal, so show a slice until they type.
+                const shown = matches.slice(0, 60);
+                return (
+                  <>
+                    {matches.length > shown.length && (
+                      <p className="text-xs text-[#86868b] px-3 py-2">
+                        Showing {shown.length} of {matches.length} — type to narrow the list.
+                      </p>
+                    )}
+                    {shown.map(o => (
+                      <button
+                        key={o.id}
+                        onClick={() => setMoveOrgId(o.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl mb-1 transition ${moveOrgId === o.id ? 'bg-[#f0f7ff] border border-[#003e79]' : 'hover:bg-[#fafafa] border border-transparent'}`}
+                      >
+                        <span className="text-sm font-medium text-[#1d1d1f]">{o.name}</span>
+                        {o.state && <span className="block text-xs text-[#86868b]">{o.state}</span>}
+                      </button>
+                    ))}
+                    {matches.length === 0 && (
+                      <p className="text-sm text-[#86868b] py-4 text-center">No organizations match that search.</p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {moveError && (
+              <p className="px-5 text-sm text-red-600">{moveError}</p>
+            )}
+
+            <div className="px-5 py-4 border-t border-[#f0f0f0] flex gap-2">
+              <button
+                onClick={() => setMoveModal(null)}
+                disabled={moveSaving}
+                className="flex-1 py-2.5 rounded-xl border border-[#e0e0e5] text-sm font-semibold text-[#6e6e73] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMoveOrg}
+                disabled={moveSaving || moveOrgId === (moveModal.team.organization_id || '')}
+                className="flex-1 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold disabled:opacity-40"
+              >
+                {moveSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setDeleteModal(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>

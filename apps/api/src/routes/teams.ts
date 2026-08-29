@@ -131,7 +131,10 @@ teamRoutes.get('/admin/list', authMiddleware, requireRole('admin', 'director'), 
 
   // Paginate
   const pageNum = Math.max(1, parseInt(page));
-  const perPage = Math.min(100, Math.max(10, parseInt(per_page)));
+  // Admin views load the whole roster of teams in one screen, so the cap has to
+  // clear the total team count. At 100 the admin Teams page silently truncated
+  // (198 teams, first 100 shown) — teams after 'Lake Central' just vanished.
+  const perPage = Math.min(500, Math.max(10, parseInt(per_page)));
   const offset = (pageNum - 1) * perPage;
 
   const result = await db.prepare(`
