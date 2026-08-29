@@ -132,14 +132,27 @@ export async function evaluateSuperSaver(
       // Every active registration this team made inside the promo window.
       // 'awaiting_payment' rows are abandoned checkouts — they don't count.
       const teamRegs: TeamReg[] = [];
-      const er = await db.prepare(
-        `SELECT id, event_id, created_at, COALESCE(needs_hotel, 0) as needs_hotel,
-                hotel_choice_1, payment_status
-         FROM event_registrations
-         WHERE (team_id = ? OR LOWER(team_name) = LOWER(?))
-           AND created_at >= ? AND created_at <= ?
-           AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')`
-      ).bind(teamId || '', teamName, promo.starts_at, promo.ends_at).all<any>();
+      // Match on team_id when we have one. Falling back to the name for a
+      // team that HAS an id merges genuinely different teams that share a name
+      // (two 'Lake County Vipers Pee Wee (12U) Prospects Blue' squads, say),
+      // which would hand one of them a credit it never earned.
+      const er = teamId
+        ? await db.prepare(
+            `SELECT id, event_id, created_at, COALESCE(needs_hotel, 0) as needs_hotel,
+                    hotel_choice_1, payment_status
+             FROM event_registrations
+             WHERE team_id = ?
+               AND created_at >= ? AND created_at <= ?
+               AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')`
+          ).bind(teamId, promo.starts_at, promo.ends_at).all<any>()
+        : await db.prepare(
+            `SELECT id, event_id, created_at, COALESCE(needs_hotel, 0) as needs_hotel,
+                    hotel_choice_1, payment_status
+             FROM event_registrations
+             WHERE LOWER(team_name) = LOWER(?) AND team_id IS NULL
+               AND created_at >= ? AND created_at <= ?
+               AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')`
+          ).bind(teamName, promo.starts_at, promo.ends_at).all<any>();
       for (const r of (er.results || [])) teamRegs.push(r);
 
       if (teamId) {
