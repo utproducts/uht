@@ -94,12 +94,32 @@ function getBackLabel(path: string): string {
   return 'Back to Events';
 }
 
-// Derive display team name from org + age group + division
-function deriveTeamName(orgName: string, ageGroup: string, division: string): string {
+// Derive display team name from org + age group + division + head coach surname.
+// The surname is what lets a parent tell two same-division squads apart — orgs
+// routinely field e.g. two "Pee Wee (12U) Prospects Blue" teams, and without it
+// the names are byte-identical everywhere they appear.
+function coachSurname(coachName: string): string {
+  const cleaned = (coachName || '').trim().replace(/\s+/g, ' ');
+  if (!cleaned) return '';
+  // Placeholders aren't names — appending them makes things worse, not better
+  if (/^(tbd|tba|n\/a|none|unknown|coach)$/i.test(cleaned)) return '';
+  const tokens = cleaned.split(' ');
+  const last = tokens[tokens.length - 1];
+  // A lone first name gives us nothing to disambiguate with
+  if (tokens.length < 2) return '';
+  return last;
+}
+
+function deriveTeamName(orgName: string, ageGroup: string, division: string, coachName = ''): string {
   const parts = [orgName];
   if (ageGroup) parts.push(ageGroup);
   if (division) parts.push(division);
-  return parts.join(' ');
+  const base = parts.join(' ');
+  const surname = coachSurname(coachName);
+  if (!surname) return base;
+  // Some orgs already type the surname into the org/division themselves
+  if (base.toLowerCase().endsWith(surname.toLowerCase())) return base;
+  return `${base} - ${surname}`;
 }
 
 export default function CreateTeamPage() {
@@ -346,7 +366,7 @@ export default function CreateTeamPage() {
   };
 
   // Derived team name
-  const teamDisplayName = deriveTeamName(form.orgName, form.ageGroup, form.divisionLevel);
+  const teamDisplayName = deriveTeamName(form.orgName, form.ageGroup, form.divisionLevel, form.headCoachName);
 
   // Step validations
   const canProceedStep1 = !!(selectedOrg || form.orgId) && !!form.state && !!seasonType;
@@ -1076,6 +1096,11 @@ export default function CreateTeamPage() {
                   <div className="bg-navy-50 border border-navy-100 rounded-xl p-4">
                     <p className="text-xs font-semibold text-navy-500 uppercase tracking-wide mb-1">Your Team Name</p>
                     <p className="text-lg font-bold text-[#003e79]">{teamDisplayName}</p>
+                    {!coachSurname(form.headCoachName) && (
+                      <p className="text-xs text-[#6e6e73] mt-1.5">
+                        Your head coach&apos;s last name gets added on the next step, so parents can tell your team apart from others in the same division.
+                      </p>
+                    )}
                   </div>
                 )}
 
