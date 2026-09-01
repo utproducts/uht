@@ -35,6 +35,7 @@ interface EventItem {
   divisions: string | null;
   slots_count: number | null;
   is_sold_out: number;
+  is_hybrid: number;
   hide_availability: number;
   show_participants: number;
   information: string | null;
@@ -254,6 +255,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
     hide_availability: event?.hide_availability || 0,
     show_participants: event?.show_participants ?? 1,
     is_sold_out: event?.is_sold_out || 0,
+    is_hybrid: event?.is_hybrid || 0,
     sanction_number: event?.sanction_number || '',
   });
 
@@ -758,6 +760,7 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
         hide_availability: form.hide_availability,
         show_participants: form.show_participants,
         is_sold_out: form.is_sold_out,
+        is_hybrid: form.is_hybrid,
         sanction_number: form.sanction_number || null,
       };
 
@@ -1211,6 +1214,11 @@ function EventFormModal({ event, tournaments, venues, onClose, onSaved }: {
                   <input type="checkbox" checked={form.is_sold_out === 1} onChange={e => setForm({ ...form, is_sold_out: e.target.checked ? 1 : 0 })}
                     className="w-4 h-4 rounded border-[#e8e8ed] text-[#003e79] focus:ring-[#003e79]/20" />
                   <span className="text-sm text-[#3d3d3d]">Sold Out</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.is_hybrid === 1} onChange={e => setForm({ ...form, is_hybrid: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 rounded border-[#e8e8ed] text-[#003e79] focus:ring-[#003e79]/20" />
+                  <span className="text-sm text-[#3d3d3d]">Hybrid Event</span>
                 </label>
               </div>
 
@@ -5425,7 +5433,10 @@ export default function AdminEventsPage() {
                   return (
                     <tr key={event.id} className="border-b border-[#f5f5f7] hover:bg-[#fafafa] transition cursor-pointer" onClick={() => setSelectedEventId(event.id)}>
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-[#1d1d1f]">{event.name}</div>
+                        <div className="font-semibold text-[#1d1d1f]">
+                          {event.name}
+                          {event.is_hybrid === 1 && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wide align-middle">Hybrid</span>}
+                        </div>
                         {event.tournament_name && <div className="text-xs text-[#86868b]">{event.tournament_name}</div>}
                       </td>
                       <td className="px-4 py-3 text-[#6e6e73] whitespace-nowrap">{fmtDate(event.start_date)} – {fmtDate(event.end_date)}</td>

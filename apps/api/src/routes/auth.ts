@@ -398,7 +398,8 @@ authRoutes.get('/me', authMiddleware, async (c) => {
   const db = c.env.DB;
 
   const user = await db.prepare(`
-    SELECT id, email, first_name, last_name, phone, avatar_url, created_at
+    SELECT id, email, first_name, last_name, phone, avatar_url, created_at,
+           COALESCE(data_restricted, 0) as data_restricted
     FROM users WHERE id = ?
   `).bind(authUser.id).first();
 

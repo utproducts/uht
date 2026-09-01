@@ -98,7 +98,9 @@ export default function CreateTeamScreen({
   // Roster import step state
   const [showRosterStep, setShowRosterStep] = useState(false);
   const [createdTeamId, setCreatedTeamId] = useState('');
-  const [rosterTab, setRosterTab] = useState<'url' | 'paste' | 'manual'>('url');
+  // Default was 'url', but USA Hockey added a CAPTCHA to roster pages (Aug 2026)
+  // so link import no longer works for them — lead with paste instead.
+  const [rosterTab, setRosterTab] = useState<'url' | 'paste' | 'manual'>('paste');
   const [importUrl, setImportUrl] = useState('');
   const [pastedText, setPastedText] = useState('');
   const [newPlayer, setNewPlayer] = useState({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
@@ -985,8 +987,8 @@ export default function CreateTeamScreen({
             {/* Tab Selector */}
             <View style={rosterStyles.tabRow}>
               {([
-                { key: 'url' as const, label: 'USA Hockey URL', icon: 'link-outline' as const },
                 { key: 'paste' as const, label: 'Paste', icon: 'clipboard-outline' as const },
+                { key: 'url' as const, label: 'URL', icon: 'link-outline' as const },
                 { key: 'manual' as const, label: 'Manual', icon: 'person-add-outline' as const },
               ]).map(tab => (
                 <TouchableOpacity
@@ -1004,7 +1006,7 @@ export default function CreateTeamScreen({
             {/* URL Import Tab */}
             {rosterTab === 'url' && (
               <View style={rosterStyles.tabContent}>
-                <Text style={rosterStyles.tabDesc}>Paste your USA Hockey roster page URL to auto-import players.</Text>
+                <Text style={rosterStyles.tabDesc}>Import players from a public roster web page. Note: USA Hockey links no longer work — USA Hockey added a verification step to roster pages. Open your roster, complete the verification, then copy the table and use the Paste tab instead.</Text>
                 <TextInput
                   style={styles.input}
                   value={importUrl}

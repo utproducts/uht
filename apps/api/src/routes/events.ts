@@ -534,6 +534,7 @@ const updateEventSchema = z.object({
   deposit_cents: z.number().nullable().optional(),
   slots_count: z.number().nullable().optional(),
   is_sold_out: z.number().optional(),
+  is_hybrid: z.number().optional(),
   hide_availability: z.number().optional(),
   show_participants: z.number().optional(),
   registration_open_date: z.string().nullable().optional(),
@@ -698,6 +699,7 @@ const createEventSimpleSchema = z.object({
   banner_url: z.string().nullable().optional(),
   hide_availability: z.number().optional(),
   show_participants: z.number().optional(),
+  is_hybrid: z.number().optional(),
   multi_event_discount_pct: z.number().nullable().optional(),
   sanction_number: z.string().nullable().optional(),
 });
@@ -713,8 +715,8 @@ eventRoutes.post('/admin/create', authMiddleware, requireRole('admin', 'director
     INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, venue_id, status,
       description, information, price_cents, deposit_cents, slots_count, age_groups, divisions,
       season, timezone, registration_open_date, registration_deadline, scorekeeper_pin,
-      rules_url, logo_url, banner_url, hide_availability, show_participants, multi_event_discount_pct, sanction_number)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      rules_url, logo_url, banner_url, hide_availability, show_participants, multi_event_discount_pct, sanction_number, is_hybrid)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, data.name, slug, data.city, data.state, data.start_date, data.end_date,
     data.tournament_id || null, data.venue_id || null, data.status || 'draft',
@@ -725,7 +727,7 @@ eventRoutes.post('/admin/create', authMiddleware, requireRole('admin', 'director
     data.registration_open_date || null, data.registration_deadline || null, pin,
     data.rules_url || null, data.logo_url || null, data.banner_url || null,
     data.hide_availability || 0, data.show_participants ?? 1, data.multi_event_discount_pct || 0,
-    data.sanction_number || null
+    data.sanction_number || null, data.is_hybrid || 0
   ).run();
 
   return c.json({ success: true, data: { id, slug, scorekeeper_pin: pin } }, 201);

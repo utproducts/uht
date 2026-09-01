@@ -1948,6 +1948,18 @@ teamRoutes.post('/:id/import-roster', authMiddleware, async (c) => {
       }
       const html = await resp.text();
 
+      // USA Hockey put a CAPTCHA wall in front of public roster pages (Aug 2026),
+      // so their pages now return the verification form instead of the roster.
+      const isUsaHockeyUrl = (() => {
+        try { return new URL(body.url).hostname.endsWith('usahockey.com'); } catch { return false; }
+      })();
+      if (/user validation required|g-recaptcha|recaptcha/i.test(html)) {
+        return c.json({
+          success: false,
+          error: 'USA Hockey now requires a human verification step before showing rosters, so importing from a link no longer works. Instead: open your roster link in a browser, complete the verification, then select the roster table, copy it, and use the Paste option here — or upload the CSV export.',
+        }, 400);
+      }
+
       // Try to parse roster from HTML tables
       // Look for table rows with player-like data (jersey #, name, position)
       const tableRowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
@@ -2037,7 +2049,9 @@ teamRoutes.post('/:id/import-roster', authMiddleware, async (c) => {
       if (players.length === 0) {
         return c.json({
           success: false,
-          error: 'Could not find roster data on that page. The page may be JavaScript-rendered or require login. Try pasting your roster data instead.',
+          error: isUsaHockeyUrl
+            ? 'USA Hockey now requires a human verification step before showing rosters, so importing from a link no longer works. Instead: open your roster link in a browser, complete the verification, then select the roster table, copy it, and use the Paste option here — or upload the CSV export.'
+            : 'Could not find roster data on that page. The page may be JavaScript-rendered or require login. Try pasting your roster data instead.',
         }, 400);
       }
     } catch (e: any) {

@@ -183,7 +183,9 @@ function parseRows(rows: string[][]): Player[] {
 }
 
 export default function RosterImport({ teamId, onPlayersAdded, compact }: RosterImportProps) {
-  const [activeTab, setActiveTab] = useState<'upload' | 'paste' | 'url' | 'manual'>('url');
+  // Default was 'url', but USA Hockey added a CAPTCHA to roster pages (Aug 2026)
+  // so link import no longer works for them — lead with file upload instead.
+  const [activeTab, setActiveTab] = useState<'upload' | 'paste' | 'url' | 'manual'>('upload');
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -581,6 +583,9 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
       {/* URL Import Tab */}
       {activeTab === 'url' && (
         <div className="space-y-3">
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+            <strong>USA Hockey links no longer work here.</strong> USA Hockey added a verification step to roster pages, so automatic import from portal.usahockey.com links fails. Open your roster link, complete the verification, then copy the roster table and use the <strong>Paste</strong> tab — or download the CSV and use <strong>Upload File</strong>.
+          </div>
           <p className="text-sm text-[#6e6e73]">Paste a roster URL to import players automatically</p>
           <div className="flex gap-2">
             <input type="url" value={importUrl} onChange={e => setImportUrl(e.target.value)}

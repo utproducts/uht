@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import RoleSwitcher from '../components/RoleSwitcher';
 
 const ADMIN_ROLES = ['admin', 'director'];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
 function readUserName(): string {
   if (typeof window === 'undefined') return '';
@@ -148,17 +149,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [refreshName]);
 
   useEffect(() => {
-    const allowed = checkAdminAccess();
-    setHasAccess(allowed);
-    if (!allowed) {
-      const token = localStorage.getItem('uht_token');
-      if (!token) {
-        window.location.href = '/login?redirect=' + encodeURIComponent(pathname);
-      } else {
-        window.location.href = '/dashboard';
-      }
+    const token = localStorage.getItem('uht_token');
+    if (!token) {
+      window.location.href = '/login?redirect=' + encodeURIComponent(pathname);
+      return;
     }
-  }, [pathname, router]);
+
+    // The cached login payload goes stale when roles change after sign-in
+    // (Nick's director grant, restrictions added/removed). Trust the cache for
+    // instant paint, but always confirm with the server — it both rescues
+    // stale-cache users and evicts revoked ones without a re-login.
+    const cachedAllowed = checkAdminAccess();
+    if (cachedAllowed) setHasAccess(true);
+
+    fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j?.success) return; // network/API hiccup — keep the cached verdict
+        const roles: string[] = j.data?.roles || [];
+        const restricted = j.data?.data_restricted === 1;
+        try {
+          const u = JSON.parse(localStorage.getItem('uht_user') || '{}');
+          localStorage.setItem('uht_user', JSON.stringify({ ...u, roles, data_restricted: restricted ? 1 : 0 }));
+        } catch {}
+        setDataRestricted(restricted);
+        const allowed = roles.some((r: string) => ADMIN_ROLES.includes(r));
+        setHasAccess(allowed);
+        if (!allowed) window.location.href = '/dashboard';
+      })
+      .catch(() => {
+        // Offline/API down: fall back to the cached check
+        if (!cachedAllowed) window.location.href = '/dashboard';
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { setMobileNavOpen(false); }, [pathname]);
 
