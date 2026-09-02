@@ -4,6 +4,28 @@ import { useRouter } from 'next/navigation';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
+// Some school / corporate / rink-guest networks and DNS filters block *.workers.dev,
+// which made login fail with "Unable to connect" even while the API was healthy.
+// ultimatetournaments.com/api/* is routed to this same Worker, so prefer the
+// same-origin path on the live domain and fall back to the direct Worker URL if
+// the same-origin request can't be completed at all.
+function shouldUseSameOrigin() {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  return h === 'ultimatetournaments.com' || h === 'www.ultimatetournaments.com';
+}
+
+async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+  if (shouldUseSameOrigin()) {
+    try {
+      return await fetch(path, init);
+    } catch {
+      // same-origin route unreachable — fall through to the direct Worker URL
+    }
+  }
+  return fetch(`${API}${path}`, init);
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -39,7 +61,7 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      const resp = await fetch(`${API}/api/auth/magic-link`, {
+      const resp = await apiFetch('/api/auth/magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -78,7 +100,7 @@ export default function LoginPage() {
     setPwError('');
     setNoPassword(false);
     try {
-      const resp = await fetch(`${API}/api/auth/login`, {
+      const resp = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -141,7 +163,7 @@ export default function LoginPage() {
     setPinError('');
 
     try {
-      const resp = await fetch(`${API}/api/auth/admin-pin`, {
+      const resp = await apiFetch('/api/auth/admin-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), pin: code }),
