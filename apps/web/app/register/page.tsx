@@ -216,54 +216,83 @@ export default function RegisterPage() {
     setLoading(false);
   };
 
-  // Load teams for an authenticated user
+  // Load teams for an authenticated user.
+  // Server sources only — the raw localStorage cache used to be shown as-is,
+  // which resurfaced deleted teams as duplicate choices (Amy Hay, 9/1). Cached
+  // ids are now validated through /teams/by-ids (active teams only) and dead
+  // entries are pruned from the cache; the raw cache is only a fallback when
+  // the API is unreachable.
   const loadTeams = async (token: string) => {
     setLoadingTeams(true);
-    let allTeams: Team[] = [];
-    try {
-      const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-      if (Array.isArray(local) && local.length > 0) {
-        allTeams = local.map((t: any) => ({
-          id: t.id, name: t.name, age_group: t.age_group || t.ageGroup,
-          division_level: t.division_level || t.divisionLevel,
-          head_coach_name: t.head_coach_name || t.headCoachName,
-        }));
-      }
-    } catch {}
+    const allTeams: Team[] = [];
+    let serverOk = false;
     try {
       const res = await fetch(`${API}/teams/my-teams`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const json = await res.json() as any;
-        const apiTeams = (json.data || []).map((t: any) => ({
-          id: t.id, name: t.name, age_group: t.age_group,
-          division_level: t.division_level, head_coach_name: t.head_coach_name,
-        }));
-        const existing = new Set(allTeams.map(t => t.id));
-        for (const t of apiTeams) {
-          if (!existing.has(t.id)) allTeams.push(t);
-        }
-      }
-    } catch {}
-    try {
-      const localTeams = JSON.parse(localStorage.getItem('uht_teams') || '[]');
-      const ids = localTeams.map((t: any) => t.id).filter(Boolean);
-      if (ids.length > 0) {
-        const res = await fetch(`${API}/teams/by-ids?ids=${ids.join(',')}`);
-        if (res.ok) {
-          const json = await res.json() as any;
-          const byIdTeams = (json.data || []).map((t: any) => ({
-            id: t.id, name: t.name, age_group: t.age_group,
-            division_level: t.division_level, head_coach_name: t.head_coach_name,
-          }));
-          const existing = new Set(allTeams.map(t => t.id));
-          for (const t of byIdTeams) {
-            if (!existing.has(t.id)) allTeams.push(t);
+        serverOk = true;
+        for (const t of (json.data || [])) {
+          if (!allTeams.some(x => x.id === t.id)) {
+            allTeams.push({
+              id: t.id, name: t.name, age_group: t.age_group,
+              division_level: t.division_level, head_coach_name: t.head_coach_name,
+            });
           }
         }
       }
     } catch {}
+    let cachedIds: string[] = [];
+    try {
+      const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+      if (Array.isArray(local)) cachedIds = local.map((t: any) => t.id).filter(Boolean);
+    } catch {}
+    const unconfirmed = cachedIds.filter(id => !allTeams.some(t => t.id === id));
+    if (unconfirmed.length > 0) {
+      try {
+        const res = await fetch(`${API}/teams/by-ids?ids=${unconfirmed.join(',')}`);
+        if (res.ok) {
+          const json = await res.json() as any;
+          serverOk = true;
+          for (const t of (json.data || [])) {
+            if (!allTeams.some(x => x.id === t.id)) {
+              allTeams.push({
+                id: t.id, name: t.name, age_group: t.age_group,
+                division_level: t.division_level, head_coach_name: t.head_coach_name,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+    if (serverOk) {
+      try {
+        const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+        if (Array.isArray(local)) {
+          const validIds = new Set(allTeams.map(t => t.id));
+          const pruned = local.filter((t: any) => t?.id && validIds.has(t.id));
+          if (pruned.length !== local.length) {
+            localStorage.setItem('uht_teams', JSON.stringify(pruned));
+          }
+        }
+      } catch {}
+    } else {
+      try {
+        const local = JSON.parse(localStorage.getItem('uht_teams') || '[]');
+        if (Array.isArray(local)) {
+          for (const t of local) {
+            if (t?.id && !allTeams.some(x => x.id === t.id)) {
+              allTeams.push({
+                id: t.id, name: t.name, age_group: t.age_group || t.ageGroup,
+                division_level: t.division_level || t.divisionLevel,
+                head_coach_name: t.head_coach_name || t.headCoachName,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
     setTeams(allTeams);
     if (allTeams.length === 1) setSelectedTeam(allTeams[0]);
     setLoadingTeams(false);

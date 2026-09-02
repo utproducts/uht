@@ -1345,6 +1345,19 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
     } catch {}
   }
 
+  // A new attempt supersedes any abandoned (never-paid) attempts for the same
+  // team + events — withdraw them so retries replace instead of stacking up as
+  // "Pending Approval / Awaiting Payment" clutter on the team page.
+  for (const supersededEventId of eventIds) {
+    try {
+      await db.prepare(
+        `UPDATE event_registrations
+         SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: superseded by newer checkout attempt'
+         WHERE event_id = ? AND team_name = ? AND status = 'awaiting_payment'`
+      ).bind(supersededEventId, data.teamName).run();
+    } catch {}
+  }
+
   await db.prepare(`
     INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, hotel_choice_1, hotel_choice_2, hotel_choice_3, event_division_id, needs_hotel, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
