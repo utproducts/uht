@@ -28,6 +28,7 @@ interface EventData {
   multi_event_discount_pct: number | null;
   slots_count: number | null;
   is_sold_out: number;
+  is_hybrid: number;
   show_participants: number;
   registration_open_date: string | null;
   registration_deadline: string | null;
@@ -434,6 +435,11 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                   <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
                   {statusLabel(event.status)}
                 </span>
+                {event.is_hybrid === 1 && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-400/25 text-purple-100 border border-purple-300/40">
+                    Hybrid Event
+                  </span>
+                )}
                 {event.season && (
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-white/80 border border-white/20">
                     {event.season}

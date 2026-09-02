@@ -23,6 +23,7 @@ interface Event {
   deposit_cents: number | null;
   slots_count: number | null;
   is_sold_out: number;
+  is_hybrid: number;
   schedule_published: number | null;
   season: string | null;
 }
@@ -188,6 +189,11 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
           ) : (
             <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${past ? statusBadge('completed') : statusBadge(event.status)}`}>
               {past ? 'Completed' : statusLabel(event.status)}
+            </span>
+          )}
+          {event.is_hybrid === 1 && (
+            <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+              Hybrid Event
             </span>
           )}
           {isNextUp && (
@@ -705,6 +711,11 @@ export default function EventsPage() {
                           ) : (
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border ${past ? statusBadge('completed') : statusBadge(event.status)}`}>
                               {past ? 'Completed' : statusLabel(event.status)}
+                            </span>
+                          )}
+                          {event.is_hybrid === 1 && (
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                              Hybrid
                             </span>
                           )}
                           {isFirst && (
