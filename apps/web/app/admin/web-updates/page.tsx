@@ -149,7 +149,7 @@ export default function WebUpdatesPage() {
   };
 
   return (
-    <div className="max-w-4xl">
+    <div className="p-6 sm:p-8 max-w-[1100px] mx-auto">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-2xl font-bold text-[#1d1d1f]">Web Updates</h1>
         <button onClick={() => { setShowForm(f => !f); setMessage(''); }}
