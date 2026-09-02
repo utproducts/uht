@@ -49,7 +49,7 @@ export default function WebUpdatesPage() {
   const [requests, setRequests] = useState<UpdateRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState<'open' | 'all'>('open');
+  const [filter, setFilter] = useState<'open' | 'done' | 'all'>('open');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   // New request form
@@ -112,7 +112,7 @@ export default function WebUpdatesPage() {
       if (json.success) {
         setTitle(''); setDescription(''); setPriority('normal'); setPageUrl(''); setScreenshotUrl('');
         setShowForm(false);
-        setMessage('Request submitted! Claude will pick it up on the next run and you\'ll get an email when it\'s done.');
+        setMessage('Added to the log — you\'ll get an email when it\'s done.');
         load();
       } else {
         setMessage(json.error || 'Failed to submit request.');
@@ -136,7 +136,9 @@ export default function WebUpdatesPage() {
 
   const visible = filter === 'open'
     ? requests.filter(r => r.status === 'new' || r.status === 'in_progress' || r.status === 'needs_info')
-    : requests;
+    : filter === 'done'
+      ? requests.filter(r => r.status === 'done')
+      : requests;
 
   const fmtDate = (s: string) => {
     try {
@@ -152,13 +154,27 @@ export default function WebUpdatesPage() {
         <h1 className="text-2xl font-bold text-[#1d1d1f]">Web Updates</h1>
         <button onClick={() => { setShowForm(f => !f); setMessage(''); }}
           className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">
-          {showForm ? 'Cancel' : '+ New Request'}
+          {showForm ? 'Cancel' : '+ New Update'}
         </button>
       </div>
       <p className="text-sm text-[#6e6e73] mb-5">
-        Ask Claude for site changes — describe what you want, and you&apos;ll get an email when it&apos;s live.
-        The more specific the request (which page, exact wording, a screenshot), the faster it ships.
+        The running log of site changes — what&apos;s needed, what&apos;s in progress, and everything that&apos;s shipped.
+        Be specific (which page, exact wording, a screenshot) and you&apos;ll get an email when your item is done.
       </p>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        {[
+          { label: 'Open', value: requests.filter(r => ['new', 'needs_info'].includes(r.status)).length, color: 'text-[#003e79]' },
+          { label: 'In Progress', value: requests.filter(r => r.status === 'in_progress').length, color: 'text-amber-600' },
+          { label: 'Completed', value: requests.filter(r => r.status === 'done').length, color: 'text-green-600' },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-2xl border border-[#e8e8ed] px-4 py-3 text-center">
+            <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">{s.label}</div>
+          </div>
+        ))}
+      </div>
 
       {message && (
         <div className="p-3 mb-4 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-800">{message}</div>
@@ -218,10 +234,14 @@ export default function WebUpdatesPage() {
       )}
 
       <div className="flex gap-2 mb-4">
-        {(['open', 'all'] as const).map(f => (
+        {(['open', 'done', 'all'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${filter === f ? 'bg-[#003e79] text-white' : 'bg-white border border-gray-200 text-[#6e6e73] hover:bg-gray-50'}`}>
-            {f === 'open' ? `Open (${requests.filter(r => ['new', 'in_progress', 'needs_info'].includes(r.status)).length})` : `All (${requests.length})`}
+            {f === 'open'
+              ? `Open (${requests.filter(r => ['new', 'in_progress', 'needs_info'].includes(r.status)).length})`
+              : f === 'done'
+                ? `Completed (${requests.filter(r => r.status === 'done').length})`
+                : `All (${requests.length})`}
           </button>
         ))}
       </div>
@@ -230,7 +250,7 @@ export default function WebUpdatesPage() {
         <div className="text-[#86868b] text-sm py-8 text-center">Loading...</div>
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[#e8e8ed] p-10 text-center text-[#86868b] text-sm">
-          {filter === 'open' ? 'No open requests — the queue is clear! 🎉' : 'No requests yet.'}
+          {filter === 'open' ? 'No open items — all caught up! 🎉' : filter === 'done' ? 'Nothing completed yet.' : 'No updates logged yet.'}
         </div>
       ) : (
         <div className="space-y-3">
@@ -241,6 +261,7 @@ export default function WebUpdatesPage() {
                   <div className="font-semibold text-[#1d1d1f] text-sm">{r.title}</div>
                   <div className="text-xs text-[#86868b] mt-0.5">
                     {r.requested_by_name || r.requested_by_email || 'Unknown'} · {fmtDate(r.created_at)}
+                    {r.status === 'done' && r.completed_at && <span className="text-green-600"> · completed {fmtDate(r.completed_at)}</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
