@@ -85,6 +85,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
   {
     title: 'Site',
     items: [
+      { name: 'Web Updates', href: '/admin/web-updates' },
       { name: 'Reports', href: '/admin/reports' },
       { name: 'FAQs', href: '/admin/faqs' },
       { name: 'Settings', href: '/admin/settings' },
