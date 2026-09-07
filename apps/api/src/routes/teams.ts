@@ -1190,9 +1190,9 @@ teamRoutes.get('/my-teams', authMiddleware, async (c) => {
         FROM event_registrations er
         JOIN events e ON e.id = er.event_id
         LEFT JOIN event_hotels eh ON eh.id = er.hotel_assigned
-        WHERE er.team_name = ? AND er.status NOT IN ('withdrawn','denied','rejected')
+        WHERE (er.team_id = ? OR er.team_name = ?) AND er.status NOT IN ('withdrawn','denied','rejected')
         ORDER BY e.start_date ASC
-      `).bind((team as any).name).all();
+      `).bind((team as any).id, (team as any).name).all();
       // Deduplicate by event_id
       const existingEventIds = new Set(teamEvents.map((te: any) => te.event_id));
       for (const r of (legacyRegs.results || [])) {
