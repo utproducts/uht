@@ -1348,13 +1348,25 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
   // A new attempt supersedes any abandoned (never-paid) attempts for the same
   // team + events — withdraw them so retries replace instead of stacking up as
   // "Pending Approval / Awaiting Payment" clutter on the team page.
+  // Match by team_id when we have one: two DIFFERENT teams can share a name
+  // (accidental duplicate team creation), and a name-only match made their
+  // registrations withdraw each other (Adamson Squirt incident, 9/7).
   for (const supersededEventId of eventIds) {
     try {
-      await db.prepare(
-        `UPDATE event_registrations
-         SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: superseded by newer checkout attempt'
-         WHERE event_id = ? AND team_name = ? AND status = 'awaiting_payment'`
-      ).bind(supersededEventId, data.teamName).run();
+      if (resolvedTeamId) {
+        await db.prepare(
+          `UPDATE event_registrations
+           SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: superseded by newer checkout attempt'
+           WHERE event_id = ? AND status = 'awaiting_payment'
+             AND (team_id = ? OR (team_id IS NULL AND team_name = ?))`
+        ).bind(supersededEventId, resolvedTeamId, data.teamName).run();
+      } else {
+        await db.prepare(
+          `UPDATE event_registrations
+           SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: superseded by newer checkout attempt'
+           WHERE event_id = ? AND team_name = ? AND team_id IS NULL AND status = 'awaiting_payment'`
+        ).bind(supersededEventId, data.teamName).run();
+      }
     } catch {}
   }
 

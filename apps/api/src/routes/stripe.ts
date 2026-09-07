@@ -110,14 +110,26 @@ export async function discountCodeBurnedByAbandonedCheckout(db: D1Database, dc: 
 async function withdrawAbandonedDuplicates(db: D1Database, paidRegId: string) {
   try {
     const er = await db.prepare(
-      'SELECT event_id, team_name FROM event_registrations WHERE id = ?'
-    ).bind(paidRegId).first<{ event_id: string; team_name: string }>();
+      'SELECT event_id, team_id, team_name FROM event_registrations WHERE id = ?'
+    ).bind(paidRegId).first<{ event_id: string; team_id: string | null; team_name: string }>();
     if (er) {
-      await db.prepare(
-        `UPDATE event_registrations
-         SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: duplicate abandoned checkout, superseded by paid registration ' || ?
-         WHERE event_id = ? AND team_name = ? AND id != ? AND status = 'awaiting_payment'`
-      ).bind(paidRegId, er.event_id, er.team_name, paidRegId).run();
+      // Match by team_id when we have one — a name-only match let two
+      // different teams sharing a name withdraw each other's registrations
+      // (Adamson Squirt incident, 9/7).
+      if (er.team_id) {
+        await db.prepare(
+          `UPDATE event_registrations
+           SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: duplicate abandoned checkout, superseded by paid registration ' || ?
+           WHERE event_id = ? AND id != ? AND status = 'awaiting_payment'
+             AND (team_id = ? OR (team_id IS NULL AND team_name = ?))`
+        ).bind(paidRegId, er.event_id, paidRegId, er.team_id, er.team_name).run();
+      } else {
+        await db.prepare(
+          `UPDATE event_registrations
+           SET status = 'withdrawn', notes = COALESCE(notes || ' | ', '') || 'Auto-withdrawn: duplicate abandoned checkout, superseded by paid registration ' || ?
+           WHERE event_id = ? AND team_name = ? AND team_id IS NULL AND id != ? AND status = 'awaiting_payment'`
+        ).bind(paidRegId, er.event_id, er.team_name, paidRegId).run();
+      }
     }
   } catch {}
   try {
