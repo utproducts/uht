@@ -1003,6 +1003,9 @@ export default function AdminRegistrationsPage() {
   const pending = registrations.filter(r => r.status === 'pending').length;
   const waitlisted = registrations.filter(r => r.status === 'waitlisted').length;
   const canceled = registrations.filter(r => CANCELED.includes(r.status)).length;
+  // Teams that registered but stalled at checkout — real teams may sit here
+  // for days (Deanna Downey sat 4 days), so surface them instead of hiding them
+  const awaitingPayment = registrations.filter(r => r.status === 'awaiting_payment').length;
   const total = approved + pending + waitlisted;
 
   // Unique events for event filter dropdown
@@ -1043,13 +1046,16 @@ export default function AdminRegistrationsPage() {
             { key: 'approved', label: 'Approved', count: approved },
             { key: 'pending', label: 'Pending', count: pending },
             { key: 'waitlisted', label: 'Waitlisted', count: waitlisted },
+            { key: 'awaiting_payment', label: 'Awaiting Payment', count: awaitingPayment },
             { key: 'canceled', label: 'Canceled', count: canceled },
           ].map(s => (
             <button
               key={s.key}
               onClick={() => setStatusFilter(s.key)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${
-                statusFilter === s.key ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
+                statusFilter === s.key ? 'bg-[#003e79] text-white'
+                : s.key === 'awaiting_payment' && s.count > 0 ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+                : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'
               }`}
             >
               {s.label} ({s.count})
