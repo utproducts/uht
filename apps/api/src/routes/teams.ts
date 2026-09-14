@@ -630,12 +630,10 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
 
   if (!team) return c.json({ success: false, error: 'Not authorized' }, 403);
 
-  // Only coaches, managers, org admins and staff can upload team logos (not parents/players)
-  const userRoles = user.roles || [];
-  const canUpload = isAdmin || userRoles.includes('coach') || userRoles.includes('manager') || userRoles.includes('organization');
-  if (!canUpload) {
-    return c.json({ success: false, error: 'Only coaches and managers can upload team logos' }, 403);
-  }
+  // No extra role-name check: passing the team-link gate above already means
+  // creator/coach/manager/org-admin of THIS team. Token roles are frozen at
+  // login, so checking them here rejected legit managers whose roles were
+  // granted after they last logged in (Jeni Gardner, AIC Vikings, 9/14).
 
   const body = await c.req.json() as { data: string; mimeType: string };
   if (!body.data || !body.mimeType) {
