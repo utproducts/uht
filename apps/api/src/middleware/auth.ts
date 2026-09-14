@@ -45,6 +45,20 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
       lastName: '',
     };
 
+    // Tokens freeze roles at login, and roles get granted/revoked afterwards —
+    // that stale snapshot caused a stream of "system doesn't recognize me"
+    // failures (Nick's admin access, Jeni Gardner's manager rights). Overlay
+    // the live roles from the DB; tokens are the fallback only when the read
+    // itself fails. Login builds tokens from user_roles, so an empty result
+    // means the roles really are gone (revocation must stick).
+    try {
+      const rr = await c.env.DB.prepare('SELECT role FROM user_roles WHERE user_id = ?')
+        .bind(payload.sub).all<{ role: UserRole }>();
+      if (rr.results !== undefined) {
+        user.roles = rr.results.map(r => r.role);
+      }
+    } catch { /* DB hiccup — keep token roles rather than failing the request */ }
+
     c.set('user', user);
     await next();
   } catch (err) {
