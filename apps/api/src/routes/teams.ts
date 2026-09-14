@@ -492,8 +492,9 @@ teamRoutes.patch('/:teamId', authMiddleware, async (c) => {
       SELECT t.id FROM teams t
       LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
       LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
-      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
-    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+      LEFT JOIN organization_admins oa ON oa.organization_id = t.organization_id AND oa.user_id = ?
+      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR oa.user_id = ?)
+    `).bind(user.id, user.id, user.id, teamId, user.id, user.id, user.id, user.id).first();
   }
 
   if (!team) return c.json({ success: false, error: 'Not authorized to edit this team' }, 403);
@@ -567,8 +568,9 @@ teamRoutes.post('/:teamId/logo', authMiddleware, async (c) => {
       SELECT t.id FROM teams t
       LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
       LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
-      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
-    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+      LEFT JOIN organization_admins oa ON oa.organization_id = t.organization_id AND oa.user_id = ?
+      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR oa.user_id = ?)
+    `).bind(user.id, user.id, user.id, teamId, user.id, user.id, user.id, user.id).first();
   }
 
   if (!team) return c.json({ success: false, error: 'Not authorized' }, 403);
@@ -615,19 +617,22 @@ teamRoutes.post('/:teamId/logo-base64', authMiddleware, async (c) => {
   if (isAdmin) {
     team = await db.prepare(`SELECT id, organization_id FROM teams WHERE id = ?`).bind(teamId).first();
   } else {
+    // Org admins of the team's organization count too — org owners were being
+    // rejected on their own teams (John's report, 9/14)
     team = await db.prepare(`
       SELECT t.id, t.organization_id FROM teams t
       LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
       LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
-      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
-    `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first();
+      LEFT JOIN organization_admins oa ON oa.organization_id = t.organization_id AND oa.user_id = ?
+      WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR oa.user_id = ?)
+    `).bind(user.id, user.id, user.id, teamId, user.id, user.id, user.id, user.id).first();
   }
 
   if (!team) return c.json({ success: false, error: 'Not authorized' }, 403);
 
-  // Only coaches and admins can upload team logos (not parents/players)
+  // Only coaches, managers, org admins and staff can upload team logos (not parents/players)
   const userRoles = user.roles || [];
-  const canUpload = isAdmin || userRoles.includes('coach') || userRoles.includes('manager');
+  const canUpload = isAdmin || userRoles.includes('coach') || userRoles.includes('manager') || userRoles.includes('organization');
   if (!canUpload) {
     return c.json({ success: false, error: 'Only coaches and managers can upload team logos' }, 403);
   }
@@ -1012,8 +1017,9 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
     SELECT t.id, t.name, t.invite_code, t.age_group FROM teams t
     LEFT JOIN team_coaches tc ON tc.team_id = t.id AND tc.user_id = ?
     LEFT JOIN team_managers tm ON tm.team_id = t.id AND tm.user_id = ?
-    WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ?)
-  `).bind(user.id, user.id, teamId, user.id, user.id, user.id).first<{
+    LEFT JOIN organization_admins oa ON oa.organization_id = t.organization_id AND oa.user_id = ?
+    WHERE t.id = ? AND (t.created_by = ? OR tc.user_id = ? OR tm.user_id = ? OR oa.user_id = ?)
+  `).bind(user.id, user.id, user.id, teamId, user.id, user.id, user.id, user.id).first<{
     id: string; name: string; invite_code: string | null; age_group: string;
   }>();
 
