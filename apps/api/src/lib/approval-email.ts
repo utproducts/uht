@@ -36,6 +36,8 @@ interface ApprovalEmailParams {
   noHotelNeeded?: boolean;
   /** "WE'RE IN!" shareable graphic (1080x1080 PNG) for this registration */
   socialCardUrl?: string;
+  /** Direct payment link for this registration (/pay?reg=...) */
+  payUrl?: string;
   /** Admin-customized field overrides from DB */
   _overrides?: Record<string, string>;
 }
@@ -45,7 +47,7 @@ interface ApprovalEmailParams {
  * 3 variants based on payment status: pay_later, deposit_paid, fully_paid
  */
 export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { teamName: string; ageGroup: string; eventName: string; eventDate: string; eventCity: string; paymentStatus: string }): string {
-  const { teamName, ageGroup, division, eventName, eventDate, eventCity, paymentStatus, priceCents, hotelInfo } = params;
+  const { teamName, ageGroup, division, eventName, eventDate, eventCity, paymentStatus, priceCents, hotelInfo, payUrl } = params;
   const o = (params as any)._overrides as Record<string, string> | undefined;
 
   const divisionText = division ? ` - ${division}` : '';
@@ -71,7 +73,7 @@ export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { tea
       <p>${paymentText}</p>
       <p>${rosterText}</p>
       <h3 style="color: #003e79; margin-top: 24px;">Payment Options:</h3>
-      ${paymentOptionsHtml()}
+      ${paymentOptionsHtml(payUrl)}
     `;
   } else {
     // unpaid / pay later (default)
@@ -83,7 +85,7 @@ export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { tea
       <p>${rosterText}</p>
       <p>${depositNote}</p>
       <h3 style="color: #003e79; margin-top: 24px;">Payment Options:</h3>
-      ${paymentOptionsHtml()}
+      ${paymentOptionsHtml(payUrl)}
     `;
   }
 
@@ -214,10 +216,16 @@ export function buildAcceptanceHtml(params: Partial<ApprovalEmailParams> & { tea
 </html>`;
 }
 
-function paymentOptionsHtml(): string {
+function paymentOptionsHtml(payUrl?: string): string {
+  // A per-registration pay link beats sending people to the homepage — teams
+  // were landing on the generic registration page and giving up (Josh Frider,
+  // 9/14). Fall back to the homepage only when no link is available.
+  const cardLink = payUrl
+    ? `<a href="${payUrl}" style="color: #00ccff;"><strong>click here to pay by card</strong></a> — your team and balance are already loaded, no login needed`
+    : `Process your payment directly on our <a href="https://ultimatetournaments.com" style="color: #00ccff;">website registration portal</a>`;
   return `
     <ol style="padding-left: 20px; font-size: 14px; line-height: 1.8; color: #1d1d1f;">
-      <li><strong>Credit Card:</strong> Process your payment directly on our <a href="https://ultimatetournaments.com" style="color: #00ccff;">website registration portal</a>.</li>
+      <li><strong>Credit Card:</strong> ${cardLink}.</li>
       <li><strong>Venmo:</strong><br>
         Ultimate Hockey Tournaments: <strong>@ultimatetournaments</strong> (look for the UHT logo)<br>
         John Schwarz: <strong>@john-Schwarz-33</strong> (UHT logo; last 4 digits: 6160)

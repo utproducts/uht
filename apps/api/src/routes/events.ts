@@ -2131,6 +2131,7 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
           eventCity: `${event.city}, ${event.state}`,
           paymentStatus: updated.payment_status || 'unpaid',
           priceCents: event.price_cents || undefined,
+          payUrl: `https://ultimatetournaments.com/pay?reg=${regId}`,
           hotelInfo: hotelRow ? {
             name: hotelRow.hotel_name,
             address: hotelRow.address,

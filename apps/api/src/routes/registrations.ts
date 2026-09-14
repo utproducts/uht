@@ -588,6 +588,7 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
         eventCity: `${event.city}, ${event.state}`,
         paymentStatus,
         priceCents: event.price_cents || undefined,
+        payUrl: `https://ultimatetournaments.com/pay?reg=${regId}`,
         noHotelNeeded: !hotelInfo && hasHotels,
         hotelInfo: hotelInfo ? {
           name: hotelInfo.hotel_name,
