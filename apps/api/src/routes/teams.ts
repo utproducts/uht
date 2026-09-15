@@ -1692,9 +1692,24 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Duplicate team prevention — DISABLED for launch (was blocking coaches from creating teams)
-  // Teams with same name + age group are allowed; coaches know their own team names
-  // TODO: Re-enable as a non-blocking warning after launch
+  // Duplicate prevention, scoped to the SAME user only: five support cases in
+  // three weeks came from one person creating their own team twice (double-tap
+  // or "did it save?" retries), which split roster and registrations across
+  // copies. Different users sharing a team name stays allowed — that was why
+  // the old global check got disabled for launch.
+  try {
+    const creator = c.get('user');
+    const dup = await db.prepare(
+      `SELECT id FROM teams WHERE created_by = ? AND is_active = 1 AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`
+    ).bind(creator.id, data.name).first<{ id: string }>();
+    if (dup) {
+      return c.json({
+        success: false,
+        error: `You already have a team named "${data.name.trim()}" - it's on your My Teams page. Use that team instead of creating it again. If you meant to create a different team, change the name slightly (for example add the coach's name).`,
+        existingTeamId: dup.id,
+      }, 409);
+    }
+  } catch { /* never block creation on a failed dup check */ }
 
   const teamId = crypto.randomUUID().replace(/-/g, '');
 
