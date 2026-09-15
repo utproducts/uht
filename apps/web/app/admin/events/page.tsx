@@ -4519,18 +4519,15 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                   <tbody>
                     {grouped[ageGroup].map((reg: any) => (
                       <tr key={reg.id}
-                        draggable
-                        onDragStart={(e) => {
-                          if (!(e.target as HTMLElement).closest?.('[data-grip]')) { e.preventDefault(); return; }
-                          setDragRegId(reg.id);
-                        }}
                         onDragOver={(e) => { if (dragRegId) e.preventDefault(); }}
                         onDrop={(e) => { e.preventDefault(); handleRowDrop(reg); }}
-                        onDragEnd={() => setDragRegId(null)}
                         className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '') + (dragRegId === reg.id ? ' opacity-40' : '')}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span data-grip title="Drag to reorder" className="cursor-grab active:cursor-grabbing select-none text-[#c7c7cc] hover:text-[#6e6e73] text-[13px] leading-none flex-shrink-0">⠿</span>
+                            <span data-grip draggable title="Drag to reorder"
+                              onDragStart={(e) => { e.dataTransfer.setData('text/plain', reg.id); e.dataTransfer.effectAllowed = 'move'; setDragRegId(reg.id); }}
+                              onDragEnd={() => setDragRegId(null)}
+                              className="cursor-grab active:cursor-grabbing select-none text-[#c7c7cc] hover:text-[#6e6e73] text-[13px] leading-none flex-shrink-0 px-0.5">⠿</span>
                             <span className="font-medium text-[#1d1d1f] text-[12.5px] leading-tight" title={reg.team_name}>{reg.display_name || reg.team_name}</span>
                             {reg.mhr_url && (
                               <a href={String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`}
