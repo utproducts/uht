@@ -115,7 +115,7 @@ export default function LoginPage() {
         } else {
           const role = data.data.user.roles?.[0] || 'parent';
           if (role === 'admin') window.location.href = '/admin/events';
-          else if (role === 'director') window.location.href = '/director';
+          else if (role === 'director') window.location.href = '/admin/registrations';
           else window.location.href = '/dashboard/' + role;
         }
       } else if (data.error === 'no_password') {
@@ -180,7 +180,7 @@ export default function LoginPage() {
         } else {
           const role = data.data.user.roles?.[0] || 'admin';
           if (role === 'admin') router.push('/admin/events');
-          else if (role === 'director') router.push('/director');
+          else if (role === 'director') router.push('/admin/registrations');
           else router.push('/dashboard/' + role);
         }
       } else {

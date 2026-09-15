@@ -54,7 +54,9 @@ export default function RoleSwitcher() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  const visibleRoles = ALL_ROLES.filter((r) => userRoles.includes(r.id));
+  // Directors get the Admin panel too (admin layout accepts the director
+  // role) — without this, a director-only user like Nick has no door to it
+  const visibleRoles = ALL_ROLES.filter((r) => userRoles.includes(r.id) || (r.id === 'admin' && userRoles.includes('director')));
   const addableRoles = ALL_ROLES.filter((r) => SELF_ADDABLE.includes(r.id) && !userRoles.includes(r.id));
 
   const switchRole = (roleId: string) => {

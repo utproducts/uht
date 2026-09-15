@@ -41,7 +41,7 @@ function VerifyContent() {
           if (!dest) {
             const role = data.data.user.roles?.[0] || 'parent';
             if (role === 'admin') dest = '/admin/events';
-            else if (role === 'director') dest = '/director';
+            else if (role === 'director') dest = '/admin/registrations';
             else dest = '/dashboard/' + role;
           }
 
