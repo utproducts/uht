@@ -3,8 +3,27 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
+import { verifyGameWriteAccess } from '../lib/game-access';
+import { computeStandings, resolveBracketGames } from '../lib/standings';
 
 export const scoringRoutes = new Hono<{ Bindings: Env }>();
+
+// Gate for score-writing endpoints: validated event PIN, or a JWT whose user
+// holds admin/director/scorekeeper (fresh from DB). See lib/game-access.ts.
+// Workers terminates floating promises when the response returns — background
+// work (bracket resolution, coach SMS) must go through executionCtx.waitUntil.
+function keepAlive(c: any, p: Promise<any>) {
+  const guarded = p.catch((err: any) => console.error('Background task error:', err));
+  try { c.executionCtx.waitUntil(guarded); } catch { /* non-Workers env — let it float */ }
+}
+
+const scorekeeperOrStaff = async (c: any, next: any) => {
+  const access = await verifyGameWriteAccess(c, c.req.param('gameId'));
+  if (!access.ok) {
+    return c.json({ success: false, error: access.error }, (access.status || 401) as any);
+  }
+  await next();
+};
 
 // ==========================================
 // USA HOCKEY PENALTY CODES
@@ -241,20 +260,9 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
   const db = c.env.DB;
 
   // Verify auth: PIN header, JWT Bearer token, or dev bypass
-  const pin = c.req.header('X-Scorekeeper-Pin');
-  const devBypass = c.req.header('X-Dev-Bypass') === 'true';
-  let jwtValid = false;
-  const authHeader = c.req.header('Authorization');
-  if (authHeader?.startsWith('Bearer ') && c.env.JWT_SECRET) {
-    try {
-      const { jwtVerify } = await import('jose');
-      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-      await jwtVerify(authHeader.slice(7), secret);
-      jwtValid = true;
-    } catch {}
-  }
-  if (!devBypass && !pin && !jwtValid) {
-    return c.json({ success: false, error: 'Scorekeeper PIN required' }, 401);
+  const access = await verifyGameWriteAccess(c, gameId);
+  if (!access.ok) {
+    return c.json({ success: false, error: access.error }, (access.status || 401) as any);
   }
 
   try {
@@ -294,8 +302,10 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       await db.prepare("UPDATE games SET status = 'in_progress', period = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
     } else if (data.eventType === 'game_end') {
       await db.prepare("UPDATE games SET status = 'final', updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
-      // Send coach notification texts (fire and forget)
-      notifyCoachesOnFinal(db, c.env, gameId).catch(err => console.error('Coach notify error:', err));
+      // Coach texts + bracket auto-advance, kept alive past the response
+      keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
+      keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
+        .then((g: any) => g && resolveBracketGames(db, g.event_id)));
     } else if (data.eventType === 'period_start' && data.period) {
       await db.prepare("UPDATE games SET period = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?").bind(data.period, gameId).run();
     } else if (data.eventType === 'period_end') {
@@ -315,20 +325,9 @@ scoringRoutes.delete('/games/:gameId/events/:eventId', async (c) => {
   const { gameId, eventId } = c.req.param();
   const db = c.env.DB;
 
-  const pin = c.req.header('X-Scorekeeper-Pin');
-  const devBypass = c.req.header('X-Dev-Bypass') === 'true';
-  let jwtValid = false;
-  const authHeader = c.req.header('Authorization');
-  if (authHeader?.startsWith('Bearer ') && c.env.JWT_SECRET) {
-    try {
-      const { jwtVerify } = await import('jose');
-      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-      await jwtVerify(authHeader.slice(7), secret);
-      jwtValid = true;
-    } catch {}
-  }
-  if (!devBypass && !pin && !jwtValid) {
-    return c.json({ success: false, error: 'Scorekeeper PIN required' }, 401);
+  const access = await verifyGameWriteAccess(c, gameId);
+  if (!access.ok) {
+    return c.json({ success: false, error: access.error }, (access.status || 401) as any);
   }
 
   try {
@@ -356,7 +355,7 @@ scoringRoutes.delete('/games/:gameId/events/:eventId', async (c) => {
 // ==========================================
 // SCOREKEEPER: Update shot count per period
 // ==========================================
-scoringRoutes.post('/games/:gameId/shots', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/shots', scorekeeperOrStaff, zValidator('json', z.object({
   teamId: z.string(),
   period: z.number(),
   shotCount: z.number().min(0),
@@ -400,43 +399,30 @@ scoringRoutes.get('/events/:eventId/standings', async (c) => {
   const db = c.env.DB;
   const { division_id } = c.req.query();
 
-  // Calculate standings from game results
-  let query = `
-    SELECT
-      g.event_division_id,
-      ed.age_group, ed.division_level,
-      g.pool_name,
-      t.id as team_id, COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = t.organization_id), t.name) || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END) as team_name, t.logo_url as team_logo,
-      COUNT(*) as games_played,
-      SUM(CASE WHEN (t.id = g.home_team_id AND g.home_score > g.away_score) OR (t.id = g.away_team_id AND g.away_score > g.home_score) THEN 1 ELSE 0 END) as wins,
-      SUM(CASE WHEN (t.id = g.home_team_id AND g.home_score < g.away_score) OR (t.id = g.away_team_id AND g.away_score < g.home_score) THEN 1 ELSE 0 END) as losses,
-      SUM(CASE WHEN g.home_score = g.away_score THEN 1 ELSE 0 END) as ties,
-      SUM(CASE WHEN t.id = g.home_team_id THEN g.home_score ELSE g.away_score END) as goals_for,
-      SUM(CASE WHEN t.id = g.home_team_id THEN g.away_score ELSE g.home_score END) as goals_against
-    FROM games g
-    JOIN teams t ON (t.id = g.home_team_id OR t.id = g.away_team_id)
-    JOIN event_divisions ed ON ed.id = g.event_division_id
-    WHERE g.event_id = ? AND g.status = 'final' AND g.game_type = 'pool'
-  `;
-  const params: string[] = [eventId];
+  // Tiebreaker-aware standings (lib/standings.ts): points, head-to-head,
+  // wins, goal diff, fewest GA, most GF. Teams with no finals yet appear
+  // with zeros so pre-tournament standings aren't empty. Response keeps the
+  // legacy flat-array field names the web and app clients already read.
+  try {
+    const { standings } = await computeStandings(db, eventId, division_id || undefined);
+    return c.json({ success: true, data: standings });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to compute standings' }, 500);
+  }
+});
 
-  if (division_id) { query += ' AND g.event_division_id = ?'; params.push(division_id); }
-
-  query += ` GROUP BY g.event_division_id, t.id, g.pool_name
-    ORDER BY ed.age_group ASC, g.pool_name ASC,
-    (SUM(CASE WHEN (t.id = g.home_team_id AND g.home_score > g.away_score) OR (t.id = g.away_team_id AND g.away_score > g.home_score) THEN 1 ELSE 0 END) * 2 + SUM(CASE WHEN g.home_score = g.away_score THEN 1 ELSE 0 END)) DESC,
-    (SUM(CASE WHEN t.id = g.home_team_id THEN g.home_score ELSE g.away_score END) - SUM(CASE WHEN t.id = g.home_team_id THEN g.away_score ELSE g.home_score END)) DESC`;
-
-  const result = await db.prepare(query).bind(...params).all();
-
-  // Add points calculation
-  const standings = (result.results || []).map((r: any) => ({
-    ...r,
-    points: (r.wins * 2) + r.ties,
-    goal_differential: r.goals_for - r.goals_against,
-  }));
-
-  return c.json({ success: true, data: standings });
+// ==========================================
+// ADMIN: Force bracket resolution (also runs automatically on every final)
+// ==========================================
+scoringRoutes.post('/events/:eventId/resolve-bracket', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const body = await c.req.json().catch(() => ({})) as { force?: boolean };
+  try {
+    const result = await resolveBracketGames(c.env.DB, eventId as string, { force: !!body.force });
+    return c.json({ success: true, data: result });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || 'Failed to resolve bracket' }, 500);
+  }
 });
 
 // ==========================================
@@ -777,10 +763,14 @@ scoringRoutes.put('/games/:gameId/score', authMiddleware, requireRole('admin', '
 
     await db.prepare(query).bind(...params).run();
 
-    // If status changed to final, notify coaches
+    // If status changed to final, notify coaches and advance brackets.
+    // Score corrections on already-final games also re-run resolution so
+    // seeding stays right (only fills empty slots / unstarted games).
     if (status === 'final') {
-      notifyCoachesOnFinal(db, c.env, gameId).catch(err => console.error('Coach notify error:', err));
+      keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
     }
+    keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
+      .then((g: any) => g && resolveBracketGames(db, g.event_id)));
 
     return c.json({ success: true });
   } catch (err: any) {
@@ -953,19 +943,10 @@ scoringRoutes.post('/games/:gameId/lineups/load', async (c) => {
   const gameId = c.req.param('gameId');
   const db = c.env.DB;
 
-  const pin = c.req.header('X-Scorekeeper-Pin');
-  const devBypass = c.req.header('X-Dev-Bypass') === 'true';
-  let jwtValid = false;
-  const authHeader = c.req.header('Authorization');
-  if (authHeader?.startsWith('Bearer ') && c.env.JWT_SECRET) {
-    try {
-      const { jwtVerify } = await import('jose');
-      const secret = new TextEncoder().encode(c.env.JWT_SECRET);
-      await jwtVerify(authHeader.slice(7), secret);
-      jwtValid = true;
-    } catch {}
+  const access = await verifyGameWriteAccess(c, gameId);
+  if (!access.ok) {
+    return c.json({ success: false, error: access.error }, (access.status || 401) as any);
   }
-  if (!devBypass && !pin && !jwtValid) return c.json({ success: false, error: 'PIN required' }, 401);
 
   const game = await db.prepare('SELECT home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
   if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
@@ -998,7 +979,7 @@ scoringRoutes.post('/games/:gameId/lineups/load', async (c) => {
 // ==========================================
 // SCOREKEEPER: Manage individual lineup entries
 // ==========================================
-scoringRoutes.put('/games/:gameId/lineups/:lineupId', authMiddleware, zValidator('json', z.object({
+scoringRoutes.put('/games/:gameId/lineups/:lineupId', scorekeeperOrStaff, zValidator('json', z.object({
   isScrached: z.boolean().optional(),
   position: z.string().optional(),
   jerseyNumber: z.string().optional(),
@@ -1023,7 +1004,7 @@ scoringRoutes.put('/games/:gameId/lineups/:lineupId', authMiddleware, zValidator
 // ==========================================
 // SCOREKEEPER: Three Stars
 // ==========================================
-scoringRoutes.post('/games/:gameId/three-stars', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/three-stars', scorekeeperOrStaff, zValidator('json', z.object({
   stars: z.array(z.object({
     starNumber: z.number().min(1).max(3),
     teamId: z.string(),
@@ -1060,7 +1041,7 @@ scoringRoutes.get('/games/:gameId/three-stars', async (c) => {
 // ==========================================
 // SCOREKEEPER: Goalie Stats
 // ==========================================
-scoringRoutes.post('/games/:gameId/goalie-stats', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/goalie-stats', scorekeeperOrStaff, zValidator('json', z.object({
   teamId: z.string(),
   jerseyNumber: z.string(),
   playerName: z.string().optional(),
@@ -1096,7 +1077,7 @@ scoringRoutes.post('/games/:gameId/goalie-stats', authMiddleware, zValidator('js
   return c.json({ success: true, data: { id } });
 });
 
-scoringRoutes.put('/games/:gameId/goalie-stats/:statId', authMiddleware, zValidator('json', z.object({
+scoringRoutes.put('/games/:gameId/goalie-stats/:statId', scorekeeperOrStaff, zValidator('json', z.object({
   toiMinutes: z.number().optional(),
   shotsAgainst: z.number().optional(),
   goalsAgainst: z.number().optional(),
@@ -1119,7 +1100,7 @@ scoringRoutes.put('/games/:gameId/goalie-stats/:statId', authMiddleware, zValida
 // ==========================================
 // SCOREKEEPER: Shootout Rounds
 // ==========================================
-scoringRoutes.post('/games/:gameId/shootout', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/shootout', scorekeeperOrStaff, zValidator('json', z.object({
   teamId: z.string(),
   jerseyNumber: z.string(),
   playerName: z.string().optional(),
@@ -1145,7 +1126,7 @@ scoringRoutes.post('/games/:gameId/shootout', authMiddleware, zValidator('json',
   return c.json({ success: true, data: { id } });
 });
 
-scoringRoutes.delete('/games/:gameId/shootout/:roundId', authMiddleware, async (c) => {
+scoringRoutes.delete('/games/:gameId/shootout/:roundId', scorekeeperOrStaff, async (c) => {
   const { roundId } = c.req.param();
   const db = c.env.DB;
   await db.prepare('DELETE FROM shootout_rounds WHERE id = ?').bind(roundId).run();
@@ -1155,7 +1136,7 @@ scoringRoutes.delete('/games/:gameId/shootout/:roundId', authMiddleware, async (
 // ==========================================
 // SCOREKEEPER: Game Notes
 // ==========================================
-scoringRoutes.post('/games/:gameId/notes', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/notes', scorekeeperOrStaff, zValidator('json', z.object({
   noteType: z.string().optional(),
   content: z.string(),
   period: z.number().optional(),
@@ -1177,7 +1158,7 @@ scoringRoutes.post('/games/:gameId/notes', authMiddleware, zValidator('json', z.
 // ==========================================
 // SCOREKEEPER: Game Officials
 // ==========================================
-scoringRoutes.post('/games/:gameId/officials', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/officials', scorekeeperOrStaff, zValidator('json', z.object({
   officials: z.array(z.object({
     officialName: z.string(),
     role: z.string().optional(),
@@ -1206,7 +1187,7 @@ scoringRoutes.post('/games/:gameId/officials', authMiddleware, zValidator('json'
 // ==========================================
 // SCOREKEEPER: Game Coaches
 // ==========================================
-scoringRoutes.post('/games/:gameId/coaches', authMiddleware, zValidator('json', z.object({
+scoringRoutes.post('/games/:gameId/coaches', scorekeeperOrStaff, zValidator('json', z.object({
   coaches: z.array(z.object({
     teamId: z.string(),
     coachName: z.string(),
@@ -1235,7 +1216,7 @@ scoringRoutes.post('/games/:gameId/coaches', authMiddleware, zValidator('json', 
 // ==========================================
 // SCOREKEEPER: Update scorekeeper info on game
 // ==========================================
-scoringRoutes.put('/games/:gameId/scorekeeper-info', authMiddleware, zValidator('json', z.object({
+scoringRoutes.put('/games/:gameId/scorekeeper-info', scorekeeperOrStaff, zValidator('json', z.object({
   scorekeeperName: z.string().optional(),
   scorekeeperPhone: z.string().optional(),
 })), async (c) => {
