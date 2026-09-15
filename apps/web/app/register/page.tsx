@@ -119,6 +119,22 @@ export default function RegisterPage() {
   // payment step offers adding a 2nd event with the credit auto-applied
   const [superSaver, setSuperSaver] = useState<{ discount_cents: number; ends_at: string; min_event_start: string | null } | null>(null);
   const [ssAddEventId, setSsAddEventId] = useState('');
+  // Hotel picks for the Super Saver add-on event - the upsell used to skip
+  // the hotel question for the 2nd event entirely
+  const [ssHotels, setSsHotels] = useState<any[]>([]);
+  const [ssHotelPicks, setSsHotelPicks] = useState<[string, string, string]>(['', '', '']);
+  const [ssLocal, setSsLocal] = useState(false);
+  useEffect(() => {
+    setSsHotelPicks(['', '', '']);
+    setSsLocal(false);
+    setSsHotels([]);
+    if (!ssAddEventId) return;
+    fetch(`${API}/events/event-hotels/${ssAddEventId}`)
+      .then(r => r.json())
+      .then((j: any) => setSsHotels(j.data || []))
+      .catch(() => setSsHotels([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssAddEventId]);
   const [ssAppliedCents, setSsAppliedCents] = useState(0);
   const [codeDeferred, setCodeDeferred] = useState('');
   const [ssReservedFor, setSsReservedFor] = useState('');
@@ -691,7 +707,14 @@ export default function RegisterPage() {
           needsHotel: needsHotel,
           scheduleRequests: (teamScheduleRequests[team.id] || '').trim() || undefined,
           // Super Saver upsell: also register this team for the chosen 2nd event
-          ...(ssAddEventId ? { additionalEventIds: [ssAddEventId] } : {}),
+          ...(ssAddEventId ? {
+            additionalEventIds: [ssAddEventId],
+            ...(ssLocal
+              ? { additionalEventHotel: { hotelChoice1: 'Local Team', needsHotel: false } }
+              : ssHotelPicks[0]
+                ? { additionalEventHotel: { hotelChoice1: ssHotelPicks[0], hotelChoice2: ssHotelPicks[1] || undefined, hotelChoice3: ssHotelPicks[2] || undefined, needsHotel: true } }
+                : {}),
+          } : {}),
         };
         const res = await fetch(`${API}/events/register`, {
           method: 'POST',
@@ -1512,6 +1535,32 @@ export default function RegisterPage() {
                       ✓ {chosen.name} will be added to your registration{multiTeamMode && selectedTeams.length > 1 ? ' for each team' : ''} —
                       the ${discount} Super Saver Discount applies at payment.
                     </p>
+                  )}
+                  {chosen && ssHotels.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-[#00ccff]/20">
+                      <p className="text-sm font-semibold text-[#1d1d1f]">Hotel for {chosen.name}</p>
+                      <p className="text-xs text-[#6e6e73] mt-0.5 mb-2">A partner-hotel stay is required to qualify for the Super Saver discount. Pick up to 3 choices for this event too.</p>
+                      <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input type="checkbox" checked={ssLocal}
+                          onChange={e => { setSsLocal(e.target.checked); if (e.target.checked) setSsHotelPicks(['', '', '']); }}
+                          className="w-4 h-4 rounded border-gray-300" />
+                        <span className="text-xs text-[#3d3d3d]">We&apos;re local to this event — no hotel needed</span>
+                      </label>
+                      {!ssLocal && (
+                        <div className="space-y-2">
+                          {[0, 1, 2].map(slot => (
+                            <select key={slot} value={ssHotelPicks[slot]}
+                              onChange={e => setSsHotelPicks(prev => { const next = [...prev] as [string, string, string]; next[slot] = e.target.value; return next; })}
+                              className="w-full px-3 py-2 border-2 border-[#e8e8ed] rounded-xl text-sm text-[#1d1d1f] focus:border-[#00ccff] outline-none bg-white">
+                              <option value="">{slot === 0 ? '1st Choice hotel...' : slot === 1 ? '2nd Choice (optional)...' : '3rd Choice (optional)...'}</option>
+                              {ssHotels.filter((h: any) => !ssHotelPicks.some((p, i) => i !== slot && p === h.id)).map((h: any) => (
+                                <option key={h.id} value={h.id}>{h.hotel_name}{h.rate_description ? ` — ${h.rate_description}` : ''}</option>
+                              ))}
+                            </select>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );

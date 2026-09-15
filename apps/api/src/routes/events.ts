@@ -1193,6 +1193,14 @@ const consumerRegisterSchema = z.object({
   headCoachName: z.string().optional(),
   paymentChoice: z.enum(['pay_now', 'pay_deposit', 'pay_later']),
   additionalEventIds: z.array(z.string()).optional(),
+  // Hotel picks for the Super Saver add-on event (the upsell used to skip the
+  // hotel question entirely for the 2nd event)
+  additionalEventHotel: z.object({
+    hotelChoice1: z.string().optional(),
+    hotelChoice2: z.string().optional(),
+    hotelChoice3: z.string().optional(),
+    needsHotel: z.boolean().optional(),
+  }).optional(),
   hotelChoice1: z.string().optional(),
   hotelChoice2: z.string().optional(),
   hotelChoice3: z.string().optional(),
@@ -1391,15 +1399,18 @@ eventRoutes.post('/register', zValidator('json', consumerRegisterSchema), async 
 
     const addMatchedDivId = await findMatchingDivision(addEvent.id, data.ageGroup);
 
+    const addHotel = data.additionalEventHotel;
     await db.prepare(`
-      INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO event_registrations (id, event_id, team_id, team_name, age_group, division, manager_first_name, manager_last_name, email1, phone, status, payment_status, event_division_id, hotel_choice_1, hotel_choice_2, hotel_choice_3, needs_hotel, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       addRegId, addEvent.id, resolvedTeamId, data.teamName, data.ageGroup, data.division || null,
       data.managerFirstName || null, data.managerLastName || null,
       data.email, data.phone || null,
       initialStatus, initialPaymentStatus,
       addMatchedDivId,
+      addHotel?.hotelChoice1 || null, addHotel?.hotelChoice2 || null, addHotel?.hotelChoice3 || null,
+      addHotel?.needsHotel ? 1 : 0,
       (data.scheduleRequests || '').trim() || null
     ).run();
   }
