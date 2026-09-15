@@ -371,6 +371,23 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
 // ==================
 // ADMIN/DIRECTOR: Approve registration
 // ==================
+// ==================
+// ADMIN: Drag-to-reorder participants (sets display order per registration)
+// ==================
+registrationRoutes.put('/admin/reorder', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as { order?: string[] };
+  const order = Array.isArray(body.order) ? body.order.filter(id => typeof id === 'string') : [];
+  if (order.length === 0 || order.length > 500) {
+    return c.json({ success: false, error: 'order must be a list of 1-500 registration ids' }, 400);
+  }
+  const db = c.env.DB;
+  for (let i = 0; i < order.length; i++) {
+    await db.prepare('UPDATE event_registrations SET sort_order = ? WHERE id = ?').bind(i + 1, order[i]).run().catch(() => {});
+    await db.prepare('UPDATE registrations SET sort_order = ? WHERE id = ?').bind(i + 1, order[i]).run().catch(() => {});
+  }
+  return c.json({ success: true, data: { updated: order.length } });
+});
+
 registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const regId = c.req.param('id');
   const user = c.get('user');

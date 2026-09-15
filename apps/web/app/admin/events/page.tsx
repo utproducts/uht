@@ -4084,6 +4084,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   };
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers'>('overview');
+  const [dragRegId, setDragRegId] = useState<string | null>(null);
   // Full registration editor — the SAME slide-out panel as /admin/registrations,
   // hitting the same API row, so edits on either page always stay in sync.
   const [fullEditReg, setFullEditReg] = useState<FullRegistration | null>(null);
@@ -4249,8 +4250,40 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     if (!grouped[ag]) grouped[ag] = [];
     grouped[ag].push(r);
   });
-  // Sort each group by team name so rows don't jump on status change
-  Object.values(grouped).forEach(arr => arr.sort((a: any, b: any) => (a.team_name || '').localeCompare(b.team_name || '')));
+  // Saved drag order first (sort_order), then team name for unordered rows
+  Object.values(grouped).forEach(arr => arr.sort((a: any, b: any) =>
+    (a.sort_order ?? 999999) - (b.sort_order ?? 999999) || (a.team_name || '').localeCompare(b.team_name || '')));
+
+  // Drag-to-reorder within an age group; persists the whole event's order
+  const persistOrder = (groups: Record<string, any[]>) => {
+    const flat: string[] = [];
+    Object.keys(groups).forEach(ag => groups[ag].forEach((r: any) => flat.push(r.id)));
+    fetch(`${API_ROOT}/registrations/admin/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+      body: JSON.stringify({ order: flat }),
+    }).catch(() => {});
+  };
+  const handleRowDrop = (targetReg: any) => {
+    if (!dragRegId || dragRegId === targetReg.id) { setDragRegId(null); return; }
+    const source = registrations.find((r: any) => r.id === dragRegId);
+    if (!source || (source.age_group || 'Unknown') !== (targetReg.age_group || 'Unknown')) { setDragRegId(null); return; }
+    const ag = targetReg.age_group || 'Unknown';
+    const arr = [...grouped[ag]];
+    const from = arr.findIndex((r: any) => r.id === dragRegId);
+    const to = arr.findIndex((r: any) => r.id === targetReg.id);
+    if (from === -1 || to === -1) { setDragRegId(null); return; }
+    arr.splice(to, 0, arr.splice(from, 1)[0]);
+    const newGroups: Record<string, any[]> = { ...grouped, [ag]: arr };
+    // Stamp fresh sort_order locally so the render order holds
+    let n = 1;
+    const orderMap: Record<string, number> = {};
+    Object.keys(newGroups).forEach(g => newGroups[g].forEach((r: any) => { orderMap[r.id] = n++; }));
+    const newRegs = (event.registrations || []).map((r: any) => orderMap[r.id] ? { ...r, sort_order: orderMap[r.id] } : r);
+    setEvent({ ...event, registrations: newRegs });
+    persistOrder(newGroups);
+    setDragRegId(null);
+  };
 
   return (
     <div>
@@ -4485,9 +4518,19 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                   </thead>
                   <tbody>
                     {grouped[ageGroup].map((reg: any) => (
-                      <tr key={reg.id} className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '')}>
+                      <tr key={reg.id}
+                        draggable
+                        onDragStart={(e) => {
+                          if (!(e.target as HTMLElement).closest?.('[data-grip]')) { e.preventDefault(); return; }
+                          setDragRegId(reg.id);
+                        }}
+                        onDragOver={(e) => { if (dragRegId) e.preventDefault(); }}
+                        onDrop={(e) => { e.preventDefault(); handleRowDrop(reg); }}
+                        onDragEnd={() => setDragRegId(null)}
+                        className={"border-b border-[#e8e8ed] hover:bg-[#f5f5f7] transition" + (reg.status === 'denied' ? ' opacity-50' : '') + (dragRegId === reg.id ? ' opacity-40' : '')}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
+                            <span data-grip title="Drag to reorder" className="cursor-grab active:cursor-grabbing select-none text-[#c7c7cc] hover:text-[#6e6e73] text-[13px] leading-none flex-shrink-0">⠿</span>
                             <span className="font-medium text-[#1d1d1f] text-[12.5px] leading-tight" title={reg.team_name}>{reg.display_name || reg.team_name}</span>
                             {reg.mhr_url && (
                               <a href={String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`}

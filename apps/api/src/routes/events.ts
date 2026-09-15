@@ -412,6 +412,7 @@ eventRoutes.get('/admin/detail/:id', authMiddleware, requireRole('admin', 'direc
       COALESCE(ed.division_level, t.division_level) as division,
       r.hotel_assigned,
       ha.hotel_name as hotel_assigned_name,
+      r.sort_order,
       r.notes,
       r.event_division_id,
       r.created_at, r.updated_at,
@@ -426,7 +427,7 @@ eventRoutes.get('/admin/detail/:id', authMiddleware, requireRole('admin', 'direc
 
   // Also check event_registrations table (consumer registration flow)
   const legacyRegs = await db.prepare(`
-    SELECT er.id, er.event_id, er.team_name,
+    SELECT er.id, er.event_id, er.team_name, er.sort_order,
       COALESCE(ed2.age_group, er.age_group) as age_group,
       COALESCE(ed2.division_level, er.division, ct.division_level) as division,
       er.manager_first_name, er.manager_last_name, er.email1 as email,
