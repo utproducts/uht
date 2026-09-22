@@ -373,13 +373,15 @@ pushRoutes.get('/notifications', authMiddleware, requireRole('admin', 'director'
   const limit = parseInt(c.req.query('limit') || '50');
   const offset = parseInt(c.req.query('offset') || '0');
 
+  const eventId = c.req.query('event_id') || null;
   const result = await db.prepare(`
-    SELECT n.*, u.firstName || ' ' || u.lastName as sent_by_name
+    SELECT n.*, TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) as sent_by_name
     FROM notifications n
     LEFT JOIN users u ON u.id = n.sent_by
+    WHERE (?1 IS NULL OR n.target_id = ?1)
     ORDER BY n.created_at DESC
-    LIMIT ? OFFSET ?
-  `).bind(limit, offset).all();
+    LIMIT ?2 OFFSET ?3
+  `).bind(eventId, limit, offset).all();
 
   const countResult = await db.prepare(`SELECT COUNT(*) as total FROM notifications`).first() as any;
 

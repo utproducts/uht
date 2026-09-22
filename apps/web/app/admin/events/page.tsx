@@ -3709,6 +3709,7 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
   const [newPinRink, setNewPinRink] = useState('');
   const [creatingPin, setCreatingPin] = useState(false);
   const [showAccountAssign, setShowAccountAssign] = useState(false);
+  const [pushHistory, setPushHistory] = useState<any[]>([]);
 
   const skFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...adminHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
 
@@ -3719,8 +3720,10 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
       skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
       skFetch(`${API_BASE.replace('/api/events', '/api/scheduling')}/staff`).then(r => r.json()),
       skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/pins`).then(r => r.json()).catch(() => ({})),
-    ]).then(([gamesJson, skJson, staffJson, pinsJson]: any[]) => {
+      skFetch(`${API_BASE.replace('/api/events', '/api/push')}/notifications?event_id=${eventId}&limit=30`).then(r => r.json()).catch(() => ({})),
+    ]).then(([gamesJson, skJson, staffJson, pinsJson, pushJson]: any[]) => {
       if (pinsJson?.success) setPins(pinsJson.data || []);
+      if (pushJson?.success) setPushHistory(pushJson.data?.notifications || (Array.isArray(pushJson.data) ? pushJson.data : []));
       if (gamesJson.success) setGames(gamesJson.data || []);
       if (skJson.success) {
         setScorekeepers(skJson.data || []);
@@ -3894,6 +3897,33 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
                   {pin.rink_id && <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold uppercase">rink-only</span>}
                 </div>
                 <button onClick={() => deletePin(pin.id)} className="text-red-500 text-xs font-semibold hover:text-red-700">Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Push history for this event - manual sends and the automated
+          game-start / final / delay / locker-room pushes */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Push History</h3>
+        <p className="text-sm text-[#86868b] mb-4">Every notification sent for this event - automated game pushes and manual sends.</p>
+        {pushHistory.length === 0 ? (
+          <p className="text-sm text-[#c7c7cc]">Nothing sent yet for this event.</p>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {pushHistory.map((n: any) => (
+              <div key={n.id} className="flex items-start justify-between gap-3 border border-[#e8e8ed] rounded-xl px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#1d1d1f] truncate">{n.title}</p>
+                  <p className="text-xs text-[#86868b] truncate">{n.body}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${n.sent_by === 'system' || !n.sent_by_name ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {(n.type || '').replace(/_/g, ' ')}
+                  </span>
+                  <p className="text-[11px] text-[#86868b] mt-1">{n.sent_count} sent · {String(n.created_at || '').slice(5, 16)}</p>
+                </div>
               </div>
             ))}
           </div>

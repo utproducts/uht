@@ -196,6 +196,46 @@ export async function notifyGameFinalPush(db: any, gameId: string) {
 }
 
 /*
+  Game-start push to both teams' followers: "Dogs vs Cats - starting now".
+  Idempotent via games.start_push_sent (a re-tapped Start Game never
+  double-pushes).
+*/
+export async function notifyGameStartPush(db: any, gameId: string) {
+  const g = await db.prepare(`
+    SELECT g.id, g.event_id, g.game_number, g.home_team_id, g.away_team_id,
+      COALESCE(g.start_push_sent, 0) as start_push_sent,
+      e.name as event_name,
+      vr.name as rink_name, v.name as venue_name,
+      COALESCE(ht.schedule_name, ht.name, g.home_placeholder, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, g.away_placeholder, 'Away') as away_name
+    FROM games g
+    JOIN events e ON e.id = g.event_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    WHERE g.id = ?
+  `).bind(gameId).first();
+  if (!g || g.start_push_sent) return;
+
+  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id]);
+  await db.prepare("UPDATE games SET start_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
+  if (tokens.length === 0) return;
+
+  const title = `${g.away_name} vs ${g.home_name} - starting now!`;
+  const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
+  const body = `${g.event_name}${g.game_number ? ` - Game #${g.game_number}` : ''}${where ? `\n${where}` : ''}`;
+  const pushData = { type: 'game_start', game_id: g.id, event_id: g.event_id };
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, {
+    type: 'game_start', title, body, audience: 'team_followers',
+    target_id: g.event_id, sent_count: sent, sent_by: 'system',
+    metadata: JSON.stringify({ game_id: g.id }),
+  });
+  await createUserNotifications(db, userIds, title, body, 'game_start', pushData);
+}
+
+/*
   Delay push to the game's division. delay_push_sig stores the last-notified
   delay so edits that don't change anything (or repeat saves) don't re-push.
 */

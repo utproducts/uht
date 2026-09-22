@@ -5,7 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { verifyGameWriteAccess } from '../lib/game-access';
 import { computeStandings, resolveBracketGames } from '../lib/standings';
-import { notifyGameFinalPush, notifyGameDelayPush } from '../lib/push';
+import { notifyGameFinalPush, notifyGameDelayPush, notifyGameStartPush } from '../lib/push';
 
 export const scoringRoutes = new Hono<{ Bindings: Env }>();
 
@@ -339,6 +339,8 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
     // Update game status for period/game events
     if (data.eventType === 'game_start') {
       await db.prepare("UPDATE games SET status = 'in_progress', period = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
+      // "Starting now" push to both teams' followers (idempotent)
+      keepAlive(c, notifyGameStartPush(db, gameId));
     } else if (data.eventType === 'game_end') {
       await db.prepare("UPDATE games SET status = 'final', updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
       // Coach texts + bracket auto-advance, kept alive past the response
