@@ -266,6 +266,18 @@ function ScoringPageInner() {
     finally { setPosting(false); }
   };
 
+  // Lineups load themselves the moment rosters are known - scorekeepers should
+  // never have to know what a lineup is (server side is INSERT OR IGNORE)
+  useEffect(() => {
+    if (!gameId || !pin || !rosterLoaded || lineupsLoaded) return;
+    if (homePlayers.length === 0 && awayPlayers.length === 0) return;
+    fetch(`${API_BASE}/scoring/games/${gameId}/lineups/load`, { method: 'POST', headers: headers() })
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setLineupsLoaded(true); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, pin, rosterLoaded, lineupsLoaded]);
+
   const doFlash = (color: string) => { setFlash(color); setTimeout(() => setFlash(''), 400); };
 
   // Goal flow with roster
@@ -442,20 +454,6 @@ function ScoringPageInner() {
           </div>
         </div>
       </div>
-
-      {/* ROSTER BANNER - if not loaded */}
-      {!lineupsLoaded && rosterLoaded && (homePlayers.length > 0 || awayPlayers.length > 0) && (
-        <div className="mx-4 mt-3 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-900">Rosters Available</p>
-            <p className="text-xs text-blue-700">{homePlayers.length + awayPlayers.length} players ready to load</p>
-          </div>
-          <button onClick={loadLineups} disabled={posting}
-            className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg active:bg-blue-700 disabled:opacity-50">
-            Load Rosters
-          </button>
-        </div>
-      )}
 
       {/* CONTROLS */}
       <div className="px-4 py-4 space-y-3">
