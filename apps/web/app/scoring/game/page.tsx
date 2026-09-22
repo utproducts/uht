@@ -96,6 +96,7 @@ function ScoringPageInner() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalType>(null);
   const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState('');
 
   // Roster
   const [homePlayers, setHomePlayers] = useState<RosterPlayer[]>([]);
@@ -194,8 +195,12 @@ function ScoringPageInner() {
         method: 'POST', headers: headers(), body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (json.success) { doFlash('green'); await fetchGame(); } else { doFlash('red'); }
-    } catch { doFlash('red'); }
+      if (json.success) { doFlash('green'); setPostError(''); await fetchGame(); }
+      else {
+        doFlash('red');
+        setPostError(typeof json.error === 'string' ? json.error : 'That entry was not saved - please try again.');
+      }
+    } catch { doFlash('red'); setPostError('Connection problem - that entry was not saved.'); }
     finally { setPosting(false); }
   };
 
@@ -505,6 +510,11 @@ function ScoringPageInner() {
             </div>
           </div>
         )}
+      {postError && (
+        <div className="mx-1 mb-3 p-3 rounded-xl bg-red-50 border border-red-300 text-red-700 text-sm font-semibold">
+          {postError}
+        </div>
+      )}
       </div>
 
       {/* EVENT LOG */}

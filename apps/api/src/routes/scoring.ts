@@ -244,15 +244,18 @@ const gameEventSchema = z.object({
     'goal', 'penalty', 'period_start', 'period_end',
     'game_start', 'game_end', 'timeout', 'goalie_pull', 'goalie_return',
   ]),
-  teamId: z.string().optional(),
-  jerseyNumber: z.string().optional(),
-  assist1Jersey: z.string().optional(),
-  assist2Jersey: z.string().optional(),
-  period: z.number().optional(),
-  gameTime: z.string().optional(),
-  penaltyCode: z.string().optional(),
-  penaltyMinutes: z.number().optional(),
-  details: z.string().optional(),
+  // .nullable() everywhere: the web console sends explicit nulls for skipped
+  // fields (assists especially), and plain .optional() rejected them - every
+  // console goal without both assists 400'd silently (found 9/21 with Johnny)
+  teamId: z.string().nullable().optional(),
+  jerseyNumber: z.string().nullable().optional(),
+  assist1Jersey: z.string().nullable().optional(),
+  assist2Jersey: z.string().nullable().optional(),
+  period: z.number().nullable().optional(),
+  gameTime: z.string().nullable().optional(),
+  penaltyCode: z.string().nullable().optional(),
+  penaltyMinutes: z.number().nullable().optional(),
+  details: z.string().nullable().optional(),
 });
 
 scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema), async (c) => {
