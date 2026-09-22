@@ -3691,6 +3691,150 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
 }
 
 // --- Scorekeepers Tab Component ---
+function CheckInTab({ eventId }: { eventId: string }) {
+  const [teams, setTeams] = useState<any[]>([]);
+  const [playerStatuses, setPlayerStatuses] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [rosters, setRosters] = useState<Record<string, any[]>>({});
+  const [notifying, setNotifying] = useState(false);
+  const [notifyMsg, setNotifyMsg] = useState('');
+  const API_ROOT2 = 'https://uht.chad-157.workers.dev/api';
+  const ciFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...adminHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
+
+  const load = () => {
+    ciFetch(`${API_ROOT2}/registrations/admin/checkin/${eventId}`).then(r => r.json()).then((j: any) => {
+      if (j.success) {
+        setTeams(j.data.teams || []);
+        const map: Record<string, string> = {};
+        (j.data.player_statuses || []).forEach((ps: any) => { map[ps.player_id] = ps.status; });
+        setPlayerStatuses(map);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, [eventId]);
+
+  const toggleCheckIn = async (regId: string) => {
+    await ciFetch(`${API_ROOT2}/registrations/admin/checkin/${eventId}/toggle/${regId}`, { method: 'POST' });
+    load();
+  };
+  const loadRoster = async (teamId: string) => {
+    if (rosters[teamId]) return;
+    try {
+      const r = await ciFetch(`${API_ROOT2}/teams/admin/team-roster/${teamId}`);
+      const j = await r.json();
+      if (j.success) setRosters(prev => ({ ...prev, [teamId]: j.data?.players || j.data || [] }));
+    } catch {}
+  };
+  const setPlayerStatus = async (teamId: string, playerId: string, status: string) => {
+    setPlayerStatuses(prev => ({ ...prev, [playerId]: status }));
+    await ciFetch(`${API_ROOT2}/registrations/admin/checkin/${eventId}/player-status`, {
+      method: 'PUT', body: JSON.stringify({ teamId, playerId, status }),
+    }).catch(() => {});
+  };
+  const notifyPending = async () => {
+    setNotifying(true);
+    try {
+      const r = await ciFetch(`${API_ROOT2}/registrations/admin/checkin/${eventId}/notify`, { method: 'POST' });
+      const j = await r.json();
+      setNotifyMsg(j.success ? `Push sent to ${j.data?.teams ?? 0} un-checked-in teams (${j.data?.sent ?? 0} devices).` : (j.error || 'Failed to send'));
+    } catch { setNotifyMsg('Failed to send'); }
+    setNotifying(false);
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  const checkedCount = teams.filter(t => t.checked_in_at).length;
+  const grouped: Record<string, any[]> = {};
+  teams.forEach(t => { const ag = t.age_group || 'Other'; (grouped[ag] = grouped[ag] || []).push(t); });
+  const fmtMoney = (c: number) => `$${(c / 100).toLocaleString()}`;
+  const STATUS_STYLES: Record<string, string> = {
+    playing: 'bg-emerald-600 text-white',
+    absent: 'bg-amber-500 text-white',
+    suspended: 'bg-red-600 text-white',
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl shadow-lg p-6 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Event Check-In</h3>
+          <p className="text-sm text-[#86868b]">{checkedCount} of {teams.length} teams checked in. Tap a team to open its roster and mark players Playing, Absent, or Suspended.</p>
+          {notifyMsg && <p className="text-xs text-blue-700 font-medium mt-1">{notifyMsg}</p>}
+        </div>
+        <button onClick={notifyPending} disabled={notifying}
+          className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] disabled:bg-gray-300 shrink-0">
+          {notifying ? 'Sending...' : 'Push: Check In Now'}
+        </button>
+      </div>
+
+      {Object.keys(grouped).sort().map(ag => (
+        <div key={ag} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div className="bg-[#f5f5f7] px-5 py-3 border-b border-[#e8e8ed] flex items-center justify-between">
+            <h3 className="font-bold text-[#1d1d1f]">{ag}</h3>
+            <span className="text-xs text-[#86868b] font-medium">{grouped[ag].filter((t: any) => t.checked_in_at).length}/{grouped[ag].length} checked in</span>
+          </div>
+          <div className="divide-y divide-[#f5f5f7]">
+            {grouped[ag].map((t: any) => (
+              <div key={t.id}>
+                <div className="px-5 py-3 flex items-center gap-3 cursor-pointer hover:bg-[#fafafa]"
+                  onClick={() => { const next = expanded === t.id ? null : t.id; setExpanded(next); if (next && t.team_id) loadRoster(t.team_id); }}>
+                  <button onClick={(e) => { e.stopPropagation(); toggleCheckIn(t.id); }}
+                    className={`w-24 py-2 rounded-xl text-xs font-bold shrink-0 transition ${t.checked_in_at ? 'bg-emerald-600 text-white' : 'bg-white border-2 border-[#003e79] text-[#003e79] hover:bg-[#f0f7ff]'}`}>
+                    {t.checked_in_at ? 'Checked In' : 'Check In'}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[#1d1d1f] text-sm truncate">{t.display_name || t.team_name}</p>
+                    <p className="text-xs text-[#86868b]">{t.coach_name || ''}{t.checked_in_at ? ` - checked in ${String(t.checked_in_at).slice(11, 16)} UTC` : ''}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {t.missing_roster && <span className="px-2 py-1 rounded-full bg-red-50 text-red-700 text-[10px] font-bold uppercase">No roster</span>}
+                    {!t.missing_roster && <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">{t.roster_count} players</span>}
+                    {t.balance_cents > 0
+                      ? <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold">Owes {fmtMoney(t.balance_cents)}</span>
+                      : <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">Paid</span>}
+                  </div>
+                </div>
+                {expanded === t.id && (
+                  <div className="px-5 pb-4 bg-[#fafafa]">
+                    {!t.team_id ? (
+                      <p className="text-xs text-[#86868b] py-2">No linked team record - roster unavailable.</p>
+                    ) : !(rosters[t.team_id]) ? (
+                      <p className="text-xs text-[#86868b] py-2">Loading roster...</p>
+                    ) : rosters[t.team_id].length === 0 ? (
+                      <p className="text-xs text-red-600 py-2 font-medium">Roster is empty - have the coach load it before game time.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-2">
+                        {rosters[t.team_id].map((pl: any) => {
+                          const st = playerStatuses[pl.id] || 'playing';
+                          return (
+                            <div key={pl.id} className="flex items-center justify-between bg-white border border-[#e8e8ed] rounded-lg px-3 py-1.5">
+                              <span className="text-xs font-medium text-[#1d1d1f] truncate">#{pl.jersey_number || '-'} {pl.first_name} {pl.last_name}</span>
+                              <div className="flex gap-1 shrink-0">
+                                {(['playing', 'absent', 'suspended'] as const).map(opt => (
+                                  <button key={opt} onClick={() => setPlayerStatus(t.team_id, pl.id, opt)}
+                                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition ${st === opt ? STATUS_STYLES[opt] : 'bg-[#f5f5f7] text-[#86868b] hover:bg-[#e8e8ed]'}`}>
+                                    {opt === 'playing' ? 'Play' : opt === 'absent' ? 'Abs' : 'Susp'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ScorekeepersTab({ eventId }: { eventId: string }) {
   const [games, setGames] = useState<any[]>([]);
   const [scorekeepers, setScorekeepers] = useState<any[]>([]);
@@ -4199,7 +4343,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     setTimeout(() => setCopiedEmail(c => (c === email ? '' : c)), 1500);
   };
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
   const [dragRegId, setDragRegId] = useState<string | null>(null);
   // Full registration editor — the SAME slide-out panel as /admin/registrations,
   // hitting the same API row, so edits on either page always stay in sync.
@@ -4357,7 +4501,12 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   // awaiting_payment = abandoned checkout (never paid) — hidden here to match the Registrations tab.
   const registrations = allRegistrations.filter((r: any) => r.status !== 'denied' && r.status !== 'withdrawn' && r.status !== 'awaiting_payment');
   const approvedRegistrations = allRegistrations.filter((r: any) => r.status === 'approved');
-  const totalRevenue = approvedRegistrations.filter((r: any) => r.payment_status === 'paid').reduce((sum: number, r: any) => sum + (r.payment_amount_cents || 0), 0);
+  // Revenue = card money (incl. deposits) + recorded manual payments (check/
+  // Venmo). Previously only fully-'paid' card rows counted.
+  const totalRevenue = registrations.reduce((sum: number, r: any) => {
+    const card = r.card_paid_cents ?? (['paid', 'partial'].includes(r.payment_status) ? (r.payment_amount_cents || 0) : 0);
+    return sum + card + (r.manual_paid_cents || 0);
+  }, 0);
 
   // Group registrations by age_group, stable sort by team_name within each group
   const grouped: Record<string, any[]> = {};
@@ -4462,7 +4611,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tabs */}
       <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit mb-6">
-        {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'locker_rooms', 'scorekeepers'] as const).map((t) => (
+        {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -4470,7 +4619,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
-            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'locker_rooms' ? 'Locker Rooms' : 'Scorekeepers'}
+            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
           </button>
         ))}
       </div>
@@ -4991,6 +5140,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'scorekeepers' && (
         <ScorekeepersTab eventId={eventId} />
+      )}
+      {tab === 'check_in' && (
+        <CheckInTab eventId={eventId} />
       )}
     </div>
   );

@@ -1673,8 +1673,8 @@ export default function RegisterPage() {
                       type="text"
                       value={discountCode}
                       onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
-                      placeholder="UHT-XXXXXX"
-                      maxLength={10}
+                      placeholder="Discount code"
+                      maxLength={50}
                       className="flex-1 px-4 py-2.5 rounded-lg border border-[#e8e8ed] text-sm font-mono tracking-wider uppercase focus:outline-none focus:border-[#00ccff] focus:ring-1 focus:ring-[#00ccff]"
                       onKeyDown={(e) => { if (e.key === 'Enter') validateDiscountCode(); }}
                     />

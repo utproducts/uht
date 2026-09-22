@@ -372,6 +372,107 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
 // ADMIN/DIRECTOR: Approve registration
 // ==================
 // ==================
+// EVENT CHECK-IN (director desk flow)
+// ==================
+registrationRoutes.get('/admin/checkin/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const regs = await db.prepare(`
+    SELECT er.id, er.team_id, er.team_name, er.age_group, er.division, er.status, er.payment_status,
+      er.checked_in_at, er.checked_in_by,
+      COALESCE(ct.schedule_name, ct.name, er.team_name) as display_name,
+      COALESCE(ct.head_coach_name, er.coach_name) as coach_name,
+      ed.price_cents as division_price_cents, e2.price_cents as event_price_cents,
+      COALESCE(er.card_paid_cents, CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents, 0) ELSE 0 END) as card_cents,
+      (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = er.id) as manual_cents,
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = er.team_id AND tp.status = 'active') as roster_count
+    FROM event_registrations er
+    LEFT JOIN teams ct ON ct.id = er.team_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    JOIN events e2 ON e2.id = er.event_id
+    WHERE er.event_id = ? AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment')
+    ORDER BY er.age_group, er.team_name
+  `).bind(eventId).all<any>();
+
+  const rows = (regs.results || []).map((r: any) => {
+    const expected = r.division_price_cents || r.event_price_cents || 0;
+    const paid = (r.card_cents || 0) + (r.manual_cents || 0);
+    return {
+      ...r,
+      expected_cents: expected,
+      paid_cents: paid,
+      balance_cents: Math.max(0, expected - paid),
+      missing_roster: (r.roster_count || 0) === 0,
+    };
+  });
+
+  // Per-player game-day statuses for the whole event in one query
+  const statuses = await db.prepare(
+    'SELECT team_id, player_id, status FROM event_player_status WHERE event_id = ?'
+  ).bind(eventId).all<any>();
+
+  return c.json({ success: true, data: { teams: rows, player_statuses: statuses.results || [] } });
+});
+
+registrationRoutes.post('/admin/checkin/:eventId/toggle/:regId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { eventId, regId } = c.req.param();
+  const user = c.get('user');
+  const db = c.env.DB;
+  const reg = await db.prepare('SELECT id, checked_in_at FROM event_registrations WHERE id = ? AND event_id = ?').bind(regId, eventId).first<any>();
+  if (!reg) return c.json({ success: false, error: 'Registration not found' }, 404);
+  if (reg.checked_in_at) {
+    await db.prepare('UPDATE event_registrations SET checked_in_at = NULL, checked_in_by = NULL WHERE id = ?').bind(regId).run();
+    return c.json({ success: true, data: { checked_in: false } });
+  }
+  await db.prepare("UPDATE event_registrations SET checked_in_at = datetime('now'), checked_in_by = ? WHERE id = ?").bind(user.id, regId).run();
+  return c.json({ success: true, data: { checked_in: true } });
+});
+
+registrationRoutes.put('/admin/checkin/:eventId/player-status', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  teamId: z.string(),
+  playerId: z.string(),
+  status: z.enum(['playing', 'absent', 'suspended']),
+})), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { teamId, playerId, status } = c.req.valid('json');
+  const db = c.env.DB;
+  await db.prepare(`
+    INSERT INTO event_player_status (id, event_id, team_id, player_id, status)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(event_id, player_id) DO UPDATE SET status = excluded.status, team_id = excluded.team_id, updated_at = datetime('now')
+  `).bind(crypto.randomUUID().replace(/-/g, ''), eventId, teamId, playerId, status).run();
+  return c.json({ success: true });
+});
+
+// Push "check in now" to teams that have not checked in yet
+registrationRoutes.post('/admin/checkin/:eventId/notify', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const user = c.get('user');
+  const db = c.env.DB;
+  const { teamAudience, sendExpoPushNotifications, logNotification, createUserNotifications } = await import('../lib/push');
+  const ev = await db.prepare('SELECT name FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!ev) return c.json({ success: false, error: 'Event not found' }, 404);
+  const pending = await db.prepare(`
+    SELECT DISTINCT er.team_id FROM event_registrations er
+    WHERE er.event_id = ? AND er.checked_in_at IS NULL AND er.team_id IS NOT NULL
+      AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment')
+  `).bind(eventId).all<any>();
+  const teamIds = (pending.results || []).map((r: any) => r.team_id as string);
+  if (teamIds.length === 0) return c.json({ success: true, data: { sent: 0, teams: 0 }, message: 'All teams are checked in' });
+  const { tokens, userIds } = await teamAudience(db, teamIds);
+  const title = `Check in now - ${ev.name}`;
+  const body = 'Your team has not checked in yet. Open the app to review your roster, then check in at the tournament desk.';
+  const pushData = { type: 'event_checkin', event_id: eventId };
+  const sent = tokens.length ? await sendExpoPushNotifications(tokens, title, body, pushData) : 0;
+  await logNotification(db, {
+    type: 'checkin_reminder', title, body, audience: 'team_followers',
+    target_id: eventId, sent_count: sent, sent_by: user.id,
+  });
+  if (userIds.length) await createUserNotifications(db, userIds, title, body, 'event_checkin', pushData);
+  return c.json({ success: true, data: { sent, teams: teamIds.length } });
+});
+
+// ==================
 // ADMIN: Drag-to-reorder participants (sets display order per registration)
 // ==================
 registrationRoutes.put('/admin/reorder', authMiddleware, requireRole('admin', 'director'), async (c) => {
