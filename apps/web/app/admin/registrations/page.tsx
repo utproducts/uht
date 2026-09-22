@@ -999,13 +999,15 @@ export default function AdminRegistrationsPage() {
   }
 
   // Stats
-  const approved = registrations.filter(r => r.status === 'approved').length;
-  const pending = registrations.filter(r => r.status === 'pending').length;
-  const waitlisted = registrations.filter(r => r.status === 'waitlisted').length;
-  const canceled = registrations.filter(r => CANCELED.includes(r.status)).length;
+  // Tally excludes claude-test sandbox events (rows still listed below)
+  const realRegs = registrations.filter(r => !String((r as any).event_name || '').startsWith('claude-test'));
+  const approved = realRegs.filter(r => r.status === 'approved').length;
+  const pending = realRegs.filter(r => r.status === 'pending').length;
+  const waitlisted = realRegs.filter(r => r.status === 'waitlisted').length;
+  const canceled = realRegs.filter(r => CANCELED.includes(r.status)).length;
   // Teams that registered but stalled at checkout — real teams may sit here
   // for days (Deanna Downey sat 4 days), so surface them instead of hiding them
-  const awaitingPayment = registrations.filter(r => r.status === 'awaiting_payment').length;
+  const awaitingPayment = realRegs.filter(r => r.status === 'awaiting_payment').length;
   const total = approved + pending + waitlisted;
 
   // Unique events for event filter dropdown

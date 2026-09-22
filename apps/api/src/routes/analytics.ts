@@ -267,6 +267,7 @@ analyticsRoutes.get('/reports/registration-trends', authMiddleware, requireRole(
       LEFT JOIN teams t ON t.id = er.team_id
       WHERE er.created_at >= date('now', '-12 months')
         AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
+        AND er.event_id NOT IN (SELECT id FROM events WHERE name LIKE 'claude-test%')
     `).all(),
     db.prepare(`
       SELECT strftime('%Y-%m', r.created_at) as month, r.status,
@@ -383,6 +384,7 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
       FROM event_registrations
       WHERE created_at >= ? AND status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
+        AND event_id NOT IN (SELECT id FROM events WHERE name LIKE 'claude-test%')
       GROUP BY month
     `).bind(seasonStart).all(),
     db.prepare(`

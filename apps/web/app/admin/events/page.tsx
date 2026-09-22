@@ -5368,8 +5368,11 @@ export default function AdminEventsPage() {
   }).sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
 
   // Stats
-  const totalTeams = events.reduce((sum, e) => sum + e.registration_count, 0);
-  const totalRevenue = events.reduce((sum, e) => sum + (e.total_revenue_cents || 0), 0);
+  // Aggregate tiles exclude claude-test sandbox events - fake teams must not
+  // pad the real numbers
+  const realEvents = events.filter(e => !String(e.name || '').startsWith('claude-test'));
+  const totalTeams = realEvents.reduce((sum, e) => sum + e.registration_count, 0);
+  const totalRevenue = realEvents.reduce((sum, e) => sum + (e.total_revenue_cents || 0), 0);
 
   // Full-page edit/create mode
   if (editingEvent) {
@@ -5581,7 +5584,7 @@ export default function AdminEventsPage() {
       <div className="max-w-7xl mx-auto px-6 mt-2">
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-[#1d1d1f]">{events.length}</div>
+            <div className="text-2xl font-bold text-[#1d1d1f]">{realEvents.length}</div>
             <div className="text-xs text-[#86868b] mt-1">{filter === 'upcoming' ? 'Upcoming' : filter === 'past' ? 'Past' : 'Total'} Events</div>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
