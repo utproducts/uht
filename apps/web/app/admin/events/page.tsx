@@ -3703,6 +3703,12 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
   const [selectedScorekeeper, setSelectedScorekeeper] = useState('');
   const [selectedEventSk, setSelectedEventSk] = useState('');
   const [showGameAssign, setShowGameAssign] = useState(false);
+  const [pins, setPins] = useState<any[]>([]);
+  const [newPin, setNewPin] = useState('');
+  const [newPinLabel, setNewPinLabel] = useState('');
+  const [newPinRink, setNewPinRink] = useState('');
+  const [creatingPin, setCreatingPin] = useState(false);
+  const [showAccountAssign, setShowAccountAssign] = useState(false);
 
   const skFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...adminHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
 
@@ -3712,7 +3718,9 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
       skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/games`).then(r => r.json()),
       skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/scorekeepers`).then(r => r.json()),
       skFetch(`${API_BASE.replace('/api/events', '/api/scheduling')}/staff`).then(r => r.json()),
-    ]).then(([gamesJson, skJson, staffJson]) => {
+      skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/pins`).then(r => r.json()).catch(() => ({})),
+    ]).then(([gamesJson, skJson, staffJson, pinsJson]: any[]) => {
+      if (pinsJson?.success) setPins(pinsJson.data || []);
       if (gamesJson.success) setGames(gamesJson.data || []);
       if (skJson.success) {
         setScorekeepers(skJson.data || []);
@@ -3799,6 +3807,28 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
     else setSelectedGames(new Set(unassigned.map(g => g.id)));
   };
 
+  const createPin = async () => {
+    const code = newPin.trim();
+    if (!/^\d{4,8}$/.test(code)) { alert('PIN must be 4-8 digits'); return; }
+    setCreatingPin(true);
+    try {
+      const res = await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/pins`, {
+        method: 'POST',
+        body: JSON.stringify({ pinCode: code, label: newPinLabel.trim() || undefined, rinkId: newPinRink || undefined }),
+      });
+      const json = await res.json();
+      if (json.success) { setNewPin(''); setNewPinLabel(''); setNewPinRink(''); loadData(); }
+      else alert(json.error || 'Failed to create PIN');
+    } catch { alert('Failed to create PIN'); }
+    setCreatingPin(false);
+  };
+  const deletePin = async (pinId: string) => {
+    if (!window.confirm('Delete this PIN? Scorekeepers using it will lose access.')) return;
+    await skFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/pins/${pinId}`, { method: 'DELETE' });
+    loadData();
+  };
+  const suggestPin = () => setNewPin(String(Math.floor(1000 + Math.random() * 9000)));
+
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
 
   const assignedGames = games.filter(g => g.scorekeeper_id);
@@ -3819,6 +3849,63 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Scorekeeper PINs — the primary flow: hand a PIN to whoever is at the
+          scoresheet; no account needed */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-8 h-8 bg-[#003e79] rounded-lg flex items-center justify-center text-white font-black text-sm">#</div>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Scorekeeper PINs</h3>
+        </div>
+        <p className="text-sm text-[#86868b] mb-4 ml-11">Give a PIN to whoever runs the scoresheet. They go to <span className="font-semibold text-[#1d1d1f]">ultimatetournaments.com</span>, tap Scorekeeper Login in the footer, and enter it - no account needed. A PIN tied to a rink only shows that rink's games.</p>
+
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
+          <div className="flex gap-2">
+            <input value={newPin} onChange={e => setNewPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
+              placeholder="4-8 digit PIN" inputMode="numeric"
+              className="w-36 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-mono tracking-widest focus:border-[#003e79] outline-none" />
+            <button onClick={suggestPin} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-[#6e6e73] hover:bg-gray-50" title="Generate random PIN">🎲</button>
+          </div>
+          <input value={newPinLabel} onChange={e => setNewPinLabel(e.target.value)} placeholder="Label (e.g. Main rink sheet)" maxLength={60}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-[#003e79] outline-none" />
+          <select value={newPinRink} onChange={e => setNewPinRink(e.target.value)}
+            className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-[#003e79] outline-none">
+            <option value="">All rinks</option>
+            {Array.from(new Map(games.filter((g: any) => g.rink_id).map((g: any) => [g.rink_id, `${g.venue_name ? g.venue_name + ' - ' : ''}${g.rink_name || ''}`])).entries()).map(([rid, label]: any) => (
+                  <option key={rid} value={rid}>{label}</option>
+                ))}
+          </select>
+          <button onClick={createPin} disabled={creatingPin || !newPin}
+            className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] disabled:bg-gray-300">
+            {creatingPin ? 'Creating...' : 'Create PIN'}
+          </button>
+        </div>
+
+        {pins.length === 0 ? (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+            No PINs yet - scorekeepers cannot log in for this event until you create one.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {pins.map((pin: any) => (
+              <div key={pin.id} className="flex items-center justify-between border border-[#e8e8ed] rounded-xl px-4 py-3">
+                <div>
+                  <span className="font-mono font-extrabold text-lg text-[#003e79] tracking-widest">{pin.pin_code}</span>
+                  <span className="ml-3 text-sm text-[#6e6e73]">{pin.label || ''}</span>
+                  {pin.rink_id && <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold uppercase">rink-only</span>}
+                </div>
+                <button onClick={() => deletePin(pin.id)} className="text-red-500 text-xs font-semibold hover:text-red-700">Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={() => setShowAccountAssign(v => !v)}
+        className="text-sm font-semibold text-[#6e6e73] hover:text-[#003e79] transition ml-1">
+        {showAccountAssign ? '\u25be' : '\u25b8'} Advanced: assign scorekeeper accounts (optional)
+      </button>
+
+      {showAccountAssign && (<>
       {/* Event-Level Scorekeepers */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-center gap-3 mb-1">
@@ -4041,11 +4128,10 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
           </div>
         )}
       </div>
+      </>)}
     </div>
   );
 }
-
-// --- Event Detail Overlay ---
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   // Which email was just copied to the clipboard (shows a brief "Copied!")
