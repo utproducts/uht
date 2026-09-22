@@ -111,6 +111,23 @@ pushRoutes.post('/send', authMiddleware, requireRole('admin', 'director'), zVali
 });
 
 // ==================
+// GET /audience-preview — how many devices/people a push would reach
+// ==================
+pushRoutes.get('/audience-preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.query('event_id');
+  const divisionId = c.req.query('event_division_id') || null;
+  if (eventId) {
+    const { tokens, userIds } = await eventAudience(db, eventId, divisionId);
+    return c.json({ success: true, data: { devices: tokens.length, users: userIds.length } });
+  }
+  const row = await db.prepare(
+    'SELECT COUNT(DISTINCT token) as devices, COUNT(DISTINCT user_id) as users FROM push_tokens'
+  ).first() as any;
+  return c.json({ success: true, data: { devices: row?.devices || 0, users: row?.users || 0 } });
+});
+
+// ==================
 // POST /send-event — Notify all followers of teams registered for an event
 // ==================
 const sendEventSchema = z.object({

@@ -35,6 +35,7 @@ export default function NotificationsPage() {
   const [audience, setAudience] = useState<'event_followers' | 'division' | 'all_users'>('event_followers');
   const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedDivisionId, setSelectedDivisionId] = useState('');
+  const [reach, setReach] = useState<{ devices: number; users: number } | null>(null);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
   const apiFetch = (url: string, opts?: any) => fetch(url, {
@@ -70,6 +71,22 @@ export default function NotificationsPage() {
       })
       .catch(() => setDivisions([]));
   }, [selectedEventId]);
+
+  // How many devices/people the selected audience would reach
+  useEffect(() => {
+    setReach(null);
+    let url: string | null = null;
+    if (audience === 'all_users') url = `${API_BASE}/push/audience-preview`;
+    else if (audience === 'event_followers' && selectedEventId) url = `${API_BASE}/push/audience-preview?event_id=${selectedEventId}`;
+    else if (audience === 'division' && selectedEventId && selectedDivisionId) url = `${API_BASE}/push/audience-preview?event_id=${selectedEventId}&event_division_id=${selectedDivisionId}`;
+    if (!url) return;
+    let stale = false;
+    apiFetch(url)
+      .then(r => r.json())
+      .then(json => { if (!stale && json.success) setReach(json.data); })
+      .catch(() => {});
+    return () => { stale = true; };
+  }, [audience, selectedEventId, selectedDivisionId]);
 
   // Sort events by date
   const sortedEvents = useMemo(() => {
@@ -300,6 +317,16 @@ export default function NotificationsPage() {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Reach preview */}
+          {reach && (audience === 'all_users' || (audience === 'event_followers' && selectedEventId) || (audience === 'division' && selectedDivisionId)) && (
+            <div className="mb-5 -mt-2 flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1.5 bg-[#f0f7ff] text-[#003e79] font-semibold rounded-full px-3 py-1.5">
+                🔔 Reaches {reach.devices.toLocaleString()} device{reach.devices === 1 ? '' : 's'}
+              </span>
+              <span className="text-[#86868b]">{reach.users.toLocaleString()} {reach.users === 1 ? 'person' : 'people'} will get this push</span>
             </div>
           )}
 
