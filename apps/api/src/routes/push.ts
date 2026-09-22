@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
+import { sendExpoPushNotifications, logNotification, createUserNotifications, eventAudience, runLockerRoomSweep } from '../lib/push';
 
 export const pushRoutes = new Hono<{ Bindings: Env }>();
 
@@ -124,19 +125,7 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
   const user = c.get('user') as { id: string };
   const { event_id, title, body, data } = c.req.valid('json');
 
-  const result = await db.prepare(`
-    SELECT DISTINCT pt.token, pt.user_id
-    FROM push_tokens pt
-    WHERE pt.user_id IN (
-      SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ?
-      UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ?
-      UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ?
-      UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND tmem.status = 'active'
-    )
-  `).bind(event_id, event_id, event_id, event_id).all();
-
-  const tokens = (result.results || []).map((r: any) => r.token as string);
-  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
+  const { tokens, userIds } = await eventAudience(db, event_id);
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for event followers' });
@@ -175,20 +164,7 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
   const user = c.get('user') as { id: string };
   const { event_id, event_division_id, title, body, data } = c.req.valid('json');
 
-  // Get all push tokens for users following/coaching/managing teams in this division
-  const result = await db.prepare(`
-    SELECT DISTINCT pt.token, pt.user_id
-    FROM push_tokens pt
-    WHERE pt.user_id IN (
-      SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-      UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-      UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-      UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND er.event_division_id = ? AND tmem.status = 'active'
-    )
-  `).bind(event_id, event_division_id, event_id, event_division_id, event_id, event_division_id, event_id, event_division_id).all();
-
-  const tokens = (result.results || []).map((r: any) => r.token as string);
-  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
+  const { tokens, userIds } = await eventAudience(db, event_id, event_division_id);
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for division followers' });
@@ -422,103 +398,12 @@ pushRoutes.get('/notifications', authMiddleware, requireRole('admin', 'director'
 // POST /check-locker-room-alerts — Trigger locker room push for games starting within 1 hour
 // Called by a Cloudflare Cron trigger or manual admin trigger
 // ==================
-pushRoutes.post('/check-locker-room-alerts', async (c) => {
-  const db = c.env.DB;
-
-  // Verify this is a cron trigger or admin request
-  const authHeader = c.req.header('Authorization');
-  const cronSecret = c.req.header('X-Cron-Secret');
-
-  // Allow cron triggers or authenticated admin users
-  if (!cronSecret && !authHeader) {
-    return c.json({ success: false, error: 'Unauthorized' }, 401);
-  }
-
-  const now = new Date();
-  const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-  const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
-
-  // Find games starting in ~1 hour that have locker rooms assigned
-  // and haven't already been notified (check notifications table)
-  const games = await db.prepare(`
-    SELECT g.id, g.game_number, g.start_time, g.event_id, g.event_division_id,
-      g.home_locker_room, g.away_locker_room, g.notes,
-      e.name as event_name,
-      r.name as rink_name
-    FROM games g
-    LEFT JOIN events e ON e.id = g.event_id
-    LEFT JOIN rinks r ON r.id = g.rink_id
-    WHERE g.start_time BETWEEN ? AND ?
-    AND (g.home_locker_room IS NOT NULL OR g.away_locker_room IS NOT NULL)
-    AND g.locker_room_notified = 0
-    AND g.status IN ('scheduled', 'warmup')
-  `).bind(
-    thirtyMinAgo.toISOString().replace('Z', ''),
-    oneHourFromNow.toISOString().replace('Z', '')
-  ).all();
-
-  let totalSent = 0;
-  const gamesNotified: number[] = [];
-
-  for (const game of (games.results || []) as any[]) {
-    // Get push tokens for all followers/coaches/managers of teams in this division
-    const tokenResult = await db.prepare(`
-      SELECT DISTINCT pt.token, pt.user_id
-      FROM push_tokens pt
-      WHERE pt.user_id IN (
-        SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-        UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-        UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-        UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND er.event_division_id = ? AND tmem.status = 'active'
-      )
-    `).bind(game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id).all();
-
-    const tokens = (tokenResult.results || []).map((r: any) => r.token as string);
-    const autoUserIds = [...new Set((tokenResult.results || []).map((r: any) => r.user_id as string))];
-    if (tokens.length === 0) continue;
-
-    const gameTime = game.start_time ? new Date(game.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-    const lockerInfo: string[] = [];
-    if (game.home_locker_room) lockerInfo.push(`Home: ${game.home_locker_room}`);
-    if (game.away_locker_room) lockerInfo.push(`Away: ${game.away_locker_room}`);
-
-    const title = `Locker Room - Game #${game.game_number}`;
-    const body = `${game.notes || 'Game'} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
-
-    const pushData = { type: 'locker_room', game_id: game.id, event_id: game.event_id };
-    const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
-
-    totalSent += sent;
-    gamesNotified.push(game.game_number);
-
-    // Mark game as notified
-    await db.prepare(
-      `UPDATE games SET locker_room_notified = 1, updated_at = datetime('now') WHERE id = ?`
-    ).bind(game.id).run();
-
-    // Log notification
-    await logNotification(db, {
-      type: 'locker_room_auto',
-      title,
-      body,
-      audience: 'event_followers',
-      target_id: game.event_id,
-      sent_count: sent,
-      sent_by: 'system',
-      metadata: JSON.stringify({ game_id: game.id, game_number: game.game_number }),
-    });
-
-    await createUserNotifications(db, autoUserIds, title, body, 'locker_room', pushData);
-  }
-
-  return c.json({
-    success: true,
-    data: {
-      games_checked: (games.results || []).length,
-      games_notified: gamesNotified,
-      total_sent: totalSent,
-    },
-  });
+pushRoutes.post('/check-locker-room-alerts', authMiddleware, requireRole('admin', 'director', 'scorekeeper'), async (c) => {
+  // The sweep also runs every minute from the Worker cron; this endpoint is
+  // the admin page's manual trigger. (The old version accepted ANY value in
+  // the Authorization header - never validated.)
+  const result = await runLockerRoomSweep(c.env.DB);
+  return c.json({ success: true, data: result });
 });
 
 // ==================
@@ -682,95 +567,3 @@ pushRoutes.post('/migrate', authMiddleware, requireRole('admin'), async (c) => {
 
   return c.json({ success: true, message: 'Push tables and locker room columns created/updated' });
 });
-
-// ==================
-// Helper: Log a notification to the notifications table
-// ==================
-async function logNotification(db: any, data: {
-  type: string;
-  title: string;
-  body: string;
-  audience: string;
-  target_id: string | null;
-  sent_count: number;
-  sent_by: string;
-  metadata?: string;
-}) {
-  const id = crypto.randomUUID().replace(/-/g, '');
-  await db.prepare(`
-    INSERT INTO notifications (id, type, title, body, audience, target_id, sent_count, sent_by, metadata)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, data.type, data.title, data.body, data.audience, data.target_id, data.sent_count, data.sent_by, data.metadata || null).run();
-}
-
-// ==================
-// Helper: Create per-user notification records for inbox
-// ==================
-async function createUserNotifications(
-  db: any,
-  userIds: string[],
-  title: string,
-  body: string,
-  type: string,
-  data?: Record<string, unknown>
-) {
-  const dataStr = data ? JSON.stringify(data) : null;
-  // Batch insert — D1 doesn't support multi-row INSERT, so we loop
-  for (const userId of userIds) {
-    const id = crypto.randomUUID().replace(/-/g, '');
-    try {
-      await db.prepare(`
-        INSERT INTO user_notifications (id, user_id, title, body, type, data)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(id, userId, title, body, type, dataStr).run();
-    } catch (e) {
-      console.error('Failed to create user notification:', e);
-    }
-  }
-}
-
-// ==================
-// Helper: Send notifications via Expo Push API (batched, max 100 per request)
-// ==================
-async function sendExpoPushNotifications(
-  tokens: string[],
-  title: string,
-  body: string,
-  data?: Record<string, unknown>
-): Promise<number> {
-  const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-  const BATCH_SIZE = 100;
-  let totalSent = 0;
-
-  const messages = tokens.map((token) => ({
-    to: token,
-    sound: 'default' as const,
-    title,
-    body,
-    ...(data ? { data } : {}),
-  }));
-
-  for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-    const batch = messages.slice(i, i + BATCH_SIZE);
-    try {
-      const res = await fetch(EXPO_PUSH_URL, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Accept-Encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(batch),
-      });
-      if (res.ok) {
-        totalSent += batch.length;
-      } else {
-        console.error('Expo push API error:', res.status, await res.text());
-      }
-    } catch (err) {
-      console.error('Failed to send push batch:', err);
-    }
-  }
-
-  return totalSent;
-}

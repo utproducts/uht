@@ -1208,5 +1208,8 @@ export default {
   fetch: app.fetch,
   scheduled: (_event: any, env: any, ctx: any) => {
     ctx.waitUntil(runScheduled(env));
+    // Locker-room push sweep (idempotent via games.locker_room_notified) —
+    // previously only ran when an admin clicked the button
+    ctx.waitUntil(import('./lib/push').then(m => m.runLockerRoomSweep(env.DB)).catch((e: any) => console.error('Locker sweep error:', e)));
   },
 };

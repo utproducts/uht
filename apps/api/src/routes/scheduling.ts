@@ -1822,23 +1822,23 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
   // ---- existing divisions, registrations (team names), venues, rinks ----
   const divisions = (await db.prepare('SELECT id, age_group, division_level FROM event_divisions WHERE event_id = ?').bind(eventId).all<any>()).results || [];
 
-  const regTeams: { team_id: string | null; names: string[] }[] = [];
+  const regTeams: { team_id: string | null; names: string[]; age_group: string }[] = [];
   const er = await db.prepare(`
-    SELECT er.team_id, er.team_name,
+    SELECT er.team_id, er.team_name, COALESCE(er.age_group, ct.age_group, '') as reg_age_group,
       COALESCE(ct.schedule_name, CASE WHEN ct.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ct.organization_id), ct.name) || ' (' || TRIM(SUBSTR(ct.head_coach_name, INSTR(ct.head_coach_name, ' '))) || ')' ELSE ct.name END) as display_name
     FROM event_registrations er LEFT JOIN teams ct ON ct.id = er.team_id
     WHERE er.event_id = ? AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
   `).bind(eventId).all<any>();
   for (const r of (er.results || [])) {
-    regTeams.push({ team_id: r.team_id || null, names: [r.display_name, r.team_name].filter(Boolean) });
+    regTeams.push({ team_id: r.team_id || null, names: [r.display_name, r.team_name].filter(Boolean), age_group: r.reg_age_group || '' });
   }
   const nr = await db.prepare(`
-    SELECT r.team_id, t.name as team_name, COALESCE(t.schedule_name, t.name) as display_name
+    SELECT r.team_id, t.name as team_name, COALESCE(t.age_group, '') as reg_age_group, COALESCE(t.schedule_name, t.name) as display_name
     FROM registrations r LEFT JOIN teams t ON t.id = r.team_id
     WHERE r.event_id = ? AND r.status NOT IN ('rejected', 'withdrawn')
   `).bind(eventId).all<any>();
   for (const r of (nr.results || [])) {
-    regTeams.push({ team_id: r.team_id || null, names: [r.display_name, r.team_name].filter(Boolean) });
+    regTeams.push({ team_id: r.team_id || null, names: [r.display_name, r.team_name].filter(Boolean), age_group: r.reg_age_group || '' });
   }
 
   const venues = (await db.prepare('SELECT id, name FROM venues WHERE is_active = 1').all<any>()).results || [];
@@ -1891,9 +1891,14 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
   };
 
   const teamCache = new Map<string, { team_id: string | null; placeholder: string | null }>();
-  const resolveTeam = (raw: string): { team_id: string | null; placeholder: string | null } => {
+  // divRaw scopes name matching to the row's division first: clubs enter
+  // same-named teams in several divisions (Chesterfield Falcons in Squirt C
+  // AND Bantam B/C at CHI), and a global name match linked games to the wrong
+  // division's team - wrong roster on the scoresheet.
+  const resolveTeam = (raw: string, divRaw: string): { team_id: string | null; placeholder: string | null } => {
     const trimmed = String(raw || '').trim();
-    const key = norm(trimmed);
+    const divKey = normDiv(String(divRaw || ''));
+    const key = divKey + '|' + norm(trimmed);
     if (teamCache.has(key)) return teamCache.get(key) as any;
     let out: { team_id: string | null; placeholder: string | null };
     if (/^tbd\b/i.test(trimmed)) {
@@ -1904,8 +1909,16 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
       const poolLabel = pool ? ' ' + pool.charAt(0).toUpperCase() + pool.slice(1).toLowerCase() : '';
       out = { team_id: null, placeholder: seed ? `${seed[1]}${seed[2].toLowerCase()} Place${poolLabel}` : (rest || 'TBD') };
     } else {
-      const exact = regTeams.find(t => t.names.some(n => norm(n) === key));
-      const partial = exact || regTeams.find(t => t.names.some(n => norm(n).includes(key) || key.includes(norm(n))));
+      const nameKey = norm(trimmed);
+      const sameDiv = (t: { age_group: string }) => {
+        const ag = normDiv(t.age_group || '');
+        return ag !== '' && divKey !== '' && (ag === divKey || ag.startsWith(divKey) || divKey.startsWith(ag));
+      };
+      const byName = (pool: typeof regTeams) =>
+        pool.find(t => t.names.some(n => norm(n) === nameKey)) ||
+        pool.find(t => t.names.some(n => norm(n).includes(nameKey) || nameKey.includes(norm(n))));
+      // Division-scoped match wins; global match only as a fallback
+      const partial = byName(regTeams.filter(sameDiv)) || byName(regTeams);
       if (partial?.team_id) {
         out = { team_id: partial.team_id, placeholder: null };
       } else {
@@ -1982,8 +1995,8 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
     if (!startTime) { warnings.push(`Row ${i + 1}: bad date/time ("${r[ci.date]} ${r[ci.time]}") — skipped`); continue; }
     const endTime = parseWhen(r[ci.date], r[ci.endTime]);
     const divisionId = resolveDivision(divRaw);
-    const home = resolveTeam(r[ci.homeTeam]);
-    const away = resolveTeam(r[ci.visTeam]);
+    const home = resolveTeam(r[ci.homeTeam], r[ci.homeDiv] || divRaw);
+    const away = resolveTeam(r[ci.visTeam], r[ci.visDiv] || divRaw);
     const loc = resolveLocation((r[ci.location] || '').trim());
     const typeRaw = (r[ci.gameType] || '').trim().toLowerCase();
     let gameType = 'pool';

@@ -45,6 +45,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
       { name: 'Schedule Builder', href: '/admin/schedule' },
       { name: 'Referees', href: '/admin/referees' },
       { name: 'RSVPs', href: '/admin/rsvps' },
+      { name: 'Push Notifications', href: '/admin/notifications' },
     ],
   },
   {
@@ -53,6 +54,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
       { name: 'Teams', href: '/admin/teams' },
       { name: 'Organizations', href: '/admin/organizations' },
       { name: 'Users', href: '/admin/users' },
+      { name: 'App Users', href: '/admin/app-users' },
       { name: 'Contacts', href: '/admin/contacts' },
       { name: 'Inquiries', href: '/admin/inquiries' },
     ],
@@ -64,14 +66,6 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
       { name: 'Coupon Codes', href: '/admin/coupons' },
       { name: 'Shop', href: '/admin/shop' },
       { name: 'Sponsors', href: '/admin/sponsors' },
-    ],
-  },
-  {
-    title: 'Communication',
-    items: [
-      { name: 'Communications', href: '/admin/comms' },
-      { name: 'Email Campaigns', href: '/admin/email' },
-      { name: 'Notifications', href: '/admin/notifications' },
     ],
   },
   {
@@ -95,7 +89,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
 
 // Sections/items hidden from data-restricted staff (server enforces the real
 // block — this just avoids dead links and confusing 403s)
-const RESTRICTED_HIDDEN_ITEMS = ['Contacts', 'Users', 'Communications', 'Email Campaigns', 'Financials',
+const RESTRICTED_HIDDEN_ITEMS = ['Contacts', 'Users', 'App Users', 'Communications', 'Email Campaigns', 'Push Notifications', 'Financials',
   // Entire Site section hidden for restricted staff (Chad, 9/14)
   'Web Updates', 'Reports', 'FAQs', 'Settings'];
 

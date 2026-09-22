@@ -15,6 +15,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { login, getToken, getUser } from '../services/auth';
+import { registerForPushNotifications } from '../services/notifications';
 
 const BIOMETRIC_EMAIL_KEY = 'uht_biometric_email';
 const BIOMETRIC_PASSWORD_KEY = 'uht_biometric_password';
@@ -71,7 +72,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         if (savedEmail && savedPassword) {
           const result = await login(savedEmail, savedPassword);
           if (result.success) {
-            navigation.replace('Main');
+            registerForPushNotifications().catch(() => {});
+        navigation.replace('Main');
             return;
           }
         }
@@ -80,7 +82,8 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
         const token = await getToken();
         const user = await getUser();
         if (token && user) {
-          navigation.replace('Main');
+          registerForPushNotifications().catch(() => {});
+        navigation.replace('Main');
           return;
         }
       }
@@ -138,6 +141,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
           await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email.trim().toLowerCase());
           await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, password);
         }
+        registerForPushNotifications().catch(() => {});
         navigation.replace('Main');
       } else {
         const errMsg = typeof result.error === 'string' ? result.error : 'Invalid email or password.';

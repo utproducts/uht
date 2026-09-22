@@ -5,6 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { verifyGameWriteAccess } from '../lib/game-access';
 import { computeStandings, resolveBracketGames } from '../lib/standings';
+import { notifyGameFinalPush, notifyGameDelayPush } from '../lib/push';
 
 export const scoringRoutes = new Hono<{ Bindings: Env }>();
 
@@ -306,6 +307,7 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
       keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
         .then((g: any) => g && resolveBracketGames(db, g.event_id)));
+      keepAlive(c, notifyGameFinalPush(db, gameId));
     } else if (data.eventType === 'period_start' && data.period) {
       await db.prepare("UPDATE games SET period = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?").bind(data.period, gameId).run();
     } else if (data.eventType === 'period_end') {
@@ -618,6 +620,7 @@ scoringRoutes.put('/games/:gameId/delay', authMiddleware, requireRole('admin', '
     params.push(gameId);
     await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
 
+    keepAlive(c, notifyGameDelayPush(db, gameId));
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err?.message || 'Failed to update delay' }, 500);
@@ -768,6 +771,7 @@ scoringRoutes.put('/games/:gameId/score', authMiddleware, requireRole('admin', '
     // seeding stays right (only fills empty slots / unstarted games).
     if (status === 'final') {
       keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
+      keepAlive(c, notifyGameFinalPush(db, gameId));
     }
     keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
       .then((g: any) => g && resolveBracketGames(db, g.event_id)));

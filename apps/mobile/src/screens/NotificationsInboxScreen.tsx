@@ -106,10 +106,19 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
         activeOpacity={0.7}
         onPress={() => {
           markAsRead(item.id);
+          let data: any = null;
+          try { data = item.data ? JSON.parse(item.data) : null; } catch {}
           if (item.type === 'meeting_reward') {
             // Use CommonActions.navigate to reach root Stack from nested navigator
             navigation.dispatch(
               CommonActions.navigate({ name: 'RewardReveal' })
+            );
+          } else if ((item.type === 'game_final' || item.type === 'game_delay' || item.type === 'locker_room' || item.type === 'event_update' || item.type === 'division_update') && data?.event_id) {
+            navigation.dispatch(
+              CommonActions.navigate({
+                name: 'Main',
+                params: { screen: 'Home', params: { screen: 'EventDetail', params: { eventId: data.event_id } } },
+              })
             );
           }
         }}

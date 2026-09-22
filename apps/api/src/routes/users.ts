@@ -275,6 +275,29 @@ userRoutes.get('/',
 // ==================
 // EXPORT USERS (CSV)
 // ==================
+// ==================
+// ADMIN: App user stats (App Users tab) - accounts created via the app and
+// devices registered for push, with recent growth
+// ==================
+userRoutes.get('/admin/app-stats', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const one = async (q: string) => ((await db.prepare(q).first<any>()) || {}) as any;
+  const totals = await one(`SELECT
+    (SELECT COUNT(*) FROM users WHERE is_app_user = 1) as app_accounts,
+    (SELECT COUNT(*) FROM users WHERE is_app_user = 1 AND created_at > datetime('now','-7 days')) as new_7d,
+    (SELECT COUNT(*) FROM users WHERE is_app_user = 1 AND created_at > datetime('now','-30 days')) as new_30d,
+    (SELECT COUNT(*) FROM push_tokens) as push_devices,
+    (SELECT COUNT(*) FROM push_tokens WHERE platform = 'ios') as ios_devices,
+    (SELECT COUNT(*) FROM push_tokens WHERE platform = 'android') as android_devices,
+    (SELECT COUNT(DISTINCT user_id) FROM push_tokens) as push_users`);
+  const monthly = await db.prepare(`
+    SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as signups
+    FROM users WHERE is_app_user = 1 AND created_at > datetime('now','-12 months')
+    GROUP BY month ORDER BY month ASC
+  `).all();
+  return c.json({ success: true, data: { ...totals, monthly: monthly.results || [] } });
+});
+
 userRoutes.get('/export/csv',
   authMiddleware,
   requireRole('admin'),
