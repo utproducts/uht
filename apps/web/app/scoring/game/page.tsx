@@ -53,6 +53,7 @@ interface GameEvent {
   penalty_minutes: number | null;
   period: number;
   details: string | null;
+  game_time: string | null;
 }
 
 interface ShotRecord { team_id: string; period: number; shot_count: number; }
