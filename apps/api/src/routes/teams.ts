@@ -1635,7 +1635,7 @@ teamRoutes.get('/check-duplicate', async (c) => {
     SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code,
       t.head_coach_name, t.head_coach_email, t.created_by,
       (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') as player_count,
-      (SELECT COUNT(*) FROM event_registrations er WHERE er.team_name = t.name AND er.status NOT IN ('denied','withdrawn')) as reg_count
+      (SELECT COUNT(*) FROM event_registrations er WHERE er.team_name = t.name AND er.status NOT IN ('denied','rejected','withdrawn')) as reg_count
     FROM teams t
     WHERE LOWER(t.name) = LOWER(?) AND LOWER(t.age_group) = LOWER(?)
     AND t.is_active = 1
