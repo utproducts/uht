@@ -244,6 +244,7 @@ analyticsRoutes.get('/reports/division-totals', authMiddleware, requireRole('adm
     FROM event_divisions ed
     JOIN events e ON e.id = ed.event_id
     WHERE e.status IN ('registration_open', 'active', 'published')
+      AND e.name NOT LIKE 'claude-test%'
     GROUP BY ed.age_group
     ORDER BY total_teams DESC
   `).all();

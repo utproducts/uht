@@ -261,8 +261,9 @@ export function AdminDash() {
       fetch(`${API}/analytics/reports/pending-registrations`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/analytics/reports/division-totals`, { headers: devHeaders }).then(r => r.json()),
     ]).then(([upJson, allJson, pendJson, divJson]) => {
-      const upcoming = upJson.success ? upJson.data : [];
-      const all = allJson.success ? allJson.data : [];
+      const noTest = (list: any[]) => (list || []).filter((e: any) => !String(e.name || '').startsWith('claude-test'));
+      const upcoming = noTest(upJson.success ? upJson.data : []);
+      const all = noTest(allJson.success ? allJson.data : []);
       setEvents(upcoming);
       setPendingCount(pendJson.success ? (pendJson.data?.length || 0) : 0);
       setDivisionTotals(divJson.success ? (divJson.data || []) : []);
