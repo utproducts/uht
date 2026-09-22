@@ -32,6 +32,7 @@ export default function ScorekeeperPage() {
   const [loading, setLoading] = useState(false);
   const [shake, setShake] = useState(false);
   const [storedPin, setStoredPin] = useState('');
+  const [collapsedRinks, setCollapsedRinks] = useState<Record<string, boolean>>({});
   const [selectedEventId, setSelectedEventId] = useState('');
   const [eventName, setEventName] = useState('');
 
@@ -176,11 +177,16 @@ export default function ScorekeeperPage() {
                 .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([rinkName, rinkGames]) => (
                   <div key={rinkName}>
-                    <div className="flex items-center gap-2 mb-2 px-1">
+                    <button
+                      onClick={() => setCollapsedRinks(prev => ({ ...prev, [rinkName]: !prev[rinkName] }))}
+                      className="w-full flex items-center gap-2 mb-2 px-1 text-left"
+                    >
                       <span className="text-lg">🏒</span>
                       <h2 className="font-extrabold text-[#003e79] text-base uppercase tracking-wide">{rinkName}</h2>
                       <span className="text-xs text-[#86868b] font-medium">{rinkGames.length} game{rinkGames.length !== 1 ? 's' : ''}</span>
-                    </div>
+                      <span className="ml-auto text-[#003e79] text-sm font-bold">{collapsedRinks[rinkName] ? '\u25b8' : '\u25be'}</span>
+                    </button>
+                    {!collapsedRinks[rinkName] && (
                     <div className="space-y-3">
               {[...rinkGames].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')).map((game) => {
                 const statusBadge = getStatusBadge(game.status);
@@ -239,6 +245,7 @@ export default function ScorekeeperPage() {
                 );
               })}
                     </div>
+                    )}
                   </div>
                 ))}
             </div>
