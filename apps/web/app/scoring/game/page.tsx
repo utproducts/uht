@@ -102,6 +102,35 @@ function ScoringPageInner() {
   const [homePlayers, setHomePlayers] = useState<RosterPlayer[]>([]);
   const [awayPlayers, setAwayPlayers] = useState<RosterPlayer[]>([]);
   const [rosterLoaded, setRosterLoaded] = useState(false);
+  // Full USA Hockey penalty list from the API (single source of truth);
+  // the hardcoded lists below remain only as an offline fallback
+  const [penaltyGroups, setPenaltyGroups] = useState<{ key: string; label: string; color: string; items: { code: string; name: string; min: number }[] }[] | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/scoring/penalty-codes`)
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j.success || !j.data) return;
+        const groups: Record<string, { code: string; name: string; min: number }[]> = {};
+        Object.entries(j.data as Record<string, any>).forEach(([code, p]: any) => {
+          (groups[p.category] = groups[p.category] || []).push({ code, name: p.name, min: p.minutes });
+        });
+        const META: Record<string, { label: string; color: string }> = {
+          minor: { label: 'Minor (2:00)', color: 'bg-amber-500 active:bg-amber-600' },
+          double: { label: 'Double Minor (4:00)', color: 'bg-orange-500 active:bg-orange-600' },
+          major: { label: 'Major (5:00)', color: 'bg-red-600 active:bg-red-700' },
+          misconduct: { label: 'Misconduct (10:00)', color: 'bg-[#1d1d1f] active:bg-black' },
+          game_misconduct: { label: 'Game Misconduct', color: 'bg-purple-700 active:bg-purple-800' },
+          match: { label: 'Match Penalty (Ejection)', color: 'bg-rose-900 active:bg-rose-950' },
+        };
+        const order = ['minor', 'double', 'major', 'misconduct', 'game_misconduct', 'match'];
+        setPenaltyGroups(order.filter(k => groups[k]?.length).map(k => ({
+          key: k, label: META[k].label, color: META[k].color,
+          items: groups[k].sort((a, b) => a.name.localeCompare(b.name)),
+        })));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [lineupsLoaded, setLineupsLoaded] = useState(false);
 
   // Goal state
@@ -606,27 +635,21 @@ function ScoringPageInner() {
           {penaltyStep === 'type' && (
             <div className="w-full overflow-y-auto max-h-[70vh]">
               <p className="text-center text-lg font-bold text-[#1d1d1f] mb-4">Select Penalty</p>
-              <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">Minor (2:00)</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {PENALTIES_MINOR.map((p) => (
-                  <button key={p.code} onClick={() => submitPenalty(p)}
-                    className="py-3 px-2 rounded-xl bg-amber-500 text-white text-sm font-bold active:bg-amber-600">{p.name}</button>
-                ))}
-              </div>
-              <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">Major (5:00)</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {PENALTIES_MAJOR.map((p) => (
-                  <button key={p.code} onClick={() => submitPenalty(p)}
-                    className="py-3 px-2 rounded-xl bg-red-600 text-white text-sm font-bold active:bg-red-700">{p.name}</button>
-                ))}
-              </div>
-              <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">Misconduct (10:00)</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {PENALTIES_MISCONDUCT.map((p) => (
-                  <button key={p.code} onClick={() => submitPenalty(p)}
-                    className="py-3 px-2 rounded-xl bg-[#1d1d1f] text-white text-sm font-bold active:bg-black">{p.name}</button>
-                ))}
-              </div>
+              {(penaltyGroups || [
+                { key: 'minor', label: 'Minor (2:00)', color: 'bg-amber-500 active:bg-amber-600', items: PENALTIES_MINOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
+                { key: 'major', label: 'Major (5:00)', color: 'bg-red-600 active:bg-red-700', items: PENALTIES_MAJOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
+                { key: 'misconduct', label: 'Misconduct (10:00)', color: 'bg-[#1d1d1f] active:bg-black', items: PENALTIES_MISCONDUCT.map(p => ({ code: p.code, name: p.name, min: p.min })) },
+              ]).map(group => (
+                <div key={group.key}>
+                  <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">{group.label}</p>
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    {group.items.map((p) => (
+                      <button key={p.code} onClick={() => submitPenalty(p)}
+                        className={`py-3 px-2 rounded-xl text-white text-sm font-bold ${group.color}`}>{p.name}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </FullScreenModal>
