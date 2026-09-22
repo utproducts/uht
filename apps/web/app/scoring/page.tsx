@@ -161,8 +161,28 @@ export default function ScorekeeperPage() {
               <p className="text-[#6e6e73] text-sm">There are no scoreable games for this PIN right now.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {games.map((game) => {
+            <div className="space-y-6">
+              {/* Grouped by rink, then time - scorekeepers work one sheet of
+                  ice, so their rink's games belong together in order */}
+              {Object.entries(
+                games.reduce((acc: Record<string, typeof games>, g) => {
+                  const venue = (g as any).venue_name || '';
+                  const rink = g.rink_name || '';
+                  const key = venue && rink ? `${venue} - ${rink}` : venue || rink || 'Rink TBD';
+                  (acc[key] = acc[key] || []).push(g);
+                  return acc;
+                }, {})
+              )
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([rinkName, rinkGames]) => (
+                  <div key={rinkName}>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <span className="text-lg">🏒</span>
+                      <h2 className="font-extrabold text-[#003e79] text-base uppercase tracking-wide">{rinkName}</h2>
+                      <span className="text-xs text-[#86868b] font-medium">{rinkGames.length} game{rinkGames.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="space-y-3">
+              {[...rinkGames].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')).map((game) => {
                 const statusBadge = getStatusBadge(game.status);
                 const typeBadge = getGameTypeBadge(game.game_type);
                 return (
@@ -218,6 +238,9 @@ export default function ScorekeeperPage() {
                   </button>
                 );
               })}
+                    </div>
+                  </div>
+                ))}
             </div>
           )}
 
