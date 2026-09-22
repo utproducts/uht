@@ -84,8 +84,8 @@ interface GameData {
 }
 
 type ModalType = null | 'goal' | 'penalty' | 'shots' | 'roster' | 'three-stars' | 'shootout' | 'goalie' | 'notes' | 'officials' | 'menu';
-type GoalStep = 'team' | 'player' | 'assist1' | 'assist2';
-type PenaltyStep = 'team' | 'player' | 'type';
+type GoalStep = 'team' | 'player' | 'assist1' | 'assist2' | 'time';
+type PenaltyStep = 'team' | 'player' | 'type' | 'time';
 
 function ScoringPageInner() {
   const searchParams = useSearchParams();
@@ -139,11 +139,14 @@ function ScoringPageInner() {
   const [goalJersey, setGoalJersey] = useState('');
   const [goalAssist1, setGoalAssist1] = useState('');
   const [goalAssist2, setGoalAssist2] = useState('');
+  const [goalTime, setGoalTime] = useState('');
 
   // Penalty state
   const [penaltyStep, setPenaltyStep] = useState<PenaltyStep>('team');
   const [penaltyTeamId, setPenaltyTeamId] = useState('');
   const [penaltyJersey, setPenaltyJersey] = useState('');
+  const [penaltyPick, setPenaltyPick] = useState<{ code: string; name?: string; min: number } | null>(null);
+  const [penaltyTime, setPenaltyTime] = useState('');
 
   // Three Stars
   const [star1, setStar1] = useState({ teamId: '', jersey: '', name: '' });
@@ -281,28 +284,36 @@ function ScoringPageInner() {
   const doFlash = (color: string) => { setFlash(color); setTimeout(() => setFlash(''), 400); };
 
   // Goal flow with roster
-  const resetGoal = () => { setGoalStep('team'); setGoalTeamId(''); setGoalJersey(''); setGoalAssist1(''); setGoalAssist2(''); };
+  const resetGoal = () => { setGoalStep('team'); setGoalTeamId(''); setGoalJersey(''); setGoalAssist1(''); setGoalAssist2(''); setGoalTime(''); };
   const openGoal = () => { resetGoal(); setModal('goal'); };
 
-  const submitGoal = async () => {
+  const submitGoal = async (time?: string) => {
     await postEvent({
       eventType: 'goal', teamId: goalTeamId,
       jerseyNumber: goalJersey || null, assist1Jersey: goalAssist1 || null, assist2Jersey: goalAssist2 || null,
       period: game?.period || 1,
+      gameTime: time || null,
     });
     setModal(null);
   };
 
   // Penalty flow with roster
-  const resetPenalty = () => { setPenaltyStep('team'); setPenaltyTeamId(''); setPenaltyJersey(''); };
+  const resetPenalty = () => { setPenaltyStep('team'); setPenaltyTeamId(''); setPenaltyJersey('');  setPenaltyPick(null); setPenaltyTime(''); };
   const openPenalty = () => { resetPenalty(); setModal('penalty'); };
 
-  const submitPenalty = async (penalty: { code: string; min: number }) => {
+  const submitPenalty = (penalty: { code: string; min: number }) => {
+    setPenaltyPick(penalty);
+    setPenaltyStep('time');
+  };
+  const submitPenaltyWithTime = async (time?: string) => {
+    if (!penaltyPick) return;
     await postEvent({
       eventType: 'penalty', teamId: penaltyTeamId,
-      jerseyNumber: penaltyJersey || null, penaltyCode: penalty.code, penaltyMinutes: penalty.min,
+      jerseyNumber: penaltyJersey || null, penaltyCode: penaltyPick.code, penaltyMinutes: penaltyPick.min,
       period: game?.period || 1,
+      gameTime: time || null,
     });
+    setPenaltyPick(null);
     setModal(null);
   };
 
@@ -554,8 +565,9 @@ function ScoringPageInner() {
               const teamName = isHome ? game.home_team_name : game.away_team_name;
               return (
                 <div key={ev.id} className="bg-white border border-[#e8e8ed] rounded-xl p-3 flex items-center gap-3">
-                  <div className="w-8 text-center">
+                  <div className="w-12 text-center">
                     <span className="text-[10px] font-bold text-[#86868b]">P{ev.period}</span>
+                    {ev.game_time && <span className="block text-[10px] font-bold text-[#003e79] tabular-nums">{ev.game_time}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
                     {ev.event_type === 'goal' && (
@@ -611,9 +623,12 @@ function ScoringPageInner() {
           )}
           {goalStep === 'assist2' && (
             <PlayerPicker label="2nd Assist" players={playersForTeam(goalTeamId)} optional
-              onPick={(jersey) => { setGoalAssist2(jersey); submitGoal(); }}
-              onSkip={() => { setGoalAssist2(''); submitGoal(); }}
+              onPick={(jersey) => { setGoalAssist2(jersey); setGoalStep('time'); }}
+              onSkip={() => { setGoalAssist2(''); setGoalStep('time'); }}
               showKeypad />
+          )}
+          {goalStep === 'time' && (
+            <ClockTimePicker label="Time of Goal" onConfirm={(t) => submitGoal(t)} onSkip={() => submitGoal()} />
           )}
         </FullScreenModal>
       )}
@@ -649,6 +664,10 @@ function ScoringPageInner() {
                 </div>
               ))}
             </div>
+          )}
+          {penaltyStep === 'time' && (
+            <ClockTimePicker label={`Time of Penalty${penaltyPick?.name ? ` - ${penaltyPick.name}` : ''}`}
+              onConfirm={(t) => submitPenaltyWithTime(t)} onSkip={() => submitPenaltyWithTime()} />
           )}
         </FullScreenModal>
       )}
@@ -945,6 +964,44 @@ function MenuBtn({ label, desc, onClick }: { label: string; desc: string; onClic
       <p className="text-sm font-bold text-[#1d1d1f]">{label}</p>
       <p className="text-xs text-[#86868b]">{desc}</p>
     </button>
+  );
+}
+
+function ClockTimePicker({ label, onConfirm, onSkip }: { label: string; onConfirm: (t: string) => void; onSkip: () => void }) {
+  const [digits, setDigits] = useState('');
+  // Digits fill right-to-left like a scoreboard: "812" -> 8:12, "1234" -> 12:34
+  const fmt = (d: string) => {
+    const p = d.padStart(4, '0');
+    return `${String(parseInt(p.slice(0, 2), 10))}:${p.slice(2)}`;
+  };
+  const valid = digits.length >= 3 && parseInt(digits.padStart(4, '0').slice(2), 10) < 60;
+  return (
+    <div className="w-full max-w-sm mx-auto">
+      <p className="text-center text-lg font-bold text-[#1d1d1f] mb-1">{label}</p>
+      <p className="text-center text-xs text-[#86868b] mb-4">Clock reading when it happened (minutes:seconds)</p>
+      <div className="text-center text-5xl font-black tabular-nums text-[#003e79] mb-4 tracking-wider">
+        {digits ? fmt(digits) : '-:--'}
+      </div>
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {['1','2','3','4','5','6','7','8','9'].map(n => (
+          <button key={n} onClick={() => setDigits(d => (d + n).slice(0, 4))}
+            className="py-4 rounded-xl bg-white border border-[#e8e8ed] text-2xl font-bold text-[#1d1d1f] active:bg-[#f5f5f7]">{n}</button>
+        ))}
+        <button onClick={() => setDigits(d => d.slice(0, -1))}
+          className="py-4 rounded-xl bg-white border border-[#e8e8ed] text-xl font-bold text-[#6e6e73] active:bg-[#f5f5f7]">&#9003;</button>
+        <button onClick={() => setDigits(d => (d + '0').slice(0, 4))}
+          className="py-4 rounded-xl bg-white border border-[#e8e8ed] text-2xl font-bold text-[#1d1d1f] active:bg-[#f5f5f7]">0</button>
+        <button onClick={() => setDigits('')}
+          className="py-4 rounded-xl bg-white border border-[#e8e8ed] text-sm font-bold text-[#6e6e73] active:bg-[#f5f5f7]">Clear</button>
+      </div>
+      <button onClick={() => valid && onConfirm(fmt(digits))} disabled={!valid}
+        className="w-full py-4 rounded-xl bg-emerald-600 text-white text-lg font-extrabold active:bg-emerald-700 disabled:bg-gray-300 mb-2">
+        Confirm Time
+      </button>
+      <button onClick={onSkip} className="w-full py-3 rounded-xl border border-[#e8e8ed] text-[#6e6e73] text-sm font-semibold">
+        Skip (no time)
+      </button>
+    </div>
   );
 }
 
