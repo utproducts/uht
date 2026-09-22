@@ -98,6 +98,7 @@ function ScoringPageInner() {
   const [modal, setModal] = useState<ModalType>(null);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState('');
+  const [showLog, setShowLog] = useState(false);
 
   // Roster
   const [homePlayers, setHomePlayers] = useState<RosterPlayer[]>([]);
@@ -556,9 +557,148 @@ function ScoringPageInner() {
       )}
       </div>
 
-      {/* EVENT LOG */}
-      <div className="flex-1 px-4 pb-6">
-        <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Event Log</p>
+      {/* SCORESHEET - GameSheet-style sections, stacked for mobile */}
+      <div className="px-4 pb-2">
+        {(() => {
+          const evs = game.events || [];
+          const teams = [
+            { id: game.home_team_id, name: game.home_team_name, tag: 'HOME' },
+            { id: game.away_team_id, name: game.away_team_name, tag: 'VISITOR' },
+          ];
+          const sortByClock = (a: any, b: any) =>
+            (a.period || 0) - (b.period || 0) ||
+            // clock counts down: later in the period = smaller time
+            (b.game_time || '99:99').localeCompare(a.game_time || '99:99');
+          const periods = [1, 2, 3];
+          const maxPeriod = Math.max(3, ...evs.map((e: any) => e.period || 0), period || 0);
+          for (let p2 = 4; p2 <= maxPeriod; p2++) periods.push(p2);
+          return (
+            <div className="space-y-4">
+              {/* SCORING */}
+              <div>
+                <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Scoring</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {teams.map(team => {
+                    const goals = evs.filter((e: any) => e.event_type === 'goal' && e.team_id === team.id).sort(sortByClock);
+                    return (
+                      <div key={team.tag} className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
+                        <p className="px-3 py-2 text-xs font-bold text-[#003e79] bg-[#f5f5f7]">{team.tag} - {team.name}</p>
+                        <table className="w-full text-xs tabular-nums">
+                          <thead>
+                            <tr className="text-[#86868b] text-[10px] uppercase">
+                              <th className="py-1.5 font-bold w-10">Per</th>
+                              <th className="py-1.5 font-bold w-14">Time</th>
+                              <th className="py-1.5 font-bold w-10">G</th>
+                              <th className="py-1.5 font-bold w-10">A</th>
+                              <th className="py-1.5 font-bold w-10">A</th>
+                              <th className="py-1.5 font-bold w-8"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {goals.length === 0 ? (
+                              <tr><td colSpan={6} className="py-3 text-center text-[#c7c7cc]">No goals</td></tr>
+                            ) : goals.map((g: any) => (
+                              <tr key={g.id} className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f]">
+                                <td className="py-1.5">{g.period ?? '-'}</td>
+                                <td className="py-1.5">{g.game_time || '-'}</td>
+                                <td className="py-1.5">{g.jersey_number || '?'}</td>
+                                <td className="py-1.5 text-[#6e6e73]">{g.assist1_jersey || ''}</td>
+                                <td className="py-1.5 text-[#6e6e73]">{g.assist2_jersey || ''}</td>
+                                <td className="py-1.5">
+                                  <button onClick={() => deleteEvent(g.id)} className="text-red-400 text-[10px] font-bold px-1">✕</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PENALTIES */}
+              <div>
+                <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Penalties</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {teams.map(team => {
+                    const pens = evs.filter((e: any) => e.event_type === 'penalty' && e.team_id === team.id).sort(sortByClock);
+                    return (
+                      <div key={team.tag} className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
+                        <p className="px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50">{team.tag} - {team.name}</p>
+                        <table className="w-full text-xs tabular-nums">
+                          <thead>
+                            <tr className="text-[#86868b] text-[10px] uppercase">
+                              <th className="py-1.5 font-bold w-9">Per</th>
+                              <th className="py-1.5 font-bold w-8">#</th>
+                              <th className="py-1.5 font-bold w-10">Min</th>
+                              <th className="py-1.5 font-bold">Penalty</th>
+                              <th className="py-1.5 font-bold w-14">Off</th>
+                              <th className="py-1.5 font-bold w-8"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pens.length === 0 ? (
+                              <tr><td colSpan={6} className="py-3 text-center text-[#c7c7cc]">No penalties</td></tr>
+                            ) : pens.map((pe: any) => (
+                              <tr key={pe.id} className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f]">
+                                <td className="py-1.5">{pe.period ?? '-'}</td>
+                                <td className="py-1.5">{pe.jersey_number || '?'}</td>
+                                <td className="py-1.5">{pe.penalty_minutes ?? '-'}</td>
+                                <td className="py-1.5 text-left text-[11px]">{pe.penalty_type || 'Penalty'}</td>
+                                <td className="py-1.5">{pe.game_time || '-'}</td>
+                                <td className="py-1.5">
+                                  <button onClick={() => deleteEvent(pe.id)} className="text-red-400 text-[10px] font-bold px-1">✕</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SHOTS */}
+              <div>
+                <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Shots</p>
+                <div className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
+                  <table className="w-full text-xs tabular-nums">
+                    <thead>
+                      <tr className="text-[#86868b] text-[10px] uppercase bg-[#f5f5f7]">
+                        <th className="py-2 px-3 font-bold text-left">Team</th>
+                        {periods.map(pn => <th key={pn} className="py-2 font-bold w-12">P{pn}</th>)}
+                        <th className="py-2 font-bold w-14">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teams.map(team => {
+                        const per = shotsMap[team.id] || {};
+                        const total = Object.values(per).reduce((a: number, b: any) => a + (b || 0), 0);
+                        return (
+                          <tr key={team.tag} className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f]">
+                            <td className="py-2 px-3 text-left text-[11px]">{team.name}</td>
+                            {periods.map(pn => <td key={pn} className="py-2">{per[pn] || 0}</td>)}
+                            <td className="py-2 font-extrabold text-[#003e79]">{total}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* EVENT LOG - chronological view, collapsed by default */}
+      <div className="flex-1 px-4 pb-6 pt-2">
+        <button onClick={() => setShowLog(v => !v)} className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2">
+          {showLog ? '\u25be' : '\u25b8'} Event Log
+        </button>
+        {showLog && (<>
         {game.events && game.events.length > 0 ? (
           <div className="space-y-2">
             {[...game.events].reverse().map((ev) => {
@@ -602,6 +742,7 @@ function ScoringPageInner() {
         ) : (
           <p className="text-sm text-[#86868b] text-center py-8">No events yet</p>
         )}
+        </>)}
       </div>
 
       {/* ==================== GOAL MODAL (with roster) ==================== */}
