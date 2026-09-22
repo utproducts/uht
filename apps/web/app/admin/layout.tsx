@@ -69,6 +69,12 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
     ],
   },
   {
+    title: 'Communication',
+    items: [
+      { name: 'Email Campaigns', href: '/admin/email' },
+    ],
+  },
+  {
     title: 'Locations',
     items: [
       { name: 'Hotels', href: '/admin/hotels' },
