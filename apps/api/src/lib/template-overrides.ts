@@ -278,7 +278,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
         key: 'scores_text',
         label: 'Live Scores Message',
         type: 'textarea',
-        defaultValue: 'Every game is scored live. Follow scores, standings, and brackets in the UHT app or at ultimatetournaments.com from the rink, the hotel, or anywhere else. Printed brackets are also posted at each rink, but the website and app are always the most up to date.',
+        defaultValue: 'Every game is scored live. Follow scores, standings, and brackets in the UHT app or at ultimatetournaments.com from the rink, the hotel, or anywhere else.',
       },
       {
         key: 'jerseys_text',

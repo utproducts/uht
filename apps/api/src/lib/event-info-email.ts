@@ -70,7 +70,7 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
   const scheduleText = f('schedule_text',
     'Schedules will be posted in the UHT app on {scheduleDate}, and the app is the only place they are posted. Download the app, follow your team, and turn on notifications so you see your game times the moment they go live. Make sure your parents and players do the same. The welcome letter, tournament rules, and directions to the rinks will be emailed to team managers the same day.\n\nEarliest games on Friday: Mites and Squirts start no earlier than 12pm, Pee Wees no earlier than 2pm, and Bantams and Midgets no earlier than 4pm. Teams traveling the furthest are given scheduling consideration.');
   const scoresText = f('scores_text',
-    'Every game is scored live. Follow scores, standings, and brackets in the UHT app or at ultimatetournaments.com from the rink, the hotel, or anywhere else. Printed brackets are also posted at each rink, but the website and app are always the most up to date.');
+    'Every game is scored live. Follow scores, standings, and brackets in the UHT app or at ultimatetournaments.com from the rink, the hotel, or anywhere else.');
   const jerseysText = f('jerseys_text',
     'Home teams wear white jerseys and away teams wear dark. If your team has a jersey conflict, let us know ahead of time.');
   const gameTimesText = f('game_times_text',
