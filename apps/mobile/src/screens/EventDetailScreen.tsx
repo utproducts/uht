@@ -1027,7 +1027,7 @@ export default function EventDetailScreen({
   // TAB: Game Center (division picker + full schedule + scores + standings)
   // ==================
   const [gameCenterSub, setGameCenterSub] = useState<'schedule' | 'scores' | 'standings'>('schedule');
-  const [gameTimeFilter, setGameTimeFilter] = useState<'upcoming' | 'past' | 'all'>('all');
+  const [gameTimeFilter, setGameTimeFilter] = useState<'upcoming' | 'past' | 'all' | 'live'>('all');
 
   // Get unique divisions from schedule data
   const divisions = (() => {
@@ -1055,8 +1055,11 @@ export default function EventDetailScreen({
     if (selectedDivision !== 'all') {
       filtered = filtered.filter(g => g.event_division_id === selectedDivision);
     }
-    if (gameTimeFilter === 'upcoming') {
-      filtered = filtered.filter(g => g.status !== 'final');
+    const liveNow = (g: GameSlot) => g.status === 'in_progress' || g.status === 'intermission' || g.status === 'warmup';
+    if (gameTimeFilter === 'live') {
+      filtered = filtered.filter(liveNow);
+    } else if (gameTimeFilter === 'upcoming') {
+      filtered = filtered.filter(g => g.status !== 'final' && !liveNow(g));
     } else if (gameTimeFilter === 'past') {
       filtered = filtered.filter(g => g.status === 'final');
     }
@@ -1136,18 +1139,26 @@ export default function EventDetailScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         ListHeaderComponent={
           <View style={styles.timeFilterRow}>
-            {(['all', 'upcoming', 'past'] as const).map(f => (
-              <TouchableOpacity
-                key={f}
-                style={[styles.timeFilterBtn, gameTimeFilter === f ? styles.timeFilterBtnActive : null]}
-                onPress={() => setGameTimeFilter(f)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.timeFilterText, gameTimeFilter === f ? styles.timeFilterTextActive : null]}>
-                  {f === 'all' ? 'All' : f === 'upcoming' ? 'Upcoming' : 'Past'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {(['all', 'live', 'upcoming', 'past'] as const).map(f => {
+              const liveCount = f === 'live'
+                ? schedule.filter(g => (selectedDivision === 'all' || g.event_division_id === selectedDivision)
+                    && (g.status === 'in_progress' || g.status === 'intermission' || g.status === 'warmup')).length
+                : 0;
+              const isActive = gameTimeFilter === f;
+              return (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.timeFilterBtn, isActive ? (f === 'live' ? styles.timeFilterBtnLive : styles.timeFilterBtnActive) : null]}
+                  onPress={() => setGameTimeFilter(f)}
+                  activeOpacity={0.7}
+                >
+                  {f === 'live' && liveCount > 0 && !isActive ? <View style={styles.liveFilterDot} /> : null}
+                  <Text style={[styles.timeFilterText, isActive ? styles.timeFilterTextActive : null]}>
+                    {f === 'all' ? 'All' : f === 'live' ? `Live${liveCount ? ` (${liveCount})` : ''}` : f === 'upcoming' ? 'Upcoming' : 'Past'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         }
         renderItem={({ item }) => {
@@ -2084,6 +2095,8 @@ const styles = StyleSheet.create({
   lockerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 48, marginTop: 2 },
   vsText: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', marginLeft: 48 },
   myTeamHighlight: { color: colors.navy, ...fonts.bold },
+  timeFilterBtnLive: { backgroundColor: '#e74c3c' },
+  liveFilterDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#e74c3c', marginRight: 5 },
   livePeriodText: { marginLeft: 'auto', fontSize: 11, color: colors.success, ...fonts.bold },
   starsStrip: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
   starsStripText: { flex: 1, fontSize: 11, color: '#8a6d1a', ...fonts.medium, lineHeight: 15 },
@@ -2139,6 +2152,7 @@ const styles = StyleSheet.create({
   // Time filter
   timeFilterRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   timeFilterBtn: {
+    flexDirection: 'row', alignItems: 'center',
     paddingVertical: 5, paddingHorizontal: spacing.md, borderRadius: radii.full,
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
   },
