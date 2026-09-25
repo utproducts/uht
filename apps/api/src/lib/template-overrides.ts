@@ -271,7 +271,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
         key: 'schedule_text',
         label: 'Schedule Message',
         type: 'textarea',
-        defaultValue: 'Schedules will be emailed to team managers on {scheduleDate}, along with the welcome letter, tournament rules, and directions to the rinks.\n\nEarliest games on Friday: Mites and Squirts start no earlier than 12pm, Pee Wees no earlier than 2pm, and Bantams and Midgets no earlier than 4pm. Teams traveling the furthest are given scheduling consideration.',
+        defaultValue: 'Schedules will be posted in the UHT app on {scheduleDate}, and the app is the only place they are posted. Download the app, follow your team, and turn on notifications so you see your game times the moment they go live. Make sure your parents and players do the same. The welcome letter, tournament rules, and directions to the rinks will be emailed to team managers the same day.\n\nEarliest games on Friday: Mites and Squirts start no earlier than 12pm, Pee Wees no earlier than 2pm, and Bantams and Midgets no earlier than 4pm. Teams traveling the furthest are given scheduling consideration.',
         variables: ['scheduleDate'],
       },
       {

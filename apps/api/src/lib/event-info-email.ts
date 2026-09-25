@@ -68,7 +68,7 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
   const venmoText = f('venmo_text',
     'Venmo: @ultimatetournaments (Ultimate Hockey Tournaments, UHT logo) or @john-Schwarz-33 (UHT logo, last 4 digits 6160).');
   const scheduleText = f('schedule_text',
-    'Schedules will be emailed to team managers on {scheduleDate}, along with the welcome letter, tournament rules, and directions to the rinks.\n\nEarliest games on Friday: Mites and Squirts start no earlier than 12pm, Pee Wees no earlier than 2pm, and Bantams and Midgets no earlier than 4pm. Teams traveling the furthest are given scheduling consideration.');
+    'Schedules will be posted in the UHT app on {scheduleDate}, and the app is the only place they are posted. Download the app, follow your team, and turn on notifications so you see your game times the moment they go live. Make sure your parents and players do the same. The welcome letter, tournament rules, and directions to the rinks will be emailed to team managers the same day.\n\nEarliest games on Friday: Mites and Squirts start no earlier than 12pm, Pee Wees no earlier than 2pm, and Bantams and Midgets no earlier than 4pm. Teams traveling the furthest are given scheduling consideration.');
   const scoresText = f('scores_text',
     'Every game is scored live. Follow scores, standings, and brackets in the UHT app or at ultimatetournaments.com from the rink, the hotel, or anywhere else. Printed brackets are also posted at each rink, but the website and app are always the most up to date.');
   const jerseysText = f('jerseys_text',
