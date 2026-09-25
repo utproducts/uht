@@ -297,7 +297,13 @@ export default function EventsPage() {
     }
     return Array.from(bucketCounts.entries())
       .filter(([bucket]) => bucketHasUpcoming.get(bucket))
-      .sort((a, b) => b[0].localeCompare(a[0])) // newest first
+      .sort((a, b) => {
+        // Real seasons newest first; the catch-all 'other' bucket always last
+        // so it can never become the default selection
+        if (a[0] === 'other') return 1;
+        if (b[0] === 'other') return -1;
+        return b[0].localeCompare(a[0]);
+      })
       .map(([bucket, count]) => ({ bucket, count }));
   }, [allEvents]);
 
