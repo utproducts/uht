@@ -31,18 +31,45 @@ interface GameSheet {
 function GameSheetInner() {
   const searchParams = useSearchParams();
   const gameId = searchParams.get('gameId');
-  const [data, setData] = useState<GameSheet | null>(null);
+  const pin = searchParams.get('pin');
+  const share = searchParams.get('share');
+  const [data, setData] = useState<(GameSheet & { share_url?: string | null }) | null>(null);
   const [loading, setLoading] = useState(true);
+  const [restricted, setRestricted] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!gameId) return;
-    fetch(`${API_BASE}/scoring/games/${gameId}/sheet`)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (pin) headers['X-Scorekeeper-Pin'] = pin;
+    fetch(`${API_BASE}/scoring/games/${gameId}/sheet${share ? `?share=${encodeURIComponent(share)}` : ''}`, { headers })
       .then(r => r.json())
-      .then(json => { if (json.success) setData(json.data); setLoading(false); })
+      .then(json => {
+        if (json.success) setData(json.data);
+        else if (json.error && String(json.error).toLowerCase().includes('coach')) setRestricted(true);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
-  }, [gameId]);
+  }, [gameId, pin, share]);
+
+  const shareSheet = async () => {
+    const url = data?.share_url;
+    if (!url) return;
+    const title = 'Official Scoresheet';
+    try {
+      if (navigator.share) { await navigator.share({ title, url }); return; }
+    } catch { /* fall through to copy */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* */ }
+  };
 
   if (loading) return <Loading />;
+  if (restricted) return <Restricted />;
   if (!data) return <NotFound />;
 
   const g = data.game;
@@ -104,6 +131,12 @@ function GameSheetInner() {
           <div className="flex items-center gap-2">
             <img src="/uht-logo.png" alt="UHT" className="h-7 w-auto" />
             <span className="text-white font-semibold text-sm">Score Sheet</span>
+            {data.share_url && (
+              <button onClick={shareSheet}
+                className="ml-2 px-3 py-1.5 rounded-full bg-white/15 text-white text-xs font-bold hover:bg-white/25 transition-colors">
+                {copied ? 'Link Copied!' : 'Share'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -541,6 +574,23 @@ function Loading() {
       <div className="text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79] mx-auto mb-4" />
         <p className="text-[#86868b]">Loading score sheet...</p>
+      </div>
+    </div>
+  );
+}
+
+function Restricted() {
+  return (
+    <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center p-6">
+      <div className="text-center max-w-sm">
+        <div className="text-4xl mb-4">🔒</div>
+        <h1 className="text-xl font-bold text-[#1d1d1f] mb-2">Coaches and Managers Only</h1>
+        <p className="text-[#6e6e73] text-sm leading-relaxed">
+          The official scoresheet is available to each team's coaches and managers.
+          If you are on the team's staff, sign in with your account. Players and
+          families: ask your coach to send you the share link.
+        </p>
+        <a href="/login" className="mt-4 inline-block text-[#003e79] font-semibold underline">Sign In</a>
       </div>
     </div>
   );

@@ -677,7 +677,7 @@ function ScoringPageInner() {
                 className="py-3 rounded-2xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">
                 Add Note
               </button>
-              <a href={`/scores/game?gameId=${gameId}`} target="_blank"
+              <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
                 className="py-3 rounded-2xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7] text-center">
                 View Sheet
               </a>
@@ -1030,7 +1030,7 @@ function ScoringPageInner() {
             <MenuBtn label="Add Note" desc="Timeout, injury, or note" onClick={() => setModal('notes')} />
             <MenuBtn label="Officials" desc="Record game officials" onClick={() => setModal('officials')} />
             <MenuBtn label="View Roster" desc={`${homePlayers.length + awayPlayers.length} players`} onClick={() => setModal('roster')} />
-            <a href={`/scores/game?gameId=${gameId}`} target="_blank"
+            <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
               className="block w-full py-4 px-4 rounded-2xl bg-[#f5f5f7] text-left active:bg-[#e8e8ed]">
               <p className="text-sm font-bold text-[#1d1d1f]">View Score Sheet</p>
               <p className="text-xs text-[#86868b]">Public game sheet view</p>
@@ -1863,7 +1863,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
         </div>
       )}
 
-      <a href={`/scores/game?gameId=${gameId}`} target="_blank"
+      <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
         className="block text-center py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">
         View Full Scoresheet
       </a>

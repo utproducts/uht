@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
-import { verifyGameWriteAccess } from '../lib/game-access';
+import { verifyGameWriteAccess, verifySheetReadAccess } from '../lib/game-access';
 import { computeStandings, resolveBracketGames } from '../lib/standings';
 import { notifyGameFinalPush, notifyGameDelayPush, notifyGameStartPush, notifyScoresheetPush, notifyThreeStarsPush } from '../lib/push';
 import { autoAssignThreeStars } from '../lib/three-stars';
@@ -925,6 +925,22 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
 
   if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
 
+  // Scoresheets are coach/manager/staff-only - not for every team follower
+  const sheetAccess = await verifySheetReadAccess(c, game as any);
+  if (!sheetAccess.ok) {
+    return c.json({ success: false, error: sheetAccess.error }, (sheetAccess.status || 403) as any);
+  }
+  // Coaches/managers/staff get a share link to send to players and families
+  let shareUrl: string | null = null;
+  if (sheetAccess.canShare) {
+    let token = (game as any).share_token as string | null;
+    if (!token) {
+      token = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare('UPDATE games SET share_token = ? WHERE id = ?').bind(token, gameId).run();
+    }
+    shareUrl = `https://ultimatetournaments.com/scores/game?gameId=${gameId}&share=${token}`;
+  }
+
   // Fetch all related data in parallel
   const [events, shots, lineups, threeStars, goalieStats, shootout, periodScores, notes, coaches, officials] = await Promise.all([
     db.prepare(`SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, game_time DESC, created_at ASC`).bind(gameId).all(),
@@ -957,6 +973,7 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
     success: true,
     data: {
       game,
+      share_url: shareUrl,
       goals,
       penalties,
       allEvents: events.results,

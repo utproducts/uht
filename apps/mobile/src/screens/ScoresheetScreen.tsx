@@ -10,9 +10,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Share } from 'react-native';
 import { colors } from '../constants/theme';
-
-const API = 'https://uht.chad-157.workers.dev/api';
+import { authFetch } from '../services/auth';
 
 // Official game scoresheet — the GameSheet-style record coaches and managers
 // open from the "Scoresheet Ready" push or from My Schedule's completed games.
@@ -22,13 +22,16 @@ export default function ScoresheetScreen({ route, navigation }: any) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [restricted, setRestricted] = useState(false);
 
   const load = useCallback(async () => {
     if (!gameId) return;
     try {
-      const res = await fetch(`${API}/scoring/games/${gameId}/sheet`);
+      // Coach/manager gated - authFetch carries the signed-in user's token
+      const res = await authFetch(`/api/scoring/games/${gameId}/sheet`);
       const json = await res.json();
-      if (json.success) setData(json.data);
+      if (json.success) { setData(json.data); setRestricted(false); }
+      else if (res.status === 403) setRestricted(true);
     } catch { /* keep whatever we have */ }
     setLoading(false);
     setRefreshing(false);
@@ -40,6 +43,22 @@ export default function ScoresheetScreen({ route, navigation }: any) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={colors.navy} />
+      </View>
+    );
+  }
+
+  if (restricted) {
+    return (
+      <View style={[styles.center, { paddingTop: insets.top, paddingHorizontal: 32 }]}>
+        <Ionicons name="lock-closed-outline" size={48} color={colors.textMuted} />
+        <Text style={styles.emptyTitle}>Coaches and Managers Only</Text>
+        <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 }}>
+          The official scoresheet is available to each team's coaches and managers.
+          Players and families: ask your coach to share it with you.
+        </Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backBtnText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -92,6 +111,14 @@ export default function ScoresheetScreen({ route, navigation }: any) {
             {g.event_name}{g.game_number ? ` · Game #${g.game_number}` : ''}
           </Text>
         </View>
+        {data.share_url ? (
+          <TouchableOpacity
+            onPress={() => Share.share({ message: `Official scoresheet - ${g.event_name}: ${data.share_url}`, url: data.share_url })}
+            style={{ padding: 8 }}
+          >
+            <Ionicons name="share-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <ScrollView

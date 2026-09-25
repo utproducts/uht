@@ -60,6 +60,7 @@ export default function Navigation() {
             <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium whitespace-nowrap">Book Ice</a>
             <a href="/sponsors" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Sponsors</a>
             <a href="/referees" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Referees</a>
+            <a href="/three-stars" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium whitespace-nowrap">Three Stars</a>
             <a href="/faq" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">FAQ</a>
             <a href="/contact" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Contact</a>
           </div>
@@ -112,6 +113,7 @@ export default function Navigation() {
             <a href="/book-ice" className="block py-2.5 px-3 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Book Ice</a>
             <a href="/sponsors" className="block py-2.5 px-3 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Sponsors</a>
             <a href="/referees" className="block py-2.5 px-3 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Referees</a>
+            <a href="/three-stars" className="block py-2.5 px-3 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Three Stars</a>
             <a href="/faq" className="block py-2.5 px-3 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">FAQ</a>
             <a href="/contact" className="block py-2.5 px-3 text-sm font-medium text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Contact</a>
             <div className="pt-2 border-t border-[#e8e8ed] mt-1">
