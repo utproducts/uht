@@ -113,6 +113,13 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
             navigation.dispatch(
               CommonActions.navigate({ name: 'RewardReveal' })
             );
+          } else if (item.type === 'scoresheet' && data?.game_id) {
+            navigation.dispatch(
+              CommonActions.navigate({
+                name: 'Main',
+                params: { screen: 'Home', params: { screen: 'Scoresheet', params: { gameId: data.game_id } } },
+              })
+            );
           } else if ((item.type === 'game_final' || item.type === 'game_start' || item.type === 'game_delay' || item.type === 'locker_room' || item.type === 'event_update' || item.type === 'division_update') && data?.event_id) {
             navigation.dispatch(
               CommonActions.navigate({

@@ -32,6 +32,7 @@ import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
 import ScoreGameScreen from '../screens/ScoreGameScreen';
 import DirectorGamesScreen from '../screens/DirectorGamesScreen';
 import RewardRevealScreen from '../screens/RewardRevealScreen';
+import ScoresheetScreen from '../screens/ScoresheetScreen';
 
 const Stack = createNativeStackNavigator();
 const MenuStack = createNativeStackNavigator();
@@ -75,6 +76,7 @@ function HomeStackNavigator() {
       <HomeStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
     </HomeStackNav.Navigator>
   );
 }
@@ -87,6 +89,7 @@ function MyTeamsStackNavigator() {
       <MyTeamsStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+      <MyTeamsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
     </MyTeamsStackNav.Navigator>
   );
 }
@@ -98,6 +101,7 @@ function MyEventsStackNavigator() {
       <MyEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <MyEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <MyEventsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
+      <MyEventsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
     </MyEventsStackNav.Navigator>
   );
 }
@@ -108,6 +112,7 @@ function FindEventsStackNavigator() {
       <FindEventsStackNav.Screen name="EventsList" component={EventsScreen} />
       <FindEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <FindEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
+      <FindEventsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
     </FindEventsStackNav.Navigator>
   );
 }
@@ -184,6 +189,11 @@ export default function AppNavigator() {
       const data = response.notification?.request?.content?.data;
       if (data?.type === 'meeting_reward') {
         navigationRef.current?.navigate('RewardReveal' as never);
+      } else if (data?.type === 'scoresheet' && data?.game_id) {
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'Scoresheet', params: { gameId: data.game_id } },
+        });
       } else if ((data?.type === 'game_final' || data?.type === 'game_start' || data?.type === 'game_delay' || data?.type === 'locker_room') && data?.event_id) {
         // Land on the event's Game Center so the tapped game is one tap away
         (navigationRef.current as any)?.navigate('Main', {

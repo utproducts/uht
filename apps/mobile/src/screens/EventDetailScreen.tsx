@@ -884,6 +884,16 @@ export default function EventDetailScreen({
               {item.venue_name ? (
                 <Text style={styles.gameVenue}>{item.venue_name}</Text>
               ) : null}
+              {isFinal && item.id ? (
+                <TouchableOpacity
+                  style={styles.scoresheetBtn}
+                  onPress={() => navigation.navigate('Scoresheet', { gameId: item.id })}
+                >
+                  <Ionicons name="document-text-outline" size={15} color={colors.navy} />
+                  <Text style={styles.scoresheetBtnText}>View Scoresheet</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.navy} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           );
         }}
@@ -1969,6 +1979,21 @@ const styles = StyleSheet.create({
   myTeamHighlight: { color: colors.navy, ...fonts.bold },
   inlineScore: { fontSize: 18, color: colors.textSecondary, ...fonts.semibold, marginLeft: 'auto', paddingLeft: spacing.sm },
   inlineScoreWin: { color: colors.navy, ...fonts.bold },
+  scoresheetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: '#eef4fb',
+  },
+  scoresheetBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.navy,
+  },
   gameVenue: { fontSize: 11, color: colors.textMuted, ...fonts.regular, marginTop: spacing.sm, textAlign: 'right' },
 
   // Game status
