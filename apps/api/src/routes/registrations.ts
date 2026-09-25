@@ -819,6 +819,16 @@ registrationRoutes.post('/:id/approve', authMiddleware, requireRole('admin', 'di
     }
   }
 
+  // Approved inside the 30-day window: send the tournament guide instantly
+  // instead of making the team wait for a sweep that already passed
+  try {
+    c.executionCtx.waitUntil(
+      import('../lib/event-info-sweep')
+        .then(m => m.sendEventInfoOnApproval(c.env, regId))
+        .catch((err: any) => console.error('Guide-on-approval error:', err))
+    );
+  } catch {}
+
   return c.json({
     success: true,
     message: 'Registration approved',

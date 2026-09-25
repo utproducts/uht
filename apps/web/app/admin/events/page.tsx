@@ -4306,6 +4306,88 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
     </div>
   );
 }
+// Tournament guide (30-day event info email) — manual send card on the Overview tab.
+// The send is idempotent per recipient, so re-clicking only reaches teams/emails
+// added since the last send.
+function TournamentGuideCard({ eventId }: { eventId: string }) {
+  const [status, setStatus] = useState<{ teams: number; emails_sent: number; teams_sent: number; last_sent: string | null } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState('');
+
+  const load = () => {
+    fetch(`https://uht.chad-157.workers.dev/api/email/event-info/${eventId}/status`, { headers: adminHeaders() })
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setStatus(j.data); })
+      .catch(() => {});
+  };
+  useEffect(load, [eventId]);
+
+  const send = async () => {
+    setSending(true);
+    setResult('');
+    try {
+      const r = await fetch(`https://uht.chad-157.workers.dev/api/email/event-info/${eventId}/send`, {
+        method: 'POST', headers: adminHeaders(),
+      }).then(res => res.json()) as any;
+      if (r.success) {
+        const d = r.data;
+        setResult(
+          d.sent === 0 && d.skipped > 0
+            ? 'Nothing new to send - every team already received the guide.'
+            : `Sent ${d.sent} email${d.sent !== 1 ? 's' : ''} across ${d.teams} team${d.teams !== 1 ? 's' : ''}` +
+              (d.skipped ? ` (${d.skipped} recipient${d.skipped !== 1 ? 's' : ''} already had it)` : '') +
+              (d.no_email ? `. ${d.no_email} team${d.no_email !== 1 ? 's have' : ' has'} no email on file.` : '')
+        );
+        load();
+      } else {
+        setResult(r.error || 'Send failed');
+      }
+    } catch {
+      setResult('Send failed');
+    }
+    setSending(false);
+    setConfirming(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">📬 Tournament Guide Email</h3>
+          <p className="text-sm text-[#6e6e73] mt-1">
+            The 30-day info email: rinks, schedules, payments, roster and mobile check-in status per team.
+            {status && (
+              status.teams_sent > 0
+                ? ` Sent to ${status.teams_sent} of ${status.teams} teams (${status.emails_sent} emails, last ${status.last_sent ? new Date(status.last_sent + 'Z').toLocaleDateString() : ''}).`
+                : ` Not sent yet - ${status.teams} team${status.teams !== 1 ? 's' : ''} would receive it.`
+            )}
+          </p>
+        </div>
+        {confirming ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-[#1d1d1f]">Email {status?.teams || 0} teams now?</span>
+            <button onClick={send} disabled={sending}
+              className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition disabled:opacity-50">
+              {sending ? 'Sending…' : 'Yes, Send'}
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={sending}
+              className="px-4 py-2 rounded-xl bg-white border border-[#e8e8ed] text-[#6e6e73] text-sm font-semibold hover:bg-[#fafafa] transition">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => { setResult(''); setConfirming(true); }}
+            className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition">
+            {status && status.teams_sent > 0 ? 'Send to New Teams' : 'Send Tournament Guide'}
+          </button>
+        )}
+      </div>
+      {result && <p className="text-sm font-semibold text-green-700 mt-3">{result}</p>}
+    </div>
+  );
+}
+
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   // Which email was just copied to the clipboard (shows a brief "Copied!")

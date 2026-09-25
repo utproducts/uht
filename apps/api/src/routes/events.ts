@@ -2262,6 +2262,16 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
       (updated as any).email_sent = false;
       (updated as any).email_error = emailErr.message;
     }
+
+    // Approved inside the 30-day window: send the tournament guide instantly
+    // instead of making the team wait for a sweep that already passed
+    try {
+      c.executionCtx.waitUntil(
+        import('../lib/event-info-sweep')
+          .then(m => m.sendEventInfoOnApproval(c.env, regId))
+          .catch((e: any) => console.error('Guide-on-approval error:', e))
+      );
+    } catch {}
   }
 
   return c.json({ success: true, data: updated });

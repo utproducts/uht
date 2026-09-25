@@ -796,6 +796,41 @@ emailRoutes.get('/automated', authMiddleware, requireRole('admin', 'director'), 
   return c.json({ success: true, data: templatesWithStatus });
 });
 
+// ==================
+// Tournament guide (event_info_30day) — manual per-event send + status
+// ==================
+emailRoutes.get('/event-info/:eventId/status', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const teams = await db.prepare(`
+    SELECT COUNT(*) as n FROM event_registrations
+    WHERE event_id = ? AND status = 'approved'
+  `).bind(eventId).first<any>();
+  const sent = await db.prepare(
+    "SELECT COUNT(*) as emails, COUNT(DISTINCT registration_id) as regs, MAX(sent_at) as last_sent FROM automated_email_log WHERE template_id = 'event_info_30day' AND event_id = ?"
+  ).bind(eventId).first<any>();
+  return c.json({
+    success: true,
+    data: {
+      teams: teams?.n || 0,
+      emails_sent: sent?.emails || 0,
+      teams_sent: sent?.regs || 0,
+      last_sent: sent?.last_sent || null,
+    },
+  });
+});
+
+emailRoutes.post('/event-info/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const event = await db.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  const { sendEventInfoForEvent } = await import('../lib/event-info-sweep');
+  const result = await sendEventInfoForEvent(c.env, event);
+  return c.json({ success: true, data: result });
+});
+
 // Get current overrides for a template (returns defaults merged with any DB overrides)
 emailRoutes.get('/automated/:templateId/overrides', authMiddleware, requireRole('admin', 'director'), blockDataRestricted(), async (c) => {
   const templateId = c.req.param('templateId');

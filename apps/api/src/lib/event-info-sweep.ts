@@ -80,6 +80,120 @@ async function rosterCountFor(db: any, reg: any): Promise<number> {
   return row?.n || 0;
 }
 
+/**
+ * Send the tournament guide for ONE event to every active registration's
+ * coach/manager emails. Idempotent per recipient (automated_email_log), so a
+ * repeat call only reaches registrations/emails that have not gotten it yet.
+ * Used by the daily 30-day sweep AND the manual Send button on the admin
+ * event page.
+ */
+export async function sendEventInfoForEvent(env: any, event: any): Promise<{ teams: number; sent: number; skipped: number; no_email: number }> {
+  const db = env.DB;
+  // APPROVED teams only (Chad, 9/26) — pending/unapproved teams never get the guide
+  const regs = (await db.prepare(`
+    SELECT er.*, t.head_coach_email
+    FROM event_registrations er
+    LEFT JOIN teams t ON t.id = er.team_id
+    WHERE er.event_id = ? AND er.status = 'approved'
+  `).bind(event.id).all()).results || [];
+
+  return sendEventInfoToRegs(env, event, regs);
+}
+
+/**
+ * Instant trigger: a registration just got APPROVED. If its event starts
+ * within the next 30 days, send that team its guide right away instead of
+ * making it wait for a sweep that already passed.
+ */
+export async function sendEventInfoOnApproval(env: any, registrationId: string): Promise<{ sent: number } | null> {
+  const db = env.DB;
+  const reg = await db.prepare(`
+    SELECT er.*, t.head_coach_email
+    FROM event_registrations er
+    LEFT JOIN teams t ON t.id = er.team_id
+    WHERE er.id = ? AND er.status = 'approved'
+  `).bind(registrationId).first();
+  if (!reg) return null;
+
+  const event = await db.prepare(`
+    SELECT * FROM events
+    WHERE id = ? AND name NOT LIKE 'claude-test%'
+      AND date(start_date) >= date('now')
+      AND date(start_date) <= date('now', '+30 days')
+  `).bind(reg.event_id).first();
+  if (!event) return null;
+
+  const r = await sendEventInfoToRegs(env, event, [reg]);
+  return { sent: r.sent };
+}
+
+async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{ teams: number; sent: number; skipped: number; no_email: number }> {
+  const db = env.DB;
+  const out = { teams: 0, sent: 0, skipped: 0, no_email: 0 };
+  const fields = await getResolvedFields(db, TEMPLATE_ID);
+  const ctx = await getEventInfoContext(db, event);
+
+  for (const reg of regs) {
+    out.teams++;
+    // One send wave per call stays well under subrequest limits for
+    // realistic event sizes (30-40 teams x ~2 emails); the idempotency log
+    // lets a repeat call finish anything a first call could not.
+    const recipients = [...new Set(
+      [reg.email1, reg.email2, reg.coach_email, reg.head_coach_email]
+        .map((e: string | null) => (e || '').trim().toLowerCase())
+        .filter((e: string) => emailRe.test(e) && !e.includes('..'))
+    )];
+    if (recipients.length === 0) { out.no_email++; continue; }
+
+    const rosterCount = await rosterCountFor(db, reg);
+    const vars = {
+      eventName: ctx.eventName,
+      teamName: reg.team_name || 'Your Team',
+      eventDates: ctx.eventDates,
+      eventCity: ctx.eventCity,
+      scheduleDate: ctx.scheduleDate,
+    };
+    const subject = replaceVars(fields.subject, vars);
+    const html = buildEventInfoHtml({
+      ...ctx,
+      teamName: reg.team_name || 'Your Team',
+      ageGroup: reg.age_group,
+      division: reg.division,
+      rosterCount,
+      isPaid: reg.payment_status === 'paid',
+      payUrl: `https://ultimatetournaments.com/pay?reg=${reg.id}`,
+      _overrides: fields,
+    });
+
+    for (const email of recipients) {
+      const already = await db.prepare(
+        'SELECT id FROM automated_email_log WHERE template_id = ? AND registration_id = ? AND email = ?'
+      ).bind(TEMPLATE_ID, reg.id, email).first();
+      if (already) { out.skipped++; continue; }
+
+      try {
+        const resp = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], subject, html }),
+        });
+        if (!resp.ok) {
+          console.error(`30-day email failed for ${email}: ${resp.status} ${await resp.text()}`);
+          continue; // no log row — retried on the next call/tick
+        }
+        await db.prepare(
+          'INSERT OR IGNORE INTO automated_email_log (template_id, event_id, registration_id, email) VALUES (?, ?, ?, ?)'
+        ).bind(TEMPLATE_ID, event.id, reg.id, email).run();
+        out.sent++;
+      } catch (e: any) {
+        console.error(`30-day email error for ${email}:`, e?.message || String(e));
+      }
+    }
+  }
+
+  return out;
+}
+
 export async function runEventInfo30DaySweep(env: any): Promise<{ events: number; sent: number; skipped: number }> {
   const db = env.DB;
   const out = { events: 0, sent: 0, skipped: 0 };
@@ -89,78 +203,12 @@ export async function runEventInfo30DaySweep(env: any): Promise<{ events: number
     WHERE date(start_date) = date('now', '+30 days')
       AND name NOT LIKE 'claude-test%'
   `).all()).results || [];
-  if (events.length === 0) return out;
-
-  const fields = await getResolvedFields(db, TEMPLATE_ID);
 
   for (const event of events) {
     out.events++;
-    const ctx = await getEventInfoContext(db, event);
-
-    const regs = (await db.prepare(`
-      SELECT er.*, t.head_coach_email
-      FROM event_registrations er
-      LEFT JOIN teams t ON t.id = er.team_id
-      WHERE er.event_id = ?
-        AND er.status NOT IN ('withdrawn', 'denied', 'rejected', 'awaiting_payment')
-    `).bind(event.id).all()).results || [];
-
-    for (const reg of regs) {
-      // One send wave per cron tick stays well under subrequest limits for
-      // realistic event sizes (30-40 teams x ~2 emails); the idempotency log
-      // lets a second tick finish anything a first tick could not.
-      const recipients = [...new Set(
-        [reg.email1, reg.email2, reg.coach_email, reg.head_coach_email]
-          .map((e: string | null) => (e || '').trim().toLowerCase())
-          .filter((e: string) => emailRe.test(e) && !e.includes('..'))
-      )];
-      if (recipients.length === 0) continue;
-
-      const rosterCount = await rosterCountFor(db, reg);
-      const vars = {
-        eventName: ctx.eventName,
-        teamName: reg.team_name || 'Your Team',
-        eventDates: ctx.eventDates,
-        eventCity: ctx.eventCity,
-        scheduleDate: ctx.scheduleDate,
-      };
-      const subject = replaceVars(fields.subject, vars);
-      const html = buildEventInfoHtml({
-        ...ctx,
-        teamName: reg.team_name || 'Your Team',
-        ageGroup: reg.age_group,
-        division: reg.division,
-        rosterCount,
-        isPaid: reg.payment_status === 'paid',
-        payUrl: `https://ultimatetournaments.com/pay?reg=${reg.id}`,
-        _overrides: fields,
-      });
-
-      for (const email of recipients) {
-        const already = await db.prepare(
-          'SELECT id FROM automated_email_log WHERE template_id = ? AND registration_id = ? AND email = ?'
-        ).bind(TEMPLATE_ID, reg.id, email).first();
-        if (already) { out.skipped++; continue; }
-
-        try {
-          const resp = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], subject, html }),
-          });
-          if (!resp.ok) {
-            console.error(`30-day email failed for ${email}: ${resp.status} ${await resp.text()}`);
-            continue; // no log row — retried next tick
-          }
-          await db.prepare(
-            'INSERT OR IGNORE INTO automated_email_log (template_id, event_id, registration_id, email) VALUES (?, ?, ?, ?)'
-          ).bind(TEMPLATE_ID, event.id, reg.id, email).run();
-          out.sent++;
-        } catch (e: any) {
-          console.error(`30-day email error for ${email}:`, e?.message || String(e));
-        }
-      }
-    }
+    const r = await sendEventInfoForEvent(env, event);
+    out.sent += r.sent;
+    out.skipped += r.skipped;
   }
 
   return out;
