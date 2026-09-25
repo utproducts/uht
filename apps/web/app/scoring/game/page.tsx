@@ -135,6 +135,20 @@ function ScoringPageInner() {
   }, []);
   const [lineupsLoaded, setLineupsLoaded] = useState(false);
 
+  // GameSheet-style sections
+  type Section = 'details' | 'visitor' | 'home' | 'scoring' | 'postgame';
+  const [section, setSection] = useState<Section>('scoring');
+  const [lineupState, setLineupState] = useState<any>(null);
+  const fetchLineupState = useCallback(async () => {
+    if (!gameId) return;
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineup-state`);
+      const json = await res.json();
+      if (json.success) setLineupState(json.data);
+    } catch { /* */ }
+  }, [gameId]);
+  useEffect(() => { fetchLineupState(); }, [fetchLineupState, lineupsLoaded]);
+
   // Goal state
   const [goalStep, setGoalStep] = useState<GoalStep>('team');
   const [goalTeamId, setGoalTeamId] = useState('');
@@ -393,7 +407,16 @@ function ScoringPageInner() {
   };
 
   // Game control events
-  const startGame = () => postEvent({ eventType: 'game_start' });
+  const startGame = () => {
+    const missing: string[] = [];
+    if (lineupState && !lineupState.away?.signoff) missing.push('Visitor');
+    if (lineupState && !lineupState.home?.signoff) missing.push('Home');
+    if (missing.length > 0) {
+      const ok = confirm(`⚠️ ${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.\n\nPress Cancel to collect sign-off first, or OK to start anyway.`);
+      if (!ok) { setSection(missing[0] === 'Visitor' ? 'visitor' : 'home'); return; }
+    }
+    postEvent({ eventType: 'game_start' });
+  };
   const endPeriod = () => postEvent({ eventType: 'period_end', period: game?.period });
   const startPeriod = () => postEvent({ eventType: 'period_start', period: (game?.period || 0) + 1 });
   const endGame = () => {
@@ -436,6 +459,17 @@ function ScoringPageInner() {
   // Roster for team picker
   const playersForTeam = (teamId: string) => teamId === game.home_team_id ? homePlayers : awayPlayers;
 
+  const awaySigned = !!lineupState?.away?.signoff;
+  const homeSigned = !!lineupState?.home?.signoff;
+  const navWarnings = (awaySigned ? 0 : 1) + (homeSigned ? 0 : 1);
+  const NAV: { key: 'details' | 'visitor' | 'home' | 'scoring' | 'postgame'; label: string; short: string; icon: string; badge?: string; ok?: boolean }[] = [
+    { key: 'details', label: 'Game Details', short: 'Details', icon: '📋', badge: navWarnings > 0 && !isFinal ? `${navWarnings} WARNING${navWarnings > 1 ? 'S' : ''}` : undefined },
+    { key: 'visitor', label: 'Visitor Lineup', short: 'Visitor', icon: '🎽', ok: awaySigned },
+    { key: 'home', label: 'Home Lineup', short: 'Home', icon: '🎽', ok: homeSigned },
+    { key: 'scoring', label: 'Scoring', short: 'Scoring', icon: '🥅' },
+    { key: 'postgame', label: 'Officials / Post Game', short: 'Officials', icon: '🧑‍⚖️', ok: !!lineupState?.officialsSignoff },
+  ];
+
   return (
     <div className={`min-h-screen bg-[#fafafa] flex flex-col transition-colors duration-300 ${flashBg}`}>
       {/* SCOREBOARD */}
@@ -468,6 +502,53 @@ function ScoringPageInner() {
         </div>
       </div>
 
+      {/* GameSheet-style layout: dark sidebar on md+, segmented bar on phones */}
+      <div className="flex-1 md:flex md:items-stretch">
+        <aside className="hidden md:block w-64 shrink-0 bg-[#33363b]">
+          {NAV.map(item => (
+            <button key={item.key} onClick={() => setSection(item.key)}
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left border-b border-white/5 transition-colors ${
+                section === item.key ? 'bg-[#44474d] text-white' : 'text-white/70 hover:bg-[#3b3e44] hover:text-white'
+              }`}>
+              <span className="text-lg">{item.icon}</span>
+              <span className="flex-1 text-sm font-semibold">{item.label}</span>
+              {item.badge && <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded">{item.badge}</span>}
+              {item.ok && <span className="w-5 h-5 rounded-full bg-amber-400 text-[#1d1d1f] text-xs font-black flex items-center justify-center">✓</span>}
+            </button>
+          ))}
+        </aside>
+
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Mobile section bar */}
+          <div className="md:hidden bg-[#33363b] flex">
+            {NAV.map(item => (
+              <button key={item.key} onClick={() => setSection(item.key)}
+                className={`flex-1 py-2.5 text-center relative ${section === item.key ? 'bg-[#44474d]' : ''}`}>
+                <span className="block text-base leading-none">{item.icon}</span>
+                <span className={`block text-[9px] font-bold mt-1 ${section === item.key ? 'text-white' : 'text-white/60'}`}>{item.short}</span>
+                {item.badge && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-400" />}
+                {item.ok && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-400" />}
+              </button>
+            ))}
+          </div>
+
+          {section === 'details' && (
+            <DetailsSection game={game} gameId={gameId!} pin={pin || ''} onFlash={doFlash} />
+          )}
+          {section === 'visitor' && (
+            <LineupSection label="VISITOR" teamName={game.away_team_name} side={lineupState?.away}
+              gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
+          )}
+          {section === 'home' && (
+            <LineupSection label="HOME" teamName={game.home_team_name} side={lineupState?.home}
+              gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
+          )}
+          {section === 'postgame' && (
+            <PostGameSection gameId={gameId!} pin={pin || ''} lineupState={lineupState}
+              onChanged={fetchLineupState} setModal={setModal} isFinal={isFinal} onFlash={doFlash} />
+          )}
+
+          {section === 'scoring' && (<>
       {/* CONTROLS */}
       <div className="px-4 py-4 space-y-3">
         {isScheduled && (
@@ -743,6 +824,10 @@ function ScoringPageInner() {
           <p className="text-sm text-[#86868b] text-center py-8">No events yet</p>
         )}
         </>)}
+      </div>
+
+          </>)}
+        </div>
       </div>
 
       {/* ==================== GOAL MODAL (with roster) ==================== */}
@@ -1301,5 +1386,311 @@ export default function ScoringPage() {
     }>
       <ScoringPageInner />
     </Suspense>
+  );
+}
+
+// ═══════════════ GameSheet-style sections ═══════════════
+
+function DetailsSection({ game, gameId, pin, onFlash }: { game: any; gameId: string; pin: string; onFlash: (c: string) => void }) {
+  const [skName, setSkName] = useState(game.scorekeeper_name || '');
+  const [skPhone, setSkPhone] = useState(game.scorekeeper_phone || '');
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/scorekeeper-info`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin },
+        body: JSON.stringify({ scorekeeperName: skName, scorekeeperPhone: skPhone }),
+      });
+      const j = await res.json();
+      onFlash(j.success ? 'green' : 'red');
+    } catch { onFlash('red'); }
+    setSaving(false);
+  };
+  const Row = ({ label, value }: { label: string; value: any }) => (
+    <div className="flex items-center justify-between px-4 py-3 border-b border-[#f0f0f2] last:border-0">
+      <span className="text-sm text-[#1d1d1f]">{label}</span>
+      <span className="text-sm font-semibold text-[#1d1d1f] text-right">{value ?? '—'}</span>
+    </div>
+  );
+  const dt = game.scheduled_time || game.start_time || '';
+  return (
+    <div className="p-4 space-y-4 max-w-xl">
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden">
+        <Row label="Game #" value={game.game_number} />
+        <Row label="Division" value={[game.age_group, game.division_level].filter(Boolean).join(' ')} />
+        <Row label="Type" value={(game.game_type || 'pool').replace('_', ' ')} />
+        <Row label="Date" value={game.game_date || game.scheduled_date} />
+        <Row label="Scheduled Start" value={dt} />
+        <Row label="Venue" value={game.venue_name} />
+        <Row label="Rink" value={game.rink_name} />
+        <Row label="Status" value={(game.status || '').replace('_', ' ')} />
+      </div>
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4 space-y-3">
+        <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest">Official Scorekeeper</p>
+        <input value={skName} onChange={e => setSkName(e.target.value)} placeholder="Scorekeeper name"
+          className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+        <input value={skPhone} onChange={e => setSkPhone(e.target.value)} placeholder="Scorekeeper phone number" inputMode="tel"
+          className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+        <button onClick={save} disabled={saving}
+          className="w-full py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a] disabled:opacity-50">
+          {saving ? 'Saving…' : 'Save Scorekeeper Info'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_META: Record<string, { label: string; cls: string; next: string }> = {
+  playing: { label: 'Playing', cls: 'bg-emerald-100 text-emerald-700 border-emerald-300', next: 'not_playing' },
+  not_playing: { label: 'Not Playing', cls: 'bg-[#e8e8ed] text-[#6e6e73] border-[#d2d2d7]', next: 'suspended' },
+  suspended: { label: 'Suspended', cls: 'bg-red-100 text-red-700 border-red-300', next: 'playing' },
+};
+
+function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash }: {
+  label: string; teamName: string; side: any; gameId: string; pin: string; onChanged: () => void; onFlash: (c: string) => void;
+}) {
+  const [signName, setSignName] = useState('');
+  const [signing, setSigning] = useState(false);
+  const [busyId, setBusyId] = useState('');
+  const players = side?.players || [];
+  const coaches = side?.coaches || [];
+  const signoff = side?.signoff;
+  const playing = players.filter((p: any) => (p.status || 'playing') === 'playing').length;
+
+  const hdrs = { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin };
+
+  const setStatus = async (p: any) => {
+    const next = STATUS_META[p.status || 'playing'].next;
+    setBusyId(p.id);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/${p.id}`, {
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ status: next }),
+      });
+      const j = await res.json();
+      if (j.success) onChanged(); else onFlash('red');
+    } catch { onFlash('red'); }
+    setBusyId('');
+  };
+
+  const setStartingGoalie = async (p: any) => {
+    setBusyId(p.id);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/${p.id}`, {
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ isStartingGoalie: !p.is_starting_goalie }),
+      });
+      const j = await res.json();
+      if (j.success) onChanged(); else onFlash('red');
+    } catch { onFlash('red'); }
+    setBusyId('');
+  };
+
+  const signOff = async () => {
+    if (!side?.teamId || signName.trim().length < 2) return;
+    setSigning(true);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/teams/${side.teamId}/roster-signoff`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ name: signName.trim() }),
+      });
+      const j = await res.json();
+      if (j.success) { setSignName(''); onChanged(); onFlash('green'); } else onFlash('red');
+    } catch { onFlash('red'); }
+    setSigning(false);
+  };
+
+  return (
+    <div className="p-4 space-y-4 max-w-2xl">
+      <div>
+        <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">{label} Lineup</p>
+        <h2 className="text-lg font-extrabold text-[#1d1d1f]">{teamName}</h2>
+      </div>
+
+      {/* Coaches */}
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4">
+        <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">Coaches</p>
+        {coaches.length === 0 ? (
+          <p className="text-sm text-[#86868b]">No coaches on file for this team.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {coaches.map((tc: any, i: number) => (
+              <span key={i} className="px-3 py-1.5 bg-[#f0f7ff] text-[#003e79] rounded-full text-sm font-semibold">
+                {tc.name || 'Coach'}{tc.role && tc.role !== 'head' ? ` (${tc.role})` : ''}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Coach sign-off — required before every game */}
+      {signoff ? (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex items-center gap-3">
+          <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
+          <div>
+            <p className="text-sm font-bold text-emerald-800">Roster signed off by {signoff.coach_name}</p>
+            <p className="text-xs text-emerald-700">{signoff.signed_off_at ? new Date(signoff.signed_off_at + 'Z').toLocaleString() : ''}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 space-y-3">
+          <p className="text-sm font-bold text-amber-800">⚠️ Coach must sign off on this roster before the game</p>
+          <p className="text-xs text-amber-700">Hand the device to the coach. Signing confirms the lineup below is correct: who is playing, who is not, and the starting goalie.</p>
+          <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Coach full name"
+            className="w-full px-4 py-2.5 rounded-xl border border-amber-300 bg-white text-sm outline-none focus:border-amber-500" />
+          <button onClick={signOff} disabled={signing || signName.trim().length < 2}
+            className="w-full py-3 rounded-xl bg-amber-500 text-white text-sm font-black active:bg-amber-600 disabled:opacity-40">
+            {signing ? 'Signing…' : 'SIGN OFF ON ROSTER'}
+          </button>
+        </div>
+      )}
+
+      {/* Players */}
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden">
+        <div className="px-4 py-2.5 bg-[#f5f5f7] flex items-center justify-between">
+          <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest">Players</p>
+          <p className="text-xs font-bold text-[#003e79]">{playing} of {players.length} playing</p>
+        </div>
+        {players.length === 0 ? (
+          <p className="text-sm text-[#86868b] p-4">No roster online for this team - players will appear here once the team's roster is uploaded on ultimatetournaments.com.</p>
+        ) : players.map((p: any) => {
+          const st = STATUS_META[p.status || 'playing'];
+          const isGoalie = (p.position || '').toUpperCase().startsWith('G');
+          return (
+            <div key={p.id} className={`px-4 py-2.5 border-t border-[#f5f5f7] flex items-center gap-3 ${busyId === p.id ? 'opacity-50' : ''}`}>
+              <span className="w-8 text-center text-sm font-black text-[#003e79] tabular-nums">{p.jersey_number}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1d1d1f] truncate">{p.first_name} {p.last_name}</p>
+                <p className="text-[10px] text-[#86868b] font-semibold">{p.position || 'F'}{p.is_starting_goalie ? ' · STARTING GOALIE' : ''}</p>
+              </div>
+              {isGoalie && (
+                <button onClick={() => setStartingGoalie(p)}
+                  className={`text-[10px] font-bold px-2 py-1.5 rounded-lg border ${p.is_starting_goalie
+                    ? 'bg-[#003e79] text-white border-[#003e79]'
+                    : 'bg-white text-[#6e6e73] border-[#d2d2d7]'}`}>
+                  {p.is_starting_goalie ? '★ Starter' : 'Set Starter'}
+                </button>
+              )}
+              <button onClick={() => setStatus(p)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-full border ${st.cls} min-w-[92px]`}>
+                {st.label}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-[#86868b] px-1">Tap a player's status to cycle Playing → Not Playing → Suspended. Suspended and Not Playing players are scratched from this game only.</p>
+    </div>
+  );
+}
+
+function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFinal, onFlash }: {
+  gameId: string; pin: string; lineupState: any; onChanged: () => void;
+  setModal: (m: any) => void; isFinal: boolean; onFlash: (c: string) => void;
+}) {
+  const [refName, setRefName] = useState('');
+  const [refRole, setRefRole] = useState('referee');
+  const [signName, setSignName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const officials = lineupState?.officials || [];
+  const signoff = lineupState?.officialsSignoff;
+  const hdrs = { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin };
+
+  const addOfficial = async () => {
+    if (refName.trim().length < 2) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/officials`, {
+        method: 'POST', headers: hdrs,
+        body: JSON.stringify({ officialName: refName.trim(), role: refRole }),
+      });
+      const j = await res.json();
+      if (j.success) { setRefName(''); onChanged(); onFlash('green'); } else onFlash('red');
+    } catch { onFlash('red'); }
+    setBusy(false);
+  };
+
+  const signOff = async () => {
+    if (signName.trim().length < 2) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/officials-signoff`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ name: signName.trim() }),
+      });
+      const j = await res.json();
+      if (j.success) { setSignName(''); onChanged(); onFlash('green'); } else onFlash('red');
+    } catch { onFlash('red'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="p-4 space-y-4 max-w-2xl">
+      <div>
+        <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Officials / Post Game</p>
+      </div>
+
+      {/* Officials */}
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4 space-y-3">
+        <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest">Game Officials</p>
+        {officials.length === 0 ? (
+          <p className="text-sm text-[#86868b]">No officials recorded yet.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {officials.map((o: any) => (
+              <div key={o.id} className="flex items-center gap-2 text-sm">
+                <span className="font-semibold text-[#1d1d1f]">{o.official_name}</span>
+                <span className="text-xs text-[#86868b] capitalize">{o.role}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={refName} onChange={e => setRefName(e.target.value)} placeholder="Official's name"
+            className="flex-1 px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+          <select value={refRole} onChange={e => setRefRole(e.target.value)}
+            className="px-2 py-2.5 rounded-xl border border-[#e8e8ed] text-sm bg-white">
+            <option value="referee">Referee</option>
+            <option value="linesman">Linesman</option>
+          </select>
+        </div>
+        <button onClick={addOfficial} disabled={busy || refName.trim().length < 2}
+          className="w-full py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a] disabled:opacity-40">
+          Add Official
+        </button>
+      </div>
+
+      {/* Post-game extras */}
+      <div className="grid grid-cols-3 gap-2">
+        <button onClick={() => setModal('three-stars')} className="py-3 rounded-xl bg-amber-500 text-white text-xs font-bold active:bg-amber-600">Three Stars</button>
+        <button onClick={() => setModal('goalie')} className="py-3 rounded-xl bg-[#003e79] text-white text-xs font-bold active:bg-[#002d5a]">Goalie Stats</button>
+        <button onClick={() => setModal('notes')} className="py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-xs font-bold active:bg-[#d2d2d7]">Add Note</button>
+      </div>
+
+      {/* Officials sign-off */}
+      {signoff ? (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex items-center gap-3">
+          <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
+          <div>
+            <p className="text-sm font-bold text-emerald-800">Game signed off by {signoff.name}</p>
+            <p className="text-xs text-emerald-700">{signoff.at ? new Date(signoff.at + 'Z').toLocaleString() : ''}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white border-2 border-[#e8e8ed] rounded-2xl p-4 space-y-3">
+          <p className="text-sm font-bold text-[#1d1d1f]">Official's post-game sign-off</p>
+          <p className="text-xs text-[#6e6e73]">After the game, the referee reviews the scoresheet and signs off that the score, goals, and penalties are correct.</p>
+          <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Official's full name"
+            className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+          <button onClick={signOff} disabled={busy || signName.trim().length < 2}
+            className="w-full py-3 rounded-xl bg-[#1d1d1f] text-white text-sm font-black active:bg-black disabled:opacity-40">
+            SIGN OFF ON GAME
+          </button>
+        </div>
+      )}
+
+      <a href={`/scores/game?gameId=${gameId}`} target="_blank"
+        className="block text-center py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">
+        View Full Scoresheet
+      </a>
+      {isFinal && <p className="text-xs text-emerald-700 font-semibold text-center">This game is final. The scoresheet has been sent to both teams' coaches and managers.</p>}
+    </div>
   );
 }

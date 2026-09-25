@@ -196,6 +196,56 @@ export async function notifyGameFinalPush(db: any, gameId: string) {
 }
 
 /*
+  Scoresheet-ready push to both teams' COACHES and MANAGERS only (not all
+  followers) the moment a game goes final. Tapping opens the scoresheet in
+  the app. Idempotent via games.scoresheet_push_sent.
+*/
+export async function notifyScoresheetPush(db: any, gameId: string) {
+  const g = await db.prepare(`
+    SELECT g.id, g.event_id, g.game_number, g.home_score, g.away_score,
+      g.home_team_id, g.away_team_id, COALESCE(g.scoresheet_push_sent, 0) as scoresheet_push_sent,
+      e.name as event_name,
+      COALESCE(ht.schedule_name, ht.name, g.home_placeholder, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, g.away_placeholder, 'Away') as away_name
+    FROM games g
+    JOIN events e ON e.id = g.event_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    WHERE g.id = ?
+  `).bind(gameId).first();
+  if (!g || g.scoresheet_push_sent) return;
+
+  const teamIds = [g.home_team_id, g.away_team_id].filter(Boolean);
+  if (teamIds.length === 0) return;
+  const ph = teamIds.map(() => '?').join(',');
+  const result = await db.prepare(`
+    SELECT DISTINCT pt.token, pt.user_id
+    FROM push_tokens pt
+    WHERE pt.user_id IN (
+      SELECT tc.user_id FROM team_coaches tc WHERE tc.team_id IN (${ph})
+      UNION SELECT tm.user_id FROM team_managers tm WHERE tm.team_id IN (${ph})
+    )
+  `).bind(...teamIds, ...teamIds).all();
+  const rows = result.results || [];
+  const tokens = rows.map((r: any) => r.token as string);
+  const userIds = [...new Set(rows.map((r: any) => r.user_id as string))] as string[];
+
+  await db.prepare("UPDATE games SET scoresheet_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
+  if (tokens.length === 0) return;
+
+  const title = '📋 Scoresheet Ready';
+  const body = `${g.home_name} ${g.home_score}, ${g.away_name} ${g.away_score}${g.game_number ? ` - Game #${g.game_number}` : ''} - tap to view the official scoresheet`;
+  const pushData = { type: 'scoresheet', game_id: g.id, event_id: g.event_id };
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, {
+    type: 'scoresheet', title, body, audience: 'team_staff',
+    target_id: g.event_id, sent_count: sent, sent_by: 'system',
+    metadata: JSON.stringify({ game_id: g.id }),
+  });
+  await createUserNotifications(db, userIds, title, body, 'scoresheet', pushData);
+}
+
+/*
   Game-start push to both teams' followers: "Dogs vs Cats - starting now".
   Idempotent via games.start_push_sent (a re-tapped Start Game never
   double-pushes).

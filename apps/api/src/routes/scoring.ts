@@ -5,7 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { verifyGameWriteAccess } from '../lib/game-access';
 import { computeStandings, resolveBracketGames } from '../lib/standings';
-import { notifyGameFinalPush, notifyGameDelayPush, notifyGameStartPush } from '../lib/push';
+import { notifyGameFinalPush, notifyGameDelayPush, notifyGameStartPush, notifyScoresheetPush } from '../lib/push';
 
 export const scoringRoutes = new Hono<{ Bindings: Env }>();
 
@@ -348,6 +348,7 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
         .then((g: any) => g && resolveBracketGames(db, g.event_id)));
       keepAlive(c, notifyGameFinalPush(db, gameId));
+      keepAlive(c, notifyScoresheetPush(db, gameId));
     } else if (data.eventType === 'period_start' && data.period) {
       await db.prepare("UPDATE games SET period = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?").bind(data.period, gameId).run();
     } else if (data.eventType === 'period_end') {
@@ -812,6 +813,7 @@ scoringRoutes.put('/games/:gameId/score', authMiddleware, requireRole('admin', '
     if (status === 'final') {
       keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
       keepAlive(c, notifyGameFinalPush(db, gameId));
+      keepAlive(c, notifyScoresheetPush(db, gameId));
     }
     keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
       .then((g: any) => g && resolveBracketGames(db, g.event_id)));
@@ -1027,6 +1029,8 @@ scoringRoutes.put('/games/:gameId/lineups/:lineupId', scorekeeperOrStaff, zValid
   isScrached: z.boolean().optional(),
   position: z.string().optional(),
   jerseyNumber: z.string().optional(),
+  status: z.enum(['playing', 'not_playing', 'suspended']).optional(),
+  isStartingGoalie: z.boolean().optional(),
 })), async (c) => {
   const { gameId, lineupId } = c.req.param();
   const data = c.req.valid('json');
@@ -1037,12 +1041,124 @@ scoringRoutes.put('/games/:gameId/lineups/:lineupId', scorekeeperOrStaff, zValid
   if (data.isScrached !== undefined) { updates.push('is_scratched = ?'); params.push(data.isScrached ? 1 : 0); }
   if (data.position) { updates.push('position = ?'); params.push(data.position); }
   if (data.jerseyNumber) { updates.push('jersey_number = ?'); params.push(data.jerseyNumber); }
+  if (data.status) {
+    updates.push('status = ?'); params.push(data.status);
+    // Keep the legacy scratch flag in sync — anything not Playing sits out
+    updates.push('is_scratched = ?'); params.push(data.status === 'playing' ? 0 : 1);
+  }
+  if (data.isStartingGoalie !== undefined) {
+    if (data.isStartingGoalie) {
+      // Only one starting goalie per team per game
+      const row = await db.prepare('SELECT team_id FROM game_lineups WHERE id = ? AND game_id = ?').bind(lineupId, gameId).first<any>();
+      if (row) {
+        await db.prepare('UPDATE game_lineups SET is_starting_goalie = 0 WHERE game_id = ? AND team_id = ?').bind(gameId, row.team_id).run();
+      }
+    }
+    updates.push('is_starting_goalie = ?'); params.push(data.isStartingGoalie ? 1 : 0);
+  }
 
   if (updates.length === 0) return c.json({ success: true });
 
   params.push(lineupId, gameId);
   await db.prepare(`UPDATE game_lineups SET ${updates.join(', ')} WHERE id = ? AND game_id = ?`).bind(...params).run();
   return c.json({ success: true });
+});
+
+// ==========================================
+// GameSheet-style console: full lineup state for both teams
+// (players with status + starting goalie, team coaches, sign-offs)
+// ==========================================
+scoringRoutes.get('/games/:gameId/lineup-state', async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+
+  const game = await db.prepare(
+    'SELECT id, home_team_id, away_team_id, status, officials_signed_by, officials_signed_at FROM games WHERE id = ?'
+  ).bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  const [lineups, coaches, signoffs, officials] = await Promise.all([
+    db.prepare(`
+      SELECT gl.id, gl.team_id, gl.player_id, gl.jersey_number, gl.position,
+        gl.status, gl.is_starting_goalie, gl.is_scratched,
+        p.first_name, p.last_name
+      FROM game_lineups gl
+      LEFT JOIN players p ON p.id = gl.player_id
+      WHERE gl.game_id = ?
+      ORDER BY CAST(gl.jersey_number AS INTEGER) ASC
+    `).bind(gameId).all(),
+    db.prepare(`
+      SELECT tc.team_id, COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) as name, tc.role
+      FROM team_coaches tc
+      LEFT JOIN users u ON u.id = tc.user_id
+      WHERE tc.team_id IN (?, ?)
+    `).bind(game.home_team_id || '', game.away_team_id || '').all(),
+    db.prepare(`
+      SELECT team_id, coach_name, signed_off_at FROM game_coaches
+      WHERE game_id = ? AND role = 'roster_signoff'
+    `).bind(gameId).all(),
+    db.prepare('SELECT id, official_name, role, jersey_number FROM game_officials WHERE game_id = ? ORDER BY role ASC').bind(gameId).all(),
+  ]);
+
+  const side = (teamId: string | null) => ({
+    teamId,
+    players: (lineups.results || []).filter((l: any) => l.team_id === teamId),
+    coaches: (coaches.results || []).filter((tc: any) => tc.team_id === teamId),
+    signoff: (signoffs.results || []).find((s: any) => s.team_id === teamId) || null,
+  });
+
+  return c.json({
+    success: true,
+    data: {
+      home: side(game.home_team_id),
+      away: side(game.away_team_id),
+      officials: officials.results || [],
+      officialsSignoff: game.officials_signed_by
+        ? { name: game.officials_signed_by, at: game.officials_signed_at }
+        : null,
+      gameStatus: game.status,
+    },
+  });
+});
+
+// ==========================================
+// Coach roster sign-off — required before every game
+// ==========================================
+scoringRoutes.post('/games/:gameId/teams/:teamId/roster-signoff', scorekeeperOrStaff, zValidator('json', z.object({
+  name: z.string().min(2).max(80),
+})), async (c) => {
+  const { gameId, teamId } = c.req.param();
+  const { name } = c.req.valid('json');
+  const db = c.env.DB;
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO game_coaches (id, game_id, team_id, coach_name, role, signature_data, signed_off_at)
+    VALUES (?, ?, ?, ?, 'roster_signoff', ?, datetime('now'))
+    ON CONFLICT (game_id, team_id, role) DO UPDATE SET
+      coach_name = excluded.coach_name,
+      signature_data = excluded.signature_data,
+      signed_off_at = excluded.signed_off_at
+  `).bind(id, gameId, teamId, name.trim(), name.trim()).run();
+
+  return c.json({ success: true, data: { name: name.trim() } });
+});
+
+// ==========================================
+// Officials post-game sign-off
+// ==========================================
+scoringRoutes.post('/games/:gameId/officials-signoff', scorekeeperOrStaff, zValidator('json', z.object({
+  name: z.string().min(2).max(80),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { name } = c.req.valid('json');
+  const db = c.env.DB;
+
+  await db.prepare(
+    "UPDATE games SET officials_signed_by = ?, officials_signed_at = datetime('now') WHERE id = ?"
+  ).bind(name.trim(), gameId).run();
+
+  return c.json({ success: true, data: { name: name.trim() } });
 });
 
 // ==========================================
