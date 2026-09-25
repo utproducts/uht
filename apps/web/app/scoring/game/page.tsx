@@ -238,11 +238,13 @@ function ScoringPageInner() {
   useEffect(() => { fetchGame(); }, [fetchGame]);
   useEffect(() => { if (game) fetchRoster(); }, [game, fetchRoster]);
 
-  // Poll every 15s
+  // Live refresh: score AND lineup state (sign-offs, statuses, starting
+  // goalie) every 10s, so a coach signing on one device shows up on every
+  // other open console without a manual refresh
   useEffect(() => {
-    const interval = setInterval(fetchGame, 15000);
+    const interval = setInterval(() => { fetchGame(); fetchLineupState(); }, 10000);
     return () => clearInterval(interval);
-  }, [fetchGame]);
+  }, [fetchGame, fetchLineupState]);
 
   // Shots lookup
   const shotsMap: Record<string, Record<number, number>> = {};
