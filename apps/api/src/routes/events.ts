@@ -2779,7 +2779,9 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
       vr.name as rink_name,
       v.name as venue_name,
       ed.age_group, ed.division_level,
-      (ed.age_group || ' ' || COALESCE(ed.division_level, '')) as division_name
+      (ed.age_group || ' ' || COALESCE(ed.division_level, '')) as division_name,
+      (SELECT group_concat(ts.star_number || '|' || COALESCE(ts.jersey_number,'') || '|' || COALESCE(ts.player_name,''), ';')
+        FROM game_three_stars ts WHERE ts.game_id = g.id) as three_stars_str
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at2 ON at2.id = g.away_team_id
@@ -2798,7 +2800,11 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
   query += ` ORDER BY g.start_time ASC, g.game_number ASC`;
 
   const result = await db.prepare(query).bind(...bindings).all();
-  return c.json({ success: true, data: result.results });
+  const rows = (result.results || []) as any[];
+  // Live announcer line for in-progress games (what the PA is reading)
+  const { attachAnnouncements } = await import('./scoring');
+  await attachAnnouncements(db, rows);
+  return c.json({ success: true, data: rows });
 });
 
 // ==================

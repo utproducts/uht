@@ -104,6 +104,8 @@ function ScoringPageInner() {
   const [viewPeriod, setViewPeriod] = useState<number | 'all'>('all');
   // Goal/penalty line being edited
   const [editEvent, setEditEvent] = useState<GameEvent | null>(null);
+  // Announcer script popup (the megaphone)
+  const [announceEvent, setAnnounceEvent] = useState<GameEvent | null>(null);
 
   // Roster
   const [homePlayers, setHomePlayers] = useState<RosterPlayer[]>([]);
@@ -741,11 +743,12 @@ function ScoringPageInner() {
                               <th className="py-1.5 font-bold w-9">A</th>
                               <th className="py-1.5 font-bold w-12">Goalie</th>
                               <th className="py-1.5 font-bold w-8"></th>
+                              <th className="py-1.5 font-bold w-8"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {goals.length === 0 ? (
-                              <tr><td colSpan={7} className="py-3 text-center text-[#c7c7cc]">No goals</td></tr>
+                              <tr><td colSpan={8} className="py-3 text-center text-[#c7c7cc]">No goals</td></tr>
                             ) : goals.map((g: any) => (
                               <tr key={g.id} onClick={() => setEditEvent(g)}
                                 className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f] cursor-pointer active:bg-[#f0f7ff]">
@@ -755,6 +758,12 @@ function ScoringPageInner() {
                                 <td className="py-1.5 text-[#6e6e73]">{g.assist1_jersey || ''}</td>
                                 <td className="py-1.5 text-[#6e6e73]">{g.assist2_jersey || ''}</td>
                                 <td className="py-1.5">{g.goalie_jersey === 'EN' ? <span className="text-amber-600 font-bold">EN</span> : (g.goalie_jersey || '')}</td>
+                                <td className="py-1.5">
+                                  <button onClick={(ev) => { ev.stopPropagation(); setAnnounceEvent(g); }}
+                                    className="text-[#003e79] p-0.5" title="Announcer script">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73" /></svg>
+                                  </button>
+                                </td>
                                 <td className="py-1.5 text-[#00a0cc] text-[10px] font-bold">✎</td>
                               </tr>
                             ))}
@@ -784,11 +793,12 @@ function ScoringPageInner() {
                               <th className="py-1.5 font-bold">Penalty</th>
                               <th className="py-1.5 font-bold w-14">Off</th>
                               <th className="py-1.5 font-bold w-8"></th>
+                              <th className="py-1.5 font-bold w-8"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {pens.length === 0 ? (
-                              <tr><td colSpan={6} className="py-3 text-center text-[#c7c7cc]">No penalties</td></tr>
+                              <tr><td colSpan={7} className="py-3 text-center text-[#c7c7cc]">No penalties</td></tr>
                             ) : pens.map((pe: any) => (
                               <tr key={pe.id} onClick={() => setEditEvent(pe)}
                                 className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f] cursor-pointer active:bg-amber-50">
@@ -797,6 +807,12 @@ function ScoringPageInner() {
                                 <td className="py-1.5">{pe.penalty_minutes ?? '-'}</td>
                                 <td className="py-1.5 text-left text-[11px]">{pe.penalty_type || 'Penalty'}</td>
                                 <td className="py-1.5">{pe.game_time || '-'}</td>
+                                <td className="py-1.5">
+                                  <button onClick={(ev) => { ev.stopPropagation(); setAnnounceEvent(pe); }}
+                                    className="text-[#003e79] p-0.5" title="Announcer script">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73" /></svg>
+                                  </button>
+                                </td>
                                 <td className="py-1.5 text-[#00a0cc] text-[10px] font-bold">✎</td>
                               </tr>
                             ))}
@@ -896,6 +912,13 @@ function ScoringPageInner() {
           </>)}
         </div>
       </div>
+
+      {announceEvent && (
+        <AnnounceModal event={announceEvent}
+          teamName={announceEvent.team_id === game.home_team_id ? game.home_team_name : game.away_team_name}
+          players={playersForTeam(announceEvent.team_id)}
+          onClose={() => setAnnounceEvent(null)} />
+      )}
 
       {editEvent && (
         <EventEditModal event={editEvent} submitting={posting}
@@ -2095,6 +2118,53 @@ function EventEditModal({ event, submitting, onClose, onSave, onDelete }: {
         <button onClick={onDelete} disabled={submitting}
           className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-bold active:bg-red-100">
           Delete this {isGoal ? 'goal' : 'penalty'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// The announcer script - exactly what the scorekeeper reads over the PA
+function AnnounceModal({ event, teamName, players, onClose }: {
+  event: any; teamName: string; players: RosterPlayer[]; onClose: () => void;
+}) {
+  const nameOf = (jersey: string | null) => {
+    if (!jersey) return '';
+    const p = players.find(pl => pl.jersey_number === jersey);
+    return p ? ` ${`${p.first_name} ${p.last_name}`.toUpperCase()}` : '';
+  };
+  const isGoal = event.event_type === 'goal';
+  const lines: string[] = [];
+  if (isGoal) {
+    lines.push(`Scored by #${event.jersey_number || '?'}${nameOf(event.jersey_number)},`);
+    const assists = [event.assist1_jersey, event.assist2_jersey].filter(Boolean)
+      .map((j: string) => `#${j}${nameOf(j)}`);
+    lines.push(assists.length ? `Assisted by ${assists.join(' and ')},` : 'Unassisted,');
+    if (event.game_time) lines.push(`Time of the goal, ${event.game_time}.`);
+  } else {
+    lines.push(`To #${event.jersey_number || '?'}${nameOf(event.jersey_number)},`);
+    lines.push(`${event.penalty_minutes || 2} minutes for ${event.penalty_type || 'a penalty'},`);
+    if (event.game_time) lines.push(`Time of the penalty, ${event.game_time}.`);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-4">
+          <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73" /></svg>
+          <h3 className="text-lg font-extrabold text-[#1d1d1f]">{teamName} {isGoal ? 'goal' : 'penalty'}:</h3>
+        </div>
+        <div className="space-y-2.5">
+          {lines.map((l, i) => (
+            <p key={i} className="text-lg text-[#1d1d1f] leading-snug flex gap-2.5">
+              <span className="text-[#86868b]">•</span>
+              <span>{l}</span>
+            </p>
+          ))}
+        </div>
+        <button onClick={onClose}
+          className="mt-6 w-full py-3 rounded-xl bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a]">
+          Done
         </button>
       </div>
     </div>

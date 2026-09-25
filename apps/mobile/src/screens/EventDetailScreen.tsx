@@ -79,6 +79,7 @@ interface GameSlot {
   division_name?: string;
   three_stars_str?: string;
   period?: number;
+  announcement?: string;
   age_group?: string;
   division_level?: string;
   event_division_id?: string;
@@ -419,6 +420,18 @@ export default function EventDetailScreen({
       <View style={styles.starsStrip}>
         <Ionicons name="star" size={12} color="#b8860b" />
         <Text style={styles.starsStripText} numberOfLines={2}>Three Stars: {parts.join(' · ')}</Text>
+      </View>
+    );
+  }
+
+  function renderAnnouncementStrip(item: any) {
+    if (!item.announcement) return null;
+    const live = item.status === 'in_progress' || item.status === 'intermission' || item.status === 'warmup';
+    if (!live) return null;
+    return (
+      <View style={styles.announceStrip}>
+        <Ionicons name="megaphone-outline" size={13} color={colors.navy} />
+        <Text style={styles.announceText} numberOfLines={3}>{item.announcement}</Text>
       </View>
     );
   }
@@ -911,6 +924,7 @@ export default function EventDetailScreen({
                   </View>
                 ) : null}
               </View>
+              {renderAnnouncementStrip(item)}
               {renderStarsStrip(item)}
               {item.venue_name ? (
                 <Text style={styles.gameVenue}>{item.venue_name}</Text>
@@ -1204,6 +1218,7 @@ export default function EventDetailScreen({
                   </View>
                 ) : null}
               </View>
+              {renderAnnouncementStrip(item)}
               {renderStarsStrip(item)}
             </View>
           );
@@ -2072,6 +2087,8 @@ const styles = StyleSheet.create({
   livePeriodText: { marginLeft: 'auto', fontSize: 11, color: colors.success, ...fonts.bold },
   starsStrip: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
   starsStripText: { flex: 1, fontSize: 11, color: '#8a6d1a', ...fonts.medium, lineHeight: 15 },
+  announceStrip: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#eef4fb', borderWidth: 1, borderColor: '#c9def5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
+  announceText: { flex: 1, fontSize: 11.5, color: colors.navy, ...fonts.semibold, lineHeight: 15 },
   starsRulesCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 14, padding: 14, marginBottom: 12 },
   starsRulesTitle: { fontSize: 13.5, color: '#6b520f', ...fonts.bold },
   starsRulesSub: { fontSize: 11.5, color: '#8a6d1a', marginTop: 2, lineHeight: 15 },

@@ -516,6 +516,57 @@ scoringRoutes.post('/events/:eventId/resolve-bracket', authMiddleware, requireRo
   }
 });
 
+
+/*
+  Announcer script for the latest goal/penalty of a live game - the words a
+  scorekeeper reads over the PA, and the line fans see on live game cards.
+*/
+export async function attachAnnouncements(db: any, games: any[]) {
+  const live = games.filter(g => ['in_progress', 'intermission', 'warmup'].includes(g.status));
+  for (const g of live) {
+    try {
+      const e = await db.prepare(`
+        SELECT ge.*, p.first_name, p.last_name
+        FROM game_events ge
+        LEFT JOIN game_lineups gl ON gl.game_id = ge.game_id AND gl.team_id = ge.team_id AND gl.jersey_number = ge.jersey_number
+        LEFT JOIN players p ON p.id = gl.player_id
+        WHERE ge.game_id = ? AND ge.event_type IN ('goal', 'penalty')
+        ORDER BY ge.created_at DESC LIMIT 1
+      `).bind(g.id).first();
+      if (!e) continue;
+
+      const teamName = e.team_id === g.home_team_id ? (g.home_team_name || 'Home') : (g.away_team_name || 'Away');
+      const playerName = async (jersey: string | null): Promise<string> => {
+        if (!jersey) return '';
+        if (jersey === e.jersey_number && (e.first_name || e.last_name)) {
+          return ` ${`${e.first_name || ''} ${e.last_name || ''}`.trim().toUpperCase()}`;
+        }
+        const row = await db.prepare(`
+          SELECT p.first_name, p.last_name FROM game_lineups gl
+          JOIN players p ON p.id = gl.player_id
+          WHERE gl.game_id = ? AND gl.team_id = ? AND gl.jersey_number = ? LIMIT 1
+        `).bind(g.id, e.team_id, jersey).first();
+        return row ? ` ${`${row.first_name || ''} ${row.last_name || ''}`.trim().toUpperCase()}` : '';
+      };
+
+      if (e.event_type === 'goal') {
+        const scorer = `#${e.jersey_number || '?'}${await playerName(e.jersey_number)}`;
+        const assists: string[] = [];
+        for (const aj of [e.assist1_jersey, e.assist2_jersey]) {
+          if (aj) assists.push(`#${aj}${await playerName(aj)}`);
+        }
+        g.announcement = `${teamName} goal scored by ${scorer}` +
+          (assists.length ? `, assisted by ${assists.join(' and ')}` : ', unassisted') +
+          (e.game_time ? `. Time of the goal, ${e.game_time}` : '') + '.';
+      } else {
+        g.announcement = `${teamName} penalty to #${e.jersey_number || '?'}${await playerName(e.jersey_number)}, ` +
+          `${e.penalty_minutes || 2} minutes for ${e.penalty_type || 'a penalty'}` +
+          (e.game_time ? `. Time of the penalty, ${e.game_time}` : '') + '.';
+      }
+    } catch { /* a missing announcement never breaks the feed */ }
+  }
+}
+
 // ==========================================
 // PUBLIC: Live scores (all in-progress + recent final games)
 // ==========================================
@@ -568,14 +619,14 @@ scoringRoutes.get('/events/:eventId/live', async (c) => {
     shotsByGame[gid] = shots.results || [];
   }
 
-  return c.json({
-    success: true,
-    data: (games.results || []).map((g: any) => ({
-      ...g,
-      goals: recentGoals[g.id] || [],
-      shots: shotsByGame[g.id] || [],
-    })),
-  });
+  const liveOut = (games.results || []).map((g: any) => ({
+    ...g,
+    goals: recentGoals[g.id] || [],
+    shots: shotsByGame[g.id] || [],
+  }));
+  await attachAnnouncements(db, liveOut);
+
+  return c.json({ success: true, data: liveOut });
 });
 
 // ==========================================
@@ -590,7 +641,7 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
       g.home_score, g.away_score, g.period, g.status, g.delay_minutes, g.delay_note,
       (SELECT group_concat(ts.star_number || '|' || COALESCE(ts.jersey_number,'') || '|' || COALESCE(ts.player_name,''), ';')
         FROM game_three_stars ts WHERE ts.game_id = g.id) as three_stars_str,
-      g.delay_status, g.delay_reason,
+      g.delay_status, g.delay_reason, g.home_team_id, g.away_team_id,
       g.checked_in_at, g.rink_id, g.is_overtime, g.is_shootout,
       COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder) as away_team_name,
       ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
@@ -648,6 +699,7 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
     };
   });
 
+  await attachAnnouncements(db, enriched);
   return c.json({ success: true, data: enriched });
 });
 
