@@ -957,6 +957,31 @@ emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('a
       html = buildMagicLinkHtml('Coach Johnson', '#', fields);
       break;
     }
+    case 'event_info_30day': {
+      const { buildEventInfoHtml } = await import('../lib/event-info-email');
+      const infoVars = { ...vars, eventDates: sampleData.eventDate, scheduleDate: 'May 19' };
+      subject = replaceVars(fields.subject, infoVars);
+      // Preview shows the missing-roster state so admins see the warning banner
+      html = buildEventInfoHtml({
+        eventName: sampleData.eventName,
+        eventDates: sampleData.eventDate,
+        eventCity: sampleData.eventCity,
+        eventUrl: 'https://ultimatetournaments.com/events',
+        rinks: [
+          { name: 'Johnny\'s IceHouse West', address: '2550 W Madison St', city: 'Chicago', state: 'IL' },
+          { name: 'Fifth Third Arena', address: '1801 W Jackson Blvd', city: 'Chicago', state: 'IL' },
+        ],
+        scheduleDate: 'May 19',
+        teamName: sampleData.teamName,
+        ageGroup: sampleData.ageGroup,
+        division: sampleData.division,
+        rosterCount: 0,
+        isPaid: false,
+        payUrl: 'https://ultimatetournaments.com/pay',
+        _overrides: fields,
+      });
+      break;
+    }
   }
 
   return c.json({ success: true, data: { subject, html, template: { id: template.id, name: template.name, description: template.description, trigger: template.trigger, from: template.from } } });
@@ -1032,6 +1057,47 @@ emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), z
           to: [email],
           subject: `[TEST] ${fields.subject}`,
           html: html,
+        }),
+      });
+      result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };
+      break;
+    }
+    case 'event_info_30day': {
+      const { buildEventInfoHtml } = await import('../lib/event-info-email');
+      const infoVars = {
+        eventName: sampleData.eventName,
+        teamName: sampleData.teamName,
+        eventDates: sampleData.eventDate,
+        eventCity: sampleData.eventCity,
+        scheduleDate: 'May 19',
+      };
+      const html = buildEventInfoHtml({
+        eventName: sampleData.eventName,
+        eventDates: sampleData.eventDate,
+        eventCity: sampleData.eventCity,
+        eventUrl: 'https://ultimatetournaments.com/events',
+        rinks: [
+          { name: 'Johnny\'s IceHouse West', address: '2550 W Madison St', city: 'Chicago', state: 'IL' },
+          { name: 'Fifth Third Arena', address: '1801 W Jackson Blvd', city: 'Chicago', state: 'IL' },
+        ],
+        scheduleDate: 'May 19',
+        teamName: sampleData.teamName,
+        ageGroup: sampleData.ageGroup,
+        division: sampleData.division,
+        rosterCount: 0,
+        isPaid: false,
+        payUrl: 'https://ultimatetournaments.com/pay',
+        _overrides: fields,
+      });
+      const resendResp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
+          reply_to: 'johnny@ultimatetournaments.com',
+          to: [email],
+          subject: `[TEST] ${replaceVars(fields.subject, infoVars)}`,
+          html,
         }),
       });
       result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };

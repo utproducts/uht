@@ -1211,5 +1211,12 @@ export default {
     // Locker-room push sweep (idempotent via games.locker_room_notified) —
     // previously only ran when an admin clicked the button
     ctx.waitUntil(import('./lib/push').then(m => m.runLockerRoomSweep(env.DB)).catch((e: any) => console.error('Locker sweep error:', e)));
+    // 30-days-out event info email — 14:00 UTC window (9am CDT / 8am CST);
+    // idempotent per recipient, so every tick in the hour is safe
+    if (new Date().getUTCHours() === 14) {
+      ctx.waitUntil(import('./lib/event-info-sweep').then(m => m.runEventInfo30DaySweep(env)).then((r: any) => {
+        if (r.sent || r.events) console.log(`30-day email sweep: events=${r.events} sent=${r.sent} skipped=${r.skipped}`);
+      }).catch((e: any) => console.error('30-day email sweep error:', e)));
+    }
   },
 };
