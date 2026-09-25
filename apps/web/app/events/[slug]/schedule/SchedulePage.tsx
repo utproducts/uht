@@ -99,6 +99,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [divisionFilter, setDivisionFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'upcoming' | 'final'>('all');
   const [dayFilter, setDayFilter] = useState('');
   const [collapsedDays, setCollapsedDays] = useState<Record<string, boolean>>({});
 
@@ -118,14 +119,19 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
           fetch(`${API}/scoring/events/${ev.id}/schedule`),
         ]);
 
+        // Full schedule is the source of truth; the live feed just freshens
+        // the games it knows about (status, score, period)
         let allGames: Game[] = [];
-        if (liveRes.ok) {
-          const liveJson = await liveRes.json();
-          allGames = liveJson.data || [];
-        }
-        if (allGames.length === 0 && scheduleRes.ok) {
+        if (scheduleRes.ok) {
           const schedJson = await scheduleRes.json();
           allGames = schedJson.data || [];
+        }
+        if (liveRes.ok) {
+          const liveJson = await liveRes.json();
+          const liveList = (liveJson.data || []) as Game[];
+          const liveById = new Map(liveList.map(g => [g.id, g]));
+          if (allGames.length === 0) allGames = liveList;
+          else allGames = allGames.map(g => liveById.has(g.id) ? { ...g, ...liveById.get(g.id) } : g);
         }
         setGames(allGames);
 
@@ -149,7 +155,11 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
         const res = await fetch(`${API}/scoring/events/${event.id}/live`);
         if (res.ok) {
           const json = await res.json();
-          if (json.data?.length > 0) setGames(json.data);
+          if (json.data?.length > 0) {
+            const liveById = new Map((json.data as Game[]).map(g => [g.id, g]));
+            setGames(prev => prev.length === 0 ? (json.data as Game[])
+              : prev.map(g => liveById.has(g.id) ? { ...g, ...liveById.get(g.id) } : g));
+          }
         }
       } catch {}
     }, 30000);
@@ -199,9 +209,21 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
   const days = Array.from(new Set(games.map(g => formatDay(g.start_time))));
 
   // Filter games by division and day
+  const isLiveGame = (g: Game) => ['in_progress', 'live', 'intermission', 'warmup'].includes(g.status);
+  const isFinalGame = (g: Game) => g.status === 'final';
   let filtered = games;
   if (divisionFilter) filtered = filtered.filter(g => `${g.age_group} ${g.division_level}`.trim() === divisionFilter);
   if (dayFilter) filtered = filtered.filter(g => formatDay(g.start_time) === dayFilter);
+  // All Divisions with games in progress: show ONLY what's live right now,
+  // clearly labeled - pick a division for its full schedule
+  const liveOnlyMode = !divisionFilter && games.some(isLiveGame);
+  if (liveOnlyMode) {
+    filtered = filtered.filter(isLiveGame);
+  } else if (divisionFilter && statusFilter !== 'all') {
+    if (statusFilter === 'live') filtered = filtered.filter(isLiveGame);
+    else if (statusFilter === 'final') filtered = filtered.filter(isFinalGame);
+    else filtered = filtered.filter(g => !isLiveGame(g) && !isFinalGame(g));
+  }
 
   // Group games by day
   const gamesByDay: Record<string, Game[]> = {};
@@ -281,7 +303,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
           <div className="flex items-center gap-3 py-3 overflow-x-auto">
             {/* All divisions pill */}
             <button
-              onClick={() => setDivisionFilter('')}
+              onClick={() => { setDivisionFilter(''); setStatusFilter('all'); }}
               className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
                 !divisionFilter
                   ? 'bg-[#003e79] text-white shadow-sm'
@@ -293,7 +315,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
             {divisions.map(div => (
               <button
                 key={div}
-                onClick={() => setDivisionFilter(divisionFilter === div ? '' : div)}
+                onClick={() => { setDivisionFilter(divisionFilter === div ? '' : div); setStatusFilter('all'); }}
                 className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
                   divisionFilter === div
                     ? 'bg-[#003e79] text-white shadow-sm'
@@ -395,12 +417,54 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
           </div>
         ) : (
           <div>
-            <h2 className="text-lg font-bold text-[#1d1d1f] mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-              </svg>
-              Game Schedule
-            </h2>
+            {liveOnlyMode ? (
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-[#1d1d1f] flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-500 text-white animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                    LIVE
+                  </span>
+                  Live Games
+                </h2>
+                <p className="text-sm text-[#86868b] mt-1">Showing only the games happening right now. Pick a division above to see its full schedule with upcoming and completed games.</p>
+              </div>
+            ) : (
+              <h2 className="text-lg font-bold text-[#1d1d1f] mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                </svg>
+                {divisionFilter ? `${divisionFilter} Schedule` : 'Game Schedule'}
+              </h2>
+            )}
+            {divisionFilter && (() => {
+              const divGames = games.filter(g => `${g.age_group} ${g.division_level}`.trim() === divisionFilter);
+              const counts = {
+                all: divGames.length,
+                live: divGames.filter(isLiveGame).length,
+                upcoming: divGames.filter(g => !isLiveGame(g) && !isFinalGame(g)).length,
+                final: divGames.filter(isFinalGame).length,
+              };
+              const PILLS: { key: typeof statusFilter; label: string }[] = [
+                { key: 'all', label: `All (${counts.all})` },
+                { key: 'live', label: `Live (${counts.live})` },
+                { key: 'upcoming', label: `Upcoming (${counts.upcoming})` },
+                { key: 'final', label: `Completed (${counts.final})` },
+              ];
+              return (
+                <div className="flex items-center gap-2 mb-5 overflow-x-auto">
+                  {PILLS.map(pl => (
+                    <button key={pl.key} onClick={() => setStatusFilter(pl.key)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                        statusFilter === pl.key
+                          ? pl.key === 'live' ? 'bg-red-500 text-white' : 'bg-[#003e79] text-white'
+                          : 'bg-white border border-[#e8e8ed] text-[#6e6e73] hover:border-[#003e79]/40'
+                      }`}>
+                      {pl.key === 'live' && counts.live > 0 ? '● ' : ''}{pl.label}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="space-y-4">
               {Object.entries(gamesByDay).map(([day, dayGames]) => {
                 const isCollapsed = collapsedDays[day] || false;
