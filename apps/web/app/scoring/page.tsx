@@ -32,7 +32,8 @@ export default function ScorekeeperPage() {
   const [loading, setLoading] = useState(false);
   const [shake, setShake] = useState(false);
   const [storedPin, setStoredPin] = useState('');
-  const [collapsedRinks, setCollapsedRinks] = useState<Record<string, boolean>>({});
+  // Rinks start collapsed; tapping a header expands just that rink
+  const [expandedRinks, setExpandedRinks] = useState<Record<string, boolean>>({});
   const [selectedEventId, setSelectedEventId] = useState('');
   const [eventName, setEventName] = useState('');
 
@@ -178,15 +179,15 @@ export default function ScorekeeperPage() {
                 .map(([rinkName, rinkGames]) => (
                   <div key={rinkName}>
                     <button
-                      onClick={() => setCollapsedRinks(prev => ({ ...prev, [rinkName]: !prev[rinkName] }))}
+                      onClick={() => setExpandedRinks(prev => ({ ...prev, [rinkName]: !prev[rinkName] }))}
                       className="w-full flex items-center gap-2 mb-2 px-1 text-left"
                     >
                       <span className="text-lg">🏒</span>
                       <h2 className="font-extrabold text-[#003e79] text-base uppercase tracking-wide">{rinkName}</h2>
                       <span className="text-xs text-[#86868b] font-medium">{rinkGames.length} game{rinkGames.length !== 1 ? 's' : ''}</span>
-                      <span className="ml-auto text-[#003e79] text-sm font-bold">{collapsedRinks[rinkName] ? '\u25b8' : '\u25be'}</span>
+                      <span className="ml-auto text-[#003e79] text-sm font-bold">{expandedRinks[rinkName] ? '\u25be' : '\u25b8'}</span>
                     </button>
-                    {!collapsedRinks[rinkName] && (
+                    {expandedRinks[rinkName] && (
                     <div className="space-y-3">
               {[...rinkGames].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')).map((game) => {
                 const statusBadge = getStatusBadge(game.status);
