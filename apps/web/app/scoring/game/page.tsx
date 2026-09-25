@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
@@ -148,6 +148,26 @@ function ScoringPageInner() {
     } catch { /* */ }
   }, [gameId]);
   useEffect(() => { fetchLineupState(); }, [fetchLineupState, lineupsLoaded]);
+
+  // Pre-game warnings: shown in red on Game Details, dismissable with X
+  const [dismissedWarnings, setDismissedWarnings] = useState<string[]>([]);
+  useEffect(() => {
+    if (!gameId) return;
+    try { setDismissedWarnings(JSON.parse(localStorage.getItem(`uht_warn_${gameId}`) || '[]')); } catch {}
+  }, [gameId]);
+  const dismissWarning = (id: string) => {
+    setDismissedWarnings(prev => {
+      const next = prev.includes(id) ? prev : [...prev, id];
+      try { localStorage.setItem(`uht_warn_${gameId}`, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const awaySigned = !!lineupState?.away?.signoff;
+  const homeSigned = !!lineupState?.home?.signoff;
+  const allWarnings: { id: string; text: string; fix: 'visitor' | 'home' }[] = [];
+  if (lineupState && !awaySigned) allWarnings.push({ id: 'visitor_signoff', text: `The visitor lineup (${game?.away_team_name || 'Away'}) has not been signed off by the coach.`, fix: 'visitor' });
+  if (lineupState && !homeSigned) allWarnings.push({ id: 'home_signoff', text: `The home lineup (${game?.home_team_name || 'Home'}) has not been signed off by the coach.`, fix: 'home' });
+  const warnings = game?.status === 'final' ? [] : allWarnings.filter(w => !dismissedWarnings.includes(w.id));
 
   // Goal state
   const [goalStep, setGoalStep] = useState<GoalStep>('team');
@@ -408,9 +428,7 @@ function ScoringPageInner() {
 
   // Game control events
   const startGame = () => {
-    const missing: string[] = [];
-    if (lineupState && !lineupState.away?.signoff) missing.push('Visitor');
-    if (lineupState && !lineupState.home?.signoff) missing.push('Home');
+    const missing = warnings.map(w => (w.fix === 'visitor' ? 'Visitor' : 'Home'));
     if (missing.length > 0) {
       const ok = confirm(`${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.\n\nPress Cancel to collect sign-off first, or OK to start anyway.`);
       if (!ok) { setSection(missing[0] === 'Visitor' ? 'visitor' : 'home'); return; }
@@ -459,11 +477,9 @@ function ScoringPageInner() {
   // Roster for team picker
   const playersForTeam = (teamId: string) => teamId === game.home_team_id ? homePlayers : awayPlayers;
 
-  const awaySigned = !!lineupState?.away?.signoff;
-  const homeSigned = !!lineupState?.home?.signoff;
-  const navWarnings = (awaySigned ? 0 : 1) + (homeSigned ? 0 : 1);
+  const navWarnings = warnings.length;
   const NAV: { key: 'details' | 'visitor' | 'home' | 'scoring' | 'postgame'; label: string; short: string; badge?: string; ok?: boolean }[] = [
-    { key: 'details', label: 'Game Details', short: 'Details', badge: navWarnings > 0 && !isFinal ? `${navWarnings} WARNING${navWarnings > 1 ? 'S' : ''}` : undefined },
+    { key: 'details', label: 'Game Details', short: 'Details', badge: navWarnings > 0 ? `${navWarnings} WARNING${navWarnings > 1 ? 'S' : ''}` : undefined },
     { key: 'visitor', label: 'Visitor Lineup', short: 'Visitor', ok: awaySigned },
     { key: 'home', label: 'Home Lineup', short: 'Home', ok: homeSigned },
     { key: 'scoring', label: 'Scoring', short: 'Scoring' },
@@ -531,7 +547,8 @@ function ScoringPageInner() {
           </div>
 
           {section === 'details' && (
-            <DetailsSection game={game} gameId={gameId!} pin={pin || ''} onFlash={doFlash} />
+            <DetailsSection game={game} gameId={gameId!} pin={pin || ''} onFlash={doFlash}
+              warnings={warnings} onFix={(sec) => setSection(sec)} onDismiss={dismissWarning} />
           )}
           {section === 'visitor' && (
             <LineupSection label="VISITOR" teamName={game.away_team_name} side={lineupState?.away}
@@ -1389,7 +1406,11 @@ export default function ScoringPage() {
 
 // ═══════════════ GameSheet-style sections ═══════════════
 
-function DetailsSection({ game, gameId, pin, onFlash }: { game: any; gameId: string; pin: string; onFlash: (c: string) => void }) {
+function DetailsSection({ game, gameId, pin, onFlash, warnings, onFix, onDismiss }: {
+  game: any; gameId: string; pin: string; onFlash: (c: string) => void;
+  warnings: { id: string; text: string; fix: 'visitor' | 'home' }[];
+  onFix: (sec: 'visitor' | 'home') => void; onDismiss: (id: string) => void;
+}) {
   const [skName, setSkName] = useState(game.scorekeeper_name || '');
   const [skPhone, setSkPhone] = useState(game.scorekeeper_phone || '');
   const [saving, setSaving] = useState(false);
@@ -1414,6 +1435,18 @@ function DetailsSection({ game, gameId, pin, onFlash }: { game: any; gameId: str
   const dt = game.scheduled_time || game.start_time || '';
   return (
     <div className="p-4 space-y-4 max-w-xl">
+      {warnings.map(w => (
+        <div key={w.id} className="bg-red-50 border-2 border-red-300 rounded-2xl p-4 flex items-start gap-2">
+          <div className="flex-1">
+            <p className="text-sm font-bold text-red-700">{w.text}</p>
+            <p className="text-xs text-red-500 mt-0.5">Coach sign-off is required before every game.</p>
+          </div>
+          <button onClick={() => onFix(w.fix)}
+            className="px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-bold active:bg-red-700 shrink-0">Fix</button>
+          <button onClick={() => onDismiss(w.id)} title="Dismiss this warning"
+            className="px-3 py-2 rounded-lg bg-white border border-red-300 text-red-500 text-xs font-bold active:bg-red-50 shrink-0">✕</button>
+        </div>
+      ))}
       <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden">
         <Row label="Game #" value={game.game_number} />
         <Row label="Division" value={[game.age_group, game.division_level].filter(Boolean).join(' ')} />
@@ -1448,9 +1481,10 @@ const STATUS_META: Record<string, { label: string; cls: string; next: string }> 
 function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash }: {
   label: string; teamName: string; side: any; gameId: string; pin: string; onChanged: () => void; onFlash: (c: string) => void;
 }) {
-  const [signName, setSignName] = useState('');
   const [signing, setSigning] = useState(false);
+  const [showSign, setShowSign] = useState(false);
   const [busyId, setBusyId] = useState('');
+  const [editPlayer, setEditPlayer] = useState<any | 'new' | null>(null);
   const players = side?.players || [];
   const coaches = side?.coaches || [];
   const signoff = side?.signoff;
@@ -1458,8 +1492,7 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
 
   const hdrs = { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin };
 
-  const setStatus = async (p: any) => {
-    const next = STATUS_META[p.status || 'playing'].next;
+  const setStatus = async (p: any, next: string) => {
     setBusyId(p.id);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/${p.id}`, {
@@ -1483,15 +1516,45 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
     setBusyId('');
   };
 
-  const signOff = async () => {
-    if (!side?.teamId || signName.trim().length < 2) return;
+  const signOff = async (name: string, signature: string | null) => {
+    if (!side?.teamId || name.trim().length < 2) return;
     setSigning(true);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/teams/${side.teamId}/roster-signoff`, {
-        method: 'POST', headers: hdrs, body: JSON.stringify({ name: signName.trim() }),
+        method: 'POST', headers: hdrs, body: JSON.stringify({ name: name.trim(), signature }),
       });
       const j = await res.json();
-      if (j.success) { setSignName(''); onChanged(); onFlash('green'); } else onFlash('red');
+      if (j.success) { setShowSign(false); onChanged(); onFlash('green'); } else onFlash('red');
+    } catch { onFlash('red'); }
+    setSigning(false);
+  };
+
+  const savePlayer = async (fields: { jersey: string; first: string; last: string; position: string }) => {
+    setSigning(true);
+    try {
+      const res = editPlayer === 'new'
+        ? await fetch(`${API_BASE}/scoring/games/${gameId}/lineups`, {
+            method: 'POST', headers: hdrs,
+            body: JSON.stringify({ teamId: side.teamId, firstName: fields.first, lastName: fields.last, jerseyNumber: fields.jersey, position: fields.position }),
+          })
+        : await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/${editPlayer.id}`, {
+            method: 'PUT', headers: hdrs,
+            body: JSON.stringify({ firstName: fields.first, lastName: fields.last, jerseyNumber: fields.jersey, position: fields.position }),
+          });
+      const j = await res.json();
+      if (j.success) { setEditPlayer(null); onChanged(); onFlash('green'); } else onFlash('red');
+    } catch { onFlash('red'); }
+    setSigning(false);
+  };
+
+  const removePlayer = async () => {
+    if (editPlayer === 'new' || !editPlayer) return;
+    if (!confirm(`Remove #${editPlayer.jersey_number} ${editPlayer.first_name} ${editPlayer.last_name} from this game's lineup?`)) return;
+    setSigning(true);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/${editPlayer.id}`, { method: 'DELETE', headers: hdrs });
+      const j = await res.json();
+      if (j.success) { setEditPlayer(null); onChanged(); onFlash('green'); } else onFlash('red');
     } catch { onFlash('red'); }
     setSigning(false);
   };
@@ -1521,31 +1584,51 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
 
       {/* Coach sign-off — required before every game */}
       {signoff ? (
-        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex items-center gap-3">
-          <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
-          <div>
-            <p className="text-sm font-bold text-emerald-800">Roster signed off by {signoff.coach_name}</p>
-            <p className="text-xs text-emerald-700">{signoff.signed_off_at ? new Date(signoff.signed_off_at + 'Z').toLocaleString() : ''}</p>
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4">
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
+            <div>
+              <p className="text-sm font-bold text-emerald-800">Roster signed off by {signoff.coach_name}</p>
+              <p className="text-xs text-emerald-700">{signoff.signed_off_at ? new Date(signoff.signed_off_at + 'Z').toLocaleString() : ''}</p>
+            </div>
           </div>
+          {typeof signoff.signature_data === 'string' && signoff.signature_data.startsWith('data:image') && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={signoff.signature_data} alt="Coach signature" className="mt-3 h-16 bg-white rounded-xl border border-emerald-200 px-3" />
+          )}
         </div>
       ) : (
         <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 space-y-3">
           <p className="text-sm font-bold text-amber-800">Coach must sign off on this roster before the game</p>
           <p className="text-xs text-amber-700">Hand the device to the coach. Signing confirms the lineup below is correct: who is playing, who is not, and the starting goalie.</p>
-          <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Coach full name"
-            className="w-full px-4 py-2.5 rounded-xl border border-amber-300 bg-white text-sm outline-none focus:border-amber-500" />
-          <button onClick={signOff} disabled={signing || signName.trim().length < 2}
-            className="w-full py-3 rounded-xl bg-amber-500 text-white text-sm font-black active:bg-amber-600 disabled:opacity-40">
-            {signing ? 'Signing…' : 'SIGN OFF ON ROSTER'}
+          <button onClick={() => setShowSign(true)}
+            className="w-full py-3 rounded-xl bg-amber-500 text-white text-sm font-black active:bg-amber-600">
+            SIGN OFF ON ROSTER
           </button>
         </div>
       )}
 
+      {showSign && (
+        <SignOffModal teamName={teamName} submitting={signing} onClose={() => setShowSign(false)} onSubmit={signOff} />
+      )}
+      {editPlayer !== null && (
+        <PlayerEditModal
+          player={editPlayer === 'new' ? null : editPlayer}
+          submitting={signing}
+          onClose={() => setEditPlayer(null)}
+          onSave={savePlayer}
+          onRemove={editPlayer === 'new' ? undefined : removePlayer}
+        />
+      )}
+
       {/* Players */}
       <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden">
-        <div className="px-4 py-2.5 bg-[#f5f5f7] flex items-center justify-between">
+        <div className="px-4 py-2.5 bg-[#f5f5f7] flex items-center justify-between gap-2">
           <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest">Players</p>
-          <p className="text-xs font-bold text-[#003e79]">{playing} of {players.length} playing</p>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setEditPlayer('new')} className="text-xs font-bold text-[#003e79]">+ Add Player</button>
+            <p className="text-xs font-bold text-[#003e79]">{playing} of {players.length} playing</p>
+          </div>
         </div>
         {players.length === 0 ? (
           <p className="text-sm text-[#86868b] p-4">No roster online for this team - players will appear here once the team's roster is uploaded on ultimatetournaments.com.</p>
@@ -1555,10 +1638,10 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
           return (
             <div key={p.id} className={`px-4 py-2.5 border-t border-[#f5f5f7] flex items-center gap-3 ${busyId === p.id ? 'opacity-50' : ''}`}>
               <span className="w-8 text-center text-sm font-black text-[#003e79] tabular-nums">{p.jersey_number}</span>
-              <div className="flex-1 min-w-0">
+              <button onClick={() => setEditPlayer(p)} className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-semibold text-[#1d1d1f] truncate">{p.first_name} {p.last_name}</p>
-                <p className="text-[10px] text-[#86868b] font-semibold">{p.position || 'F'}{p.is_starting_goalie ? ' · STARTING GOALIE' : ''}</p>
-              </div>
+                <p className="text-[10px] text-[#86868b] font-semibold">{p.position || 'F'}{p.is_starting_goalie ? ' · STARTING GOALIE' : ''} · tap to edit</p>
+              </button>
               {isGoalie && (
                 <button onClick={() => setStartingGoalie(p)}
                   className={`text-[10px] font-bold px-2 py-1.5 rounded-lg border ${p.is_starting_goalie
@@ -1567,15 +1650,18 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
                   {p.is_starting_goalie ? '★ Starter' : 'Set Starter'}
                 </button>
               )}
-              <button onClick={() => setStatus(p)}
-                className={`text-xs font-bold px-3 py-1.5 rounded-full border ${st.cls} min-w-[92px]`}>
-                {st.label}
-              </button>
+              <select value={p.status || 'playing'} onChange={e => setStatus(p, e.target.value)}
+                className={`text-xs font-bold pl-3 pr-6 py-1.5 rounded-full border ${st.cls} appearance-none bg-no-repeat bg-[right_8px_center]`}
+                style={{ backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='6'><path d='M0 0l4 6 4-6z' fill='%236e6e73'/></svg>\")" }}>
+                <option value="playing">Playing</option>
+                <option value="not_playing">Not Playing</option>
+                <option value="suspended">Suspended</option>
+              </select>
             </div>
           );
         })}
       </div>
-      <p className="text-[11px] text-[#86868b] px-1">Tap a player's status to cycle Playing → Not Playing → Suspended. Suspended and Not Playing players are scratched from this game only.</p>
+      <p className="text-[11px] text-[#86868b] px-1">Suspended and Not Playing players are scratched from this game only. Tap a player's name to edit their number, name, or position.</p>
     </div>
   );
 }
@@ -1587,6 +1673,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
   const [refName, setRefName] = useState('');
   const [refRole, setRefRole] = useState('referee');
   const [signName, setSignName] = useState('');
+  const [signNumber, setSignNumber] = useState('');
   const [busy, setBusy] = useState(false);
   const officials = lineupState?.officials || [];
   const signoff = lineupState?.officialsSignoff;
@@ -1611,7 +1698,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/officials-signoff`, {
-        method: 'POST', headers: hdrs, body: JSON.stringify({ name: signName.trim() }),
+        method: 'POST', headers: hdrs, body: JSON.stringify({ name: signName.trim(), usaHockeyNumber: signNumber.trim() || null }),
       });
       const j = await res.json();
       if (j.success) { setSignName(''); onChanged(); onFlash('green'); } else onFlash('red');
@@ -1667,7 +1754,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
         <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex items-center gap-3">
           <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
           <div>
-            <p className="text-sm font-bold text-emerald-800">Game signed off by {signoff.name}</p>
+            <p className="text-sm font-bold text-emerald-800">Game signed off by {signoff.name}{signoff.usa_hockey_number ? ` (USA Hockey #${signoff.usa_hockey_number})` : ''}</p>
             <p className="text-xs text-emerald-700">{signoff.at ? new Date(signoff.at + 'Z').toLocaleString() : ''}</p>
           </div>
         </div>
@@ -1676,6 +1763,8 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
           <p className="text-sm font-bold text-[#1d1d1f]">Official's post-game sign-off</p>
           <p className="text-xs text-[#6e6e73]">After the game, the referee reviews the scoresheet and signs off that the score, goals, and penalties are correct.</p>
           <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Official's full name"
+            className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+          <input value={signNumber} onChange={e => setSignNumber(e.target.value)} placeholder="USA Hockey number" inputMode="numeric"
             className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
           <button onClick={signOff} disabled={busy || signName.trim().length < 2}
             className="w-full py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
@@ -1689,6 +1778,150 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
         View Full Scoresheet
       </a>
       {isFinal && <p className="text-xs text-emerald-700 font-semibold text-center">This game is final. The scoresheet has been sent to both teams' coaches and managers.</p>}
+    </div>
+  );
+}
+
+// Coach signs the roster with their finger; the drawn signature is stored on
+// the game record and printed on the scoresheet.
+function SignOffModal({ teamName, submitting, onClose, onSubmit }: {
+  teamName: string; submitting: boolean; onClose: () => void;
+  onSubmit: (name: string, signature: string | null) => void;
+}) {
+  const [name, setName] = useState('');
+  const [hasInk, setHasInk] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.offsetWidth;
+    const h = 170;
+    c.width = w * dpr;
+    c.height = h * dpr;
+    const ctx = c.getContext('2d')!;
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#003e79';
+  }, []);
+
+  const pos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    drawing.current = true;
+    canvasRef.current!.setPointerCapture(e.pointerId);
+    const ctx = canvasRef.current!.getContext('2d')!;
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + 0.1, p.y + 0.1);
+    ctx.stroke();
+    setHasInk(true);
+  };
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current!.getContext('2d')!;
+    const p = pos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  };
+  const up = () => { drawing.current = false; };
+  const clear = () => {
+    const c = canvasRef.current!;
+    c.getContext('2d')!.clearRect(0, 0, c.width, c.height);
+    setHasInk(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+        <div>
+          <h3 className="text-lg font-extrabold text-[#1d1d1f]">Coach Roster Sign-Off</h3>
+          <p className="text-sm text-[#6e6e73] mt-1">
+            Coach: by signing below you confirm the {teamName} lineup for this game is correct - who is playing, who is not, and the starting goalie.
+          </p>
+        </div>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Coach full name"
+          className="w-full px-4 py-3 rounded-xl border border-[#e8e8ed] text-base outline-none focus:border-[#003e79]" />
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest">Sign with your finger</p>
+            <button onClick={clear} className="text-xs font-bold text-[#003e79]">Clear</button>
+          </div>
+          <canvas ref={canvasRef}
+            onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+            className="w-full h-[170px] rounded-xl border-2 border-dashed border-[#d2d2d7] bg-[#fafafa]"
+            style={{ touchAction: 'none' }} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={onClose} disabled={submitting}
+            className="py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">Cancel</button>
+          <button onClick={() => onSubmit(name, hasInk ? canvasRef.current!.toDataURL('image/png') : null)}
+            disabled={submitting || name.trim().length < 2 || !hasInk}
+            className="py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
+            {submitting ? 'Signing…' : 'CONFIRM SIGN-OFF'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Edit a lineup player (name/number/position), add a new one, or remove one
+// from this game. Name and number fixes flow through to the team roster.
+function PlayerEditModal({ player, submitting, onClose, onSave, onRemove }: {
+  player: any | null; submitting: boolean; onClose: () => void;
+  onSave: (fields: { jersey: string; first: string; last: string; position: string }) => void;
+  onRemove?: () => void;
+}) {
+  const [jersey, setJersey] = useState(player?.jersey_number || '');
+  const [first, setFirst] = useState(player?.first_name || '');
+  const [last, setLast] = useState(player?.last_name || '');
+  const [position, setPosition] = useState((player?.position || 'F').toUpperCase().startsWith('G') ? 'G' : (player?.position || 'F').toUpperCase().startsWith('D') ? 'D' : 'F');
+  const valid = jersey.trim().length > 0 && first.trim().length > 0 && last.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+        <h3 className="text-lg font-extrabold text-[#1d1d1f]">{player ? 'Edit Player' : 'Add Player'}</h3>
+        <div className="grid grid-cols-4 gap-3">
+          <input value={jersey} onChange={e => setJersey(e.target.value)} placeholder="#" inputMode="numeric" maxLength={3}
+            className="col-span-1 px-3 py-3 rounded-xl border border-[#e8e8ed] text-base text-center font-bold outline-none focus:border-[#003e79]" />
+          <select value={position} onChange={e => setPosition(e.target.value)}
+            className="col-span-3 px-3 py-3 rounded-xl border border-[#e8e8ed] text-base bg-white outline-none focus:border-[#003e79]">
+            <option value="F">Forward</option>
+            <option value="D">Defense</option>
+            <option value="G">Goalie</option>
+          </select>
+        </div>
+        <input value={first} onChange={e => setFirst(e.target.value)} placeholder="First name"
+          className="w-full px-4 py-3 rounded-xl border border-[#e8e8ed] text-base outline-none focus:border-[#003e79]" />
+        <input value={last} onChange={e => setLast(e.target.value)} placeholder="Last name"
+          className="w-full px-4 py-3 rounded-xl border border-[#e8e8ed] text-base outline-none focus:border-[#003e79]" />
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={onClose} disabled={submitting}
+            className="py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">Cancel</button>
+          <button onClick={() => onSave({ jersey: jersey.trim(), first: first.trim(), last: last.trim(), position })}
+            disabled={submitting || !valid}
+            className="py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
+            {submitting ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {onRemove && (
+          <button onClick={onRemove} disabled={submitting}
+            className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-bold active:bg-red-100">
+            Remove from this game
+          </button>
+        )}
+      </div>
     </div>
   );
 }

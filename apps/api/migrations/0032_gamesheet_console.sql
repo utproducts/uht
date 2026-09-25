@@ -6,3 +6,4 @@ ALTER TABLE game_coaches ADD COLUMN signed_off_at TEXT;
 ALTER TABLE games ADD COLUMN officials_signed_by TEXT;
 ALTER TABLE games ADD COLUMN officials_signed_at TEXT;
 ALTER TABLE games ADD COLUMN scoresheet_push_sent INTEGER DEFAULT 0;
+ALTER TABLE games ADD COLUMN officials_signed_number TEXT;
