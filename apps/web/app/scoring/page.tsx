@@ -182,7 +182,6 @@ export default function ScorekeeperPage() {
                       onClick={() => setExpandedRinks(prev => ({ ...prev, [rinkName]: !prev[rinkName] }))}
                       className="w-full flex items-center gap-2 mb-2 px-1 text-left"
                     >
-                      <span className="text-lg">🏒</span>
                       <h2 className="font-extrabold text-[#003e79] text-base uppercase tracking-wide">{rinkName}</h2>
                       <span className="text-xs text-[#86868b] font-medium">{rinkGames.length} game{rinkGames.length !== 1 ? 's' : ''}</span>
                       <span className="ml-auto text-[#003e79] text-sm font-bold">{expandedRinks[rinkName] ? '\u25be' : '\u25b8'}</span>

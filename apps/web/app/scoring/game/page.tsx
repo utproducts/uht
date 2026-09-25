@@ -120,7 +120,7 @@ function ScoringPageInner() {
           minor: { label: 'Minor (2:00)', color: 'bg-amber-500 active:bg-amber-600' },
           double: { label: 'Double Minor (4:00)', color: 'bg-orange-500 active:bg-orange-600' },
           major: { label: 'Major (5:00)', color: 'bg-red-600 active:bg-red-700' },
-          misconduct: { label: 'Misconduct (10:00)', color: 'bg-[#1d1d1f] active:bg-black' },
+          misconduct: { label: 'Misconduct (10:00)', color: 'bg-[#003e79] active:bg-[#002d5a]' },
           game_misconduct: { label: 'Game Misconduct', color: 'bg-purple-700 active:bg-purple-800' },
           match: { label: 'Match Penalty (Ejection)', color: 'bg-rose-900 active:bg-rose-950' },
         };
@@ -412,7 +412,7 @@ function ScoringPageInner() {
     if (lineupState && !lineupState.away?.signoff) missing.push('Visitor');
     if (lineupState && !lineupState.home?.signoff) missing.push('Home');
     if (missing.length > 0) {
-      const ok = confirm(`⚠️ ${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.\n\nPress Cancel to collect sign-off first, or OK to start anyway.`);
+      const ok = confirm(`${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.\n\nPress Cancel to collect sign-off first, or OK to start anyway.`);
       if (!ok) { setSection(missing[0] === 'Visitor' ? 'visitor' : 'home'); return; }
     }
     postEvent({ eventType: 'game_start' });
@@ -462,12 +462,12 @@ function ScoringPageInner() {
   const awaySigned = !!lineupState?.away?.signoff;
   const homeSigned = !!lineupState?.home?.signoff;
   const navWarnings = (awaySigned ? 0 : 1) + (homeSigned ? 0 : 1);
-  const NAV: { key: 'details' | 'visitor' | 'home' | 'scoring' | 'postgame'; label: string; short: string; icon: string; badge?: string; ok?: boolean }[] = [
-    { key: 'details', label: 'Game Details', short: 'Details', icon: '📋', badge: navWarnings > 0 && !isFinal ? `${navWarnings} WARNING${navWarnings > 1 ? 'S' : ''}` : undefined },
-    { key: 'visitor', label: 'Visitor Lineup', short: 'Visitor', icon: '🎽', ok: awaySigned },
-    { key: 'home', label: 'Home Lineup', short: 'Home', icon: '🎽', ok: homeSigned },
-    { key: 'scoring', label: 'Scoring', short: 'Scoring', icon: '🥅' },
-    { key: 'postgame', label: 'Officials / Post Game', short: 'Officials', icon: '🧑‍⚖️', ok: !!lineupState?.officialsSignoff },
+  const NAV: { key: 'details' | 'visitor' | 'home' | 'scoring' | 'postgame'; label: string; short: string; badge?: string; ok?: boolean }[] = [
+    { key: 'details', label: 'Game Details', short: 'Details', badge: navWarnings > 0 && !isFinal ? `${navWarnings} WARNING${navWarnings > 1 ? 'S' : ''}` : undefined },
+    { key: 'visitor', label: 'Visitor Lineup', short: 'Visitor', ok: awaySigned },
+    { key: 'home', label: 'Home Lineup', short: 'Home', ok: homeSigned },
+    { key: 'scoring', label: 'Scoring', short: 'Scoring' },
+    { key: 'postgame', label: 'Officials / Post Game', short: 'Officials', ok: !!lineupState?.officialsSignoff },
   ];
 
   return (
@@ -504,30 +504,28 @@ function ScoringPageInner() {
 
       {/* GameSheet-style layout: dark sidebar on md+, segmented bar on phones */}
       <div className="flex-1 md:flex md:items-stretch">
-        <aside className="hidden md:block w-64 shrink-0 bg-[#33363b]">
+        <aside className="hidden md:block w-64 shrink-0 bg-[#003e79]">
           {NAV.map(item => (
             <button key={item.key} onClick={() => setSection(item.key)}
-              className={`w-full flex items-center gap-3 px-5 py-4 text-left border-b border-white/5 transition-colors ${
-                section === item.key ? 'bg-[#44474d] text-white' : 'text-white/70 hover:bg-[#3b3e44] hover:text-white'
+              className={`w-full flex items-center gap-3 px-5 py-4 text-left border-b border-white/10 transition-colors ${
+                section === item.key ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
               }`}>
-              <span className="text-lg">{item.icon}</span>
               <span className="flex-1 text-sm font-semibold">{item.label}</span>
-              {item.badge && <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded">{item.badge}</span>}
-              {item.ok && <span className="w-5 h-5 rounded-full bg-amber-400 text-[#1d1d1f] text-xs font-black flex items-center justify-center">✓</span>}
+              {item.badge && <span className="text-[10px] font-bold bg-amber-400/25 text-amber-200 px-2 py-0.5 rounded">{item.badge}</span>}
+              {item.ok && <span className="w-5 h-5 rounded-full bg-[#00ccff] text-[#003e79] text-xs font-black flex items-center justify-center">✓</span>}
             </button>
           ))}
         </aside>
 
         <div className="flex-1 min-w-0 flex flex-col">
           {/* Mobile section bar */}
-          <div className="md:hidden bg-[#33363b] flex">
+          <div className="md:hidden bg-[#003e79] flex">
             {NAV.map(item => (
               <button key={item.key} onClick={() => setSection(item.key)}
-                className={`flex-1 py-2.5 text-center relative ${section === item.key ? 'bg-[#44474d]' : ''}`}>
-                <span className="block text-base leading-none">{item.icon}</span>
-                <span className={`block text-[9px] font-bold mt-1 ${section === item.key ? 'text-white' : 'text-white/60'}`}>{item.short}</span>
-                {item.badge && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-400" />}
-                {item.ok && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-emerald-400" />}
+                className={`flex-1 py-3.5 text-center relative ${section === item.key ? 'bg-white/15' : ''}`}>
+                <span className={`block text-[11px] font-bold ${section === item.key ? 'text-white' : 'text-white/60'}`}>{item.short}</span>
+                {item.badge && <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-amber-400" />}
+                {item.ok && <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-[#00ccff]" />}
               </button>
             ))}
           </div>
@@ -580,7 +578,7 @@ function ScoringPageInner() {
                 END PERIOD
               </button>
               <button onClick={() => setModal('menu')}
-                className="py-4 rounded-full bg-[#3d3d3d] text-white text-base font-black active:bg-[#1d1d1f]">
+                className="py-4 rounded-full bg-[#003e79] text-white text-base font-black active:bg-[#002d5a]">
                 MORE ▾
               </button>
             </div>
@@ -600,7 +598,7 @@ function ScoringPageInner() {
               START {period === 1 ? '2ND' : period === 2 ? '3RD' : 'OT'} PERIOD
             </button>
             <button onClick={() => setModal('menu')}
-              className="w-full py-3 rounded-full bg-[#3d3d3d] text-white text-sm font-bold active:bg-[#1d1d1f]">
+              className="w-full py-3 rounded-full bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a]">
               More Options ▾
             </button>
           </div>
@@ -608,7 +606,7 @@ function ScoringPageInner() {
 
         {isFinal && (
           <div className="space-y-3">
-            <div className="text-center py-5 bg-[#1d1d1f] text-white rounded-2xl text-xl font-black">FINAL</div>
+            <div className="text-center py-5 bg-[#003e79] text-white rounded-2xl text-xl font-black">FINAL</div>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setModal('three-stars')}
                 className="py-4 rounded-2xl bg-amber-500 text-white text-sm font-bold active:bg-amber-600">
@@ -878,7 +876,7 @@ function ScoringPageInner() {
               {(penaltyGroups || [
                 { key: 'minor', label: 'Minor (2:00)', color: 'bg-amber-500 active:bg-amber-600', items: PENALTIES_MINOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
                 { key: 'major', label: 'Major (5:00)', color: 'bg-red-600 active:bg-red-700', items: PENALTIES_MAJOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
-                { key: 'misconduct', label: 'Misconduct (10:00)', color: 'bg-[#1d1d1f] active:bg-black', items: PENALTIES_MISCONDUCT.map(p => ({ code: p.code, name: p.name, min: p.min })) },
+                { key: 'misconduct', label: 'Misconduct (10:00)', color: 'bg-[#003e79] active:bg-[#002d5a]', items: PENALTIES_MISCONDUCT.map(p => ({ code: p.code, name: p.name, min: p.min })) },
               ]).map(group => (
                 <div key={group.key}>
                   <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">{group.label}</p>
@@ -1532,7 +1530,7 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
         </div>
       ) : (
         <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 space-y-3">
-          <p className="text-sm font-bold text-amber-800">⚠️ Coach must sign off on this roster before the game</p>
+          <p className="text-sm font-bold text-amber-800">Coach must sign off on this roster before the game</p>
           <p className="text-xs text-amber-700">Hand the device to the coach. Signing confirms the lineup below is correct: who is playing, who is not, and the starting goalie.</p>
           <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Coach full name"
             className="w-full px-4 py-2.5 rounded-xl border border-amber-300 bg-white text-sm outline-none focus:border-amber-500" />
@@ -1680,7 +1678,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
           <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Official's full name"
             className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
           <button onClick={signOff} disabled={busy || signName.trim().length < 2}
-            className="w-full py-3 rounded-xl bg-[#1d1d1f] text-white text-sm font-black active:bg-black disabled:opacity-40">
+            className="w-full py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
             SIGN OFF ON GAME
           </button>
         </div>
