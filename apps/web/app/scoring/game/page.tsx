@@ -1688,7 +1688,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/officials`, {
         method: 'POST', headers: hdrs,
-        body: JSON.stringify({ officialName: refName.trim(), role: refRole }),
+        body: JSON.stringify({ officials: [{ officialName: refName.trim(), role: refRole }] }),
       });
       const j = await res.json();
       if (j.success) { setRefName(''); onChanged(); onFlash('green'); } else onFlash('red');
