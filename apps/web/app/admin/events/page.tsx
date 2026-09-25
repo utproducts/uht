@@ -4709,6 +4709,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tab Content */}
       {tab === 'overview' && (
         <div className="space-y-6">
+          {/* Tournament guide email send */}
+          <TournamentGuideCard eventId={eventId} />
+
           {/* Info */}
           {event.information && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
