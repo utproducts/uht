@@ -62,7 +62,7 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
   const notPlaying = f('not_playing_text',
     'If you received this email by mistake and your team is not participating, please reply and let us know.');
   const rosterText = f('roster_text',
-    'Upload your roster at ultimatetournaments.com, or reply to this email with a copy. Once your roster is online, your team is eligible for mobile check-in, live scoring, event promos, and restaurant deals, all from your phone.');
+    'Upload your roster at ultimatetournaments.com, or send us your official roster link from the USA Hockey portal. Once your roster is online, your team is eligible for mobile check-in, live scoring, event promos, and restaurant deals, all from your phone.');
   const paymentText = f('payment_text',
     'Registration balances are due in full at this point. If your team has not yet paid, please take care of it now or reply to this email to make arrangements. We accept credit card, Venmo, and check.');
   const venmoText = f('venmo_text',

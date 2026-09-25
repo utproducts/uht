@@ -247,7 +247,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
         key: 'roster_text',
         label: 'Roster Instructions',
         type: 'textarea',
-        defaultValue: 'Upload your roster at ultimatetournaments.com, or reply to this email with a copy. Once your roster is online, your team is eligible for mobile check-in, live scoring, event promos, and restaurant deals, all from your phone.',
+        defaultValue: 'Upload your roster at ultimatetournaments.com, or send us your official roster link from the USA Hockey portal. Once your roster is online, your team is eligible for mobile check-in, live scoring, event promos, and restaurant deals, all from your phone.',
       },
       {
         key: 'checkin_text',
