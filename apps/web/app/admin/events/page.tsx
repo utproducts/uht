@@ -5455,7 +5455,7 @@ export default function AdminEventsPage() {
   // Stats
   // Aggregate tiles exclude claude-test sandbox events - fake teams must not
   // pad the real numbers
-  const realEvents = events.filter(e => !String(e.name || '').startsWith('claude-test'));
+  const realEvents = events.filter(e => !(e as any).is_test && !String(e.name || '').startsWith('claude-test'));
   const totalTeams = realEvents.reduce((sum, e) => sum + e.registration_count, 0);
   const totalRevenue = realEvents.reduce((sum, e) => sum + (e.total_revenue_cents || 0), 0);
 

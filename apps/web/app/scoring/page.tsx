@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
@@ -55,40 +55,58 @@ export default function ScorekeeperPage() {
     setError('');
   };
 
+  const authWithPin = async (thePin: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/scoring/scorekeeper/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: thePin }),
+      });
+      const json = await response.json();
+      if (!json.success) throw new Error(json.error || 'Invalid PIN');
+      setStoredPin(thePin);
+      setSelectedEventId(json.data.eventId);
+      setEventName(json.data.eventName || '');
+      setGames(json.data.games || []);
+      try { sessionStorage.setItem('uht_sk_pin', thePin); } catch {}
+      return true;
+    } catch (err: any) {
+      setError(err?.message || 'Invalid PIN. Please try again.');
+      triggerShake();
+      setPin('');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEnter = async () => {
     if (pin.length < 4) {
       setError('PIN must be 4-8 digits');
       triggerShake();
       return;
     }
+    await authWithPin(pin);
+  };
 
-    setLoading(true);
-    setError('');
-
+  // Coming back from a game console: re-enter with the remembered PIN so
+  // the Back button lands on the game list, not the keypad
+  useEffect(() => {
     try {
-      const response = await fetch(`${API_BASE}/scoring/scorekeeper/auth`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin }),
-      });
+      const saved = sessionStorage.getItem('uht_sk_pin');
+      if (saved && !games) authWithPin(saved);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-      const json = await response.json();
-
-      if (!json.success) {
-        throw new Error(json.error || 'Invalid PIN');
-      }
-
-      setStoredPin(pin);
-      setSelectedEventId(json.data.eventId);
-      setEventName(json.data.eventName || '');
-      setGames(json.data.games || []);
-    } catch (err: any) {
-      setError(err?.message || 'Invalid PIN. Please try again.');
-      triggerShake();
-      setPin('');
-    } finally {
-      setLoading(false);
-    }
+  const switchPin = () => {
+    try { sessionStorage.removeItem('uht_sk_pin'); } catch {}
+    setGames(null);
+    setStoredPin('');
+    setPin('');
+    setError('');
   };
 
   const triggerShake = () => {
@@ -151,8 +169,13 @@ export default function ScorekeeperPage() {
       <div className="min-h-screen bg-[#fafafa]">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-8">
-          <h1 className="text-3xl font-bold text-white">UHT Scorekeeper</h1>
-          <p className="text-white/70 mt-1 text-sm">{eventName || 'Select a game to score'}</p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">UHT Scorekeeper</h1>
+              <p className="text-white/70 mt-1 text-sm">{eventName || 'Select a game to score'}</p>
+            </div>
+            <button onClick={switchPin} className="text-white/70 text-xs font-bold underline mt-2">Switch PIN</button>
+          </div>
         </div>
 
         {/* Games List */}

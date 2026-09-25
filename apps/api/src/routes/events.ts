@@ -363,7 +363,7 @@ eventRoutes.get('/admin/list', async (c) => {
   const offset = (parseInt(page) - 1) * limit;
 
   const result = await db.prepare(`
-    SELECT e.*,
+    SELECT e.*, COALESCE(e.is_test, 0) as is_test,
       t.name as tournament_name, t.location as tournament_location,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status NOT IN ('denied','rejected','withdrawn','awaiting_payment')) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('denied','rejected','withdrawn','awaiting_payment')) as registration_count,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as total_registration_count,

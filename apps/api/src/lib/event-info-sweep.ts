@@ -117,7 +117,7 @@ export async function sendEventInfoOnApproval(env: any, registrationId: string):
 
   const event = await db.prepare(`
     SELECT * FROM events
-    WHERE id = ? AND name NOT LIKE 'claude-test%'
+    WHERE id = ? AND COALESCE(is_test, 0) = 0
       AND date(start_date) >= date('now')
       AND date(start_date) <= date('now', '+30 days')
   `).bind(reg.event_id).first();
@@ -201,7 +201,7 @@ export async function runEventInfo30DaySweep(env: any): Promise<{ events: number
   const events = (await db.prepare(`
     SELECT * FROM events
     WHERE date(start_date) = date('now', '+30 days')
-      AND name NOT LIKE 'claude-test%'
+      AND COALESCE(is_test, 0) = 0
   `).all()).results || [];
 
   for (const event of events) {

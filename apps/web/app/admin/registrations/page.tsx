@@ -1000,7 +1000,7 @@ export default function AdminRegistrationsPage() {
 
   // Stats
   // Tally excludes claude-test sandbox events (rows still listed below)
-  const realRegs = registrations.filter(r => !String((r as any).event_name || '').startsWith('claude-test'));
+  const realRegs = registrations.filter(r => !(r as any).event_is_test && !String((r as any).event_name || '').startsWith('claude-test'));
   const approved = realRegs.filter(r => r.status === 'approved').length;
   const pending = realRegs.filter(r => r.status === 'pending').length;
   const waitlisted = realRegs.filter(r => r.status === 'waitlisted').length;
