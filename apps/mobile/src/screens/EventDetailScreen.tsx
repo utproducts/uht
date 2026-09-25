@@ -28,6 +28,7 @@ type TabKey =
   | 'merchandise'
   | 'my_schedule'
   | 'game_center'
+  | 'three_stars'
   | 'updates'
   | 'promotions'
   | 'venues'
@@ -45,6 +46,7 @@ const EVENT_TABS: TabDef[] = [
   { key: 'info', label: 'Event Info', icon: 'information-circle-outline' },
   { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
   { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
+  { key: 'three_stars', label: '3 Stars', icon: 'star-outline' },
   { key: 'venues', label: 'Venues', icon: 'location-outline' },
   { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
   { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
@@ -75,6 +77,8 @@ interface GameSlot {
   home_score?: number | null;
   away_score?: number | null;
   division_name?: string;
+  three_stars_str?: string;
+  period?: number;
   age_group?: string;
   division_level?: string;
   event_division_id?: string;
@@ -213,8 +217,8 @@ export default function EventDetailScreen({
   route: any;
   navigation: any;
 }) {
-  const { eventId, eventName, event: navEvent } = route.params || {};
-  const [activeTab, setActiveTab] = useState<TabKey>('info');
+  const { eventId, eventName, event: navEvent, initialTab } = route.params || {};
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab || 'info');
   const [event, setEvent] = useState<EventInfo | null>(
     navEvent
       ? {
@@ -251,6 +255,9 @@ export default function EventDetailScreen({
   }, [eventId]);
 
   useEffect(() => {
+    if (activeTab === 'three_stars' && !scoresLoaded) {
+      loadScores();
+    }
     if (activeTab === 'game_center' && !scoresLoaded) {
       loadScores();
     }
@@ -394,6 +401,26 @@ export default function EventDetailScreen({
       case 'delayed': return 'Delayed';
       default: return status;
     }
+  }
+
+  function periodLabel(p?: number): string {
+    if (!p) return '';
+    return p === 1 ? '1st Period' : p === 2 ? '2nd Period' : p === 3 ? '3rd Period' : 'Overtime';
+  }
+
+  function renderStarsStrip(item: any) {
+    if (!item.three_stars_str || item.status !== 'final') return null;
+    const parts = String(item.three_stars_str).split(';').map((seg: string) => {
+      const [n, jersey, name] = seg.split('|');
+      const ord = n === '1' ? '1st' : n === '2' ? '2nd' : '3rd';
+      return `${ord} ${name || `#${jersey}`}`;
+    });
+    return (
+      <View style={styles.starsStrip}>
+        <Ionicons name="star" size={12} color="#b8860b" />
+        <Text style={styles.starsStripText} numberOfLines={2}>Three Stars: {parts.join(' · ')}</Text>
+      </View>
+    );
   }
 
   function getStatusColor(status: string): string {
@@ -830,6 +857,9 @@ export default function EventDetailScreen({
                     {isLive && <View style={styles.gameStatusDot} />}
                     <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}</Text>
                   </View>
+                  {isLive && item.period ? (
+                    <Text style={styles.livePeriodText}>{periodLabel(item.period)}</Text>
+                  ) : null}
                   {isDelayed && item.delay_note && (
                     <Text style={styles.delayNoteText}>{item.delay_note}</Text>
                   )}
@@ -881,6 +911,7 @@ export default function EventDetailScreen({
                   </View>
                 ) : null}
               </View>
+              {renderStarsStrip(item)}
               {item.venue_name ? (
                 <Text style={styles.gameVenue}>{item.venue_name}</Text>
               ) : null}
@@ -916,6 +947,62 @@ export default function EventDetailScreen({
                 </Text>
               </>
             )}
+          </View>
+        }
+      />
+    );
+  }
+
+  // ==================
+  // TAB: 3 Stars (per-game MVPs from every final, with the selection rules)
+  // ==================
+  function renderThreeStarsTab() {
+    const starGames = schedule.filter(g => g.status === 'final' && g.three_stars_str);
+    return (
+      <FlatList
+        data={starGames}
+        keyExtractor={(item, index) => item.id || String(index)}
+        contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
+        ListHeaderComponent={
+          <TouchableOpacity style={styles.starsRulesCard} activeOpacity={0.8}
+            onPress={() => Linking.openURL('https://ultimatetournaments.com/three-stars')}>
+            <Ionicons name="star" size={18} color="#b8860b" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.starsRulesTitle}>How are the Three Stars picked?</Text>
+              <Text style={styles.starsRulesSub}>Selected automatically from the official scoresheet by a fixed formula - same math for every team. Tap to read the rules.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#b8860b" />
+          </TouchableOpacity>
+        }
+        renderItem={({ item }) => {
+          const stars = String(item.three_stars_str || '').split(';').map(seg => {
+            const [n, jersey, name] = seg.split('|');
+            return { n: parseInt(n || '0'), jersey, name };
+          }).sort((a, b) => a.n - b.n);
+          return (
+            <View style={styles.gameCard}>
+              <View style={styles.gameTimeRow}>
+                <Text style={styles.gameTime}>{item.home_team_name || 'Home'} {item.home_score ?? ''} - {item.away_score ?? ''} {item.away_team_name || 'Away'}</Text>
+              </View>
+              {item.division_name ? <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text> : null}
+              <View style={{ marginTop: 8, gap: 6 }}>
+                {stars.map(st => (
+                  <View key={st.n} style={styles.starRow}>
+                    <Text style={styles.starOrd}>{'★'.repeat(Math.max(1, 4 - st.n))}</Text>
+                    <Text style={styles.starName}>{st.name || `#${st.jersey}`}</Text>
+                    {st.jersey ? <Text style={styles.starJersey}>#{st.jersey}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="star-outline" size={48} color={colors.textMuted} />
+            <Text style={styles.emptyTitle}>No Stars Yet</Text>
+            <Text style={styles.emptyText}>The Three Stars of each game appear here the moment the game goes final.</Text>
           </View>
         }
       />
@@ -1065,6 +1152,9 @@ export default function EventDetailScreen({
                     {isLive && <View style={styles.gameStatusDot} />}
                     <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}</Text>
                   </View>
+                  {isLive && item.period ? (
+                    <Text style={styles.livePeriodText}>{periodLabel(item.period)}</Text>
+                  ) : null}
                   {isDelayed && item.delay_minutes && (
                     <Text style={styles.delayMinText}>{item.delay_minutes} min delay</Text>
                   )}
@@ -1114,6 +1204,7 @@ export default function EventDetailScreen({
                   </View>
                 ) : null}
               </View>
+              {renderStarsStrip(item)}
             </View>
           );
         }}
@@ -1558,6 +1649,7 @@ export default function EventDetailScreen({
       case 'merchandise': return renderMerchandiseTab();
       case 'my_schedule': return renderMyScheduleTab();
       case 'game_center': return renderGameCenterTab();
+      case 'three_stars': return renderThreeStarsTab();
       case 'updates': return renderUpdatesTab();
       case 'promotions': return renderPromotionsTab();
       case 'venues': return renderVenuesTab();
@@ -1977,6 +2069,16 @@ const styles = StyleSheet.create({
   lockerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 48, marginTop: 2 },
   vsText: { fontSize: 12, color: colors.textMuted, ...fonts.regular, textAlign: 'center', marginLeft: 48 },
   myTeamHighlight: { color: colors.navy, ...fonts.bold },
+  livePeriodText: { marginLeft: 'auto', fontSize: 11, color: colors.success, ...fonts.bold },
+  starsStrip: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
+  starsStripText: { flex: 1, fontSize: 11, color: '#8a6d1a', ...fonts.medium, lineHeight: 15 },
+  starsRulesCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 14, padding: 14, marginBottom: 12 },
+  starsRulesTitle: { fontSize: 13.5, color: '#6b520f', ...fonts.bold },
+  starsRulesSub: { fontSize: 11.5, color: '#8a6d1a', marginTop: 2, lineHeight: 15 },
+  starRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  starOrd: { width: 44, fontSize: 12, color: '#b8860b', ...fonts.bold },
+  starName: { flex: 1, fontSize: 14, color: colors.text, ...fonts.semibold },
+  starJersey: { fontSize: 12, color: colors.textMuted, ...fonts.bold },
   inlineScore: { fontSize: 18, color: colors.textSecondary, ...fonts.semibold, marginLeft: 'auto', paddingLeft: spacing.sm },
   inlineScoreWin: { color: colors.navy, ...fonts.bold },
   scoresheetBtn: {

@@ -220,7 +220,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
     : standings;
   const standingsByDiv: Record<string, StandingsRow[]> = {};
   filteredStandings.forEach(s => {
-    const key = `${s.age_group} ${s.division_level} – ${s.pool_name}`;
+    const key = [[s.age_group, s.division_level].filter(v => v && v !== 'null').join(' '), s.pool_name && s.pool_name !== 'null' ? s.pool_name : ''].filter(Boolean).join(' – ');
     if (!standingsByDiv[key]) standingsByDiv[key] = [];
     standingsByDiv[key].push(s);
   });

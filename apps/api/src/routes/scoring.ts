@@ -588,6 +588,8 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
   const games = await db.prepare(`
     SELECT g.id, g.game_number, g.start_time, g.end_time, g.game_type, g.pool_name,
       g.home_score, g.away_score, g.period, g.status, g.delay_minutes, g.delay_note,
+      (SELECT group_concat(ts.star_number || '|' || COALESCE(ts.jersey_number,'') || '|' || COALESCE(ts.player_name,''), ';')
+        FROM game_three_stars ts WHERE ts.game_id = g.id) as three_stars_str,
       g.delay_status, g.delay_reason,
       g.checked_in_at, g.rink_id, g.is_overtime, g.is_shootout,
       COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder) as away_team_name,
