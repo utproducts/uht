@@ -131,6 +131,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                 <Text style={[styles.th, { width: 40 }]}>G</Text>
                 <Text style={[styles.th, { width: 40 }]}>A</Text>
                 <Text style={[styles.th, { width: 40 }]}>A</Text>
+                <Text style={[styles.th, { width: 46 }]}>GOALIE</Text>
               </View>
               {tGoals.length === 0 ? (
                 <Text style={styles.emptyRow}>No goals</Text>
@@ -141,6 +142,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                   <Text style={[styles.td, { width: 40, fontWeight: '800' }]}>{e.jersey_number || '?'}</Text>
                   <Text style={[styles.td, { width: 40, color: colors.textMuted }]}>{e.assist1_jersey || ''}</Text>
                   <Text style={[styles.td, { width: 40, color: colors.textMuted }]}>{e.assist2_jersey || ''}</Text>
+                  <Text style={[styles.td, { width: 46, fontWeight: '700' }, e.goalie_jersey === 'EN' ? { color: '#d97706' } : { color: colors.textMuted }]}>{e.goalie_jersey || ''}</Text>
                 </View>
               ))}
             </View>

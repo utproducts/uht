@@ -5,7 +5,8 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
 import { verifyGameWriteAccess } from '../lib/game-access';
 import { computeStandings, resolveBracketGames } from '../lib/standings';
-import { notifyGameFinalPush, notifyGameDelayPush, notifyGameStartPush, notifyScoresheetPush } from '../lib/push';
+import { notifyGameFinalPush, notifyGameDelayPush, notifyGameStartPush, notifyScoresheetPush, notifyThreeStarsPush } from '../lib/push';
+import { autoAssignThreeStars } from '../lib/three-stars';
 
 export const scoringRoutes = new Hono<{ Bindings: Env }>();
 
@@ -350,6 +351,7 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
         .then((g: any) => g && resolveBracketGames(db, g.event_id)));
       keepAlive(c, notifyGameFinalPush(db, gameId));
       keepAlive(c, notifyScoresheetPush(db, gameId));
+      keepAlive(c, autoAssignThreeStars(db, gameId).then(() => notifyThreeStarsPush(db, gameId)));
     } else if (data.eventType === 'period_start' && data.period) {
       await db.prepare("UPDATE games SET period = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?").bind(data.period, gameId).run();
     } else if (data.eventType === 'period_end') {
@@ -860,6 +862,7 @@ scoringRoutes.put('/games/:gameId/score', authMiddleware, requireRole('admin', '
       keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
       keepAlive(c, notifyGameFinalPush(db, gameId));
       keepAlive(c, notifyScoresheetPush(db, gameId));
+      keepAlive(c, autoAssignThreeStars(db, gameId).then(() => notifyThreeStarsPush(db, gameId)));
     }
     keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
       .then((g: any) => g && resolveBracketGames(db, g.event_id)));

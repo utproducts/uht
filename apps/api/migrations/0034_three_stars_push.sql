@@ -1,0 +1,1 @@
+ALTER TABLE games ADD COLUMN stars_push_sent INTEGER DEFAULT 0;

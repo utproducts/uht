@@ -193,6 +193,23 @@ function ScoringPageInner() {
   const [star1, setStar1] = useState({ teamId: '', jersey: '', name: '' });
   const [star2, setStar2] = useState({ teamId: '', jersey: '', name: '' });
   const [star3, setStar3] = useState({ teamId: '', jersey: '', name: '' });
+  // The server auto-assigns stars on final - load them so the modal shows
+  // the picks and lets the scorekeeper adjust rather than start blank
+  useEffect(() => {
+    if (modal !== 'three-stars' || !gameId) return;
+    fetch(`${API_BASE}/scoring/games/${gameId}/three-stars`)
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j.success) return;
+        const setters = [setStar1, setStar2, setStar3];
+        for (const row of (j.data || [])) {
+          const set = setters[(row.star_number || 0) - 1];
+          if (set) set({ teamId: row.team_id || '', jersey: row.jersey_number || '', name: row.player_name || '' });
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modal, gameId]);
 
   // Shootout
   const [soTeamId, setSoTeamId] = useState('');
@@ -1044,14 +1061,17 @@ function ScoringPageInner() {
                   </button>
                 </div>
                 {state.teamId && playersForTeam(state.teamId).length > 0 ? (
-                  <div className="grid grid-cols-4 gap-1">
+                  <select value={state.jersey}
+                    onChange={e => {
+                      const p = playersForTeam(state.teamId).find(pl => pl.jersey_number === e.target.value);
+                      setter({ ...state, jersey: e.target.value, name: p ? `${p.first_name} ${p.last_name}` : '' });
+                    }}
+                    className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-lg text-sm bg-white outline-none focus:border-[#003e79]">
+                    <option value="">Choose a player...</option>
                     {playersForTeam(state.teamId).map(p => (
-                      <button key={p.id} onClick={() => setter({ ...state, jersey: p.jersey_number, name: `${p.first_name} ${p.last_name}` })}
-                        className={`py-2 rounded-lg text-xs font-bold transition-colors ${state.jersey === p.jersey_number ? 'bg-amber-500 text-white' : 'bg-white border border-[#e8e8ed] text-[#3d3d3d]'}`}>
-                        #{p.jersey_number}
-                      </button>
+                      <option key={p.id} value={p.jersey_number}>#{p.jersey_number} {p.first_name} {p.last_name}</option>
                     ))}
-                  </div>
+                  </select>
                 ) : (
                   <input type="text" placeholder="Jersey #" value={state.jersey}
                     onChange={e => setter({ ...state, jersey: e.target.value })}

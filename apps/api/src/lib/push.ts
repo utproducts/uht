@@ -246,6 +246,51 @@ export async function notifyScoresheetPush(db: any, gameId: string) {
 }
 
 /*
+  Three Stars announcement to both teams' followers/staff/players once the
+  stars are set after a final. Idempotent via games.stars_push_sent.
+*/
+export async function notifyThreeStarsPush(db: any, gameId: string) {
+  const g = await db.prepare(`
+    SELECT g.id, g.event_id, g.game_number, g.home_team_id, g.away_team_id,
+      COALESCE(g.stars_push_sent, 0) as stars_push_sent,
+      e.name as event_name,
+      COALESCE(ht.schedule_name, ht.name, g.home_placeholder, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, g.away_placeholder, 'Away') as away_name
+    FROM games g
+    JOIN events e ON e.id = g.event_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    WHERE g.id = ?
+  `).bind(gameId).first();
+  if (!g || g.stars_push_sent) return;
+
+  const stars = (await db.prepare(
+    'SELECT star_number, team_id, jersey_number, player_name FROM game_three_stars WHERE game_id = ? ORDER BY star_number ASC'
+  ).bind(gameId).all()).results || [];
+  if (stars.length === 0) return;
+
+  const teamName = (tid: string) => (tid === g.home_team_id ? g.home_name : g.away_name);
+  const label = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : '3rd');
+  const line = stars.map((s: any) =>
+    `${label(s.star_number)}: ${s.player_name || `#${s.jersey_number}`} (${teamName(s.team_id)})`).join(' · ');
+
+  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id]);
+  await db.prepare("UPDATE games SET stars_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
+  if (tokens.length === 0) return;
+
+  const title = '⭐ Three Stars of the Game';
+  const body = `${g.home_name} vs ${g.away_name} - ${line}`;
+  const pushData = { type: 'three_stars', game_id: g.id, event_id: g.event_id };
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, {
+    type: 'three_stars', title, body, audience: 'team_followers',
+    target_id: g.event_id, sent_count: sent, sent_by: 'system',
+    metadata: JSON.stringify({ game_id: g.id }),
+  });
+  await createUserNotifications(db, userIds, title, body, 'three_stars', pushData);
+}
+
+/*
   Game-start push to both teams' followers: "Dogs vs Cats - starting now".
   Idempotent via games.start_push_sent (a re-tapped Start Game never
   double-pushes).

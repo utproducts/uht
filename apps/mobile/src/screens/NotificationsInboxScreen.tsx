@@ -113,7 +113,7 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
             navigation.dispatch(
               CommonActions.navigate({ name: 'RewardReveal' })
             );
-          } else if (item.type === 'scoresheet' && data?.game_id) {
+          } else if ((item.type === 'scoresheet' || item.type === 'three_stars') && data?.game_id) {
             navigation.dispatch(
               CommonActions.navigate({
                 name: 'Main',

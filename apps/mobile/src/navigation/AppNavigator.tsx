@@ -189,7 +189,7 @@ export default function AppNavigator() {
       const data = response.notification?.request?.content?.data;
       if (data?.type === 'meeting_reward') {
         navigationRef.current?.navigate('RewardReveal' as never);
-      } else if (data?.type === 'scoresheet' && data?.game_id) {
+      } else if ((data?.type === 'scoresheet' || data?.type === 'three_stars') && data?.game_id) {
         (navigationRef.current as any)?.navigate('Main', {
           screen: 'Home',
           params: { screen: 'Scoresheet', params: { gameId: data.game_id } },
