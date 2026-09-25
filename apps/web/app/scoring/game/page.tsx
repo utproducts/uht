@@ -630,7 +630,7 @@ function ScoringPageInner() {
             <div className="grid grid-cols-2 gap-3">
               <button onClick={endPeriod} disabled={posting}
                 className="py-4 rounded-full bg-orange-500 text-white text-base font-black active:bg-orange-600 disabled:opacity-50">
-                END PERIOD
+                END {periodLabel.toUpperCase()} PERIOD
               </button>
               <button onClick={() => setModal('menu')}
                 className="py-4 rounded-full bg-[#003e79] text-white text-base font-black active:bg-[#002d5a]">

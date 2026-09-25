@@ -97,9 +97,10 @@ function GameSheetInner() {
       {/* Header Bar */}
       <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff]">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <a href="/scores" className="text-white/70 text-sm font-semibold hover:text-white transition-colors">
-            ← Back to Scores
-          </a>
+          <button onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.href = '/events'; }}
+            className="text-white/70 text-sm font-semibold hover:text-white transition-colors">
+            ← Back
+          </button>
           <div className="flex items-center gap-2">
             <img src="/uht-logo.png" alt="UHT" className="h-7 w-auto" />
             <span className="text-white font-semibold text-sm">Score Sheet</span>
@@ -552,7 +553,7 @@ function NotFound() {
         <div className="text-4xl mb-4">🏒</div>
         <h1 className="text-xl font-bold text-[#1d1d1f] mb-2">Game Not Found</h1>
         <p className="text-[#6e6e73]">This game sheet doesn&apos;t exist or hasn&apos;t been started yet.</p>
-        <a href="/scores" className="mt-4 inline-block text-[#003e79] font-semibold underline">Back to Scores</a>
+        <a href="/events" className="mt-4 inline-block text-[#003e79] font-semibold underline">Back to Events</a>
       </div>
     </div>
   );
