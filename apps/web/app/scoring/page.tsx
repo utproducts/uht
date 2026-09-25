@@ -34,6 +34,7 @@ export default function ScorekeeperPage() {
   const [storedPin, setStoredPin] = useState('');
   // Rinks start collapsed; tapping a header expands just that rink
   const [expandedRinks, setExpandedRinks] = useState<Record<string, boolean>>({});
+  const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'upcoming' | 'final'>('all');
   const [selectedEventId, setSelectedEventId] = useState('');
   const [eventName, setEventName] = useState('');
 
@@ -156,6 +157,29 @@ export default function ScorekeeperPage() {
 
         {/* Games List */}
         <div className="px-4 py-6 max-w-2xl mx-auto">
+          {games.length > 0 && (() => {
+            const isLive = (g: any) => ['in_progress', 'intermission', 'warmup'].includes(g.status);
+            const counts = {
+              all: games.length,
+              live: games.filter(isLive).length,
+              upcoming: games.filter(g => !isLive(g) && g.status !== 'final').length,
+              final: games.filter(g => g.status === 'final').length,
+            };
+            return (
+              <div className="flex items-center gap-2 mb-5 overflow-x-auto">
+                {([['all', `All (${counts.all})`], ['live', `Live (${counts.live})`], ['upcoming', `Upcoming (${counts.upcoming})`], ['final', `Final (${counts.final})`]] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => setStatusFilter(key)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                      statusFilter === key
+                        ? key === 'live' ? 'bg-red-500 text-white' : 'bg-[#003e79] text-white'
+                        : 'bg-white border border-[#e8e8ed] text-[#6e6e73]'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {games.length === 0 ? (
             <div className="bg-white border border-[#e8e8ed] rounded-2xl p-8 text-center shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)]">
               <div className="text-4xl mb-4">🏒</div>
@@ -167,7 +191,13 @@ export default function ScorekeeperPage() {
               {/* Grouped by rink, then time - scorekeepers work one sheet of
                   ice, so their rink's games belong together in order */}
               {Object.entries(
-                games.reduce((acc: Record<string, typeof games>, g) => {
+                games.filter(g => {
+                  const live = ['in_progress', 'intermission', 'warmup'].includes(g.status);
+                  if (statusFilter === 'live') return live;
+                  if (statusFilter === 'final') return g.status === 'final';
+                  if (statusFilter === 'upcoming') return !live && g.status !== 'final';
+                  return true;
+                }).reduce((acc: Record<string, typeof games>, g) => {
                   const venue = (g as any).venue_name || '';
                   const rink = g.rink_name || '';
                   const key = venue && rink ? `${venue} - ${rink}` : venue || rink || 'Rink TBD';
@@ -188,7 +218,10 @@ export default function ScorekeeperPage() {
                     </button>
                     {expandedRinks[rinkName] && (
                     <div className="space-y-3">
-              {[...rinkGames].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || '')).map((game) => {
+              {[...rinkGames].sort((a, b) => {
+                const rank = (g: any) => (['in_progress', 'intermission', 'warmup'].includes(g.status) ? 0 : g.status === 'final' ? 2 : 1);
+                return rank(a) - rank(b) || (a.start_time || '').localeCompare(b.start_time || '');
+              }).map((game) => {
                 const statusBadge = getStatusBadge(game.status);
                 const typeBadge = getGameTypeBadge(game.game_type);
                 return (
