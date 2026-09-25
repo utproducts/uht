@@ -54,6 +54,7 @@ interface GameEvent {
   period: number;
   details: string | null;
   game_time: string | null;
+  goalie_jersey?: string | null;
 }
 
 interface ShotRecord { team_id: string; period: number; shot_count: number; }
@@ -85,7 +86,7 @@ interface GameData {
 }
 
 type ModalType = null | 'goal' | 'penalty' | 'shots' | 'roster' | 'three-stars' | 'shootout' | 'goalie' | 'notes' | 'officials' | 'menu';
-type GoalStep = 'team' | 'player' | 'assist1' | 'assist2' | 'time';
+type GoalStep = 'team' | 'player' | 'assist1' | 'assist2' | 'time' | 'goalie';
 type PenaltyStep = 'team' | 'player' | 'type' | 'time';
 
 function ScoringPageInner() {
@@ -99,6 +100,10 @@ function ScoringPageInner() {
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState('');
   const [showLog, setShowLog] = useState(false);
+  // Scoresheet period filter (GameSheet-style header tabs)
+  const [viewPeriod, setViewPeriod] = useState<number | 'all'>('all');
+  // Goal/penalty line being edited
+  const [editEvent, setEditEvent] = useState<GameEvent | null>(null);
 
   // Roster
   const [homePlayers, setHomePlayers] = useState<RosterPlayer[]>([]);
@@ -325,14 +330,28 @@ function ScoringPageInner() {
   const resetGoal = () => { setGoalStep('team'); setGoalTeamId(''); setGoalJersey(''); setGoalAssist1(''); setGoalAssist2(''); setGoalTime(''); };
   const openGoal = () => { resetGoal(); setModal('goal'); };
 
-  const submitGoal = async (time?: string) => {
+  const submitGoal = async (time?: string, goalie?: string | null) => {
     await postEvent({
       eventType: 'goal', teamId: goalTeamId,
       jerseyNumber: goalJersey || null, assist1Jersey: goalAssist1 || null, assist2Jersey: goalAssist2 || null,
       period: game?.period || 1,
       gameTime: time || null,
+      goalieJersey: goalie ?? null,
     });
     setModal(null);
+  };
+
+  const saveEventEdit = async (fields: any) => {
+    if (!gameId || !pin || !editEvent) return;
+    setPosting(true);
+    try {
+      const res = await fetch(`${API_BASE}/scoring/games/${gameId}/events/${editEvent.id}`, {
+        method: 'PUT', headers: headers(), body: JSON.stringify(fields),
+      });
+      const j = await res.json();
+      if (j.success) { setEditEvent(null); doFlash('green'); await fetchGame(); } else doFlash('red');
+    } catch { doFlash('red'); }
+    setPosting(false);
   };
 
   // Penalty flow with roster
@@ -670,41 +689,56 @@ function ScoringPageInner() {
           const periods = [1, 2, 3];
           const maxPeriod = Math.max(3, ...evs.map((e: any) => e.period || 0), period || 0);
           for (let p2 = 4; p2 <= maxPeriod; p2++) periods.push(p2);
+          const inView = (e: any) => viewPeriod === 'all' || (e.period || 0) === viewPeriod;
           return (
             <div className="space-y-4">
+              {/* Period filter - GameSheet-style header tabs */}
+              <div className="flex justify-center">
+                <div className="inline-flex bg-white border border-[#e8e8ed] rounded-full p-1">
+                  {(['all', ...periods] as (number | 'all')[]).map(pv => (
+                    <button key={String(pv)} onClick={() => setViewPeriod(pv)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                        viewPeriod === pv ? 'bg-[#003e79] text-white' : 'text-[#6e6e73]'
+                      }`}>
+                      {pv === 'all' ? 'All' : pv > 3 ? 'OT' : `P${pv}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {/* SCORING */}
               <div>
                 <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Scoring</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {teams.map(team => {
-                    const goals = evs.filter((e: any) => e.event_type === 'goal' && e.team_id === team.id).sort(sortByClock);
+                    const goals = evs.filter((e: any) => e.event_type === 'goal' && e.team_id === team.id && inView(e)).sort(sortByClock);
                     return (
                       <div key={team.tag} className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
                         <p className="px-3 py-2 text-xs font-bold text-[#003e79] bg-[#f5f5f7]">{team.tag} - {team.name}</p>
                         <table className="w-full text-xs tabular-nums">
                           <thead>
                             <tr className="text-[#86868b] text-[10px] uppercase">
-                              <th className="py-1.5 font-bold w-10">Per</th>
-                              <th className="py-1.5 font-bold w-14">Time</th>
-                              <th className="py-1.5 font-bold w-10">G</th>
-                              <th className="py-1.5 font-bold w-10">A</th>
-                              <th className="py-1.5 font-bold w-10">A</th>
+                              <th className="py-1.5 font-bold w-9">Per</th>
+                              <th className="py-1.5 font-bold w-13">Time</th>
+                              <th className="py-1.5 font-bold w-9">G</th>
+                              <th className="py-1.5 font-bold w-9">A</th>
+                              <th className="py-1.5 font-bold w-9">A</th>
+                              <th className="py-1.5 font-bold w-12">Goalie</th>
                               <th className="py-1.5 font-bold w-8"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {goals.length === 0 ? (
-                              <tr><td colSpan={6} className="py-3 text-center text-[#c7c7cc]">No goals</td></tr>
+                              <tr><td colSpan={7} className="py-3 text-center text-[#c7c7cc]">No goals</td></tr>
                             ) : goals.map((g: any) => (
-                              <tr key={g.id} className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f]">
+                              <tr key={g.id} onClick={() => setEditEvent(g)}
+                                className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f] cursor-pointer active:bg-[#f0f7ff]">
                                 <td className="py-1.5">{g.period ?? '-'}</td>
                                 <td className="py-1.5">{g.game_time || '-'}</td>
                                 <td className="py-1.5">{g.jersey_number || '?'}</td>
                                 <td className="py-1.5 text-[#6e6e73]">{g.assist1_jersey || ''}</td>
                                 <td className="py-1.5 text-[#6e6e73]">{g.assist2_jersey || ''}</td>
-                                <td className="py-1.5">
-                                  <button onClick={() => deleteEvent(g.id)} className="text-red-400 text-[10px] font-bold px-1">✕</button>
-                                </td>
+                                <td className="py-1.5">{g.goalie_jersey === 'EN' ? <span className="text-amber-600 font-bold">EN</span> : (g.goalie_jersey || '')}</td>
+                                <td className="py-1.5 text-[#00a0cc] text-[10px] font-bold">✎</td>
                               </tr>
                             ))}
                           </tbody>
@@ -720,7 +754,7 @@ function ScoringPageInner() {
                 <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Penalties</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {teams.map(team => {
-                    const pens = evs.filter((e: any) => e.event_type === 'penalty' && e.team_id === team.id).sort(sortByClock);
+                    const pens = evs.filter((e: any) => e.event_type === 'penalty' && e.team_id === team.id && inView(e)).sort(sortByClock);
                     return (
                       <div key={team.tag} className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
                         <p className="px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50">{team.tag} - {team.name}</p>
@@ -739,15 +773,14 @@ function ScoringPageInner() {
                             {pens.length === 0 ? (
                               <tr><td colSpan={6} className="py-3 text-center text-[#c7c7cc]">No penalties</td></tr>
                             ) : pens.map((pe: any) => (
-                              <tr key={pe.id} className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f]">
+                              <tr key={pe.id} onClick={() => setEditEvent(pe)}
+                                className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f] cursor-pointer active:bg-amber-50">
                                 <td className="py-1.5">{pe.period ?? '-'}</td>
                                 <td className="py-1.5">{pe.jersey_number || '?'}</td>
                                 <td className="py-1.5">{pe.penalty_minutes ?? '-'}</td>
                                 <td className="py-1.5 text-left text-[11px]">{pe.penalty_type || 'Penalty'}</td>
                                 <td className="py-1.5">{pe.game_time || '-'}</td>
-                                <td className="py-1.5">
-                                  <button onClick={() => deleteEvent(pe.id)} className="text-red-400 text-[10px] font-bold px-1">✕</button>
-                                </td>
+                                <td className="py-1.5 text-[#00a0cc] text-[10px] font-bold">✎</td>
                               </tr>
                             ))}
                           </tbody>
@@ -847,6 +880,12 @@ function ScoringPageInner() {
         </div>
       </div>
 
+      {editEvent && (
+        <EventEditModal event={editEvent} submitting={posting}
+          onClose={() => setEditEvent(null)} onSave={saveEventEdit}
+          onDelete={async () => { await deleteEvent(editEvent.id); setEditEvent(null); }} />
+      )}
+
       {/* ==================== GOAL MODAL (with roster) ==================== */}
       {modal === 'goal' && (
         <FullScreenModal title="GOAL" onClose={() => setModal(null)}>
@@ -872,8 +911,36 @@ function ScoringPageInner() {
               showKeypad />
           )}
           {goalStep === 'time' && (
-            <ClockTimePicker label="Time of Goal" onConfirm={(t) => submitGoal(t)} onSkip={() => submitGoal()} />
+            <ClockTimePicker label="Time of Goal"
+              onConfirm={(t) => { setGoalTime(t); setGoalStep('goalie'); }}
+              onSkip={() => { setGoalTime(''); setGoalStep('goalie'); }} />
           )}
+          {goalStep === 'goalie' && (() => {
+            const oppPlayers = goalTeamId === game.home_team_id ? awayPlayers : homePlayers;
+            const goalies = oppPlayers.filter(p => (p.position || '').toUpperCase().startsWith('G'));
+            return (
+              <div className="w-full">
+                <p className="text-center text-lg font-bold text-[#1d1d1f] mb-1">Scored on which goalie?</p>
+                <p className="text-center text-xs text-[#86868b] mb-4">This feeds goalie stats. Pick Empty Net if the net was empty.</p>
+                <div className="space-y-2">
+                  {goalies.map(p => (
+                    <button key={p.id} onClick={() => submitGoal(goalTime || undefined, p.jersey_number)}
+                      className="w-full py-4 rounded-2xl bg-[#003e79] text-white text-lg font-bold active:bg-[#002d5a]">
+                      #{p.jersey_number} {p.first_name} {p.last_name}
+                    </button>
+                  ))}
+                  <button onClick={() => submitGoal(goalTime || undefined, 'EN')}
+                    className="w-full py-4 rounded-2xl bg-amber-500 text-white text-lg font-bold active:bg-amber-600">
+                    Empty Net
+                  </button>
+                  <button onClick={() => submitGoal(goalTime || undefined, null)}
+                    className="w-full py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">
+                    Skip
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </FullScreenModal>
       )}
 
@@ -1926,6 +1993,89 @@ function PlayerEditModal({ player, submitting, onClose, onSave, onRemove }: {
             Remove from this game
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Edit a recorded goal or penalty line: numbers, time, period, goalie (goals)
+// or minutes (penalties). Delete lives here too.
+function EventEditModal({ event, submitting, onClose, onSave, onDelete }: {
+  event: any; submitting: boolean; onClose: () => void;
+  onSave: (fields: any) => void; onDelete: () => void;
+}) {
+  const isGoal = event.event_type === 'goal';
+  const [jersey, setJersey] = useState(event.jersey_number || '');
+  const [a1, setA1] = useState(event.assist1_jersey || '');
+  const [a2, setA2] = useState(event.assist2_jersey || '');
+  const [goalie, setGoalie] = useState(event.goalie_jersey || '');
+  const [mins, setMins] = useState(String(event.penalty_minutes ?? ''));
+  const [periodV, setPeriodV] = useState(String(event.period || 1));
+  const [time, setTime] = useState(event.game_time || '');
+
+  const timeOk = time === '' || /^\d{1,2}:\d{2}$/.test(time);
+  const field = "w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]";
+  const label = "text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-1 block";
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+        <h3 className="text-lg font-extrabold text-[#1d1d1f]">
+          Edit {isGoal ? 'Goal' : `Penalty${event.penalty_type ? ` - ${event.penalty_type}` : ''}`}
+        </h3>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <span className={label}>{isGoal ? 'Scorer #' : 'Player #'}</span>
+            <input value={jersey} onChange={e => setJersey(e.target.value)} inputMode="numeric" className={field} />
+          </div>
+          <div>
+            <span className={label}>Period</span>
+            <select value={periodV} onChange={e => setPeriodV(e.target.value)} className={`${field} bg-white`}>
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">OT</option>
+            </select>
+          </div>
+          <div>
+            <span className={label}>Time (mm:ss)</span>
+            <input value={time} onChange={e => setTime(e.target.value)} placeholder="12:34" inputMode="numeric"
+              className={`${field} ${timeOk ? '' : 'border-red-400'}`} />
+          </div>
+        </div>
+        {isGoal ? (
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <span className={label}>Assist 1 #</span>
+              <input value={a1} onChange={e => setA1(e.target.value)} inputMode="numeric" className={field} />
+            </div>
+            <div>
+              <span className={label}>Assist 2 #</span>
+              <input value={a2} onChange={e => setA2(e.target.value)} inputMode="numeric" className={field} />
+            </div>
+            <div>
+              <span className={label}>Goalie # / EN</span>
+              <input value={goalie} onChange={e => setGoalie(e.target.value)} placeholder="EN" className={field} />
+            </div>
+          </div>
+        ) : (
+          <div className="w-1/3">
+            <span className={label}>Minutes</span>
+            <input value={mins} onChange={e => setMins(e.target.value)} inputMode="numeric" className={field} />
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={onClose} disabled={submitting}
+            className="py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">Cancel</button>
+          <button disabled={submitting || !timeOk}
+            onClick={() => onSave(isGoal
+              ? { jerseyNumber: jersey || null, assist1Jersey: a1 || null, assist2Jersey: a2 || null, goalieJersey: goalie.trim().toUpperCase() === 'EN' ? 'EN' : (goalie || null), period: parseInt(periodV), gameTime: time || null }
+              : { jerseyNumber: jersey || null, penaltyMinutes: mins ? parseInt(mins) : null, period: parseInt(periodV), gameTime: time || null })}
+            className="py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
+            {submitting ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+        <button onClick={onDelete} disabled={submitting}
+          className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-bold active:bg-red-100">
+          Delete this {isGoal ? 'goal' : 'penalty'}
+        </button>
       </div>
     </div>
   );

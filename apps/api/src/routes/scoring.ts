@@ -291,6 +291,7 @@ const gameEventSchema = z.object({
   penaltyCode: z.string().nullable().optional(),
   penaltyMinutes: z.number().nullable().optional(),
   details: z.string().nullable().optional(),
+  goalieJersey: z.string().nullable().optional(), // goalie the goal was scored on; 'EN' = empty net
 });
 
 scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema), async (c) => {
@@ -317,13 +318,13 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
     const eventId = crypto.randomUUID().replace(/-/g, '');
     await db.prepare(`
       INSERT INTO game_events (id, game_id, event_type, team_id, jersey_number, assist1_jersey, assist2_jersey,
-        period, game_time, penalty_type, penalty_minutes, details)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        period, game_time, penalty_type, penalty_minutes, details, goalie_jersey)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       eventId, gameId, data.eventType, data.teamId || null,
       data.jerseyNumber || null, data.assist1Jersey || null, data.assist2Jersey || null,
       data.period || null, data.gameTime || null,
-      penaltyType, penaltyMinutes, data.details || null
+      penaltyType, penaltyMinutes, data.details || null, data.goalieJersey || null
     ).run();
 
     // If it's a goal, update the game score
@@ -359,6 +360,51 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
   } catch (err: any) {
     return c.json({ success: false, error: err?.message || 'Failed to record event' }, 500);
   }
+});
+
+// ==========================================
+// SCOREKEEPER: Edit a recorded goal/penalty line
+// ==========================================
+scoringRoutes.put('/games/:gameId/events/:eventId', zValidator('json', z.object({
+  jerseyNumber: z.string().nullable().optional(),
+  assist1Jersey: z.string().nullable().optional(),
+  assist2Jersey: z.string().nullable().optional(),
+  period: z.number().nullable().optional(),
+  gameTime: z.string().nullable().optional(),
+  penaltyCode: z.string().nullable().optional(),
+  penaltyMinutes: z.number().nullable().optional(),
+  goalieJersey: z.string().nullable().optional(),
+})), async (c) => {
+  const { gameId, eventId } = c.req.param();
+  const data = c.req.valid('json');
+  const db = c.env.DB;
+
+  const access = await verifyGameWriteAccess(c, gameId);
+  if (!access.ok) {
+    return c.json({ success: false, error: access.error }, (access.status || 401) as any);
+  }
+
+  const updates: string[] = [];
+  const params: any[] = [];
+  const set = (col: string, val: any) => { updates.push(`${col} = ?`); params.push(val); };
+  if (data.jerseyNumber !== undefined) set('jersey_number', data.jerseyNumber);
+  if (data.assist1Jersey !== undefined) set('assist1_jersey', data.assist1Jersey);
+  if (data.assist2Jersey !== undefined) set('assist2_jersey', data.assist2Jersey);
+  if (data.period !== undefined && data.period !== null) set('period', data.period);
+  if (data.gameTime !== undefined) set('game_time', data.gameTime);
+  if (data.goalieJersey !== undefined) set('goalie_jersey', data.goalieJersey);
+  if (data.penaltyCode !== undefined && data.penaltyCode) {
+    const p = USA_HOCKEY_PENALTIES[data.penaltyCode];
+    set('penalty_type', p ? p.name : data.penaltyCode);
+    set('penalty_minutes', data.penaltyMinutes ?? (p ? p.minutes : null));
+  } else if (data.penaltyMinutes !== undefined) {
+    set('penalty_minutes', data.penaltyMinutes);
+  }
+  if (updates.length === 0) return c.json({ success: true });
+
+  params.push(eventId, gameId);
+  await db.prepare(`UPDATE game_events SET ${updates.join(', ')} WHERE id = ? AND game_id = ?`).bind(...params).run();
+  return c.json({ success: true });
 });
 
 // ==========================================
