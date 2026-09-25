@@ -1609,7 +1609,8 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
       )}
 
       {showSign && (
-        <SignOffModal teamName={teamName} submitting={signing} onClose={() => setShowSign(false)} onSubmit={signOff} />
+        <SignOffModal teamName={teamName} submitting={signing} onClose={() => setShowSign(false)} onSubmit={signOff}
+          defaultName={(coaches.find((tc: any) => tc.role === 'head') || coaches[0])?.name || ''} />
       )}
       {editPlayer !== null && (
         <PlayerEditModal
@@ -1784,11 +1785,13 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
 
 // Coach signs the roster with their finger; the drawn signature is stored on
 // the game record and printed on the scoresheet.
-function SignOffModal({ teamName, submitting, onClose, onSubmit }: {
+function SignOffModal({ teamName, submitting, onClose, onSubmit, defaultName }: {
   teamName: string; submitting: boolean; onClose: () => void;
   onSubmit: (name: string, signature: string | null) => void;
+  defaultName?: string;
 }) {
-  const [name, setName] = useState('');
+  // Pre-filled with the team's head coach; fully editable for whoever is signing
+  const [name, setName] = useState(defaultName || '');
   const [hasInk, setHasInk] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
