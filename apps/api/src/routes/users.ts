@@ -32,6 +32,8 @@ const updateUserSchema = z.object({
   lastName: z.string().min(1).optional(),
   phone: z.string().optional().nullable(),
   is_active: z.number().int().min(0).max(1).optional(),
+  // Admin password reset for locked-out users (Johnny, 9/25)
+  password: z.string().min(8).optional(),
 });
 
 const updateRolesSchema = z.object({
@@ -522,6 +524,10 @@ userRoutes.put('/:userId',
     if (data.firstName) {
       updates.push('first_name = ?');
       params.push(data.firstName);
+    }
+    if (data.password) {
+      updates.push('password_hash = ?');
+      params.push(await hashPassword(data.password));
     }
     if (data.lastName) {
       updates.push('last_name = ?');

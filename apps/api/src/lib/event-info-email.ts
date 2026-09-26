@@ -214,16 +214,21 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
             </td>
           </tr>
 
+          <!-- Intro + rinks come first (Johnny, 9/25), THEN the roster warning -->
+          <tr>
+            <td style="padding: 24px 32px 0 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
+              ${para(intro)}
+              <p style="margin: 0 0 12px 0; font-size: 13px; color: #6e6e73;">${esc(notPlaying)}</p>
+
+              ${rinkSection}
+            </td>
+          </tr>
+
           ${rosterBanner}
 
           <!-- Body -->
           <tr>
             <td style="padding: 24px 32px 32px 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
-              ${para(intro)}
-              <p style="margin: 0 0 12px 0; font-size: 13px; color: #6e6e73;">${esc(notPlaying)}</p>
-
-              ${rinkSection}
-
               ${h3('📋 Rosters and Mobile Check-In')}
               ${para(rosterText)}
               ${para(checkinText)}

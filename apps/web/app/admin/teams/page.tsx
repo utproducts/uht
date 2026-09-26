@@ -82,6 +82,13 @@ export default function TeamsPage() {
   const [moveError, setMoveError] = useState('');
 
   const [deleteModal, setDeleteModal] = useState<{ team: Team } | null>(null);
+  // Rename + roster editing (Johnny's small fixes, 9/25)
+  const [renameModal, setRenameModal] = useState<{ team: Team } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [newPlayer, setNewPlayer] = useState({ first: '', last: '', jersey: '', position: '' });
+  const [playerSaving, setPlayerSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -192,6 +199,72 @@ export default function TeamsPage() {
   }, []);
 
   // Fetch roster when team is expanded
+  const adminHdrs = (): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    'X-Dev-Bypass': 'true',
+    ...(typeof window !== 'undefined' && localStorage.getItem('uht_token')
+      ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` }
+      : {}),
+  });
+
+  const reloadRoster = async (teamId: string) => {
+    try {
+      const res = await fetch(`${API}/api/teams/admin/team-roster/${teamId}`, { headers: adminHdrs() });
+      const data = await res.json();
+      if (data.success) setRoster(data.data || []);
+    } catch {}
+  };
+
+  const saveRename = async () => {
+    if (!renameModal || renameValue.trim().length < 2) return;
+    setRenameSaving(true);
+    try {
+      const res = await fetch(`${API}/api/teams/admin/${renameModal.team.id}`, {
+        method: 'PATCH', headers: adminHdrs(), body: JSON.stringify({ name: renameValue.trim() }),
+      });
+      const j = await res.json();
+      if (j.success) {
+        setTeams(prev => prev.map(t => t.id === renameModal.team.id ? { ...t, name: renameValue.trim() } : t));
+        setRenameModal(null);
+      }
+    } catch {}
+    setRenameSaving(false);
+  };
+
+  const addPlayer = async () => {
+    if (!expandedTeamId || !newPlayer.first.trim() || !newPlayer.last.trim()) return;
+    setPlayerSaving(true);
+    try {
+      const res = await fetch(`${API}/api/teams/${expandedTeamId}/players/bulk`, {
+        method: 'POST', headers: adminHdrs(),
+        body: JSON.stringify({ players: [{ firstName: newPlayer.first.trim(), lastName: newPlayer.last.trim(), jerseyNumber: newPlayer.jersey.trim() || undefined, position: newPlayer.position || undefined }] }),
+      });
+      const j = await res.json();
+      if (j.success) {
+        setNewPlayer({ first: '', last: '', jersey: '', position: '' });
+        setAddingPlayer(false);
+        await reloadRoster(expandedTeamId);
+        setTeams(prev => prev.map(t => t.id === expandedTeamId ? { ...t, player_count: (t.player_count || 0) + 1 } : t));
+      }
+    } catch {}
+    setPlayerSaving(false);
+  };
+
+  const removePlayer = async (player: Player) => {
+    if (!expandedTeamId) return;
+    if (!confirm(`Remove ${player.first_name} ${player.last_name} from this roster?`)) return;
+    try {
+      const res = await fetch(`${API}/api/teams/${expandedTeamId}/players/${player.id}`, {
+        method: 'DELETE', headers: adminHdrs(),
+      });
+      const j = await res.json();
+      if (j.success) {
+        setRoster(prev => prev.filter(pl => pl.id !== player.id));
+        setTeams(prev => prev.map(t => t.id === expandedTeamId ? { ...t, player_count: Math.max(0, (t.player_count || 1) - 1) } : t));
+      }
+    } catch {}
+  };
+
   const toggleTeamExpand = async (teamId: string) => {
     if (expandedTeamId === teamId) {
       setExpandedTeamId(null);
@@ -335,6 +408,15 @@ export default function TeamsPage() {
           </td>
           <td className="px-5 py-3 text-right">
             <button
+              onClick={(e) => { e.stopPropagation(); setRenameModal({ team }); setRenameValue(team.name); }}
+              className="p-1.5 rounded-lg text-[#c7c7cc] hover:text-[#003e79] hover:bg-blue-50 transition mr-1"
+              title="Rename team"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            <button
               onClick={(e) => { e.stopPropagation(); setMoveModal({ team }); setMoveOrgId(team.organization_id || ''); setMoveSearch(''); setMoveError(''); }}
               className="p-1.5 rounded-lg text-[#c7c7cc] hover:text-[#003e79] hover:bg-blue-50 transition mr-1"
               title="Change organization"
@@ -398,9 +480,36 @@ export default function TeamsPage() {
 
                 {/* Player roster */}
                 <div className="px-6 py-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[#86868b] mb-3">
-                    Player Roster {!rosterLoading && `(${roster.length})`}
-                  </h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">
+                      Player Roster {!rosterLoading && `(${roster.length})`}
+                    </h4>
+                    <button onClick={() => { setAddingPlayer(v => !v); setNewPlayer({ first: '', last: '', jersey: '', position: '' }); }}
+                      className="text-xs font-bold text-[#003e79] hover:underline">
+                      {addingPlayer ? 'Cancel' : '+ Add Player'}
+                    </button>
+                  </div>
+                  {addingPlayer && (
+                    <div className="flex flex-wrap items-center gap-2 mb-3 bg-[#f0f7ff] border border-[#bae6fd] rounded-xl p-3">
+                      <input value={newPlayer.jersey} onChange={e => setNewPlayer({ ...newPlayer, jersey: e.target.value })} placeholder="#" inputMode="numeric"
+                        className="w-14 px-2 py-2 rounded-lg border border-[#e0e0e5] text-sm text-center" />
+                      <input value={newPlayer.first} onChange={e => setNewPlayer({ ...newPlayer, first: e.target.value })} placeholder="First name"
+                        className="flex-1 min-w-[110px] px-3 py-2 rounded-lg border border-[#e0e0e5] text-sm" />
+                      <input value={newPlayer.last} onChange={e => setNewPlayer({ ...newPlayer, last: e.target.value })} placeholder="Last name"
+                        className="flex-1 min-w-[110px] px-3 py-2 rounded-lg border border-[#e0e0e5] text-sm" />
+                      <select value={newPlayer.position} onChange={e => setNewPlayer({ ...newPlayer, position: e.target.value })}
+                        className="px-2 py-2 rounded-lg border border-[#e0e0e5] text-sm bg-white">
+                        <option value="">Position</option>
+                        <option value="forward">Forward</option>
+                        <option value="defense">Defense</option>
+                        <option value="goalie">Goalie</option>
+                      </select>
+                      <button onClick={addPlayer} disabled={playerSaving || !newPlayer.first.trim() || !newPlayer.last.trim()}
+                        className="px-4 py-2 rounded-lg bg-[#003e79] text-white text-xs font-bold disabled:opacity-40">
+                        {playerSaving ? 'Adding…' : 'Add'}
+                      </button>
+                    </div>
+                  )}
 
                   {rosterLoading ? (
                     <div className="flex items-center gap-2 py-4 text-sm text-[#86868b]">
@@ -421,6 +530,7 @@ export default function TeamsPage() {
                             <th className="px-4 py-2 font-medium">DOB</th>
                             <th className="px-4 py-2 font-medium">Parent / Guardian</th>
                             <th className="px-4 py-2 font-medium">Contact</th>
+                            <th className="px-4 py-2 font-medium w-10"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -468,6 +578,14 @@ export default function TeamsPage() {
                                 ) : (
                                   <span className="text-[#c7c7cc] text-xs">{'—'}</span>
                                 )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                <button onClick={() => removePlayer(player)}
+                                  className="p-1 rounded-lg text-[#c7c7cc] hover:text-red-500 hover:bg-red-50 transition" title="Remove from roster">
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -744,6 +862,24 @@ export default function TeamsPage() {
                 className="flex-1 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-semibold disabled:opacity-40"
               >
                 {moveSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setRenameModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-[#1d1d1f]">Rename Team</h2>
+            <input value={renameValue} onChange={e => setRenameValue(e.target.value)} autoFocus
+              className="w-full px-4 py-2.5 rounded-xl border border-[#e0e0e5] text-sm focus:border-[#003e79] outline-none" />
+            <p className="text-xs text-[#86868b]">The new name shows everywhere: schedules, scoresheets, standings, and the app.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setRenameModal(null)} className="px-5 py-2.5 bg-[#f5f5f7] text-[#3d3d3d] font-semibold rounded-full text-sm">Cancel</button>
+              <button onClick={saveRename} disabled={renameSaving || renameValue.trim().length < 2}
+                className="px-5 py-2.5 bg-[#003e79] text-white font-semibold rounded-full text-sm disabled:opacity-50">
+                {renameSaving ? 'Saving...' : 'Save Name'}
               </button>
             </div>
           </div>

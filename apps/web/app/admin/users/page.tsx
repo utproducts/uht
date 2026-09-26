@@ -161,6 +161,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
   const [form, setForm] = useState({
     firstName: user.firstName, lastName: user.lastName, email: user.email,
     phone: user.phone || '', roles: Array.isArray(user.roles) ? [...user.roles] : [],
+    newPassword: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -175,6 +176,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
   const handleSave = async () => {
     if (!form.email.trim() || !form.firstName.trim() || !form.lastName.trim()) { setError('Name and email required'); return; }
     if (form.roles.length === 0) { setError('At least one role required'); return; }
+    if (form.newPassword && form.newPassword.length < 8) { setError('New password must be at least 8 characters'); return; }
 
     setSaving(true);
     setError('');
@@ -185,7 +187,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
 
       const res1 = await fetch(`${API_BASE}/${user.id}`, {
         method: 'PUT', headers,
-        body: JSON.stringify({ firstName: form.firstName.trim(), lastName: form.lastName.trim(), email: form.email.trim(), phone: form.phone.trim() || null }),
+        body: JSON.stringify({ firstName: form.firstName.trim(), lastName: form.lastName.trim(), email: form.email.trim(), phone: form.phone.trim() || null, ...(form.newPassword ? { password: form.newPassword } : {}) }),
       });
       const json1 = await res1.json();
       if (!json1.success) { setError(typeof json1.error === 'string' ? json1.error : 'Failed to update'); setSaving(false); return; }
@@ -221,6 +223,12 @@ function EditUserModal({ user, onClose, onSaved }: { user: User; onClose: () => 
           </div>
           <div><label className={lc}>Email *</label><input className={fc} type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
           <div><label className={lc}>Phone</label><input className={fc} type="tel" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+          <div>
+            <label className={lc}>Reset Password</label>
+            <input className={fc} type="text" value={form.newPassword} placeholder="Leave blank to keep current password"
+              onChange={e => setForm({...form, newPassword: e.target.value})} autoComplete="off" />
+            <p className="text-[11px] text-[#86868b] mt-1">For locked-out users: set a new password here and send it to them. Min 8 characters.</p>
+          </div>
           <div>
             <label className={lc}>Roles *</label>
             <div className="flex flex-wrap gap-2 mt-1">

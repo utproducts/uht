@@ -95,7 +95,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
 
 // Sections/items hidden from data-restricted staff (server enforces the real
 // block — this just avoids dead links and confusing 403s)
-const RESTRICTED_HIDDEN_ITEMS = ['Contacts', 'Users', 'App Users', 'Communications', 'Email Campaigns', 'Push Notifications', 'Financials',
+const RESTRICTED_HIDDEN_ITEMS = ['Contacts', 'Users', 'App Users', 'Financials',
   // Entire Site section hidden for restricted staff (Chad, 9/14)
   'Web Updates', 'Reports', 'FAQs', 'Settings'];
 
