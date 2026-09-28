@@ -13,6 +13,44 @@ import { getResolvedFields, replaceVars } from './template-overrides';
 const TEMPLATE_ID = 'event_info_30day';
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
+// Staff copies of every tournament guide that goes out (Johnny, 9/26)
+const STAFF_BCC = ['johnny@ultimatetournaments.com'];
+
+/*
+  Every guide send is recorded under a per-event campaign in email_campaigns /
+  email_sends, so staff can see recipients and opens on the Email Campaigns
+  page like any other send (the Resend webhook matches by message id).
+*/
+async function guideCampaignFor(db: any, event: any, subjectTemplate: string): Promise<string> {
+  const name = `Tournament Guide - ${event.name}`;
+  const existing = await db.prepare('SELECT id FROM email_campaigns WHERE name = ?').bind(name).first();
+  if (existing) return existing.id as string;
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO email_campaigns (id, name, subject, body_html, template_type, status, sent_at)
+    VALUES (?, ?, ?, ?, 'custom', 'sent', datetime('now'))
+  `).bind(id, name, subjectTemplate,
+    '<p>Automated tournament guide - each team receives its own personalized copy (roster status, payment status, rinks).</p>').run();
+  return id;
+}
+
+async function recordGuideSend(db: any, campaignId: string, email: string, name: string, resendId: string | null) {
+  try {
+    let contact = await db.prepare('SELECT id FROM contacts WHERE LOWER(email) = ?').bind(email.toLowerCase()).first();
+    let contactId = contact?.id as string | undefined;
+    if (!contactId) {
+      contactId = crypto.randomUUID().replace(/-/g, '');
+      const parts = (name || '').split(' ');
+      await db.prepare("INSERT INTO contacts (id, email, first_name, last_name, source) VALUES (?, ?, ?, ?, 'registration')")
+        .bind(contactId, email.toLowerCase(), parts[0] || null, parts.slice(1).join(' ') || null).run();
+    }
+    await db.prepare("INSERT INTO email_sends (id, campaign_id, contact_id, sendgrid_message_id, status) VALUES (?, ?, ?, ?, 'sent')")
+      .bind(crypto.randomUUID().replace(/-/g, ''), campaignId, contactId, resendId, ).run();
+    await db.prepare('UPDATE email_campaigns SET total_sent = total_sent + 1, updated_at = datetime(\'now\') WHERE id = ?').bind(campaignId).run();
+  } catch (e: any) {
+    console.error('Guide campaign bookkeeping failed (send still went out):', e?.message);
+  }
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -132,6 +170,7 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
   const out = { teams: 0, sent: 0, skipped: 0, no_email: 0 };
   const fields = await getResolvedFields(db, TEMPLATE_ID);
   const ctx = await getEventInfoContext(db, event);
+  const campaignId = await guideCampaignFor(db, event, fields.subject);
 
   for (const reg of regs) {
     out.teams++;
@@ -175,15 +214,17 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], subject, html }),
+          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], bcc: STAFF_BCC, subject, html }),
         });
         if (!resp.ok) {
           console.error(`30-day email failed for ${email}: ${resp.status} ${await resp.text()}`);
           continue; // no log row — retried on the next call/tick
         }
+        const respJson = await resp.json().catch(() => null) as any;
         await db.prepare(
           'INSERT OR IGNORE INTO automated_email_log (template_id, event_id, registration_id, email) VALUES (?, ?, ?, ?)'
         ).bind(TEMPLATE_ID, event.id, reg.id, email).run();
+        await recordGuideSend(db, campaignId, email, `${reg.team_name || ''}`, respJson?.id || null);
         out.sent++;
       } catch (e: any) {
         console.error(`30-day email error for ${email}:`, e?.message || String(e));
