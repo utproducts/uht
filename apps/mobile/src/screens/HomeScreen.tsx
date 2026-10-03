@@ -215,18 +215,18 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {/* Quick Access - photo tiles */}
         <View style={styles.qaGrid}>
           {([
-            { label: 'My Teams', sub: 'View and manage all your teams', icon: 'people' as const, color: '#1f6fb0', img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
-            { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search' as const, color: '#b9873e', img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
-            { label: 'My Events', sub: 'Schedules, scores and standings', icon: 'calendar' as const, color: '#3f7d20', img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
-            { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, color: '#6d5bd0', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
+            { label: 'My Teams', sub: 'View and manage all your teams', icon: 'people' as const, img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
+            { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search' as const, img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
+            { label: 'My Events', sub: 'Schedules, scores and standings', icon: 'calendar' as const, img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
+            { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
           ]).map(tile => (
             <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}>
               <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner}>
                 <View style={styles.qaShade} />
                 <View style={styles.qaShadeBottom} />
                 <View style={styles.qaContent}>
-                  <View style={[styles.qaIconCircle, { backgroundColor: tile.color }]}>
-                    <Ionicons name={tile.icon} size={20} color="#ffffff" />
+                  <View style={styles.qaIconCircle}>
+                    <Ionicons name={tile.icon} size={19} color={colors.cyan} />
                   </View>
                   <Text style={styles.qaLabel}>{tile.label}</Text>
                   <Text style={styles.qaSub} numberOfLines={2}>{tile.sub}</Text>
@@ -355,9 +355,10 @@ const styles = StyleSheet.create({
   qaShadeBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%', backgroundColor: 'rgba(3,14,32,0.55)' },
   qaContent: { padding: 12, paddingBottom: 12 },
   qaIconCircle: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: 'rgba(5,16,34,0.72)',
+    borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)',
     marginBottom: 8,
   },
   qaChevron: {
