@@ -396,3 +396,21 @@ export async function getResolvedFields(db: any, templateId: string): Promise<Re
   const overrides = await getOverridesFromDB(db, templateId);
   return mergeOverrides(templateId, overrides);
 }
+
+/** Pause switch: a template sends unless its overrides row says enabled = 0 */
+export async function isTemplateEnabled(db: any, templateId: string): Promise<boolean> {
+  const row = await db.prepare(
+    'SELECT enabled FROM email_template_overrides WHERE template_id = ?'
+  ).bind(templateId).first() as { enabled: number | null } | null;
+  return !row || row.enabled === null || Number(row.enabled) !== 0;
+}
+
+/** Flip the pause switch, creating the overrides row if the template was never customized */
+export async function setTemplateEnabled(db: any, templateId: string, enabled: boolean): Promise<void> {
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO email_template_overrides (id, template_id, fields, enabled)
+    VALUES (?, ?, '{}', ?)
+    ON CONFLICT (template_id) DO UPDATE SET enabled = excluded.enabled, updated_at = datetime('now')
+  `).bind(id, templateId, enabled ? 1 : 0).run();
+}

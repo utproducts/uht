@@ -125,6 +125,47 @@ async function rosterCountFor(db: any, reg: any): Promise<number> {
  * Used by the daily 30-day sweep AND the manual Send button on the admin
  * event page.
  */
+/*
+  Render the exact guide a specific registration receives - used by the
+  admin send-test so staff can see real customer copies, not sample data.
+*/
+export async function buildGuideForRegistration(env: any, registrationId: string): Promise<{ subject: string; html: string; teamName: string } | null> {
+  const db = env.DB;
+  const reg = await db.prepare(`
+    SELECT er.*, t.head_coach_email FROM event_registrations er
+    LEFT JOIN teams t ON t.id = er.team_id
+    WHERE er.id = ?
+  `).bind(registrationId).first();
+  if (!reg) return null;
+  const event = await db.prepare('SELECT * FROM events WHERE id = ?').bind(reg.event_id).first();
+  if (!event) return null;
+
+  const fields = await getResolvedFields(db, TEMPLATE_ID);
+  const ctx = await getEventInfoContext(db, event);
+  const rosterCount = await rosterCountFor(db, reg);
+  const vars = {
+    eventName: ctx.eventName,
+    teamName: reg.team_name || 'Your Team',
+    eventDates: ctx.eventDates,
+    eventCity: ctx.eventCity,
+    scheduleDate: ctx.scheduleDate,
+  };
+  return {
+    subject: replaceVars(fields.subject, vars),
+    teamName: reg.team_name || 'Your Team',
+    html: buildEventInfoHtml({
+      ...ctx,
+      teamName: reg.team_name || 'Your Team',
+      ageGroup: reg.age_group,
+      division: reg.division,
+      rosterCount,
+      isPaid: reg.payment_status === 'paid',
+      payUrl: `https://ultimatetournaments.com/pay?reg=${reg.id}`,
+      _overrides: fields,
+    }),
+  };
+}
+
 export async function sendEventInfoForEvent(env: any, event: any): Promise<{ teams: number; sent: number; skipped: number; no_email: number }> {
   const db = env.DB;
   // APPROVED teams only (Chad, 9/26) — pending/unapproved teams never get the guide

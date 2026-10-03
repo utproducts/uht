@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { isTemplateEnabled } from './template-overrides';
 
 interface HotelInfo {
   name: string;
@@ -344,6 +345,13 @@ function buildHotelSectionHtml(hotel: HotelInfo): string {
  * Send the acceptance/approval email via Resend
  */
 export async function sendApprovalEmail(env: Env, params: ApprovalEmailParams): Promise<{ success: boolean; error?: string }> {
+  // Pause switch from the Automated Emails admin
+  const pausedCheckId = params.paymentStatus === 'paid' ? 'approval_paid'
+    : params.paymentStatus === 'partial' ? 'approval_deposit' : 'approval_unpaid';
+  if (!(await isTemplateEnabled((env as any).DB, pausedCheckId))) {
+    return { success: false, error: 'Template paused in Automated Emails' };
+  }
+
   if (!env.RESEND_API) {
     console.warn('RESEND_API not configured — skipping approval email');
     return { success: false, error: 'Resend API key not configured' };

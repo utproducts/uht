@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { isTemplateEnabled } from './template-overrides';
 
 interface RegistrationConfirmationParams {
   recipientEmail: string;
@@ -228,6 +229,10 @@ export function buildConfirmationHtml(params: Partial<RegistrationConfirmationPa
  * Fired immediately when someone registers (before admin approval)
  */
 export async function sendRegistrationConfirmationEmail(env: Env, params: RegistrationConfirmationParams): Promise<{ success: boolean; error?: string }> {
+  if (!(await isTemplateEnabled((env as any).DB, 'registration_confirmation'))) {
+    return { success: false, error: 'Template paused in Automated Emails' };
+  }
+
   if (!env.RESEND_API) {
     console.warn('RESEND_API not configured — skipping registration confirmation email');
     return { success: false, error: 'Resend API key not configured' };

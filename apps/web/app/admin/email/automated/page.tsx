@@ -441,6 +441,23 @@ export default function AutomatedEmailsPage() {
   const [templates, setTemplates] = useState<AutomatedTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<AutomatedTemplate | null>(null);
+  const [togglingId, setTogglingId] = useState('');
+
+  const toggleEnabled = async (t: any) => {
+    setTogglingId(t.id);
+    try {
+      const r = await authFetch(`${API_BASE}/email/automated/${t.id}/enabled`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !t.enabled }),
+      });
+      const j = await r.json() as any;
+      if (j.success) {
+        setTemplates(prev => prev.map(x => x.id === t.id ? ({ ...x, enabled: !t.enabled } as any) : x));
+      }
+    } catch { /* leave as-is */ }
+    setTogglingId('');
+  };
 
   useEffect(() => {
     authFetch(`${API_BASE}/email/automated`)
@@ -494,15 +511,17 @@ export default function AutomatedEmailsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {templates.map(t => (
-            <button
+          {templates.map(t => {
+            const enabled = (t as any).enabled !== false;
+            const toggleable = (t as any).toggleable !== false;
+            return (
+            <div
               key={t.id}
-              onClick={() => setSelectedTemplate(t)}
-              className="w-full text-left bg-white rounded-xl border border-[#e8e8ed] p-5 hover:border-[#003e79]/30 hover:shadow-sm transition-all group"
+              className={`w-full text-left bg-white rounded-xl border p-5 hover:shadow-sm transition-all group ${enabled ? 'border-[#e8e8ed] hover:border-[#003e79]/30' : 'border-amber-300 bg-amber-50/40'}`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between gap-4">
+                <button onClick={() => setSelectedTemplate(t)} className="flex-1 text-left">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="font-semibold text-[#1d1d1f] group-hover:text-[#003e79] transition-colors">
                       {t.name}
                     </h3>
@@ -512,18 +531,36 @@ export default function AutomatedEmailsPage() {
                         Customized
                       </span>
                     )}
+                    {!enabled && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                        PAUSED - NOT SENDING
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-[#86868b] mt-1.5">{t.description}</p>
                   <p className="text-xs text-[#aeaeb2] mt-2">
                     From: {t.from}
                   </p>
+                </button>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  {toggleable ? (
+                    <button
+                      onClick={() => toggleEnabled(t)}
+                      disabled={togglingId === t.id}
+                      title={enabled ? 'Pause this email' : 'Resume this email'}
+                      className={`relative w-12 h-7 rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-[#d2d2d7]'} ${togglingId === t.id ? 'opacity-50' : ''}`}
+                    >
+                      <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${enabled ? 'left-[22px]' : 'left-0.5'}`} />
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-[#aeaeb2] font-semibold text-right">Always on<br />(login links)</span>
+                  )}
+                  <span className={`text-[10px] font-bold ${enabled ? 'text-emerald-600' : 'text-amber-600'}`}>{enabled ? 'ON' : 'OFF'}</span>
                 </div>
-                <svg className="w-5 h-5 text-[#c8c8cd] group-hover:text-[#003e79] transition-colors flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
               </div>
-            </button>
-          ))}
+            </div>
+            );
+          })}
         </div>
       )}
     </div>

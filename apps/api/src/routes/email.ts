@@ -5,7 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole, blockDataRestricted, isDataRestricted } from '../middleware/auth';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { sendApprovalEmail } from '../lib/approval-email';
-import { TEMPLATE_DEFINITIONS, getDefaults, getOverridesFromDB, getResolvedFields, replaceVars } from '../lib/template-overrides';
+import { TEMPLATE_DEFINITIONS, getDefaults, getOverridesFromDB, getResolvedFields, replaceVars, isTemplateEnabled, setTemplateEnabled } from '../lib/template-overrides';
 
 export const emailRoutes = new Hono<{ Bindings: Env }>();
 
@@ -793,6 +793,9 @@ emailRoutes.get('/automated', authMiddleware, requireRole('admin', 'director'), 
         from: t.from,
         hasCustomizations: overrides !== null,
         editableFields: t.editableFields,
+        enabled: await isTemplateEnabled(db, t.id),
+        // Login links must always send - pausing them locks people out
+        toggleable: t.id !== 'magic_link',
       };
     })
   );
@@ -881,9 +884,11 @@ emailRoutes.put('/automated/:templateId/overrides', authMiddleware, requireRole(
     }
   }
 
-  // If nothing changed from defaults, delete the override row
+  // If nothing changed from defaults, clear the fields but KEEP the row when
+  // the template is paused - deleting it would silently flip it back on
   if (Object.keys(changedFields).length === 0) {
-    await db.prepare('DELETE FROM email_template_overrides WHERE template_id = ?').bind(templateId).run();
+    await db.prepare("DELETE FROM email_template_overrides WHERE template_id = ? AND (enabled IS NULL OR enabled = 1)").bind(templateId).run();
+    await db.prepare("UPDATE email_template_overrides SET fields = '{}', updated_at = datetime('now') WHERE template_id = ?").bind(templateId).run();
     return c.json({ success: true, message: 'Reset to defaults (no changes from default)' });
   }
 
@@ -899,6 +904,20 @@ emailRoutes.put('/automated/:templateId/overrides', authMiddleware, requireRole(
   `).bind(id, templateId, JSON.stringify(changedFields), userId).run();
 
   return c.json({ success: true, message: 'Template overrides saved', data: { changedFields } });
+});
+
+// Pause / resume an automated template (magic_link excluded - login must work)
+emailRoutes.put('/automated/:templateId/enabled', authMiddleware, requireRole('admin'), zValidator('json', z.object({
+  enabled: z.boolean(),
+})), async (c) => {
+  const templateId = c.req.param('templateId');
+  const def = TEMPLATE_DEFINITIONS.find(t => t.id === templateId);
+  if (!def) return c.json({ success: false, error: 'Template not found' }, 404);
+  if (templateId === 'magic_link') return c.json({ success: false, error: 'Login links cannot be paused' }, 400);
+
+  const { enabled } = c.req.valid('json');
+  await setTemplateEnabled(c.env.DB, templateId, enabled);
+  return c.json({ success: true, data: { templateId, enabled } });
 });
 
 // Reset a template back to defaults
@@ -997,6 +1016,23 @@ emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('a
       break;
     }
     case 'event_info_30day': {
+      if (registrationId) {
+        const { buildGuideForRegistration } = await import('../lib/event-info-sweep');
+        const built = await buildGuideForRegistration(c.env, registrationId);
+        if (!built) { result = { success: false, error: 'Registration not found' }; break; }
+        const resendResp = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
+            to: [email],
+            subject: `[COPY - ${built.teamName}] ${built.subject}`,
+            html: built.html,
+          }),
+        });
+        result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };
+        break;
+      }
       const { buildEventInfoHtml } = await import('../lib/event-info-email');
       const infoVars = { ...vars, eventDates: sampleData.eventDate, scheduleDate: 'May 19' };
       subject = replaceVars(fields.subject, infoVars);
@@ -1030,10 +1066,12 @@ emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('a
 const sendTestSchema = z.object({
   templateId: z.string(),
   email: z.string().email(),
+  // event_info_30day only: render a REAL registration's copy instead of sample data
+  registrationId: z.string().optional(),
 });
 
 emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), zValidator('json', sendTestSchema), async (c) => {
-  const { templateId, email } = c.req.valid('json');
+  const { templateId, email, registrationId } = c.req.valid('json');
   const template = TEMPLATE_DEFINITIONS.find(t => t.id === templateId);
   if (!template) return c.json({ success: false, error: 'Template not found' }, 404);
 
