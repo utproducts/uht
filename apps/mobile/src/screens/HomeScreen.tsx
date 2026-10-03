@@ -157,7 +157,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {/* Hero zone - the hero photo runs down behind the tiles and fades into the page */}
         <View style={styles.heroZone}>
           <Image
-            source={require('../../assets/hero-rink.jpg')}
+            source={require('../../assets/hero-kid.jpg')}
             style={styles.heroBgImg}
             resizeMode="cover"
           />
@@ -259,28 +259,29 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     width: SCREEN_WIDTH,
-    height: 560,
+    // hero-kid.jpg is 852x1000 - exact aspect so cover never crops the composition
+    height: Math.round(SCREEN_WIDTH * 1000 / 852),
   },
   heroScrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     width: SCREEN_WIDTH,
-    height: 560,
-    backgroundColor: 'rgba(0, 26, 54, 0.55)',
+    height: Math.round(SCREEN_WIDTH * 1000 / 852),
+    backgroundColor: 'rgba(0, 26, 54, 0.18)',
   },
   heroFade: {
     position: 'absolute',
-    top: 250,
+    top: Math.round(SCREEN_WIDTH * 1000 / 852 * 0.585),
     left: 0,
     width: SCREEN_WIDTH,
-    height: 311,
+    height: Math.round(SCREEN_WIDTH * 1000 / 852 * 0.415) + 1,
   },
   hero: {
     width: SCREEN_WIDTH,
     paddingTop: 24,
-    paddingBottom: 20,
-    minHeight: 290,
+    paddingBottom: 46,
+    minHeight: 264,
     justifyContent: 'flex-end',
   },
   heroContent: {

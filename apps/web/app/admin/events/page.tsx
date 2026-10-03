@@ -4785,8 +4785,8 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
               <div className="text-2xl font-bold text-[#003e79]">{registrations.length}</div>
               <div className="text-xs text-[#003e79] font-medium mt-1">Teams Registered</div>
             </div>
-            <div className="bg-green-50 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">${(totalRevenue / 100).toLocaleString()}</div>
+            <div className="bg-green-50 rounded-xl p-4 text-center min-w-0">
+              <div className="text-2xl font-bold text-green-600 break-words">${Math.round(totalRevenue / 100).toLocaleString()}</div>
               <div className="text-xs text-green-500 font-medium mt-1">Revenue</div>
             </div>
             <div className="bg-[#f5f5f7] rounded-xl p-4 text-center">
@@ -5779,17 +5779,17 @@ export default function AdminEventsPage() {
 
       {/* Stats Bar */}
       <div className="max-w-7xl mx-auto px-6 mt-2">
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-[#1d1d1f]">{realEvents.length}</div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          <div className="bg-white rounded-xl shadow p-3 sm:p-4 text-center min-w-0">
+            <div className="text-lg sm:text-2xl font-bold text-[#1d1d1f]">{realEvents.length}</div>
             <div className="text-xs text-[#86868b] mt-1">{filter === 'upcoming' ? 'Upcoming' : filter === 'past' ? 'Past' : 'Total'} Events</div>
           </div>
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-[#003e79]">{totalTeams}</div>
+          <div className="bg-white rounded-xl shadow p-3 sm:p-4 text-center min-w-0">
+            <div className="text-lg sm:text-2xl font-bold text-[#003e79]">{totalTeams}</div>
             <div className="text-xs text-[#86868b] mt-1">Teams Registered</div>
           </div>
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <div className="text-2xl font-bold text-green-600">${(totalRevenue / 100).toLocaleString()}</div>
+          <div className="bg-white rounded-xl shadow p-3 sm:p-4 text-center min-w-0">
+            <div className="text-lg sm:text-2xl font-bold text-green-600 break-words">${Math.round(totalRevenue / 100).toLocaleString()}</div>
             <div className="text-xs text-[#86868b] mt-1">Total Revenue</div>
           </div>
         </div>
