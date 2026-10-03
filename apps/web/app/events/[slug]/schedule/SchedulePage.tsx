@@ -240,12 +240,22 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
   const filteredStandings = divisionFilter
     ? standings.filter(s => `${s.age_group} ${s.division_level}`.trim() === divisionFilter)
     : standings;
-  const standingsByDiv: Record<string, StandingsRow[]> = {};
+  // Division -> pools. Divisions of up to 5 teams are one table; bigger
+  // divisions split into pools from the schedule (UHT convention: Gray/Blue)
+  const standingsByDiv: Record<string, Record<string, StandingsRow[]>> = {};
   filteredStandings.forEach(s => {
-    const key = [[s.age_group, s.division_level].filter(v => v && v !== 'null').join(' '), s.pool_name && s.pool_name !== 'null' ? s.pool_name : ''].filter(Boolean).join(' – ');
-    if (!standingsByDiv[key]) standingsByDiv[key] = [];
-    standingsByDiv[key].push(s);
+    const div = [s.age_group, s.division_level].filter(v => v && v !== 'null').join(' ') || 'Division';
+    const pool = s.pool_name && s.pool_name !== 'null' ? s.pool_name : '';
+    if (!standingsByDiv[div]) standingsByDiv[div] = {};
+    if (!standingsByDiv[div][pool]) standingsByDiv[div][pool] = [];
+    standingsByDiv[div][pool].push(s);
   });
+  const poolTheme = (name: string, idx: number): { bg: string; text: string; dot: string } => {
+    const n = name.toLowerCase();
+    if (n.includes('blue') || (!n.match(/gr[ae]y/) && idx === 1)) return { bg: '#2563eb', text: '#ffffff', dot: '#93c5fd' };
+    if (n.match(/gr[ae]y/) || idx === 0) return { bg: '#6b7280', text: '#ffffff', dot: '#d1d5db' };
+    return { bg: '#00a0cc', text: '#ffffff', dot: '#bae6fd' };
+  };
 
   const hasLiveGames = games.some(g => g.status === 'in_progress' || g.status === 'live' || g.status === 'warmup');
 
@@ -359,11 +369,29 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
               Standings
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {Object.entries(standingsByDiv).map(([divKey, rows]) => (
+              {Object.entries(standingsByDiv).map(([divKey, pools]) => {
+                const poolNames = Object.keys(pools);
+                const multiPool = poolNames.length > 1;
+                const teamCount = poolNames.reduce((n, p) => n + pools[p].length, 0);
+                return (
                 <div key={divKey} className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden">
-                  <div className="px-5 py-3 bg-[#003e79]">
+                  <div className="px-5 py-3 bg-[#003e79] flex items-center justify-between">
                     <h3 className="text-white font-bold text-sm">{divKey}</h3>
+                    <span className="text-white/60 text-xs font-semibold">{teamCount} teams{multiPool ? ` · ${poolNames.length} pools` : ''}</span>
                   </div>
+                  {poolNames.map((poolName, pi) => {
+                    const rows = pools[poolName];
+                    const theme = poolTheme(poolName, pi);
+                    return (
+                  <div key={poolName || 'single'}>
+                  {multiPool && (
+                    <div className="px-5 py-2 flex items-center gap-2" style={{ backgroundColor: theme.bg }}>
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.dot }} />
+                      <span className="text-xs font-bold uppercase tracking-widest" style={{ color: theme.text }}>
+                        {poolName || `Pool ${pi + 1}`}{/\bpool\b/i.test(poolName) ? '' : ' Pool'}
+                      </span>
+                    </div>
+                  )}
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -396,8 +424,12 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
                       </tbody>
                     </table>
                   </div>
+                  </div>
+                    );
+                  })}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

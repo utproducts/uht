@@ -1381,13 +1381,45 @@ export default function EventDetailScreen({
         </ScrollView>
       );
     }
+    // Division -> pools (UHT: 6+ team divisions split into Gray/Blue pools)
+    const divisionCards: { div: string; pools: { pool: string; entries: any[] }[] }[] = [];
+    for (const group of filteredStandingsGroups) {
+      const first = group.entries[0] || {};
+      const div = [first.age_group, first.division_level].filter((v: any) => v && v !== 'null').join(' ') || group.label;
+      const pool = first.pool_name && first.pool_name !== 'null' ? String(first.pool_name) : '';
+      let card = divisionCards.find(c => c.div === div);
+      if (!card) { card = { div, pools: [] }; divisionCards.push(card); }
+      card.pools.push({ pool, entries: group.entries });
+    }
+    const poolColor = (name: string, idx: number): string => {
+      const n = name.toLowerCase();
+      if (n.includes('blue') || (!/gr[ae]y/.test(n) && idx === 1)) return '#2563eb';
+      if (/gr[ae]y/.test(n) || idx === 0) return '#6b7280';
+      return '#00a0cc';
+    };
+
     return (
       <ScrollView contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
-        {filteredStandingsGroups.map((group) => (
-          <View key={group.key} style={styles.standingsSection}>
-            <Text style={styles.standingsSectionHeader}>{group.label}</Text>
+        {divisionCards.map((card) => (
+          <View key={card.div} style={styles.standingsCard}>
+            <View style={styles.standingsCardHeader}>
+              <Text style={styles.standingsCardTitle}>{card.div}</Text>
+              <Text style={styles.standingsCardSub}>
+                {card.pools.reduce((n, p) => n + p.entries.length, 0)} teams{card.pools.length > 1 ? ` · ${card.pools.length} pools` : ''}
+              </Text>
+            </View>
+            {card.pools.map((poolGroup, pi) => (
+              <View key={poolGroup.pool || String(pi)}>
+                {card.pools.length > 1 && (
+                  <View style={[styles.poolStrip, { backgroundColor: poolColor(poolGroup.pool, pi) }]}>
+                    <View style={styles.poolStripDot} />
+                    <Text style={styles.poolStripText}>
+                      {(poolGroup.pool || `Pool ${pi + 1}`).toUpperCase()}{/POOL/i.test(poolGroup.pool) ? '' : ' POOL'}
+                    </Text>
+                  </View>
+                )}
             <View style={styles.standingsTable}>
               <View style={styles.standingsHeaderRow}>
                 <Text style={[styles.standingsHeaderCell, styles.standingsRankCol]}>#</Text>
@@ -1401,7 +1433,7 @@ export default function EventDetailScreen({
                 <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GA</Text>
                 <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>DIFF</Text>
               </View>
-              {group.entries.map((entry, idx) => (
+              {poolGroup.entries.map((entry: any, idx: number) => (
                 <View key={entry.team_id} style={[styles.standingsRow, idx % 2 === 1 ? styles.standingsRowAlt : null]}>
                   <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText]}>{idx + 1}</Text>
                   <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}</Text>
@@ -1418,6 +1450,8 @@ export default function EventDetailScreen({
                 </View>
               ))}
             </View>
+              </View>
+            ))}
           </View>
         ))}
       </ScrollView>
@@ -2102,6 +2136,13 @@ const styles = StyleSheet.create({
   starsStripText: { flex: 1, fontSize: 11, color: '#8a6d1a', ...fonts.medium, lineHeight: 15 },
   announceStrip: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: '#eef4fb', borderWidth: 1, borderColor: '#c9def5', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
   announceText: { flex: 1, fontSize: 11.5, color: colors.navy, ...fonts.semibold, lineHeight: 15 },
+  standingsCard: { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: 14, borderWidth: 1, borderColor: '#e8eaee' },
+  standingsCardHeader: { backgroundColor: colors.navy, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  standingsCardTitle: { color: '#fff', fontSize: 14, ...fonts.bold },
+  standingsCardSub: { color: 'rgba(255,255,255,0.65)', fontSize: 11, ...fonts.semibold },
+  poolStrip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 7 },
+  poolStripDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.6)' },
+  poolStripText: { color: '#fff', fontSize: 10.5, letterSpacing: 1.5, ...fonts.bold },
   starsRulesCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 14, padding: 14, marginBottom: 12 },
   starsRulesTitle: { fontSize: 13.5, color: '#6b520f', ...fonts.bold },
   starsRulesSub: { fontSize: 11.5, color: '#8a6d1a', marginTop: 2, lineHeight: 15 },
