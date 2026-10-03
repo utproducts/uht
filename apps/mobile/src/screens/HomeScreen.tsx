@@ -154,26 +154,28 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.navy]} />
         }
       >
-        {/* Hero greeting */}
-        <ImageBackground
-          source={require('../../assets/hero-rink.jpg')}
-          style={styles.hero}
-          resizeMode="cover"
-        >
-          <View style={styles.heroOverlay} />
-          <View style={styles.heroContent}>
-            <Text style={styles.heroGreeting}>Welcome back,</Text>
-            <Text style={styles.heroName} numberOfLines={1}>{userName || 'Coach'}</Text>
-            <Text style={styles.heroSeason}>2026-27 SEASON</Text>
-            <View style={styles.heroUnderline} />
-            <Text style={styles.heroSubtext}>What would you like to do?</Text>
-          </View>
+        {/* Hero zone - the hero photo runs down behind the tiles and fades into the page */}
+        <View style={styles.heroZone}>
+          <Image
+            source={require('../../assets/hero-rink.jpg')}
+            style={styles.heroBgImg}
+            resizeMode="cover"
+          />
+          <View style={styles.heroScrim} />
           <Image
             source={require('../../assets/hero-fade.png')}
             style={styles.heroFade}
             resizeMode="stretch"
           />
-        </ImageBackground>
+          <View style={styles.hero}>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroGreeting}>Welcome back,</Text>
+              <Text style={styles.heroName} numberOfLines={1}>{userName || 'Coach'}</Text>
+              <Text style={styles.heroSeason}>2026-27 SEASON</Text>
+              <View style={styles.heroUnderline} />
+              <Text style={styles.heroSubtext}>What would you like to do?</Text>
+            </View>
+          </View>
 
         {/* Game Day banner - a registered event is running right now */}
         {liveEvent && (
@@ -230,6 +232,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner} />
             </TouchableOpacity>
           ))}
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -248,28 +251,37 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   // Hero
-  hero: {
-    width: SCREEN_WIDTH,
-    paddingTop: 24,
-    paddingBottom: 52,
-    minHeight: 316,
-    justifyContent: 'flex-end',
-  },
-  heroFade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: -1,
-    height: 88,
+  heroZone: {
     width: SCREEN_WIDTH,
   },
-  heroOverlay: {
+  heroBgImg: {
     position: 'absolute',
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 26, 54, 0.62)',
+    width: SCREEN_WIDTH,
+    height: 560,
+  },
+  heroScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: 560,
+    backgroundColor: 'rgba(0, 26, 54, 0.55)',
+  },
+  heroFade: {
+    position: 'absolute',
+    top: 250,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: 311,
+  },
+  hero: {
+    width: SCREEN_WIDTH,
+    paddingTop: 24,
+    paddingBottom: 20,
+    minHeight: 290,
+    justifyContent: 'flex-end',
   },
   heroContent: {
     alignItems: 'flex-start',
@@ -350,6 +362,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: '#e8edf4',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.92)',
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
