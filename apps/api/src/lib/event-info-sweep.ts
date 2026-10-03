@@ -186,6 +186,7 @@ export async function sendEventInfoForEvent(env: any, event: any): Promise<{ tea
  */
 export async function sendEventInfoOnApproval(env: any, registrationId: string): Promise<{ sent: number } | null> {
   const db = env.DB;
+  if (!(await isTemplateEnabled(db, TEMPLATE_ID))) return null; // automation paused
   const reg = await db.prepare(`
     SELECT er.*, t.head_coach_email
     FROM event_registrations er
@@ -279,6 +280,7 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
 export async function runEventInfo30DaySweep(env: any): Promise<{ events: number; sent: number; skipped: number }> {
   const db = env.DB;
   const out = { events: 0, sent: 0, skipped: 0 };
+  if (!(await isTemplateEnabled(db, TEMPLATE_ID))) return out; // automation paused
 
   const events = (await db.prepare(`
     SELECT * FROM events
