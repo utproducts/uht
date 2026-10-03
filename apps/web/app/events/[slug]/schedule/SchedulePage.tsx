@@ -311,8 +311,9 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
       {/* ═══════ DIVISION FILTER BAR ═══════ */}
       <div className="sticky top-0 z-30 bg-white border-b border-[#e8e8ed] shadow-sm">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="flex items-center gap-3 py-3 overflow-x-auto">
-            {/* Schedule / Standings view toggle */}
+          {/* Row 1: view toggle + day filter stay put; Row 2: division pills
+              scroll on their own line so the toggle never slides out of view */}
+          <div className="flex items-center gap-3 pt-3">
             <div className="inline-flex bg-[#f5f5f7] rounded-full p-1 shrink-0">
               {(['schedule', 'standings'] as const).map(v => (
                 <button key={v} onClick={() => setView(v)}
@@ -323,7 +324,20 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
                 </button>
               ))}
             </div>
-            <div className="w-px h-6 bg-[#e8e8ed] shrink-0" />
+            <div className="flex-1" />
+            {days.length > 1 && (
+              <select
+                value={dayFilter}
+                onChange={e => setDayFilter(e.target.value)}
+                className="px-3 py-2 rounded-full text-sm font-medium bg-[#f5f5f7] text-[#6e6e73] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 shrink-0"
+              >
+                <option value="">All Days</option>
+                {days.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
+            <span className="text-xs text-[#86868b] tabular-nums shrink-0">{filtered.length} game{filtered.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex items-center gap-3 py-3 overflow-x-auto">
             {/* All divisions pill */}
             <button
               onClick={() => { setDivisionFilter(''); setStatusFilter('all'); }}
@@ -349,22 +363,6 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
               </button>
             ))}
 
-            {/* Spacer */}
-            <div className="flex-1" />
-
-            {/* Day filter dropdown */}
-            {days.length > 1 && (
-              <select
-                value={dayFilter}
-                onChange={e => setDayFilter(e.target.value)}
-                className="px-3 py-2 rounded-full text-sm font-medium bg-[#f5f5f7] text-[#6e6e73] border-none focus:outline-none focus:ring-2 focus:ring-[#003e79]/20 shrink-0"
-              >
-                <option value="">All Days</option>
-                {days.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
-
-            <span className="text-xs text-[#86868b] tabular-nums shrink-0">{filtered.length} game{filtered.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
       </div>
