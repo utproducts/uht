@@ -17,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
-import { getUser, User } from '../services/auth';
+import { getUser, User, authFetch } from '../services/auth';
 import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
 
 // ==================
@@ -248,11 +248,26 @@ export default function EventDetailScreen({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  // Teams of mine already registered for THIS event (name + registration status)
+  const [myRegs, setMyRegs] = useState<{ teamName: string; status: string }[]>([]);
 
   useEffect(() => {
     loadData();
     getUser().then(u => setCurrentUser(u));
     getMyTeamIds().then(ids => setMyTeamIds(ids));
+    // Check whether any of my teams are registered for this event
+    authFetch('/api/teams/my-teams')
+      .then(r => r.json())
+      .then((json: any) => {
+        if (!json.success || !Array.isArray(json.data)) return;
+        const regs: { teamName: string; status: string }[] = [];
+        for (const team of json.data) {
+          const ev = (team.registered_events || []).find((e: any) => e.event_id === eventId);
+          if (ev) regs.push({ teamName: team.name, status: ev.status || 'pending' });
+        }
+        setMyRegs(regs);
+      })
+      .catch(() => {});
   }, [eventId]);
 
   useEffect(() => {
@@ -631,7 +646,43 @@ export default function EventDetailScreen({
         {/* Register / Share CTA */}
         {currentUser && (
           <View style={styles.ctaContainer}>
-            {currentUser.roles?.some(r => ['coach', 'manager', 'admin', 'tournament_director'].includes(r)) ? (
+            {myRegs.length > 0 ? (
+              <View>
+                {myRegs.map((r, i) => (
+                  <View key={`${r.teamName}-${i}`} style={[styles.registeredCard, i > 0 && { marginTop: 8 }]}>
+                    <Ionicons
+                      name={r.status === 'approved' ? 'checkmark-circle' : 'time'}
+                      size={26}
+                      color={r.status === 'approved' ? '#1e9e55' : '#d97706'}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.registeredTitle}>You're Registered</Text>
+                      <Text style={styles.registeredSub} numberOfLines={1}>{r.teamName}</Text>
+                    </View>
+                    <View style={[styles.registeredPill, r.status !== 'approved' && styles.registeredPillPending]}>
+                      <Text style={[styles.registeredPillText, r.status !== 'approved' && styles.registeredPillTextPending]}>
+                        {r.status === 'approved' ? 'Approved' : r.status === 'waitlisted' ? 'Waitlisted' : 'Pending'}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                {currentUser.roles?.some(r => ['coach', 'manager', 'admin', 'tournament_director'].includes(r)) && (
+                  <TouchableOpacity
+                    style={styles.regAnotherLink}
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      navigation.navigate('RegisterEvent', {
+                        eventId: displayEvent?.id || eventId,
+                        eventName: displayEvent?.name || 'Tournament',
+                        eventSlug: displayEvent?.slug || displayEvent?.id || eventId,
+                      });
+                    }}
+                  >
+                    <Text style={styles.regAnotherLinkText}>Register another team</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : currentUser.roles?.some(r => ['coach', 'manager', 'admin', 'tournament_director'].includes(r)) ? (
               <TouchableOpacity
                 style={styles.registerBtn}
                 activeOpacity={0.7}
@@ -1931,6 +1982,54 @@ const styles = StyleSheet.create({
   },
   guaranteeText: { fontSize: 15, color: colors.navy, ...fonts.bold },
 
+  registeredCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#eaf8f0',
+    borderWidth: 1,
+    borderColor: '#bfe6cd',
+    borderRadius: 14,
+    padding: 14,
+  },
+  registeredTitle: {
+    fontSize: 15,
+    color: '#14532d',
+    ...fonts.bold,
+  },
+  registeredSub: {
+    fontSize: 13,
+    color: '#3f6e52',
+    marginTop: 1,
+  },
+  registeredPill: {
+    backgroundColor: '#1e9e55',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  registeredPillPending: {
+    backgroundColor: '#fef3c7',
+  },
+  registeredPillText: {
+    color: colors.white,
+    fontSize: 11,
+    ...fonts.bold,
+  },
+  registeredPillTextPending: {
+    color: '#b45309',
+  },
+  regAnotherLink: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  regAnotherLinkText: {
+    color: colors.navy,
+    fontSize: 13,
+    textDecorationLine: 'underline',
+    ...fonts.semibold,
+  },
   // Register / Share CTA
   ctaContainer: {
     marginBottom: spacing.md,
