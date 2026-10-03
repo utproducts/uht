@@ -100,6 +100,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [divisionFilter, setDivisionFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'live' | 'upcoming' | 'final'>('all');
+  const [view, setView] = useState<'schedule' | 'standings'>('schedule');
   const [dayFilter, setDayFilter] = useState('');
   const [collapsedDays, setCollapsedDays] = useState<Record<string, boolean>>({});
 
@@ -311,6 +312,18 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
       <div className="sticky top-0 z-30 bg-white border-b border-[#e8e8ed] shadow-sm">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex items-center gap-3 py-3 overflow-x-auto">
+            {/* Schedule / Standings view toggle */}
+            <div className="inline-flex bg-[#f5f5f7] rounded-full p-1 shrink-0">
+              {(['schedule', 'standings'] as const).map(v => (
+                <button key={v} onClick={() => setView(v)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                    view === v ? 'bg-[#003e79] text-white shadow-sm' : 'text-[#6e6e73]'
+                  }`}>
+                  {v === 'schedule' ? 'Schedule' : 'Standings'}
+                </button>
+              ))}
+            </div>
+            <div className="w-px h-6 bg-[#e8e8ed] shrink-0" />
             {/* All divisions pill */}
             <button
               onClick={() => { setDivisionFilter(''); setStatusFilter('all'); }}
@@ -359,8 +372,15 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
       {/* ═══════ CONTENT ═══════ */}
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
-        {/* ── STANDINGS (shown above schedule) ── */}
-        {filteredStandings.length > 0 && (
+        {/* ── STANDINGS (its own tab - stacking every division above the
+            schedule buried the games under a wall of tables) ── */}
+        {view === 'standings' && filteredStandings.length === 0 && (
+          <div className="text-center py-20">
+            <h3 className="text-xl font-bold text-[#1d1d1f] mb-2">No Standings Yet</h3>
+            <p className="text-[#6e6e73]">Standings fill in as pool play games go final.</p>
+          </div>
+        )}
+        {view === 'standings' && filteredStandings.length > 0 && (
           <div>
             <h2 className="text-lg font-bold text-[#1d1d1f] mb-4 flex items-center gap-2">
               <svg className="w-5 h-5 text-[#003e79]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -435,7 +455,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
         )}
 
         {/* ── SCHEDULE ── */}
-        {games.length === 0 ? (
+        {view === 'schedule' && (games.length === 0 ? (
           <div className="text-center py-20">
             <div className="w-20 h-20 bg-[#f5f5f7] rounded-full flex items-center justify-center mx-auto mb-6">
               <svg className="w-10 h-10 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -629,7 +649,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
               })}
             </div>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
