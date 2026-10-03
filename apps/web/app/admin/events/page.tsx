@@ -3465,6 +3465,7 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
   const [sendingPush, setSendingPush] = useState<string | null>(null);
   const [pushResult, setPushResult] = useState<{ gameId: string; sent: number } | null>(null);
   const [filterDivision, setFilterDivision] = useState('all');
+  const [filterVenue, setFilterVenue] = useState('all');
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
   const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
@@ -3551,7 +3552,11 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
   }
 
   const divisions = Array.from(new Set(games.map(g => g.division_name || g.age_group || 'Unknown'))).sort();
-  const filteredGames = filterDivision === 'all' ? games : games.filter(g => (g.division_name || g.age_group || 'Unknown') === filterDivision);
+  const venues = Array.from(new Set(games.map(g => g.venue_name).filter(Boolean))).sort() as string[];
+  const filteredGames = games.filter(g =>
+    (filterDivision === 'all' || (g.division_name || g.age_group || 'Unknown') === filterDivision) &&
+    (filterVenue === 'all' || g.venue_name === filterVenue)
+  );
 
   const formatTime = (t: string | null) => {
     if (!t) return '—';
@@ -3596,22 +3601,104 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
       )}
 
       {/* Games table */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-lg font-bold text-[#1d1d1f]">Locker Room Assignments</h3>
-          {divisions.length > 1 && (
-            <select
-              value={filterDivision}
-              onChange={e => setFilterDivision(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] outline-none"
-            >
-              <option value="all">All Divisions</option>
-              {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {venues.length > 1 && (
+              <select
+                value={filterVenue}
+                onChange={e => setFilterVenue(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] outline-none"
+              >
+                <option value="all">All Venues</option>
+                {venues.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            )}
+            {divisions.length > 1 && (
+              <select
+                value={filterDivision}
+                onChange={e => setFilterDivision(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] outline-none"
+              >
+                <option value="all">All Divisions</option>
+                {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
+          </div>
         </div>
 
-        <div className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+        {/* Mobile: card per game so locker inputs are usable on a phone */}
+        <div className="md:hidden space-y-3">
+          {filteredGames.map(g => {
+            const edit = edits[g.id] || { home: '', away: '' };
+            const changed = hasChanges(g);
+            const hasLocker = g.home_locker_room || g.away_locker_room;
+            return (
+              <div key={g.id} className="border border-[#e8e8ed] rounded-xl p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm text-[#1d1d1f]">#{g.game_number}</span>
+                  <span className="text-xs text-[#6e6e73] text-right">
+                    {formatTime(g.start_time)}{g.rink_name ? ` · ${g.rink_name}` : ''}
+                  </span>
+                </div>
+                <p className="text-sm text-[#1d1d1f] mt-1 mb-3">
+                  {g.home_team_name || g.notes?.split(' vs ')?.[0] || 'TBD'} vs {g.away_team_name || g.notes?.split(' vs ')?.[1] || 'TBD'}
+                </p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Home Locker</label>
+                    <input
+                      type="text"
+                      value={edit.home}
+                      onChange={e => updateEdit(g.id, 'home', e.target.value)}
+                      placeholder="Room A"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-base focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Away Locker</label>
+                    <input
+                      type="text"
+                      value={edit.away}
+                      onChange={e => updateEdit(g.id, 'away', e.target.value)}
+                      placeholder="Room B"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-base focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {changed && (
+                    <button
+                      onClick={() => saveLockerRoom(g.id)}
+                      disabled={saving === g.id}
+                      className="flex-1 py-2 rounded-lg bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition disabled:opacity-50"
+                    >
+                      {saving === g.id ? 'Saving...' : 'Save'}
+                    </button>
+                  )}
+                  {hasLocker && !changed && (
+                    <button
+                      onClick={() => sendLockerRoomPush(g.id)}
+                      disabled={sendingPush === g.id}
+                      className="flex-1 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition disabled:opacity-50"
+                    >
+                      {sendingPush === g.id ? 'Sending...' : 'Send Push'}
+                    </button>
+                  )}
+                  {hasLocker && !changed && (
+                    <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium shrink-0">
+                      <span className="w-2 h-2 rounded-full bg-green-400" />
+                      Assigned
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden md:block border border-[#e8e8ed] rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[#fafafa] text-[#86868b] text-xs uppercase tracking-wide">
@@ -4691,19 +4778,21 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit mb-6">
-        {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${
-              tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
-            }`}
-          >
-            {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
-          </button>
-        ))}
+      {/* Tabs - scrolls within its own bar on mobile instead of stretching the page */}
+      <div className="overflow-x-auto mb-6 max-w-full [-webkit-overflow-scrolling:touch]">
+        <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
+          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap shrink-0 ${
+                tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
+              }`}
+            >
+              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}
