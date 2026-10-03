@@ -5023,7 +5023,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                         <option value="waitlisted">Waitlisted</option>
                       </select>
                       <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${paymentStatusColor(reg.payment_status || 'unpaid')}`}>
-                        {paymentStatusLabel(reg.payment_status || 'unpaid')}{reg.payment_amount_cents ? ` · $${(reg.payment_amount_cents / 100).toLocaleString()}` : ''}
+                        {paymentStatusLabel(reg.payment_status || 'unpaid')}{((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) > 0 ? ` · $${(((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) / 100).toLocaleString()}` : ''}
                       </span>
                       {reg.team_id && reg.roster_count > 0 ? (
                         <a href={`/admin/teams?roster=${reg.team_id}&q=${encodeURIComponent(reg.team_name || '')}`}
@@ -5236,8 +5236,8 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit ${paymentStatusColor(reg.payment_status || 'unpaid')}`}>
                               {paymentStatusLabel(reg.payment_status || 'unpaid')}
                             </span>
-                            {reg.payment_amount_cents ? (
-                              <span className="text-xs font-medium text-[#3d3d3d]">${(reg.payment_amount_cents / 100).toLocaleString()}</span>
+                            {((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) > 0 ? (
+                              <span className="text-xs font-medium text-[#3d3d3d]">${(((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) / 100).toLocaleString()}</span>
                             ) : null}
                           </div>
                         </td>
