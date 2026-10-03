@@ -10,6 +10,7 @@ import {
   ImageBackground,
   Dimensions,
   Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -177,6 +178,24 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             </View>
           </View>
 
+        {/* Scorekeeper: direct line to the scoring console PIN page */}
+        {activeRole === 'scorekeeper' && (
+          <TouchableOpacity
+            style={styles.skCard}
+            activeOpacity={0.85}
+            onPress={() => Linking.openURL('https://ultimatetournaments.com/scoring')}
+          >
+            <View style={styles.skIconCircle}>
+              <Ionicons name="stopwatch-outline" size={24} color={colors.cyan} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.skTitle}>Scorekeeper Console</Text>
+              <Text style={styles.skSub}>Enter your PIN to start scoring your games</Text>
+            </View>
+            <Ionicons name="arrow-forward-circle" size={28} color={colors.cyan} />
+          </TouchableOpacity>
+        )}
+
         {/* Game Day banner - a registered event is running right now */}
         {liveEvent && (
           <TouchableOpacity
@@ -322,6 +341,33 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
     marginTop: 12,
   },
+  // Scorekeeper console card
+  skCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: colors.navy,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,204,255,0.55)',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+  },
+  skIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(0,204,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,204,255,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  skTitle: { color: colors.white, fontSize: 17, ...fonts.bold },
+  skSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12.5, marginTop: 2 },
+
   // Game Day banner
   gameDayCard: {
     marginHorizontal: spacing.lg, marginTop: spacing.lg,
