@@ -19,6 +19,14 @@ export const metadata: Metadata = {
     url: 'https://ultimatetournaments.com',
     siteName: 'Ultimate Hockey Tournaments',
     type: 'website',
+    // The big preview card iMessage/texts/socials show when the link is shared
+    images: [{ url: 'https://ultimatetournaments.com/og-image.png', width: 1200, height: 630, alt: 'Ultimate Hockey Tournaments' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Ultimate Hockey Tournaments',
+    description: 'Premier youth and adult hockey tournaments across the Midwest.',
+    images: ['https://ultimatetournaments.com/og-image.png'],
   },
 };
 
