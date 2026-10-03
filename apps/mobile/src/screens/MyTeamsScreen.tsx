@@ -31,10 +31,6 @@ import { setActiveRole, refreshUser, addRoleToAccount } from '../services/auth';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const HERO_H = Math.round(SCREEN_WIDTH * 366 / 851);
-// Single art image on every team card - swap this file for the stick-on-ice photo when Chad sends it
-const CARD_ART = require('../../assets/teamcard-puck.jpg');
-const CARD_ART_W = 104;
-
 interface Team {
   id: string;
   name: string;
@@ -265,13 +261,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
         activeOpacity={0.85}
         onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
       >
-        {/* Photo art on the right edge (chevron is part of the art) */}
-        <Image
-          source={CARD_ART}
-          style={[styles.teamArt, { width: CARD_ART_W }]}
-          resizeMode="cover"
-        />
-
         <View style={styles.teamRowMain}>
           {/* Logo */}
           <TouchableOpacity
@@ -317,6 +306,11 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
             ) : item.organization_name ? (
               <Text style={styles.metaText} numberOfLines={1}>{item.organization_name}</Text>
             ) : null}
+          </View>
+
+          {/* Chevron */}
+          <View style={styles.chevronCircle}>
+            <Ionicons name="chevron-forward" size={18} color="#16233b" />
           </View>
         </View>
       </TouchableOpacity>
@@ -655,20 +649,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden' as const,
     shadowColor: '#0f2747', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
-  teamArt: {
-    position: 'absolute' as const,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    height: '100%' as any,
-  },
   teamRowMain: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     padding: spacing.md,
     paddingVertical: spacing.md + 4,
-    paddingRight: 64,
     gap: spacing.md,
+  },
+  chevronCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f4f9',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   logoContainer: {
     width: 52,
