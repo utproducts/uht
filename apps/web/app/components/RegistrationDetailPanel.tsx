@@ -696,16 +696,24 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
                   <option value="pending_payment">Processing</option>
                   <option value="refunded">Refunded</option>
                   <option value="comp">Comped</option>
-                  <option value="comp">Comp</option>
                 </select>
               </div>
               <div>
                 <label className="block text-[11px] text-[#86868b] mb-1">Amount ($)</label>
                 <input type="number" step="0.01" value={amountCents} onChange={e => setAmountCents(e.target.value)}
                   placeholder="0.00"
-                  className="w-full px-3 py-2.5 border border-[#e8e8ed] rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                  className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none ${
+                    ['paid', 'partial'].includes(paymentStatus) && !amountCents
+                      ? 'border-amber-400 bg-amber-50'
+                      : 'border-[#e8e8ed]'
+                  }`} />
               </div>
             </div>
+            {['paid', 'partial'].includes(paymentStatus) && !amountCents && (
+              <p className="text-[11px] text-amber-600 font-medium mt-1.5">
+                Enter the amount collected (check, Venmo, cash...) so this team counts in revenue totals.
+              </p>
+            )}
             {reg.stripe_payment_intent_id && (
               <p className="text-[10px] text-[#86868b] mt-2">Stripe: {reg.stripe_payment_intent_id}</p>
             )}
