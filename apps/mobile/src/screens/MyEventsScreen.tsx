@@ -10,6 +10,7 @@ import {
   Image,
   Share,
   Alert,
+  Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -254,11 +255,15 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  async function handleCopyPaymentLink(item: MyEvent) {
+  async function handleOpenPaymentLink(item: MyEvent) {
     if (!item.regIds.length) return;
     const payUrl = `https://ultimatetournaments.com/pay?reg=${item.regIds.join(',')}`;
-    await Clipboard.setStringAsync(payUrl);
-    Alert.alert('Copied!', 'Payment link copied to clipboard.');
+    try {
+      await Linking.openURL(payUrl);
+    } catch {
+      await Clipboard.setStringAsync(payUrl);
+      Alert.alert('Copied!', 'Could not open the browser, so the payment link was copied instead.');
+    }
   }
 
   const isPaymentRole = ['coach', 'manager', 'org_admin', 'admin'].includes(activeRole);
@@ -298,11 +303,11 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
           <View style={styles.payLinkRow}>
             <TouchableOpacity
               style={styles.payLinkBtn}
-              onPress={() => handleCopyPaymentLink(item)}
-              activeOpacity={0.7}
+              onPress={() => handleOpenPaymentLink(item)}
+              activeOpacity={0.8}
             >
-              <Ionicons name="copy-outline" size={14} color={colors.navy} />
-              <Text style={styles.payLinkText}>Copy payment link</Text>
+              <Ionicons name="card-outline" size={15} color={colors.white} />
+              <Text style={styles.payLinkText}>Pay Now</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.payShareBtn}
@@ -499,13 +504,17 @@ const styles = StyleSheet.create({
   payLinkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     flex: 1,
     gap: 6,
+    backgroundColor: colors.navy,
+    borderRadius: 10,
+    paddingVertical: 9,
   },
   payLinkText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.navy,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.white,
   },
   payShareBtn: {
     padding: 6,
