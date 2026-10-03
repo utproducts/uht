@@ -156,7 +156,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       >
         {/* Hero greeting */}
         <ImageBackground
-          source={require('../../assets/hero-rink.jpg')}
+          source={require('../../assets/hero-kids.jpg')}
           style={styles.hero}
           resizeMode="cover"
         >
@@ -220,21 +220,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             { label: 'My Events', sub: 'Schedules, scores and standings', icon: 'calendar' as const, img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
             { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
           ]).map(tile => (
-            <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}>
-              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner}>
-                <View style={styles.qaShade} />
-                <View style={styles.qaShadeBottom} />
-                <View style={styles.qaContent}>
-                  <View style={styles.qaIconCircle}>
-                    <Ionicons name={tile.icon} size={19} color={colors.cyan} />
-                  </View>
-                  <Text style={styles.qaLabel}>{tile.label}</Text>
-                  <Text style={styles.qaSub} numberOfLines={2}>{tile.sub}</Text>
-                </View>
-                <View style={styles.qaChevron}>
-                  <Ionicons name="chevron-forward" size={15} color="#ffffff" />
-                </View>
-              </ImageBackground>
+            <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}
+              accessibilityLabel={`${tile.label} - ${tile.sub}`}>
+              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner} />
             </TouchableOpacity>
           ))}
         </View>
@@ -259,6 +247,8 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     paddingTop: 24,
     paddingBottom: 32,
+    minHeight: 300,
+    justifyContent: 'flex-end',
   },
   heroOverlay: {
     position: 'absolute',
@@ -266,7 +256,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 30, 60, 0.75)',
+    backgroundColor: 'rgba(0, 22, 48, 0.38)',
   },
   heroContent: {
     alignItems: 'flex-start',
@@ -343,7 +333,7 @@ const styles = StyleSheet.create({
   },
   qaCard: {
     width: (SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2,
-    height: 200,
+    height: ((SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2) * 0.964,
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: colors.navy,
