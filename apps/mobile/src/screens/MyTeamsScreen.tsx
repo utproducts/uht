@@ -520,13 +520,6 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.joinBtnText}>Join</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.joinDismissBtn}
-                activeOpacity={0.7}
-                onPress={() => Keyboard.dismiss()}
-              >
-                <Ionicons name="chevron-down" size={20} color="#9fb0c7" />
-              </TouchableOpacity>
             </View>
 
             {/* Your Teams + Create */}
@@ -570,12 +563,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row' as const,
     alignItems: 'stretch' as const,
     gap: 8,
-    marginHorizontal: spacing.md,
-    marginTop: -14,
     backgroundColor: '#0c1726',
-    borderRadius: 20,
-    padding: 10,
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8,
+    padding: 12,
   },
   joinInputWrap: {
     flex: 1,
@@ -606,15 +595,6 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     ...fonts.bold,
-  },
-  joinDismissBtn: {
-    backgroundColor: '#101e33',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#2a3c57',
-    width: 50,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
   },
 
   // Title row
