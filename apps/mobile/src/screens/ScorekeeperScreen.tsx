@@ -72,13 +72,15 @@ function formatDateRange(startDate: string, endDate: string): string {
 
 function formatTime(iso: string): string {
   if (!iso) return '';
-  const d = new Date(iso);
+  const d = new Date(iso.includes(' ') && !iso.includes('T') ? iso.replace(' ', 'T') : iso);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 function formatDay(iso: string): string {
   if (!iso) return '';
-  const d = new Date(iso);
+  const d = new Date(iso.includes(' ') && !iso.includes('T') ? iso.replace(' ', 'T') : iso);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 

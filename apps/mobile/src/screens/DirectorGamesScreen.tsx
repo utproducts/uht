@@ -169,12 +169,14 @@ export default function DirectorGamesScreen({ navigation }: any) {
   // ============================================================
 
   const formatTime = (iso: string) => {
-    const d = new Date(iso);
+    const d = new Date(iso && iso.includes(' ') && !iso.includes('T') ? iso.replace(' ', 'T') : iso);
+    if (isNaN(d.getTime())) return 'TBD';
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
   const formatDate = (iso: string) => {
-    const d = new Date(iso);
+    const d = new Date(iso && iso.includes(' ') && !iso.includes('T') ? iso.replace(' ', 'T') : iso);
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   };
 

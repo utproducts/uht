@@ -258,7 +258,8 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
             const games = gamesJson.data || gamesJson.games || [];
             for (const game of games) {
               if (!game.start_time) continue;
-              const start = new Date(game.start_time);
+              const start = new Date(String(game.start_time).includes(' ') ? String(game.start_time).replace(' ', 'T') : game.start_time);
+              if (isNaN(start.getTime())) continue;
               const end = new Date(start.getTime() + 90 * 60 * 1000);
               try {
                 await Calendar.createEventAsync(uhtCalendarId, {

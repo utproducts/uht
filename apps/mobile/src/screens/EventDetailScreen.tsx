@@ -378,30 +378,32 @@ export default function EventDetailScreen({
     return parts.join(' at ');
   }
 
+  // iOS cannot parse "YYYY-MM-DD HH:MM:SS" (needs the T) - the site works
+  // because Chrome is lenient. Normalize before constructing Date.
+  function parseGameDate(s?: string): Date | null {
+    if (!s) return null;
+    const normalized = s.includes('T') || !s.includes(' ') ? s : s.replace(' ', 'T');
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
   function formatScoreTime(startTime?: string): string {
-    if (!startTime) return 'TBD';
-    try {
-      const d = new Date(startTime);
-      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    } catch {
-      return 'TBD';
-    }
+    const d = parseGameDate(startTime);
+    if (!d) return 'TBD';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
 
   function formatScoreDate(startTime?: string): string {
-    if (!startTime) return '';
-    try {
-      const d = new Date(startTime);
-      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    } catch {
-      return '';
-    }
+    const d = parseGameDate(startTime);
+    if (!d) return '';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   }
 
   function getDateKey(startTime?: string): string {
-    if (!startTime) return 'TBD';
+    const d = parseGameDate(startTime);
+    if (!d) return 'TBD';
     try {
-      return new Date(startTime).toISOString().split('T')[0];
+      return d.toISOString().split('T')[0];
     } catch {
       return 'TBD';
     }
