@@ -156,7 +156,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       >
         {/* Hero greeting */}
         <ImageBackground
-          source={require('../../assets/hero-kids.jpg')}
+          source={require('../../assets/hero-rink.jpg')}
           style={styles.hero}
           resizeMode="cover"
         >
@@ -215,14 +215,28 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {/* Quick Access - photo tiles */}
         <View style={styles.qaGrid}>
           {([
-            { label: 'My Teams', sub: 'View and manage all your teams', icon: 'people' as const, img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
-            { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search' as const, img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
-            { label: 'My Events', sub: 'Schedules, scores and standings', icon: 'calendar' as const, img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
-            { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
+            { label: 'My Teams', baked: true, sub: 'View and manage all your teams', icon: 'people' as const, img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
+            { label: 'Find Events', baked: true, sub: 'Search tournaments across the country', icon: 'search' as const, img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
+            { label: 'My Events', baked: true, sub: 'Schedules, scores and standings', icon: 'calendar' as const, img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
+            { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, baked: false, img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
           ]).map(tile => (
             <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}
               accessibilityLabel={`${tile.label} - ${tile.sub}`}>
-              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner} />
+              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner}>
+                {!(tile as any).baked && (
+                  <>
+                    <View style={styles.qaShade} />
+                    <View style={styles.qaShadeBottom} />
+                    <View style={styles.qaContent}>
+                      <View style={styles.qaIconCircle}>
+                        <Ionicons name={tile.icon} size={19} color={colors.cyan} />
+                      </View>
+                      <Text style={styles.qaLabel}>{tile.label}</Text>
+                      <Text style={styles.qaSub} numberOfLines={2}>{tile.sub}</Text>
+                    </View>
+                  </>
+                )}
+              </ImageBackground>
             </TouchableOpacity>
           ))}
         </View>
@@ -256,7 +270,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 22, 48, 0.38)',
+    backgroundColor: 'rgba(0, 26, 54, 0.62)',
   },
   heroContent: {
     alignItems: 'flex-start',
