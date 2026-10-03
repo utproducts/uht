@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   tabBar: {
-    backgroundColor: colors.navy,
+    backgroundColor: '#0a2240',
     borderTopWidth: 0,
     height: Platform.OS === 'ios' ? 88 : 64,
     paddingTop: 6,

@@ -67,7 +67,7 @@ export default function AppHeader({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.navy,
+    backgroundColor: '#0a2240',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
