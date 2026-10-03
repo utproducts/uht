@@ -15,6 +15,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { Dimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,6 +28,14 @@ import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
 import { refreshBadgeCount } from '../services/notifications';
 import { setActiveRole, refreshUser, addRoleToAccount } from '../services/auth';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const HERO_H = Math.round(SCREEN_WIDTH * 366 / 851);
+const CARD_ART = [
+  require('../../assets/teamcard-jersey.jpg'),
+  require('../../assets/teamcard-puck.jpg'),
+];
+const CARD_ART_W = [150, 104];
 
 interface Team {
   id: string;
@@ -251,15 +260,22 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  function renderTeamCard({ item }: { item: Team }) {
+  function renderTeamCard({ item, index }: { item: Team; index: number }) {
+    const artIdx = index % CARD_ART.length;
     return (
-      <View style={styles.teamRow}>
-        {/* Main row — tap to view team detail */}
-        <TouchableOpacity
-          style={styles.teamRowMain}
-          activeOpacity={0.7}
-          onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
-        >
+      <TouchableOpacity
+        style={styles.teamRow}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate('TeamDetail' as never, { teamId: item.id, teamName: item.name } as never)}
+      >
+        {/* Photo art on the right edge (chevron is part of the art) */}
+        <Image
+          source={CARD_ART[artIdx]}
+          style={[styles.teamArt, { width: CARD_ART_W[artIdx] }]}
+          resizeMode="cover"
+        />
+
+        <View style={styles.teamRowMain}>
           {/* Logo */}
           <TouchableOpacity
             style={styles.logoContainer}
@@ -305,13 +321,8 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               <Text style={styles.metaText} numberOfLines={1}>{item.organization_name}</Text>
             ) : null}
           </View>
-
-          {/* Chevron */}
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
-
-        {/* Actions moved to TeamDetailScreen — clean card view */}
-      </View>
+        </View>
+      </TouchableOpacity>
     );
   }
 
@@ -372,20 +383,23 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <View style={styles.footerActions}>
         <TouchableOpacity
           style={styles.followAnotherBtn}
-          activeOpacity={0.7}
+          activeOpacity={0.8}
           onPress={() => navigation.navigate('FollowTeams')}
         >
-          <Ionicons name="search-outline" size={18} color={colors.navy} />
+          <View style={styles.followIconCircle}>
+            <Ionicons name="search" size={20} color={colors.navy} />
+          </View>
           <Text style={styles.followAnotherText}>Follow Another Team</Text>
+          <Ionicons name="chevron-forward" size={18} color="#9aa7ba" />
         </TouchableOpacity>
 
         {isCoach && (
           <TouchableOpacity
             style={styles.createAnotherBtn}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
             onPress={() => navigation.navigate('CreateTeam' as never, {} as never)}
           >
-            <Ionicons name="add-circle-outline" size={18} color={colors.cyan} />
+            <Ionicons name="add-circle-outline" size={22} color="#19b5f1" />
             <Text style={styles.createAnotherText}>Create a New Team</Text>
           </TouchableOpacity>
         )}
@@ -459,63 +473,72 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       />
       <RoleBar activeRole={activeRoleState} userRoles={userRoles} onSwitchRole={handleSwitchRole} />
 
-      {/* Title row with create button */}
-      <View style={styles.titleRow}>
-        <Text style={styles.titleText}>My teams</Text>
-        {renderHeaderRight()}
-      </View>
-
-      {/* Team code input — always visible above the list */}
-      <View style={styles.teamCodeBar}>
-        <View style={styles.teamCodeInputRow}>
-          <TextInput
-            style={styles.teamCodeInput}
-            value={joinCode}
-            onChangeText={(t) => setJoinCode(t.toUpperCase())}
-            placeholder="Enter team code"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={10}
-            editable={!joiningByCode}
-            returnKeyType="go"
-            onSubmitEditing={handleJoinByCode}
-          />
-          <TouchableOpacity
-            style={[styles.teamCodeJoinBtn, joiningByCode && { opacity: 0.7 }]}
-            activeOpacity={0.7}
-            onPress={handleJoinByCode}
-            disabled={joiningByCode}
-          >
-            {joiningByCode ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Text style={styles.teamCodeJoinBtnText}>Join</Text>
-            )}
-          </TouchableOpacity>
-          {/* Dismiss keyboard button */}
-          <TouchableOpacity
-            style={styles.teamCodeDismissBtn}
-            activeOpacity={0.7}
-            onPress={() => Keyboard.dismiss()}
-          >
-            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
       <FlatList
         data={teams}
         keyExtractor={(item) => item.id}
         renderItem={renderTeamCard}
-        contentContainerStyle={[
-          styles.listContent,
-          teams.length === 0 && styles.listContentEmpty,
-        ]}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshing={refreshing}
         onRefresh={handleRefresh}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <View>
+            {/* TEAMS DRIVE HOCKEY hero */}
+            <Image
+              source={require('../../assets/teams-hero.jpg')}
+              style={styles.heroImage}
+              resizeMode="cover"
+            />
+
+            {/* Join bar - overlaps the hero bottom like the mock */}
+            <View style={styles.joinBar}>
+              <View style={styles.joinInputWrap}>
+                <Ionicons name="scan-outline" size={20} color="#5d7290" style={{ marginLeft: 14 }} />
+                <TextInput
+                  style={styles.joinInput}
+                  value={joinCode}
+                  onChangeText={(t) => setJoinCode(t.toUpperCase())}
+                  placeholder="Enter team code"
+                  placeholderTextColor="#5d7290"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={10}
+                  editable={!joiningByCode}
+                  returnKeyType="go"
+                  onSubmitEditing={handleJoinByCode}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.joinBtn, joiningByCode && { opacity: 0.7 }]}
+                activeOpacity={0.8}
+                onPress={handleJoinByCode}
+                disabled={joiningByCode}
+              >
+                {joiningByCode ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={styles.joinBtnText}>Join</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.joinDismissBtn}
+                activeOpacity={0.7}
+                onPress={() => Keyboard.dismiss()}
+              >
+                <Ionicons name="chevron-down" size={20} color="#9fb0c7" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Your Teams + Create */}
+            {teams.length > 0 && (
+              <View style={styles.titleRow}>
+                <Text style={styles.titleText}>Your Teams</Text>
+                {renderHeaderRight()}
+              </View>
+            )}
+          </View>
+        }
         ListEmptyComponent={renderEmptyState}
         ListFooterComponent={teams.length > 0 ? renderListFooter : undefined}
       />
@@ -534,12 +557,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContent: {
-    padding: spacing.lg,
-    paddingBottom: 80,
+    paddingBottom: 90,
   },
-  listContentEmpty: {
+
+  // Hero
+  heroImage: {
+    width: SCREEN_WIDTH,
+    height: HERO_H,
+  },
+
+  // Join bar (overlaps hero bottom)
+  joinBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'stretch' as const,
+    gap: 8,
+    marginHorizontal: spacing.md,
+    marginTop: -30,
+    backgroundColor: '#0c1726',
+    borderRadius: 20,
+    padding: 10,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8,
+  },
+  joinInputWrap: {
     flex: 1,
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#15233a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a3c57',
+  },
+  joinInput: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 13,
+    fontSize: 16,
+    color: colors.white,
+    ...fonts.semibold,
+    letterSpacing: 0.5,
+  },
+  joinBtn: {
+    backgroundColor: '#1e9bf0',
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  joinBtnText: {
+    color: colors.white,
+    fontSize: 16,
+    ...fonts.bold,
+  },
+  joinDismissBtn: {
+    backgroundColor: '#101e33',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a3c57',
+    width: 50,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
 
   // Title row
@@ -548,12 +624,12 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
   },
   titleText: {
-    fontSize: 20,
-    color: colors.text,
+    fontSize: 23,
+    color: '#101c30',
     ...fonts.bold,
   },
 
@@ -562,47 +638,56 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.navy,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
+    borderRadius: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
     gap: spacing.xs,
   },
   addButtonText: {
     color: colors.white,
-    fontSize: 13,
+    fontSize: 14,
     ...fonts.semibold,
   },
 
   // Team list row
   teamRow: {
     backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.sm,
+    borderRadius: 16,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
     overflow: 'hidden' as const,
+    shadowColor: '#0f2747', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  },
+  teamArt: {
+    position: 'absolute' as const,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    height: '100%' as any,
   },
   teamRowMain: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     padding: spacing.md,
+    paddingVertical: spacing.md + 4,
+    paddingRight: 64,
     gap: spacing.md,
   },
   logoContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.bg,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#eef2f8',
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: '#dde5ef',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     overflow: 'hidden' as const,
   },
   teamLogo: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   teamLogoFallback: {
     width: 26,
@@ -624,50 +709,50 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   teamName: {
-    fontSize: 16,
-    color: colors.text,
+    fontSize: 17,
+    color: '#101c30',
     ...fonts.bold,
   },
   badgeRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   ageGroupBadge: {
-    backgroundColor: colors.cyan,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: '#19b5f1',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   ageGroupText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 12,
     ...fonts.bold,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   divisionBadge: {
-    backgroundColor: colors.navy,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: '#0d2b56',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   divisionBadgeText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 12,
     ...fonts.bold,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   rosterCount: {
-    fontSize: 11,
-    color: colors.textMuted,
-    ...fonts.regular,
+    fontSize: 13,
+    color: '#8a94a6',
+    ...fonts.semibold,
     marginLeft: 2,
   },
   metaText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: '#5b6b83',
     ...fonts.regular,
   },
   // Quick actions row
@@ -695,6 +780,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     paddingHorizontal: spacing.xxxl,
+    paddingTop: spacing.xxl,
   },
   emptyTitle: {
     fontSize: 20,
@@ -749,89 +835,51 @@ const styles = StyleSheet.create({
     color: colors.navy,
   },
 
-  // Team code bar (above the list, always visible)
-  teamCodeBar: {
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-  },
-  teamCodeInputRow: {
-    flexDirection: 'row' as const,
-    gap: spacing.sm,
-  },
-  teamCodeInput: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    fontSize: 15,
-    color: colors.text,
-    ...fonts.semibold,
-    letterSpacing: 1,
-  },
-  teamCodeJoinBtn: {
-    backgroundColor: colors.navy,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.xl,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  teamCodeJoinBtnText: {
-    color: colors.white,
-    fontSize: 15,
-    ...fonts.semibold,
-  },
-  teamCodeDismissBtn: {
-    backgroundColor: colors.bg,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.sm,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-
   // Footer actions (when teams exist)
   footerActions: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginHorizontal: spacing.md,
+    gap: spacing.lg,
   },
   followAnotherBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.lg,
-    gap: spacing.sm,
+    borderRadius: 16,
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+    shadowColor: '#0f2747', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  },
+  followIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#edf1f7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   followAnotherText: {
-    color: colors.navy,
-    fontSize: 15,
-    ...fonts.semibold,
+    flex: 1,
+    color: '#16233b',
+    fontSize: 16,
+    ...fonts.bold,
   },
   createAnotherBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
+    backgroundColor: 'rgba(25,181,241,0.04)',
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: colors.cyan,
+    borderColor: '#19b5f1',
     borderStyle: 'dashed' as any,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.lg + 2,
     gap: spacing.sm,
   },
   createAnotherText: {
-    color: colors.cyan,
-    fontSize: 15,
+    color: '#19b5f1',
+    fontSize: 16,
     ...fonts.semibold,
   },
 });
