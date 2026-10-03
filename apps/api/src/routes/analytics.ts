@@ -235,21 +235,80 @@ analyticsRoutes.get('/reports/pending-registrations', authMiddleware, requireRol
 analyticsRoutes.get('/reports/division-totals', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
 
-  const result = await db.prepare(`
-    SELECT
-      ed.age_group,
-      SUM(ed.current_team_count) as total_teams,
-      COUNT(DISTINCT ed.event_id) as event_count,
-      SUM(ed.max_teams) as total_capacity
-    FROM event_divisions ed
-    JOIN events e ON e.id = ed.event_id
-    WHERE e.status IN ('registration_open', 'active', 'published')
-      AND COALESCE(e.is_test, 0) = 0
-    GROUP BY ed.age_group
-    ORDER BY total_teams DESC
-  `).all();
+  // Normalize any age_group spelling into its classification bucket.
+  // Midget/16U/18U checked first so '18U' is never caught by the '8U' mite test.
+  const norm = (ag: string | null | undefined): string => {
+    const s = (ag || '').toLowerCase();
+    if (/midget|16u|18u|high school/.test(s)) return 'Midget (16U/18U)';
+    if (/bantam|14u/.test(s)) return 'Bantam (14U)';
+    if (/pee\s*wee|peewee|12u/.test(s)) return 'Pee Wee (12U)';
+    if (/squirt|10u/.test(s)) return 'Squirt (10U)';
+    if (/mite|8u/.test(s)) return 'Mite (8U)';
+    return (ag || '').trim() || 'Other';
+  };
+  const BUCKET_ORDER = ['Mite (8U)', 'Squirt (10U)', 'Pee Wee (12U)', 'Bantam (14U)', 'Midget (16U/18U)'];
 
-  return c.json({ success: true, data: result.results });
+  const eventFilter = `e.status IN ('registration_open', 'active', 'published') AND COALESCE(e.is_test, 0) = 0`;
+
+  // Actual registered teams from BOTH registration tables (current_team_count is stale)
+  const [erRows, rRows, capRows] = await Promise.all([
+    db.prepare(`
+      SELECT er.age_group as ag, er.event_id, LOWER(TRIM(COALESCE(er.team_name,''))) as tname
+      FROM event_registrations er JOIN events e ON e.id = er.event_id
+      WHERE ${eventFilter} AND er.status NOT IN ('denied','rejected','withdrawn','awaiting_payment')
+    `).all(),
+    db.prepare(`
+      SELECT COALESCE(ed.age_group, t.age_group) as ag, r.event_id, LOWER(TRIM(COALESCE(t.name,''))) as tname
+      FROM registrations r JOIN events e ON e.id = r.event_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      LEFT JOIN teams t ON t.id = r.team_id
+      WHERE ${eventFilter} AND r.status NOT IN ('denied','rejected','withdrawn')
+    `).all(),
+    db.prepare(`
+      SELECT ed.age_group as ag, ed.event_id, ed.max_teams
+      FROM event_divisions ed JOIN events e ON e.id = ed.event_id
+      WHERE ${eventFilter}
+    `).all(),
+  ]);
+
+  const buckets: Record<string, { total_teams: number; events: Set<string>; total_capacity: number }> = {};
+  const bucketOf = (ag: any) => {
+    const key = norm(ag);
+    if (!buckets[key]) buckets[key] = { total_teams: 0, events: new Set(), total_capacity: 0 };
+    return buckets[key];
+  };
+
+  // Dedupe teams that appear in both registration tables for the same event
+  const seen = new Set<string>();
+  for (const row of [...(erRows.results || []), ...(rRows.results || [])] as any[]) {
+    const dedupeKey = row.tname ? `${row.event_id}|${row.tname}` : `uniq|${Math.random()}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const b = bucketOf(row.ag);
+    b.total_teams += 1;
+    b.events.add(row.event_id);
+  }
+  for (const row of (capRows.results || []) as any[]) {
+    bucketOf(row.ag).total_capacity += row.max_teams || 0;
+  }
+
+  const data = Object.entries(buckets)
+    .map(([age_group, b]) => ({
+      age_group,
+      total_teams: b.total_teams,
+      event_count: b.events.size,
+      total_capacity: b.total_capacity,
+    }))
+    .filter(d => d.total_teams > 0 || d.total_capacity > 0)
+    .sort((a, b2) => {
+      const ia = BUCKET_ORDER.indexOf(a.age_group); const ib = BUCKET_ORDER.indexOf(b2.age_group);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return b2.total_teams - a.total_teams;
+    });
+
+  return c.json({ success: true, data });
 });
 
 // ==================

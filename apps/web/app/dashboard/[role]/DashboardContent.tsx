@@ -365,15 +365,18 @@ export function AdminDash() {
                     <span className="text-xs text-[#86868b]">{d.event_count} event{d.event_count !== 1 ? 's' : ''}</span>
                   </div>
                   <p className="text-2xl font-bold text-[#003e79]">{d.total_teams}</p>
-                  <div className="mt-2">
-                    <div className="flex justify-between text-[11px] text-[#86868b] mb-1">
-                      <span>Capacity</span>
-                      <span>{d.total_teams}/{d.total_capacity}</span>
+                  <p className="text-[11px] text-[#86868b] mt-0.5">teams registered</p>
+                  {d.total_capacity > 0 && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-[11px] text-[#86868b] mb-1">
+                        <span>Capacity</span>
+                        <span>{d.total_teams}/{d.total_capacity}</span>
+                      </div>
+                      <div className="h-1.5 bg-[#f0f0f2] rounded-full">
+                        <div className={`h-1.5 rounded-full transition-all ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-gradient-to-r from-[#003e79] to-[#00ccff]'}`} style={{ width: `${pct}%` }} />
+                      </div>
                     </div>
-                    <div className="h-1.5 bg-[#f0f0f2] rounded-full">
-                      <div className={`h-1.5 rounded-full transition-all ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-gradient-to-r from-[#003e79] to-[#00ccff]'}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

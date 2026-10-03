@@ -286,6 +286,20 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
           ) : null}
         </View>
 
+        {/* Team Code - visible to everyone so it's easy to share rink-side */}
+        {(team?.parent_invite_code || team?.invite_code) ? (
+          <TouchableOpacity style={styles.codeCard} activeOpacity={0.8} onPress={shareInviteFamilies}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.codeCardLabel}>TEAM CODE</Text>
+              <Text style={styles.codeCardValue}>{team?.parent_invite_code || team?.invite_code}</Text>
+              <Text style={styles.codeCardHint}>Anyone can enter this code in the app to follow this team</Text>
+            </View>
+            <View style={styles.codeShareCircle}>
+              <Ionicons name="share-outline" size={20} color={colors.white} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Quick Actions */}
         <View style={styles.actionsRow}>
           {isCoach && team?.invite_code ? (
@@ -531,6 +545,43 @@ const styles = StyleSheet.create({
   },
 
   // Actions
+  codeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.navy,
+    borderRadius: 16,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  codeCardLabel: {
+    color: colors.cyan,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    ...fonts.bold,
+  },
+  codeCardValue: {
+    color: colors.white,
+    fontSize: 30,
+    letterSpacing: 5,
+    marginTop: 2,
+    ...fonts.bold,
+  },
+  codeCardHint: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  codeShareCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,204,255,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,204,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   actionsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
