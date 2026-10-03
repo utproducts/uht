@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount } from '../services/auth';
+import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount, authFetch } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
@@ -29,6 +29,34 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [activeRole, setActiveRoleState] = useState<string>('');
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Registered events drive the Game Day banner and Next Up countdown
+  const [myEvents, setMyEvents] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await authFetch('/api/events/my-registered');
+        const j = await r.json();
+        if (j.success) setMyEvents(j.data || []);
+      } catch { /* home still renders without it */ }
+    })();
+  }, []);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const liveEvent = myEvents.find(e => e.start_date && e.end_date
+    && String(e.start_date).slice(0, 10) <= todayStr && todayStr <= String(e.end_date).slice(0, 10));
+  const nextEvent = myEvents
+    .filter(e => e.start_date && String(e.start_date).slice(0, 10) > todayStr)
+    .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))[0];
+  const daysToNext = nextEvent
+    ? Math.max(1, Math.round((new Date(String(nextEvent.start_date).slice(0, 10) + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000))
+    : 0;
+  const fmtRange = (sd: string, ed?: string) => {
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const [sy, sm, sdd] = String(sd).slice(0,10).split('-').map(Number);
+    if (!ed) return `${M[sm-1]} ${sdd}`;
+    const [, em, edd] = String(ed).slice(0,10).split('-').map(Number);
+    return sm === em ? `${M[sm-1]} ${sdd}-${edd}` : `${M[sm-1]} ${sdd} - ${M[em-1]} ${edd}`;
+  };
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
@@ -134,64 +162,81 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         >
           <View style={styles.heroOverlay} />
           <View style={styles.heroContent}>
-            <Image
-              source={require('../../assets/uht-logo.png')}
-              style={styles.heroLogo}
-              resizeMode="contain"
-            />
+            <Text style={styles.heroGreeting}>Welcome back,</Text>
+            <Text style={styles.heroName} numberOfLines={1}>{userName || 'Coach'}</Text>
             <Text style={styles.heroSeason}>2026-27 SEASON</Text>
-            <Text style={styles.heroGreeting}>
-              {firstName ? `Welcome back, ${firstName}` : 'Welcome'}
-            </Text>
+            <View style={styles.heroUnderline} />
             <Text style={styles.heroSubtext}>What would you like to do?</Text>
           </View>
         </ImageBackground>
 
-        {/* Quick Access Grid */}
+        {/* Game Day banner - a registered event is running right now */}
+        {liveEvent && (
+          <TouchableOpacity
+            style={styles.gameDayCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('EventDetail', { eventId: liveEvent.id, eventName: liveEvent.name, initialTab: 'game_center' })}
+          >
+            <View style={styles.gameDayPill}>
+              <View style={styles.gameDayDot} />
+              <Text style={styles.gameDayPillText}>GAME DAY</Text>
+            </View>
+            <Text style={styles.gameDayName} numberOfLines={1}>{liveEvent.name}</Text>
+            <Text style={styles.gameDaySub}>Live scores, schedules and standings are running now</Text>
+            <View style={styles.gameDayCta}>
+              <Text style={styles.gameDayCtaText}>Open Game Center</Text>
+              <Ionicons name="arrow-forward" size={15} color={colors.cyan} />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Next Up countdown */}
+        {!liveEvent && nextEvent && (
+          <TouchableOpacity
+            style={styles.nextUpCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('EventDetail', { eventId: nextEvent.id, eventName: nextEvent.name })}
+          >
+            <View style={styles.nextUpCount}>
+              <Text style={styles.nextUpDays}>{daysToNext}</Text>
+              <Text style={styles.nextUpDaysLabel}>{daysToNext === 1 ? 'DAY' : 'DAYS'}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.nextUpKicker}>NEXT UP</Text>
+              <Text style={styles.nextUpName} numberOfLines={2}>{nextEvent.name}</Text>
+              <Text style={styles.nextUpMeta}>
+                {fmtRange(nextEvent.start_date, nextEvent.end_date)}{nextEvent.city ? ` · ${nextEvent.city}` : ''}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
+          </TouchableOpacity>
+        )}
+
+        {/* Quick Access - photo tiles */}
         <View style={styles.qaGrid}>
-          <TouchableOpacity
-            style={styles.qaCard}
-            onPress={() => navigation.navigate('My Teams')}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.qaIconCircle, { backgroundColor: '#E6F1FB' }]}>
-              <Ionicons name="people" size={24} color="#185FA5" />
-            </View>
-            <Text style={styles.qaLabel}>My teams</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.qaCard}
-            onPress={() => navigation.navigate('Find Events' as never)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.qaIconCircle, { backgroundColor: '#FAEEDA' }]}>
-              <Ionicons name="search" size={24} color="#854F0B" />
-            </View>
-            <Text style={styles.qaLabel}>Find events</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.qaCard}
-            onPress={() => navigation.navigate('My Events' as never)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.qaIconCircle, { backgroundColor: '#EAF3DE' }]}>
-              <Ionicons name="calendar" size={24} color="#3B6D11" />
-            </View>
-            <Text style={styles.qaLabel}>My events</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.qaCard}
-            onPress={() => navigation.navigate('Menu', { screen: 'Shop' })}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.qaIconCircle, { backgroundColor: '#EEEDFE' }]}>
-              <Ionicons name="cart" size={24} color="#534AB7" />
-            </View>
-            <Text style={styles.qaLabel}>Shop</Text>
-          </TouchableOpacity>
+          {([
+            { label: 'My Teams', sub: 'View and manage all your teams', icon: 'people' as const, color: '#1f6fb0', img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
+            { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search' as const, color: '#b9873e', img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
+            { label: 'My Events', sub: 'Schedules, scores and standings', icon: 'calendar' as const, color: '#3f7d20', img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
+            { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, color: '#6d5bd0', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
+          ]).map(tile => (
+            <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}>
+              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner}>
+                <View style={styles.qaShade} />
+                <View style={styles.qaShadeBottom} />
+                <View style={styles.qaContent}>
+                  <View style={[styles.qaIconCircle, { backgroundColor: tile.color }]}>
+                    <Ionicons name={tile.icon} size={20} color="#ffffff" />
+                  </View>
+                  <Text style={styles.qaLabel}>{tile.label}</Text>
+                  <Text style={styles.qaSub} numberOfLines={2}>{tile.sub}</Text>
+                </View>
+                <View style={styles.qaChevron}>
+                  <Ionicons name="chevron-forward" size={15} color="#ffffff" />
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
+          ))}
         </View>
       </ScrollView>
     </View>
@@ -224,62 +269,113 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 30, 60, 0.75)',
   },
   heroContent: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: spacing.xl,
+    paddingTop: 44,
+    paddingBottom: 10,
     position: 'relative',
   },
-  heroLogo: {
-    width: 80,
-    height: 80,
-    marginBottom: 8,
+  heroGreeting: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  heroName: {
+    fontSize: 44,
+    fontWeight: '900',
+    color: colors.white,
+    letterSpacing: -0.5,
+    marginTop: -2,
   },
   heroSeason: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.cyan,
-    letterSpacing: 1.5,
-    marginBottom: 4,
-  },
-  heroGreeting: {
-    fontSize: 22,
+    fontSize: 14,
     fontWeight: '800',
-    color: colors.white,
-    textAlign: 'center',
+    color: colors.cyan,
+    letterSpacing: 2,
+    marginTop: 14,
+  },
+  heroUnderline: {
+    width: 56,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.cyan,
+    marginTop: 8,
   },
   heroSubtext: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    marginTop: 4,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 12,
   },
+  // Game Day banner
+  gameDayCard: {
+    marginHorizontal: spacing.lg, marginTop: spacing.lg,
+    backgroundColor: colors.navy, borderRadius: 18, padding: 18,
+    borderWidth: 2, borderColor: '#e74c3c',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+  },
+  gameDayPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#e74c3c', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  gameDayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
+  gameDayPillText: { color: '#fff', fontSize: 10, letterSpacing: 1.2, ...fonts.bold },
+  gameDayName: { color: '#fff', fontSize: 20, marginTop: 10, ...fonts.bold },
+  gameDaySub: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 4 },
+  gameDayCta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  gameDayCtaText: { color: colors.cyan, fontSize: 14, ...fonts.bold },
+  // Next Up countdown
+  nextUpCard: {
+    marginHorizontal: spacing.lg, marginTop: spacing.lg,
+    backgroundColor: colors.navy, borderRadius: 18, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
+  },
+  nextUpCount: { width: 72, height: 72, borderRadius: 16, backgroundColor: 'rgba(0,204,255,0.14)', borderWidth: 1, borderColor: 'rgba(0,204,255,0.35)', alignItems: 'center', justifyContent: 'center' },
+  nextUpDays: { color: colors.cyan, fontSize: 28, lineHeight: 30, ...fonts.bold },
+  nextUpDaysLabel: { color: colors.cyan, fontSize: 9, letterSpacing: 1.5, ...fonts.bold },
+  nextUpKicker: { color: 'rgba(255,255,255,0.55)', fontSize: 10, letterSpacing: 1.5, ...fonts.bold },
+  nextUpName: { color: '#fff', fontSize: 16, marginTop: 2, ...fonts.bold },
+  nextUpMeta: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 3 },
   // Quick Access Grid
   qaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.lg,
     gap: spacing.md,
   },
   qaCard: {
     width: (SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    alignItems: 'center',
-    gap: 8,
+    height: 200,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: colors.navy,
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 6,
   },
+  qaImage: { flex: 1, justifyContent: 'flex-end' },
+  qaImageInner: { borderRadius: 18 },
+  qaShade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(3,16,36,0.30)' },
+  qaShadeBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%', backgroundColor: 'rgba(3,14,32,0.55)' },
+  qaContent: { padding: 12, paddingBottom: 12 },
   qaIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)',
+    marginBottom: 8,
+  },
+  qaChevron: {
+    position: 'absolute', right: 10, bottom: 44,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(10,22,40,0.65)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center',
   },
   qaLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.white,
+  },
+  qaSub: {
+    fontSize: 11.5,
+    lineHeight: 15,
+    color: 'rgba(255,255,255,0.78)',
+    marginTop: 2,
   },
 });
