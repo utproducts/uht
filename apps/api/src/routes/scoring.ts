@@ -237,6 +237,25 @@ scoringRoutes.get('/events/:eventId/games', async (c) => {
 });
 
 // ==========================================
+// PUBLIC: Locker rooms defined on the venues this event plays at
+// (for assignment dropdowns - rooms are created per rink on the venue admin page)
+// ==========================================
+scoringRoutes.get('/events/:eventId/locker-rooms', async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  const result = await db.prepare(`
+    SELECT lr.id, lr.name, lr.sort_order, vr.venue_id, vr.id as rink_id, vr.name as rink_name
+    FROM locker_rooms lr
+    JOIN venue_rinks vr ON vr.id = lr.rink_id
+    WHERE vr.venue_id IN (SELECT DISTINCT venue_id FROM games WHERE event_id = ? AND venue_id IS NOT NULL)
+    ORDER BY lr.sort_order ASC, lr.name ASC
+  `).bind(eventId).all();
+
+  return c.json({ success: true, data: result.results });
+});
+
+// ==========================================
 // PUBLIC: Get single game with events + shots
 // ==========================================
 scoringRoutes.get('/games/:gameId', async (c) => {

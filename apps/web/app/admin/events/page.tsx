@@ -3466,9 +3466,56 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
   const [pushResult, setPushResult] = useState<{ gameId: string; sent: number } | null>(null);
   const [filterDivision, setFilterDivision] = useState('all');
   const [filterVenue, setFilterVenue] = useState('all');
+  const [venueRooms, setVenueRooms] = useState<Record<string, string[]>>({});
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
   const apiFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...(opts?.headers || {}), Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+
+  // Locker rooms defined on each venue (created on the admin Venues page)
+  useEffect(() => {
+    apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/events/${eventId}/locker-rooms`)
+      .then(r => r.json())
+      .then(json => {
+        if (!json.success) return;
+        const byVenue: Record<string, string[]> = {};
+        (json.data || []).forEach((lr: any) => {
+          if (!lr.venue_id) return;
+          if (!byVenue[lr.venue_id]) byVenue[lr.venue_id] = [];
+          if (!byVenue[lr.venue_id].includes(lr.name)) byVenue[lr.venue_id].push(lr.name);
+        });
+        setVenueRooms(byVenue);
+      })
+      .catch(() => {});
+  }, [eventId]);
+
+  // Dropdown when the game's venue has locker rooms defined, free-text input otherwise.
+  // A saved value that is no longer in the venue's list is kept as an extra option.
+  const renderLockerField = (g: any, field: 'home' | 'away', mobile: boolean) => {
+    const edit = edits[g.id] || { home: '', away: '' };
+    const val = edit[field] || '';
+    const options = g.venue_id ? (venueRooms[g.venue_id] || []) : [];
+    const cls = mobile
+      ? 'w-full px-3 py-2 rounded-lg border border-gray-200 text-base focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none bg-white'
+      : 'w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none bg-white';
+    if (options.length > 0) {
+      const opts = val && !options.includes(val) ? [val, ...options] : options;
+      return (
+        <select value={val} onChange={e => updateEdit(g.id, field, e.target.value)} className={cls}>
+          <option value="">Not assigned</option>
+          {opts.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    return (
+      <input
+        type="text"
+        value={val}
+        onChange={e => updateEdit(g.id, field, e.target.value)}
+        placeholder={field === 'home' ? 'Room A' : 'Room B'}
+        className={cls}
+      />
+    );
+  };
 
   const loadGames = () => {
     setLoading(true);
@@ -3648,23 +3695,11 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Home Locker</label>
-                    <input
-                      type="text"
-                      value={edit.home}
-                      onChange={e => updateEdit(g.id, 'home', e.target.value)}
-                      placeholder="Room A"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-base focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
-                    />
+                    {renderLockerField(g, 'home', true)}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Away Locker</label>
-                    <input
-                      type="text"
-                      value={edit.away}
-                      onChange={e => updateEdit(g.id, 'away', e.target.value)}
-                      placeholder="Room B"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-base focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
-                    />
+                    {renderLockerField(g, 'away', true)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -3723,22 +3758,10 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
                     <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
                     <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || '—'}</td>
                     <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={edit.home}
-                        onChange={e => updateEdit(g.id, 'home', e.target.value)}
-                        placeholder="e.g. Room A"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
-                      />
+                      {renderLockerField(g, 'home', false)}
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={edit.away}
-                        onChange={e => updateEdit(g.id, 'away', e.target.value)}
-                        placeholder="e.g. Room B"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-sm focus:border-[#003e79] focus:ring-1 focus:ring-blue-100 outline-none"
-                      />
+                      {renderLockerField(g, 'away', false)}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1.5">
