@@ -31,11 +31,9 @@ import { setActiveRole, refreshUser, addRoleToAccount } from '../services/auth';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const HERO_H = Math.round(SCREEN_WIDTH * 366 / 851);
-const CARD_ART = [
-  require('../../assets/teamcard-jersey.jpg'),
-  require('../../assets/teamcard-puck.jpg'),
-];
-const CARD_ART_W = [150, 104];
+// Single art image on every team card - swap this file for the stick-on-ice photo when Chad sends it
+const CARD_ART = require('../../assets/teamcard-puck.jpg');
+const CARD_ART_W = 104;
 
 interface Team {
   id: string;
@@ -260,8 +258,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     }
   }
 
-  function renderTeamCard({ item, index }: { item: Team; index: number }) {
-    const artIdx = index % CARD_ART.length;
+  function renderTeamCard({ item }: { item: Team }) {
     return (
       <TouchableOpacity
         style={styles.teamRow}
@@ -270,8 +267,8 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       >
         {/* Photo art on the right edge (chevron is part of the art) */}
         <Image
-          source={CARD_ART[artIdx]}
-          style={[styles.teamArt, { width: CARD_ART_W[artIdx] }]}
+          source={CARD_ART}
+          style={[styles.teamArt, { width: CARD_ART_W }]}
           resizeMode="cover"
         />
 
@@ -572,7 +569,7 @@ const styles = StyleSheet.create({
     alignItems: 'stretch' as const,
     gap: 8,
     marginHorizontal: spacing.md,
-    marginTop: -30,
+    marginTop: -14,
     backgroundColor: '#0c1726',
     borderRadius: 20,
     padding: 10,
