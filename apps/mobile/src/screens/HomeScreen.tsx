@@ -168,6 +168,11 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             <View style={styles.heroUnderline} />
             <Text style={styles.heroSubtext}>What would you like to do?</Text>
           </View>
+          <Image
+            source={require('../../assets/hero-fade.png')}
+            style={styles.heroFade}
+            resizeMode="stretch"
+          />
         </ImageBackground>
 
         {/* Game Day banner - a registered event is running right now */}
@@ -215,28 +220,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {/* Quick Access - photo tiles */}
         <View style={styles.qaGrid}>
           {([
-            { label: 'My Teams', baked: true, sub: 'View and manage all your teams', icon: 'people' as const, img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
-            { label: 'Find Events', baked: true, sub: 'Search tournaments across the country', icon: 'search' as const, img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
-            { label: 'My Events', baked: true, sub: 'Schedules, scores and standings', icon: 'calendar' as const, img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
-            { label: 'Shop', sub: 'Official UHT gear and apparel', icon: 'cart' as const, baked: false, img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
+            { label: 'My Teams', sub: 'View and manage all your teams', img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
+            { label: 'Find Events', sub: 'Search tournaments across the country', img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
+            { label: 'My Events', sub: 'View your schedules, rosters and details', img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
+            { label: 'Shop', sub: 'Official UHT gear, apparel and more', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
           ]).map(tile => (
             <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}
               accessibilityLabel={`${tile.label} - ${tile.sub}`}>
-              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner}>
-                {!(tile as any).baked && (
-                  <>
-                    <View style={styles.qaShade} />
-                    <View style={styles.qaShadeBottom} />
-                    <View style={styles.qaContent}>
-                      <View style={styles.qaIconCircle}>
-                        <Ionicons name={tile.icon} size={19} color={colors.cyan} />
-                      </View>
-                      <Text style={styles.qaLabel}>{tile.label}</Text>
-                      <Text style={styles.qaSub} numberOfLines={2}>{tile.sub}</Text>
-                    </View>
-                  </>
-                )}
-              </ImageBackground>
+              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner} />
             </TouchableOpacity>
           ))}
         </View>
@@ -260,9 +251,17 @@ const styles = StyleSheet.create({
   hero: {
     width: SCREEN_WIDTH,
     paddingTop: 24,
-    paddingBottom: 32,
-    minHeight: 300,
+    paddingBottom: 52,
+    minHeight: 316,
     justifyContent: 'flex-end',
+  },
+  heroFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -1,
+    height: 88,
+    width: SCREEN_WIDTH,
   },
   heroOverlay: {
     position: 'absolute',
@@ -347,40 +346,12 @@ const styles = StyleSheet.create({
   },
   qaCard: {
     width: (SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2,
-    height: ((SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2) * 0.964,
+    height: ((SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2) * 0.875,
     borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: colors.navy,
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 6,
+    backgroundColor: '#e8edf4',
+    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
   qaImageInner: { borderRadius: 18 },
-  qaShade: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(3,16,36,0.30)' },
-  qaShadeBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%', backgroundColor: 'rgba(3,14,32,0.55)' },
-  qaContent: { padding: 12, paddingBottom: 12 },
-  qaIconCircle: {
-    width: 38, height: 38, borderRadius: 12,
-    backgroundColor: 'rgba(5,16,34,0.72)',
-    borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
-  },
-  qaChevron: {
-    position: 'absolute', right: 10, bottom: 44,
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(10,22,40,0.65)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  qaLabel: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.white,
-  },
-  qaSub: {
-    fontSize: 11.5,
-    lineHeight: 15,
-    color: 'rgba(255,255,255,0.78)',
-    marginTop: 2,
-  },
 });
