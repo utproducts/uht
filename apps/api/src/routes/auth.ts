@@ -544,10 +544,11 @@ authRoutes.post('/magic-link/verify', zValidator('json', verifyMagicLinkSchema),
     return c.json({ success: false, error: 'Invalid or expired login link' }, 401);
   }
 
-  // Check if already used
-  if (link.used_at) {
-    return c.json({ success: false, error: 'This login link has already been used' }, 401);
-  }
+  // A used link stays valid until it expires. Corporate email scanners
+  // (Outlook SafeLinks etc.) prefetch login links and were burning the
+  // single-use token before the person ever clicked it - the Kasey Kaiser
+  // login loop, 9/23. The token is long, random, and dies in 15 minutes.
+  // (used_at is still recorded below for auditing.)
 
   // Check if expired
   if (new Date(link.expires_at) < new Date()) {
