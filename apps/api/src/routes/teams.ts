@@ -2444,12 +2444,22 @@ teamRoutes.post('/join', authMiddleware, zValidator('json', joinTeamSchema), asy
   `).bind(code).first<{ id: string; name: string; age_group: string; invite_code: string }>();
 
   if (!team) {
-    // Check if they used a parent code by mistake
+    // Parent/family code entered here (e.g. a coach-role user tapping a follow invite):
+    // follow the team instead of rejecting - that is what the invite text is for
     const parentMatch = await db.prepare(`
-      SELECT id, name FROM teams WHERE parent_invite_code = ? AND is_active = 1
-    `).bind(code).first();
+      SELECT id, name, age_group FROM teams WHERE parent_invite_code = ? AND is_active = 1
+    `).bind(code).first<{ id: string; name: string; age_group: string }>();
     if (parentMatch) {
-      return c.json({ success: false, error: 'This is a parent/family code. To join as a coach, ask the team admin for the coach invite code.' }, 400);
+      const existingFollow = await db.prepare(`
+        SELECT id FROM user_follows WHERE user_id = ? AND team_id = ?
+      `).bind(user.id, parentMatch.id).first();
+      if (!existingFollow) {
+        const fid = crypto.randomUUID().replace(/-/g, '');
+        await db.prepare(`
+          INSERT INTO user_follows (id, user_id, team_id) VALUES (?, ?, ?)
+        `).bind(fid, user.id, parentMatch.id).run();
+      }
+      return c.json({ success: true, data: { teamId: parentMatch.id, teamName: parentMatch.name, role: 'follower' } });
     }
     return c.json({ success: false, error: 'Invalid invite code. Please check the code and try again.' }, 404);
   }

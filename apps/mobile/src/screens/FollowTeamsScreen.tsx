@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Share,
+  Alert,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getOrganizationsByState, searchOrganizations, getTeamsByOrg, followTeam, searchTeams } from '../services/api';
@@ -134,9 +135,15 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
 
   async function handleFollowFromSearch(teamId: string) {
     try {
-      await followTeam(teamId);
-      setTeamSearchFollowed(prev => new Set([...prev, teamId]));
-    } catch {}
+      const json = await followTeam(teamId);
+      if (json?.success) {
+        setTeamSearchFollowed(prev => new Set([...prev, teamId]));
+      } else {
+        Alert.alert('Could Not Follow', json?.error || 'Something went wrong. Please try again.');
+      }
+    } catch {
+      Alert.alert('Could Not Follow', 'Network error. Please check your connection and try again.');
+    }
   }
 
   // Filter state list as user types
@@ -240,8 +247,12 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
     setSaving(true);
     setError('');
     try {
-      const promises = Array.from(selectedTeamIds).map((id) => followTeam(id));
-      await Promise.all(promises);
+      const results = await Promise.all(Array.from(selectedTeamIds).map((id) => followTeam(id)));
+      const failed = results.filter((r: any) => !r?.success);
+      if (failed.length > 0) {
+        setError((failed[0] as any)?.error || `Could not follow ${failed.length} team(s). Please try again.`);
+        return;
+      }
       navigation.replace('Main');
     } catch {
       setError('Failed to follow teams. Please try again.');
