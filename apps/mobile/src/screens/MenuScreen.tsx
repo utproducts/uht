@@ -493,12 +493,21 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
             <Ionicons name="arrow-forward" size={14} color="#1e9bf0" />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('Shop')}>
-          <Image
-            source={require('../../assets/shop-banner.jpg')}
-            style={styles.shopBanner}
-            resizeMode="cover"
-          />
+        <TouchableOpacity
+          style={styles.shopGoldCard}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('Shop')}
+        >
+          <View style={styles.shopGoldIconCircle}>
+            <Ionicons name="cart" size={24} color="#132a4d" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.shopGoldTitle}>Champions Locker</Text>
+            <Text style={styles.shopGoldSub}>Gear, merch, and more</Text>
+          </View>
+          <View style={styles.shopGoldChevron}>
+            <Ionicons name="chevron-forward" size={18} color="#132a4d" />
+          </View>
         </TouchableOpacity>
       </View>
     );
@@ -702,11 +711,45 @@ const styles = StyleSheet.create({
     ...fonts.bold,
   },
 
-  // Shop banner
-  shopBanner: {
-    width: '100%',
-    aspectRatio: 792 / 214,
+  // Shop gold card
+  shopGoldCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: '#d4af37',
     borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,245,210,0.65)',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    shadowColor: '#8a6d1f', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
+  },
+  shopGoldIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shopGoldTitle: {
+    fontSize: 20,
+    color: '#132a4d',
+    ...fonts.bold,
+  },
+  shopGoldSub: {
+    fontSize: 13,
+    color: 'rgba(19,42,77,0.75)',
+    ...fonts.semibold,
+    marginTop: 2,
+  },
+  shopGoldChevron: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Grid cards — 2-column layout with subtitles
