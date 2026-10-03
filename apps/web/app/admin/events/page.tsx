@@ -4951,9 +4951,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
             const groupWaitlisted = grouped[ageGroup].filter((r: any) => r.status === 'waitlisted').length;
             return (
             <div key={ageGroup} className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-[#f5f5f7] px-5 py-3 border-b border-[#e8e8ed] flex items-center justify-between">
+              <div className="bg-[#f5f5f7] px-4 sm:px-5 py-3 border-b border-[#e8e8ed] flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <h3 className="font-bold text-[#1d1d1f]">{ageGroup}</h3>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                   {groupPending > 0 && <span className="text-[11px] text-orange-600 font-medium">{groupPending} pending</span>}
                   <span className="text-[11px] text-green-600 font-medium">{groupApproved} approved</span>
                   {groupWaitlisted > 0 && <span className="text-[11px] text-amber-600 font-medium">{groupWaitlisted} waitlisted</span>}
@@ -4961,7 +4961,139 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                   <span className="text-sm text-[#86868b] font-medium">{grouped[ageGroup].length} team{grouped[ageGroup].length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
-              <div className="overflow-x-auto">
+
+              {/* Mobile: card per registration */}
+              <div className="lg:hidden divide-y divide-[#e8e8ed]">
+                {grouped[ageGroup].map((reg: any) => (
+                  <div key={reg.id} className={'p-4' + (reg.status === 'denied' ? ' opacity-50' : '')}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span className="font-semibold text-[#1d1d1f] text-sm">{reg.display_name || reg.team_name}</span>
+                        {reg.division ? (
+                          <span className="text-[11px] font-medium px-1.5 py-0.5 bg-[#f0f0f2] text-[#3d3d3d] rounded">{reg.division}</span>
+                        ) : null}
+                        {reg.mhr_url && (
+                          <a href={String(reg.mhr_url).startsWith('http') ? reg.mhr_url : `https://${reg.mhr_url}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center px-1.5 h-5 rounded bg-[#003e79] text-white text-[9px] font-extrabold">
+                            MHR{reg.mhr_rating != null ? ` ${Number(reg.mhr_rating).toFixed(1)}` : ''}
+                          </a>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => openFullEditor(reg)}
+                        disabled={editOpening === reg.id}
+                        className="shrink-0 p-2 bg-[#f0f7ff] text-[#003e79] rounded-lg disabled:opacity-40"
+                        title="Edit registration"
+                      >
+                        {editOpening === reg.id ? (
+                          <span className="block w-4 h-4 border-2 border-[#003e79]/30 border-t-[#003e79] rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                      <select
+                        value={reg.status || 'pending'}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value;
+                          handleRegSaved({ ...reg, status: newStatus });
+                          try {
+                            const res = await fetch(`${API_BASE}/admin/registration/${reg.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
+                              body: JSON.stringify({ status: newStatus }),
+                            });
+                            const json = await res.json() as any;
+                            if (json.success) { handleRegSaved(json.data); } else { handleRegSaved(reg); }
+                          } catch { handleRegSaved(reg); }
+                        }}
+                        className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 border-0 focus:ring-2 focus:ring-[#003e79]/20 outline-none ${
+                          reg.status === 'approved' ? 'bg-green-100 text-green-700' :
+                          reg.status === 'denied' ? 'bg-red-100 text-red-700' :
+                          reg.status === 'waitlisted' ? 'bg-amber-100 text-amber-700' :
+                          'bg-orange-100 text-orange-700'
+                        }`}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="denied">Canceled</option>
+                        <option value="waitlisted">Waitlisted</option>
+                      </select>
+                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${paymentStatusColor(reg.payment_status || 'unpaid')}`}>
+                        {paymentStatusLabel(reg.payment_status || 'unpaid')}{reg.payment_amount_cents ? ` · $${(reg.payment_amount_cents / 100).toLocaleString()}` : ''}
+                      </span>
+                      {reg.team_id && reg.roster_count > 0 ? (
+                        <a href={`/admin/teams?roster=${reg.team_id}&q=${encodeURIComponent(reg.team_name || '')}`}
+                          className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                          Roster {reg.roster_count}
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-[#c7c7cc] border border-[#e8e8ed] rounded-full px-2 py-0.5">No roster</span>
+                      )}
+                      <button
+                        onClick={() => { setNotesModalReg(reg); setNotesDraft(reg.notes || ''); }}
+                        className={`text-xs font-semibold rounded-full px-2.5 py-1 border ${reg.notes ? 'bg-amber-50 border-amber-200 text-amber-700' : 'border-[#e8e8ed] text-[#6e6e73]'}`}
+                      >
+                        {reg.notes ? 'Note ✓' : '+ Note'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide text-[#86868b] font-semibold mb-0.5">Coach</p>
+                        {reg.head_coach_name || reg.head_coach_email ? (
+                          <div>
+                            {reg.head_coach_name && <div className="font-medium text-[#1d1d1f]">{reg.head_coach_name}</div>}
+                            {reg.head_coach_email && (
+                              <button onClick={() => copyEmail(reg.head_coach_email)}
+                                className="text-[#003e79] text-left truncate block max-w-full">
+                                {copiedEmail === reg.head_coach_email ? '✓ Copied!' : reg.head_coach_email}
+                              </button>
+                            )}
+                            {reg.head_coach_phone && <div className="text-[#86868b] text-[11px]">{reg.head_coach_phone}</div>}
+                          </div>
+                        ) : <span className="text-[#c7c7cc]">—</span>}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide text-[#86868b] font-semibold mb-0.5">Manager</p>
+                        {reg.manager_name || reg.manager_email ? (
+                          <div>
+                            {reg.manager_name && <div className="font-medium text-[#1d1d1f]">{reg.manager_name}</div>}
+                            {reg.manager_email && (
+                              <button onClick={() => copyEmail(reg.manager_email)}
+                                className="text-[#003e79] text-left truncate block max-w-full">
+                                {copiedEmail === reg.manager_email ? '✓ Copied!' : reg.manager_email}
+                              </button>
+                            )}
+                            {reg.manager_phone && <div className="text-[#86868b] text-[11px]">{reg.manager_phone}</div>}
+                          </div>
+                        ) : <span className="text-[#c7c7cc]">—</span>}
+                      </div>
+                    </div>
+
+                    {(reg.hotel_assigned || reg.hotel_choice === 'Local Team' || reg.hotel_pref_1) && (
+                      <div className="mt-2.5 text-xs">
+                        {reg.hotel_assigned ? (
+                          <span className="text-[#003e79] font-medium">
+                            Hotel: {(reg as any).hotel_assigned_name || reg.hotel_assigned} <span className="text-green-600">· Assigned</span>
+                          </span>
+                        ) : reg.hotel_choice === 'Local Team' ? (
+                          <span className="text-[#86868b]">Hotel: Local Team</span>
+                        ) : (
+                          <span className="text-[#86868b]">
+                            Hotel pref: {reg.hotel_pref_1} <span className="text-amber-500 font-medium">· Needs assignment</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full text-sm table-fixed">
                   <thead className="bg-[#f5f5f7] text-left">
                     <tr>
