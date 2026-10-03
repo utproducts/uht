@@ -170,7 +170,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <View style={styles.hero}>
             <View style={styles.heroContent}>
               <Text style={styles.heroGreeting}>Welcome back,</Text>
-              <Text style={styles.heroName} numberOfLines={1}>{userName || 'Coach'}</Text>
+              <Text style={styles.heroName} numberOfLines={1}>{firstName || 'Coach'}</Text>
               <Text style={styles.heroSeason}>2026-27 SEASON</Text>
               <View style={styles.heroUnderline} />
               <Text style={styles.heroSubtext}>What would you like to do?</Text>
