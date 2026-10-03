@@ -9,6 +9,7 @@ import {
   Linking,
   Share,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CommonActions, useFocusEffect } from '@react-navigation/native';
@@ -43,6 +44,10 @@ interface ShareTeam {
   id: string;
   name: string;
   age_group: string;
+  division_level?: string;
+  player_count?: number;
+  logo_url?: string;
+  effective_logo_url?: string;
   invite_code?: string;
   parent_invite_code?: string;
   roster_share_token?: string;
@@ -147,38 +152,33 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     });
   }
 
-  const MANAGE_ITEMS: MenuGridItem[] = [
+  const MANAGE_ITEMS: (MenuGridItem & { sub?: string })[] = [
     {
       label: 'Team Management',
+      sub: 'Roster, staff, and settings',
       icon: 'people-outline',
       onPress: () => navigation.navigate('My Teams'),
     },
     {
       label: 'Registrations',
-      icon: 'checkmark-done-outline',
+      sub: 'View and manage',
+      icon: 'clipboard-outline',
       adminOnly: true,
       onPress: () => navigation.navigate('AdminRegistrations'),
     },
     {
       label: 'Score Management',
+      sub: 'Scores, stats, and standings',
       icon: 'stats-chart-outline',
       adminOnly: true,
       onPress: () => navigation.navigate('DirectorGames'),
     },
     {
       label: 'Assign Scorekeepers',
+      sub: 'Manage game assignments',
       icon: 'clipboard-outline',
       adminOnly: true,
       onPress: () => navigation.navigate('Scorekeeper'),
-    },
-  ];
-
-  const SHOP_LIST_ITEMS: MenuListItem[] = [
-    {
-      label: 'Champions Locker',
-      icon: 'cart-outline',
-      subtitle: 'Gear, merch, and more',
-      onPress: () => navigation.navigate('Shop'),
     },
   ];
 
@@ -288,18 +288,19 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     {
       label: 'Account Settings',
       icon: 'person-circle-outline',
+      subtitle: 'Profile, preferences, and billing',
       onPress: () => navigation.navigate('AccountSettings'),
     },
     {
       label: 'Notifications',
       icon: 'notifications-outline',
+      subtitle: 'Manage alerts and updates',
       onPress: () => navigation.navigate('NotificationSettings'),
     },
     {
       label: 'Add to Calendar',
       icon: 'calendar-outline',
-      subtitle: 'Sync all upcoming events to Calendar',
-      rightIcon: 'sync-outline',
+      subtitle: 'Sync all upcoming events to your calendar',
       onPress: handleCalendarSync,
     },
   ];
@@ -388,7 +389,10 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 
     return (
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>SHARE & INVITE</Text>
+        <View style={styles.kickerRow}>
+          <Text style={styles.sectionTitle}>YOUR TEAMS</Text>
+          <Text style={styles.sectionTitle}>SHARE & INVITE</Text>
+        </View>
 
         {loadingTeams && myTeams.length === 0 ? (
           <View style={styles.shareLoadingRow}>
@@ -403,15 +407,41 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
             // Need at least one invite code to show
             if (!hasInvite && !hasParentInvite) return null;
 
+            const logo = team.effective_logo_url || team.logo_url;
+
             return (
               <View key={team.id} style={styles.shareCard}>
                 {/* Team header */}
-                <View style={styles.shareCardHeader}>
-                  <View style={styles.shareTeamBadge}>
-                    <Text style={styles.shareTeamBadgeText}>{team.age_group}</Text>
+                <TouchableOpacity
+                  style={styles.shareCardHeader}
+                  activeOpacity={0.75}
+                  onPress={() => navigation.navigate('My Teams')}
+                >
+                  <View style={styles.shareLogoTile}>
+                    {logo ? (
+                      <Image source={{ uri: logo }} style={styles.shareLogoImg} />
+                    ) : (
+                      <Image source={require('../../assets/uht-logo.png')} style={styles.shareLogoFallback} resizeMode="contain" />
+                    )}
                   </View>
-                  <Text style={styles.shareTeamName} numberOfLines={1}>{team.name}</Text>
-                </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.shareTeamName} numberOfLines={1}>{team.name}</Text>
+                    <View style={styles.sharePillRow}>
+                      <View style={styles.shareTeamBadge}>
+                        <Text style={styles.shareTeamBadgeText}>{team.age_group}</Text>
+                      </View>
+                      {team.division_level ? (
+                        <View style={styles.shareDivBadge}>
+                          <Text style={styles.shareTeamBadgeText}>{team.division_level}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={styles.shareRosterText}>
+                        {(team.player_count || 0) > 0 ? `${team.player_count} players` : 'No roster'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#9aa7ba" />
+                </TouchableOpacity>
 
                 {/* Share buttons */}
                 <View style={styles.shareButtonsRow}>
@@ -449,7 +479,32 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     );
   }
 
-  function renderGridSection(title: string, items: MenuGridItem[]) {
+  function renderShopSection() {
+    return (
+      <View style={styles.section}>
+        <View style={styles.kickerRow}>
+          <Text style={styles.sectionTitle}>SHOP</Text>
+          <TouchableOpacity
+            style={styles.viewAllBtn}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Shop')}
+          >
+            <Text style={styles.viewAllText}>View All</Text>
+            <Ionicons name="arrow-forward" size={14} color="#1e9bf0" />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.navigate('Shop')}>
+          <Image
+            source={require('../../assets/shop-banner.jpg')}
+            style={styles.shopBanner}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  function renderGridSection(title: string, items: (MenuGridItem & { sub?: string })[]) {
     // Filter out admin/scorekeeper-only items for regular users
     const visibleItems = items.filter(item => {
       if (item.adminOnly && !isAdmin) return false;
@@ -470,18 +525,16 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
                 activeOpacity={0.7}
                 onPress={item.onPress || (() => console.log(`Tapped: ${item.label}`))}
               >
-                <Ionicons name={item.icon} size={22} color={colors.navy} />
-                <Text style={styles.gridLabel}>{item.label}</Text>
+                <Ionicons name={item.icon} size={24} color={colors.navy} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.gridLabel}>{item.label}</Text>
+                  {item.sub ? <Text style={styles.gridSub}>{item.sub}</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={15} color="#9aa7ba" />
               </TouchableOpacity>
             </View>
           ))}
-          {visibleItems.length % 3 === 1 && (
-            <>
-              <View style={styles.gridCardWrapper} />
-              <View style={styles.gridCardWrapper} />
-            </>
-          )}
-          {visibleItems.length % 3 === 2 && (
+          {visibleItems.length % 2 === 1 && (
             <View style={styles.gridCardWrapper} />
           )}
         </View>
@@ -588,7 +641,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {renderListSection('SHOP', SHOP_LIST_ITEMS)}
+        {renderShopSection()}
         {renderShareSection()}
         {renderGridSection('MANAGE', MANAGE_ITEMS)}
         {renderListSection('YOUR ACCOUNT', ACCOUNT_ITEMS)}
@@ -631,34 +684,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
 
-  // Grid cards — compact 3-column layout
+  // Kicker rows (section title + right accessory)
+  kickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  viewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllText: {
+    color: '#1e9bf0',
+    fontSize: 14,
+    ...fonts.bold,
+  },
+
+  // Shop banner
+  shopBanner: {
+    width: '100%',
+    aspectRatio: 792 / 214,
+    borderRadius: 18,
+  },
+
+  // Grid cards — 2-column layout with subtitles
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -(GRID_GAP / 2),
   },
   gridCardWrapper: {
-    width: '33.33%',
+    width: '50%',
     paddingHorizontal: GRID_GAP / 2,
     marginBottom: GRID_GAP,
   },
   gridCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 72,
+    gap: 10,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.md,
+    minHeight: 76,
+    shadowColor: '#0f2747', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
   },
   gridLabel: {
+    fontSize: 14,
+    color: '#101c30',
+    ...fonts.bold,
+    lineHeight: 17,
+  },
+  gridSub: {
     fontSize: 11,
-    color: colors.text,
-    ...fonts.semibold,
-    marginTop: 4,
-    textAlign: 'center',
+    color: '#5b6b83',
+    ...fonts.regular,
+    marginTop: 2,
     lineHeight: 14,
   },
 
@@ -723,23 +806,51 @@ const styles = StyleSheet.create({
   },
   shareCard: {
     backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: 16,
     padding: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
+    shadowColor: '#0f2747', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
   },
   shareCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  shareLogoTile: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  shareLogoImg: {
+    width: 56,
+    height: 56,
+  },
+  shareLogoFallback: {
+    width: 38,
+    height: 38,
+  },
+  sharePillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: 4,
   },
   shareTeamBadge: {
-    backgroundColor: colors.cyan,
-    paddingHorizontal: 8,
+    backgroundColor: '#19b5f1',
+    paddingHorizontal: 9,
     paddingVertical: 3,
-    borderRadius: radii.xs,
-    marginRight: spacing.sm,
+    borderRadius: 8,
+  },
+  shareDivBadge: {
+    backgroundColor: '#0d2b56',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   shareTeamBadgeText: {
     color: colors.white,
@@ -747,11 +858,15 @@ const styles = StyleSheet.create({
     ...fonts.bold,
     textTransform: 'uppercase',
   },
-  shareTeamName: {
-    fontSize: 15,
-    color: colors.text,
+  shareRosterText: {
+    fontSize: 13,
+    color: '#8a94a6',
     ...fonts.semibold,
-    flex: 1,
+  },
+  shareTeamName: {
+    fontSize: 17,
+    color: '#101c30',
+    ...fonts.bold,
   },
   shareButtonsRow: {
     flexDirection: 'row',
@@ -763,10 +878,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.navy,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm + 2,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
-    gap: 6,
+    gap: 7,
   },
   shareButtonParent: {
     backgroundColor: '#5856D6',

@@ -172,6 +172,10 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           method: 'POST',
           body: JSON.stringify({ inviteCode: code }),
         });
+        if (res.status === 401) {
+          Alert.alert('Session Expired', 'Please log out and log back in, then enter the code again.');
+          return;
+        }
         const json = await res.json() as any;
         if (json.success) {
           setJoinCode('');
@@ -186,6 +190,10 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
           method: 'POST',
           body: JSON.stringify({ inviteCode: code }),
         });
+        if (res.status === 401) {
+          Alert.alert('Session Expired', 'Please log out and log back in, then enter the code again.');
+          return;
+        }
         const json = await res.json() as any;
         if (json.success) {
           setJoinCode('');
