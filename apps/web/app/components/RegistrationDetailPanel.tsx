@@ -100,7 +100,11 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
 }) {
   const [status, setStatus] = useState(reg.status);
   const [paymentStatus, setPaymentStatus] = useState(reg.payment_status || 'unpaid');
-  const [amountCents, setAmountCents] = useState(reg.amount_cents ? (reg.amount_cents / 100).toString() : '');
+  // Rows from the participants list carry the amount as payment_amount_cents;
+  // older callers use amount_cents. Reading only one of them left this box
+  // blank, and saving then wiped the stored amount with null.
+  const initialAmountCents = (reg as any).payment_amount_cents ?? reg.amount_cents;
+  const [amountCents, setAmountCents] = useState(initialAmountCents ? (initialAmountCents / 100).toString() : '');
   // Division as age group + level (split selectors; resolves/creates an event division on save).
   // Level defaults to the assigned division's level, else the level the team
   // chose at creation (state-based list) — always editable.
@@ -216,6 +220,12 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
       if (json.success) {
         setManualPayments(json.data.payments || []);
         setPaySummary(json.data.summary || null);
+        // Backfill the Amount box from the server if it's still empty,
+        // so saving other fields can never null out a stored amount.
+        const charged = json.data.summary?.charged_cents;
+        if (charged) {
+          setAmountCents(prev => prev || (charged / 100).toString());
+        }
       }
     } catch {}
   }, [reg.id]);
