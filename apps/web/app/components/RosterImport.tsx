@@ -115,17 +115,24 @@ function parseRows(rows: string[][]): Player[] {
     // Assume template order: Jersey, First, Last, Position, Shoots
     // Or detect: if first column is numeric, it's jersey
     const sample = rows[startRow] || [];
-    if (sample.length >= 3) {
+    if (sample.length >= 2) {
       if (/^\d{1,3}$/.test(sample[0]?.trim()) || /^[HA]\s+\d/.test(sample[0]?.trim())) {
         // Starts with jersey number (plain or H/A format)
         colMap = { jersey: 0, firstName: 1, lastName: 2, position: 3, shoots: 4 };
       } else if (sample[0]?.includes(',')) {
         // "Last, First" format
         colMap = { fullName: 0, jersey: 1, position: 2, shoots: 3 };
+      } else if (sample.length === 2 && rows.slice(startRow).every(r => !r[1] || !/\d/.test(r[1]))) {
+        // Two text columns, no numbers anywhere: a comma-split "Last, First"
+        // name list (Papa eats the comma) - col 0 is the LAST name
+        colMap = { lastName: 0, firstName: 1 };
       } else {
         // First Last format
         colMap = { firstName: 0, lastName: 1, jersey: 2, position: 3, shoots: 4 };
       }
+    } else if (sample.length === 1 && sample[0]?.includes(',')) {
+      // Pure name list, one "Last, First" per line
+      colMap = { fullName: 0 };
     }
   }
 
@@ -279,15 +286,52 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
 
   const handlePaste = () => {
     if (!pastedText.trim()) return;
+    const text = pastedText.trim();
     // Parse pasted text as CSV/TSV
-    const results = Papa.parse(pastedText.trim());
-    const rows = (results.data as string[][]).filter(r => r.some(c => c?.trim()));
+    const results = Papa.parse(text);
+    let rows = (results.data as string[][]).filter(r => r.some(c => c?.trim()));
+
+    // Fallbacks for pastes that don't split into columns. Rosters copied from
+    // portals and PDFs often arrive space-separated, so Papa sees one column
+    // per line and the roster silently fails to import.
+    const colsPerRow = (rs: string[][]) => rs.length ? rs.reduce((m, r) => Math.max(m, r.filter(c => c?.trim()).length), 0) : 0;
+    // "Borman, Blake 10 F ..." lines make Papa split on the name comma only,
+    // leaving everything else bunched in column 2 - treat that as unsplit too.
+    const looksUnsplit = rows.length > 0 && rows.every(r => r.filter(c => c?.trim()).length <= 2) &&
+      rows.filter(r => ((r[1] || '').trim().split(/\s+/).length >= 3)).length >= Math.ceil(rows.length / 2);
+    if (colsPerRow(rows) <= 1 || looksUnsplit) {
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      // 1) Tabs or runs of 2+ spaces
+      let resplit = lines.map(l => l.split(/\t|\s{2,}/).map(c => c.trim()).filter(Boolean));
+      // 2) Single spaces, but keep "Last, First" names in one cell
+      if (colsPerRow(resplit) <= 1) {
+        resplit = lines.map(l => {
+          const nameMatch = l.match(/^([A-Za-z'’.-]+,\s*[A-Za-z'’. -]+?)\s+(\S.*)$/);
+          if (nameMatch) return [nameMatch[1].trim(), ...nameMatch[2].split(/\s+/)];
+          return l.split(/\s+/);
+        });
+      }
+      if (colsPerRow(resplit) >= 2) rows = resplit;
+    }
+
+    // Drop a leading row-number column (1, 2, 3... down the sheet)
+    const dataRows = rows.filter(r => r.some(c => c?.trim()));
+    if (dataRows.length > 1) {
+      const numbered = dataRows.filter(r => /^\d{1,3}$/.test(r[0]?.trim() || ''));
+      if (numbered.length === dataRows.length && numbered.every((r, i) => i === 0 || parseInt(r[0]) === parseInt(numbered[i - 1][0]) + 1)) {
+        rows = rows.map(r => r.slice(1));
+      }
+    }
+
     const players = parseRows(rows);
     if (players.length > 0) {
       setPreviewPlayers(players);
       setShowPreview(true);
     } else {
-      setMessage({ type: 'error', text: 'Could not parse player data. Try tab-separated or comma-separated format.' });
+      setMessage({
+        type: 'error',
+        text: `Could not read players from that paste (${rows.length} line${rows.length !== 1 ? 's' : ''} found). Easiest fix: paste columns in this order - Jersey, First Name, Last Name - one player per line, separated by tabs or commas. Or use Upload File with a CSV.`,
+      });
     }
   };
 
@@ -482,10 +526,10 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
         </div>
       )}
 
-      {/* Import Method Selector */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* Import Method Selector. URL import removed - USA Hockey put their
+          roster pages behind a CAPTCHA (Aug 2026), so it can never work. */}
+      <div className="grid grid-cols-3 gap-2">
         {([
-          { key: 'url', label: 'Import URL', desc: 'Import from URL', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
           { key: 'upload', label: 'Upload File', desc: 'CSV or Excel', icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12' },
           { key: 'paste', label: 'Paste', desc: 'From spreadsheet', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
           { key: 'manual', label: 'Manual', desc: 'One at a time', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' },
