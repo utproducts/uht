@@ -367,9 +367,8 @@ eventRoutes.get('/admin/list', async (c) => {
       t.name as tournament_name, t.location as tournament_location,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id AND r.status NOT IN ('denied','rejected','withdrawn','awaiting_payment')) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('denied','rejected','withdrawn','awaiting_payment')) as registration_count,
       (SELECT COUNT(*) FROM registrations r WHERE r.event_id = e.id) + (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as total_registration_count,
-      (SELECT COALESCE(SUM(COALESCE(r2.card_paid_cents, CASE WHEN r2.payment_status IN ('paid','partial') THEN COALESCE(r2.amount_cents, 0) ELSE 0 END)), 0) FROM registrations r2 WHERE r2.event_id = e.id AND r2.status NOT IN ('rejected','withdrawn'))
-      + (SELECT COALESCE(SUM(COALESCE(er2.card_paid_cents, CASE WHEN er2.payment_status IN ('paid','partial') THEN COALESCE(er2.payment_amount_cents, 0) ELSE 0 END)), 0) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))
-      + (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id IN (SELECT er3.id FROM event_registrations er3 WHERE er3.event_id = e.id AND er3.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as total_revenue_cents
+      (SELECT COALESCE(SUM(MAX(COALESCE(r2.amount_paid_cents, 0), COALESCE(r2.card_paid_cents, 0), CASE WHEN r2.payment_status IN ('paid','partial') THEN COALESCE(r2.amount_cents, 0) ELSE 0 END)), 0) FROM registrations r2 WHERE r2.event_id = e.id AND r2.status NOT IN ('rejected','withdrawn'))
+      + (SELECT COALESCE(SUM(MAX(COALESCE(er2.amount_paid_cents, 0), COALESCE(er2.card_paid_cents, 0), CASE WHEN er2.payment_status IN ('paid','partial') THEN COALESCE(er2.payment_amount_cents, 0) ELSE 0 END)), 0) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status NOT IN ('withdrawn','denied','rejected','awaiting_payment')) as total_revenue_cents
     FROM events e
     LEFT JOIN tournaments t ON t.id = e.tournament_id
     WHERE 1=1 ${dateCondition} ${searchCondition}
@@ -403,6 +402,7 @@ eventRoutes.get('/admin/detail/:id', authMiddleware, requireRole('admin', 'direc
   const registrations = await db.prepare(`
     SELECT r.id, r.event_id, r.status, r.payment_status,
       r.amount_cents as payment_amount_cents,
+      r.amount_paid_cents,
       r.card_paid_cents,
       (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = r.id) as manual_paid_cents,
       t.name as team_name,
@@ -437,6 +437,7 @@ eventRoutes.get('/admin/detail/:id', authMiddleware, requireRole('admin', 'direc
       er.manager_first_name, er.manager_last_name, er.email1 as email,
       er.phone, er.status, er.payment_status,
       er.payment_amount_cents,
+      er.amount_paid_cents,
       er.card_paid_cents,
       (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = er.id) as manual_paid_cents,
       COALESCE(er.team_id, (SELECT t9.id FROM teams t9 WHERE LOWER(t9.name) = LOWER(er.team_name) AND t9.is_active = 1 LIMIT 1)) as team_id,

@@ -220,12 +220,6 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
       if (json.success) {
         setManualPayments(json.data.payments || []);
         setPaySummary(json.data.summary || null);
-        // Backfill the Amount box from the server if it's still empty,
-        // so saving other fields can never null out a stored amount.
-        const charged = json.data.summary?.charged_cents;
-        if (charged) {
-          setAmountCents(prev => prev || (charged / 100).toString());
-        }
       }
     } catch {}
   }, [reg.id]);
@@ -713,15 +707,20 @@ export function RegistrationDetailPanel({ reg, divisions, eventHotels, onClose, 
                 <input type="number" step="0.01" value={amountCents} onChange={e => setAmountCents(e.target.value)}
                   placeholder="0.00"
                   className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-[#003e79]/20 outline-none ${
-                    ['paid', 'partial'].includes(paymentStatus) && !amountCents
+                    ['paid', 'partial'].includes(paymentStatus) && !amountCents && manualPayments.length === 0
                       ? 'border-amber-400 bg-amber-50'
                       : 'border-[#e8e8ed]'
                   }`} />
               </div>
             </div>
-            {['paid', 'partial'].includes(paymentStatus) && !amountCents && (
+            {['paid', 'partial'].includes(paymentStatus) && !amountCents && manualPayments.length === 0 && (
               <p className="text-[11px] text-amber-600 font-medium mt-1.5">
-                Enter the amount collected (check, Venmo, cash...) so this team counts in revenue totals.
+                No money is recorded for this team. For check / Venmo / cash, add it under Recorded Payments below (preferred) - it tracks method and reference.
+              </p>
+            )}
+            {manualPayments.length > 0 && amountCents && !reg.stripe_payment_intent_id && (
+              <p className="text-[11px] text-amber-600 font-medium mt-1.5">
+                Heads up: this team has Recorded Payments below. Leave the Amount box empty for offline money - filling both can double count.
               </p>
             )}
             {reg.stripe_payment_intent_id && (

@@ -4695,10 +4695,15 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const approvedRegistrations = allRegistrations.filter((r: any) => r.status === 'approved');
   // Revenue = card money (incl. deposits) + recorded manual payments (check/
   // Venmo). Previously only fully-'paid' card rows counted.
-  const totalRevenue = registrations.reduce((sum: number, r: any) => {
-    const card = r.card_paid_cents ?? (['paid', 'partial'].includes(r.payment_status) ? (r.payment_amount_cents || 0) : 0);
-    return sum + card + (r.manual_paid_cents || 0);
-  }, 0);
+  // One number per registration: amount_paid_cents is the server-maintained
+  // truth (card + recorded manual payments, never double counted). MAX guards
+  // legacy rows where only one of the fields was ever written.
+  const paidCentsFor = (r: any) => Math.max(
+    r.amount_paid_cents || 0,
+    r.card_paid_cents || 0,
+    ['paid', 'partial'].includes(r.payment_status) ? (r.payment_amount_cents || 0) : 0,
+  );
+  const totalRevenue = registrations.reduce((sum: number, r: any) => sum + paidCentsFor(r), 0);
 
   // Group registrations by age_group, stable sort by team_name within each group
   const grouped: Record<string, any[]> = {};
@@ -5023,7 +5028,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                         <option value="waitlisted">Waitlisted</option>
                       </select>
                       <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${paymentStatusColor(reg.payment_status || 'unpaid')}`}>
-                        {paymentStatusLabel(reg.payment_status || 'unpaid')}{((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) > 0 ? ` · $${(((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) / 100).toLocaleString()}` : ''}
+                        {paymentStatusLabel(reg.payment_status || 'unpaid')}{paidCentsFor(reg) > 0 ? ` · $${(paidCentsFor(reg) / 100).toLocaleString()}` : ''}
                       </span>
                       {reg.team_id && reg.roster_count > 0 ? (
                         <a href={`/admin/teams?roster=${reg.team_id}&q=${encodeURIComponent(reg.team_name || '')}`}
@@ -5236,8 +5241,8 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit ${paymentStatusColor(reg.payment_status || 'unpaid')}`}>
                               {paymentStatusLabel(reg.payment_status || 'unpaid')}
                             </span>
-                            {((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) > 0 ? (
-                              <span className="text-xs font-medium text-[#3d3d3d]">${(((reg.payment_amount_cents || 0) + (reg.manual_paid_cents || 0)) / 100).toLocaleString()}</span>
+                            {paidCentsFor(reg) > 0 ? (
+                              <span className="text-xs font-medium text-[#3d3d3d]">${(paidCentsFor(reg) / 100).toLocaleString()}</span>
                             ) : null}
                           </div>
                         </td>
