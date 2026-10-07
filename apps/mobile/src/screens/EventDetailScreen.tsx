@@ -387,6 +387,19 @@ export default function EventDetailScreen({
     return isNaN(d.getTime()) ? null : d;
   }
 
+  // Schedule feeds send start_time; older data may have separate time/date.
+  // Falls back so freshly uploaded schedules never show TBD.
+  function gameTimeLabel(item: any): string {
+    if (item.time || item.date) return formatGameTime(item.time, item.date);
+    if (item.start_time) {
+      const d = formatScoreDate(item.start_time);
+      const t = formatScoreTime(item.start_time);
+      if (t === 'TBD') return 'TBD';
+      return d ? `${d} at ${t}` : t;
+    }
+    return 'TBD';
+  }
+
   function formatScoreTime(startTime?: string): string {
     const d = parseGameDate(startTime);
     if (!d) return 'TBD';
@@ -932,7 +945,7 @@ export default function EventDetailScreen({
                 </View>
               )}
               <View style={styles.gameTimeRow}>
-                <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
+                <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
                 {item.rink_name || item.rink ? (
                   <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
                 ) : null}
@@ -1239,7 +1252,7 @@ export default function EventDetailScreen({
                 </View>
               )}
               <View style={styles.gameTimeRow}>
-                <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
+                <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
                 {item.rink_name || item.rink ? (
                   <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
                 ) : null}
