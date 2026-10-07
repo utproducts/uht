@@ -1799,8 +1799,20 @@ schedulingRoutes.get('/admin/:eventId/schedule-checks', authMiddleware, requireR
     };
   });
 
+  // Current pool assignments (Blue/Grey from the standings order) scope the
+  // seed warnings - a team that can't reach "1st Blue" shouldn't flag on it
+  let poolsByName: Record<string, string> | undefined;
+  try {
+    const { computeStandings } = await import('../lib/standings');
+    const { standings } = await computeStandings(db, eventId);
+    poolsByName = {};
+    for (const s of standings) {
+      if (s.pool_name && s.team_name) poolsByName[String(s.team_name).trim()] = s.pool_name;
+    }
+  } catch { /* no pools - warnings stay unscoped */ }
+
   const { runScheduleChecks } = await import('../lib/schedule-checks');
-  return c.json({ success: true, data: { games: checkGames.length, checks: runScheduleChecks(checkGames) } });
+  return c.json({ success: true, data: { games: checkGames.length, checks: runScheduleChecks(checkGames, poolsByName) } });
 });
 
 const uploadCsvSchema = z.object({

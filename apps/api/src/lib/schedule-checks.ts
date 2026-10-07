@@ -50,9 +50,16 @@ const fmtGap = (mins: number) => {
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
 };
 
-export function runScheduleChecks(games: CheckGame[]): ScheduleChecks {
+// poolsByName: team display name -> pool name ('Blue'/'Grey'), when known
+// (live checks pass the current standings pools so "1st Blue" warnings only
+// apply to Blue-pool teams; upload previews leave it undefined)
+export function runScheduleChecks(games: CheckGame[], poolsByName?: Record<string, string>): ScheduleChecks {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const poolOfSeed = (label: string) => label
+    .replace(/^\s*\d+\s*(st|nd|rd|th)\s*(place)?\s*/i, '')
+    .replace(/\bpool\b/i, '')
+    .trim().toLowerCase();
 
   const byDiv = new Map<string, CheckGame[]>();
   for (const g of games) {
@@ -176,8 +183,16 @@ export function runScheduleChecks(games: CheckGame[]): ScheduleChecks {
     for (const bg of bracket) {
       const bDay = dateOf(bg.start);
       const bMins = minsOf(bg.start);
-      const seedLabels = [bg.homeIsSeed ? bg.homeName : null, bg.awayIsSeed ? bg.awayName : null].filter(Boolean).join(' / ');
+      const seedList = [bg.homeIsSeed ? bg.homeName : null, bg.awayIsSeed ? bg.awayName : null].filter(Boolean) as string[];
+      const seedLabels = seedList.join(' / ');
+      // pools this bracket game can draw from ('' = any pool)
+      const seedPools = seedList.map(poolOfSeed);
+      const restricted = seedPools.length > 0 && seedPools.every(p => p !== '');
       for (const nm of names) {
+        if (restricted && poolsByName) {
+          const teamPool = (poolsByName[nm] || '').trim().toLowerCase();
+          if (teamPool && !seedPools.includes(teamPool)) continue; // can't land this seed
+        }
         const t = teams.get(nm)!;
         for (const g of t.games) {
           if (dateOf(g.start) !== bDay) continue;

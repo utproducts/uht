@@ -216,6 +216,10 @@ export async function computeStandings(
     for (const [divId, rows] of byDiv) {
       const singlePool = rows.every(r => !(r.pool_name || '').trim());
       if (!singlePool) continue;
+      // Stats-based order BEFORE any manual re-sort: once a 6-team division
+      // splits, game results (not drag position) must rank teams within a pool
+      const statRank = new Map(rows.map(r => [r.team_id, r.rank]));
+      const anyFinals = rows.some(r => r.games_played > 0);
       const ord = ovByDiv.get(divId);
       if (ord && ord.size > 0) {
         rows.sort((a, b) => {
@@ -227,11 +231,16 @@ export async function computeStandings(
       }
       if (rows.length === 6) {
         const baseComplete = poolComplete.get(poolKey(divId, null)) || false;
+        // Manual order (or stats) decides WHO is Blue vs Grey...
         rows.sort((a, b) => a.rank - b.rank);
-        rows.forEach((r, i) => {
-          r.pool_name = i < 3 ? 'Blue' : 'Grey';
-          r.rank = (i % 3) + 1;
-        });
+        rows.forEach((r, i) => { r.pool_name = i < 3 ? 'Blue' : 'Grey'; });
+        // ...but once games are final, results rank teams INSIDE each pool,
+        // so "1st Blue" seeds resolve from play, not from the drag order.
+        for (const pool of ['Blue', 'Grey']) {
+          const trio = rows.filter(r => r.pool_name === pool);
+          if (anyFinals) trio.sort((a, b) => (statRank.get(a.team_id) || 99) - (statRank.get(b.team_id) || 99));
+          trio.forEach((r, i) => { r.rank = i + 1; if (anyFinals) r.tiebreaker = r.tiebreaker === 'manual' ? 'unresolved' : r.tiebreaker; });
+        }
         poolComplete.set(poolKey(divId, 'Blue'), baseComplete);
         poolComplete.set(poolKey(divId, 'Grey'), baseComplete);
       }
