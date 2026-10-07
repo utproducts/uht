@@ -383,7 +383,7 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
                 <TouchableOpacity key={`${r.team_name}-${i}`}
                   style={[s.divRow, i === list.length - 1 ? s.divRowLast : null]}
                   activeOpacity={0.7} onPress={() => copyCode(r)}>
-                  <Text style={s.rowTitle} numberOfLines={1}>{r.team_name}</Text>
+                  <Text style={[s.rowTitle, { flex: 1, marginRight: 8 }]} numberOfLines={1}>{r.team_name}</Text>
                   {(r.parent_invite_code || r.invite_code) ? (
                     <View style={s.codeChip}><Text style={s.codeChipText}>{r.parent_invite_code || r.invite_code}</Text></View>
                   ) : (
@@ -396,6 +396,193 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
           {rows.length === 0 && <Text style={s.empty}>No approved teams yet.</Text>}
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// 6. Locker Room Assignments
+// ─────────────────────────────────────────────────────────
+export function DirectorLockerRoomsScreen({ navigation }: any) {
+  const { events, selected, setSelected, loading } = useDirectorEvents();
+  const [games, setGames] = useState<any[]>([]);
+  const [venueRooms, setVenueRooms] = useState<Record<string, string[]>>({});
+  const [selVenue, setSelVenue] = useState<string | null>(null);
+  const [selRink, setSelRink] = useState<string | null>(null);
+  const [selDay, setSelDay] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<{ game: any; side: 'home' | 'away' } | null>(null);
+  const [pushing, setPushing] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    if (!selected) return;
+    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${selected.id}/games`)
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setGames(j.data || []); })
+      .catch(() => {});
+    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${selected.id}/locker-rooms`)
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j.success) return;
+        const map: Record<string, string[]> = {};
+        for (const lr of j.data || []) {
+          if (!lr.venue_id) continue;
+          if (!map[lr.venue_id]) map[lr.venue_id] = [];
+          if (!map[lr.venue_id].includes(lr.name)) map[lr.venue_id].push(lr.name);
+        }
+        setVenueRooms(map);
+      })
+      .catch(() => {});
+  }, [selected]);
+  useEffect(() => { setSelVenue(null); setSelRink(null); setSelDay(null); load(); }, [load]);
+
+  const venues = Array.from(new Map(games.filter(g => g.venue_id).map(g => [g.venue_id, g.venue_name])).entries());
+  const activeVenue = selVenue || (venues[0]?.[0] ?? null);
+  const rinks = Array.from(new Map(games.filter(g => g.venue_id === activeVenue && g.rink_id).map(g => [g.rink_id, g.rink_name])).entries());
+  const activeRink = selRink && rinks.some(r => r[0] === selRink) ? selRink : (rinks[0]?.[0] ?? null);
+  const rinkGames = games.filter(g => g.venue_id === activeVenue && g.rink_id === activeRink);
+  const days = Array.from(new Set(rinkGames.map(g => String(g.start_time || '').slice(0, 10)).filter(Boolean))).sort();
+  const today = new Date().toISOString().slice(0, 10);
+  const activeDay = selDay && days.includes(selDay) ? selDay : (days.includes(today) ? today : days[0] || null);
+  const dayGames = rinkGames.filter(g => String(g.start_time || '').slice(0, 10) === activeDay)
+    .sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+
+  const fmtTime = (t: string) => {
+    const d = new Date(String(t).includes(' ') ? String(t).replace(' ', 'T') : t);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+  const fmtDay = (iso: string) => {
+    const d = new Date(iso + 'T12:00:00');
+    return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const saveRoom = async (game: any, side: 'home' | 'away', room: string | null) => {
+    setSheet(null);
+    const body = {
+      home_locker_room: side === 'home' ? room : (game.home_locker_room || null),
+      away_locker_room: side === 'away' ? room : (game.away_locker_room || null),
+    };
+    setGames(prev => prev.map(g => g.id === game.id ? { ...g, [`${side}_locker_room`]: room } : g));
+    try {
+      await authFetch(`/api/push/games/${game.id}/locker-rooms`, { method: 'PATCH', body: JSON.stringify(body) });
+    } catch {
+      Alert.alert('Save failed', 'Please try again.');
+      load();
+    }
+  };
+
+  const sendPush = async (game: any) => {
+    setPushing(game.id);
+    try {
+      const res = await authFetch('/api/push/send-locker-room', { method: 'POST', body: JSON.stringify({ game_id: game.id }) });
+      const json = await res.json() as any;
+      Alert.alert(json.success ? 'Push Sent' : 'Push Failed', json.success ? `Locker rooms sent to ${json.data?.sent ?? 0} device(s).` : (json.error || 'Try again.'));
+    } catch { Alert.alert('Push Failed', 'Try again.'); }
+    setPushing(null);
+  };
+
+  const roomsForVenue = activeVenue ? (venueRooms[activeVenue] || []) : [];
+
+  return (
+    <View style={s.screen}>
+      <Header title="Locker Rooms" subtitle="Pick a venue and rink, then assign rooms per game" navigation={navigation} />
+      <EventPills events={events} selected={selected} onSelect={setSelected} />
+      {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
+        <ScrollView contentContainerStyle={s.body}>
+          {venues.length > 1 && (
+            <View style={s.chipWrap}>
+              {venues.map(([id, name]) => (
+                <TouchableOpacity key={id} style={[s.pill, activeVenue === id && s.pillActive]} onPress={() => { setSelVenue(id as string); setSelRink(null); }}>
+                  <Text style={[s.pillText, activeVenue === id && s.pillTextActive]}>{name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {rinks.length > 1 && (
+            <View style={s.chipWrap}>
+              {rinks.map(([id, name]) => (
+                <TouchableOpacity key={id} style={[s.pill, activeRink === id && s.pillActive]} onPress={() => setSelRink(id as string)}>
+                  <Text style={[s.pillText, activeRink === id && s.pillTextActive]}>{name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {days.length > 1 && (
+            <View style={s.chipWrap}>
+              {days.map(d => (
+                <TouchableOpacity key={d} style={[s.pill, activeDay === d && s.pillActive]} onPress={() => setSelDay(d)}>
+                  <Text style={[s.pillText, activeDay === d && s.pillTextActive]}>{fmtDay(d)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {dayGames.map(g => (
+            <View key={g.id} style={s.lrCard}>
+              <View style={s.lrTopRow}>
+                <Text style={s.lrTime}>{fmtTime(g.start_time)}  ·  #{g.game_number}</Text>
+                {(g.home_locker_room || g.away_locker_room) ? (
+                  <TouchableOpacity style={s.lrPushBtn} disabled={pushing === g.id} onPress={() => sendPush(g)}>
+                    <Ionicons name="notifications-outline" size={13} color={colors.white} />
+                    <Text style={s.lrPushText}>{pushing === g.id ? 'Sending...' : 'Push'}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              {(['home', 'away'] as const).map(side => (
+                <View key={side} style={s.lrSideRow}>
+                  <Text style={s.lrSideLabel}>{side === 'home' ? 'HOME' : 'AWAY'}</Text>
+                  <Text style={s.lrTeam} numberOfLines={1}>{side === 'home' ? (g.home_team_name || 'TBD') : (g.away_team_name || 'TBD')}</Text>
+                  <TouchableOpacity style={[s.lrRoomBtn, (side === 'home' ? g.home_locker_room : g.away_locker_room) ? s.lrRoomBtnSet : null]}
+                    onPress={() => setSheet({ game: g, side })}>
+                    <Text style={[s.lrRoomText, (side === 'home' ? g.home_locker_room : g.away_locker_room) ? s.lrRoomTextSet : null]}>
+                      {(side === 'home' ? g.home_locker_room : g.away_locker_room) || 'Assign'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ))}
+          {dayGames.length === 0 && <Text style={s.empty}>No games at this rink{activeDay ? ' on this day' : ''}.</Text>}
+        </ScrollView>
+      )}
+
+      <Modal visible={!!sheet} transparent animationType="slide" onRequestClose={() => setSheet(null)}>
+        <View style={s.sheetBackdrop}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>
+              {sheet ? `${sheet.side === 'home' ? 'Home' : 'Away'} locker - ${sheet.side === 'home' ? (sheet.game.home_team_name || 'TBD') : (sheet.game.away_team_name || 'TBD')}` : ''}
+            </Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {roomsForVenue.map(room => (
+                <TouchableOpacity key={room} style={s.sheetRow} onPress={() => sheet && saveRoom(sheet.game, sheet.side, room)}>
+                  <Ionicons name="lock-closed-outline" size={16} color={colors.navy} />
+                  <Text style={s.sheetRowText}>{room}</Text>
+                </TouchableOpacity>
+              ))}
+              {roomsForVenue.length === 0 && (
+                <Text style={s.empty}>No locker rooms defined for this venue yet. Add them on the admin Venues page, or use Custom below.</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity style={s.sheetRow} onPress={() => {
+              if (!sheet) return;
+              const target = sheet;
+              setSheet(null);
+              Alert.prompt('Custom room', 'Type the locker room name', (text) => {
+                if (text && text.trim()) saveRoom(target.game, target.side, text.trim());
+              });
+            }}>
+              <Ionicons name="create-outline" size={16} color={colors.navy} />
+              <Text style={s.sheetRowText}>Custom...</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetRow} onPress={() => sheet && saveRoom(sheet.game, sheet.side, null)}>
+              <Ionicons name="close-circle-outline" size={16} color="#c0392b" />
+              <Text style={[s.sheetRowText, { color: '#c0392b' }]}>Clear assignment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetCancel} onPress={() => setSheet(null)}>
+              <Text style={s.sheetCancelText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -441,6 +628,26 @@ const s = StyleSheet.create({
   divCardSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, ...fonts.semibold },
   divRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
   divRowLast: { borderBottomWidth: 0 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  lrCard: { backgroundColor: colors.white, borderRadius: 14, padding: 13, marginBottom: 10, shadowColor: '#0f2747', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  lrTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  lrTime: { fontSize: 12, color: '#7a8699', ...fonts.bold, textTransform: 'uppercase', letterSpacing: 0.4 },
+  lrPushBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1e9e55', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  lrPushText: { color: colors.white, fontSize: 11, ...fonts.bold },
+  lrSideRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+  lrSideLabel: { width: 42, fontSize: 10, color: '#9aa7ba', ...fonts.bold, letterSpacing: 0.5 },
+  lrTeam: { flex: 1, fontSize: 13.5, color: '#101c30', ...fonts.semibold },
+  lrRoomBtn: { borderWidth: 1, borderColor: '#cfd8e3', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 6, minWidth: 84, alignItems: 'center' },
+  lrRoomBtnSet: { backgroundColor: '#f0f7ff', borderColor: '#8fc1eb' },
+  lrRoomText: { fontSize: 12.5, color: '#7a8699', ...fonts.semibold },
+  lrRoomTextSet: { color: colors.navy, ...fonts.bold },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(4,10,20,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 34 },
+  sheetTitle: { fontSize: 16, color: '#101c30', ...fonts.bold, marginBottom: 10 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+  sheetRowText: { fontSize: 15, color: '#101c30', ...fonts.semibold },
+  sheetCancel: { marginTop: 14, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: '#eef2f7' },
+  sheetCancelText: { fontSize: 15, color: '#101c30', ...fonts.bold },
   codeChip: { backgroundColor: '#f0f7ff', borderWidth: 1, borderColor: '#bcd9f5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   codeChipText: { color: colors.navy, fontSize: 14, letterSpacing: 2, ...fonts.bold },
 });

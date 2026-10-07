@@ -289,6 +289,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               { label: 'Championship Photos', sub: 'Post the winners', icon: 'trophy-outline' as const, go: () => navigation.navigate('DirectorChampions') },
               { label: 'Rink Addresses', sub: 'Share directions instantly', icon: 'location-outline' as const, go: () => navigation.navigate('DirectorRinks') },
               { label: 'Team Codes', sub: 'Help parents follow teams', icon: 'key-outline' as const, go: () => navigation.navigate('DirectorTeamCodes') },
+              { label: 'Locker Rooms', sub: 'Assign rooms by rink and day', icon: 'lock-closed-outline' as const, go: () => navigation.navigate('DirectorLockerRooms') },
             ]).map(tool => (
               <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard]} onPress={tool.go} activeOpacity={0.85}
                 accessibilityLabel={`${tool.label} - ${tool.sub}`}>
