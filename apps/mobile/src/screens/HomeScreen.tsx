@@ -262,12 +262,13 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             {(nextEvent as any).logo_url ? (
               <Image source={{ uri: (nextEvent as any).logo_url }} style={styles.nextUpLogo} resizeMode="contain" />
             ) : null}
-            <View style={styles.nextUpCount}>
-              <Text style={styles.nextUpDays}>{daysToNext}</Text>
-              <Text style={styles.nextUpDaysLabel}>{daysToNext === 1 ? 'DAY' : 'DAYS'}</Text>
-            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.nextUpKicker}>NEXT UP</Text>
+              <View style={styles.nextUpTopRow}>
+                <Text style={styles.nextUpKicker}>NEXT UP</Text>
+                <View style={styles.nextUpDaysPill}>
+                  <Text style={styles.nextUpDaysPillText}>{daysToNext} {daysToNext === 1 ? 'DAY' : 'DAYS'}</Text>
+                </View>
+              </View>
               <Text style={styles.nextUpName} numberOfLines={2}>{nextEvent.name}</Text>
               <Text style={styles.nextUpMeta}>
                 {fmtRange(nextEvent.start_date, nextEvent.end_date)}{nextEvent.city ? ` · ${nextEvent.city}` : ''}
@@ -455,6 +456,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 14,
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
+  nextUpTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nextUpDaysPill: {
+    backgroundColor: 'rgba(0,204,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,204,255,0.4)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  nextUpDaysPillText: { color: colors.cyan, fontSize: 12, letterSpacing: 0.5, ...fonts.bold },
   nextUpCount: { width: 72, height: 72, borderRadius: 16, backgroundColor: 'rgba(0,204,255,0.14)', borderWidth: 1, borderColor: 'rgba(0,204,255,0.35)', alignItems: 'center', justifyContent: 'center' },
   nextUpDays: { color: colors.cyan, fontSize: 28, lineHeight: 30, ...fonts.bold },
   nextUpDaysLabel: { color: colors.cyan, fontSize: 9, letterSpacing: 1.5, ...fonts.bold },
