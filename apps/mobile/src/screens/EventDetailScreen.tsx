@@ -992,9 +992,6 @@ export default function EventDetailScreen({
               </View>
               {renderAnnouncementStrip(item)}
               {renderStarsStrip(item)}
-              {item.venue_name ? (
-                <Text style={styles.gameVenue}>{item.venue_name}</Text>
-              ) : null}
               {isFinal && item.id ? (
                 <TouchableOpacity
                   style={styles.scoresheetBtn}
