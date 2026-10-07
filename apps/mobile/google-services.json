@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "904753843478",
+    "project_id": "ultimate-tournaments-6b29b",
+    "storage_bucket": "ultimate-tournaments-6b29b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:904753843478:android:555b2983b1870833ee1437",
+        "android_client_info": {
+          "package_name": "com.ultimatetournaments.uht"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4LRJA-5xD7F-Eu-mNsTlREC2G4fT9Bow"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
