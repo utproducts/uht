@@ -453,6 +453,7 @@ const styles = StyleSheet.create({
   nextUpCard: {
     marginHorizontal: spacing.lg, marginTop: spacing.lg,
     backgroundColor: colors.navy, borderRadius: 18, padding: 16,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)',
     flexDirection: 'row', alignItems: 'center', gap: 14,
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
