@@ -4597,7 +4597,7 @@ function AppInviteCard({ eventId }: { eventId: string }) {
   );
 }
 
-function ReplaceTeamCard({ eventId }: { eventId: string }) {
+function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string; registeredTeamIds?: string[] }) {
   const [scheduleTeams, setScheduleTeams] = useState<{ id: string; name: string }[]>([]);
   const [fromId, setFromId] = useState('');
   const [query, setQuery] = useState('');
@@ -4661,6 +4661,11 @@ function ReplaceTeamCard({ eventId }: { eventId: string }) {
 
   const fromName = scheduleTeams.find(t => t.id === fromId)?.name;
 
+  // Fillers first: teams in the schedule with NO registration for this event
+  const regIdSet = new Set(registeredTeamIds);
+  const unregistered = scheduleTeams.filter(t => !regIdSet.has(t.id));
+  const registered = scheduleTeams.filter(t => regIdSet.has(t.id));
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
       <h3 className="text-lg font-bold text-[#1d1d1f]">Replace a Team in the Schedule</h3>
@@ -4673,8 +4678,22 @@ function ReplaceTeamCard({ eventId }: { eventId: string }) {
           <select value={fromId} onChange={e => { setFromId(e.target.value); setMsg(''); }}
             className="w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:border-[#003e79] outline-none bg-white">
             <option value="">Select a team in this schedule...</option>
-            {scheduleTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {unregistered.length > 0 && (
+              <optgroup label={`Not registered for this event (${unregistered.length}) - likely fillers`}>
+                {unregistered.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </optgroup>
+            )}
+            {registered.length > 0 && (
+              <optgroup label={`Registered teams (${registered.length})`}>
+                {registered.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </optgroup>
+            )}
           </select>
+          {unregistered.length > 0 && (
+            <p className="text-[11px] text-amber-600 font-medium mt-1">
+              {unregistered.length} team{unregistered.length !== 1 ? 's' : ''} in the schedule {unregistered.length !== 1 ? 'are' : 'is'} not registered for this event.
+            </p>
+          )}
         </div>
         <div className="relative">
           <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Replacement team</label>
@@ -5698,7 +5717,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'schedules' && (
         <div className="space-y-4">
-          <ReplaceTeamCard eventId={eventId} />
+          <ReplaceTeamCard eventId={eventId} registeredTeamIds={registrations.map((r: any) => r.team_id).filter(Boolean)} />
           <ScheduleGamesTab eventId={eventId} />
         </div>
       )}
