@@ -4498,6 +4498,105 @@ function TournamentGuideCard({ eventId }: { eventId: string }) {
   );
 }
 
+function AppInviteCard({ eventId }: { eventId: string }) {
+  const [status, setStatus] = useState<{ teams: number; with_code: number; no_code: number; emails_sent: number } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState('');
+
+  const load = () => {
+    fetch(`https://uht.chad-157.workers.dev/api/email/app-invite/${eventId}/status`, { headers: adminHeaders() })
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setStatus(j.data); })
+      .catch(() => {});
+  };
+  useEffect(load, [eventId]);
+
+  const send = async (testEmail?: string) => {
+    setSending(true);
+    setResult('');
+    try {
+      const r = await fetch(`https://uht.chad-157.workers.dev/api/email/app-invite/${eventId}/send`, {
+        method: 'POST', headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(testEmail ? { testEmail } : {}),
+      }).then(res => res.json()) as any;
+      if (r.success) {
+        const d = r.data;
+        if (d.test) {
+          setResult(d.ok ? `Test sent to ${testEmail} (sample: ${d.teamName}).` : 'Test send failed.');
+        } else {
+          setResult(
+            d.sent === 0 && d.skipped > 0
+              ? 'Nothing new to send - every coach already received it.'
+              : `Sent ${d.sent} email${d.sent !== 1 ? 's' : ''} across ${d.teams} team${d.teams !== 1 ? 's' : ''}` +
+                (d.skipped ? ` (${d.skipped} already had it)` : '') +
+                (d.no_code ? `. ${d.no_code} team${d.no_code !== 1 ? 's have' : ' has'} no team code - fix those teams and send again.` : '') +
+                (d.no_email ? ` ${d.no_email} team${d.no_email !== 1 ? 's have' : ' has'} no email on file.` : '')
+          );
+          load();
+        }
+      } else {
+        setResult(r.error || 'Send failed');
+      }
+    } catch {
+      setResult('Send failed');
+    }
+    setSending(false);
+    setConfirming(false);
+  };
+
+  const sendTest = () => {
+    const email = window.prompt('Send a sample (first team) to which email?', 'utproducts1@gmail.com');
+    if (email && email.includes('@')) send(email.trim());
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">📱 Get Parents on the App</h3>
+          <p className="text-sm text-[#6e6e73] mt-1">
+            Emails every approved team's coaches their team code with download-and-follow steps for families.
+            {status && (
+              status.emails_sent > 0
+                ? ` ${status.emails_sent} email${status.emails_sent !== 1 ? 's' : ''} sent so far across ${status.teams} approved teams.`
+                : ` Not sent yet - ${status.with_code} of ${status.teams} approved team${status.teams !== 1 ? 's' : ''} have codes ready.`
+            )}
+            {status && status.no_code > 0 && (
+              <span className="text-amber-600 font-semibold"> {status.no_code} team{status.no_code !== 1 ? 's are' : ' is'} missing a team code.</span>
+            )}
+          </p>
+        </div>
+        {confirming ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-[#1d1d1f]">Email {status?.with_code || 0} teams now?</span>
+            <button onClick={() => send()} disabled={sending}
+              className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition disabled:opacity-50">
+              {sending ? 'Sending…' : 'Yes, Send'}
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={sending}
+              className="px-4 py-2 rounded-xl bg-white border border-[#e8e8ed] text-[#6e6e73] text-sm font-semibold hover:bg-[#fafafa] transition">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button onClick={sendTest} disabled={sending}
+              className="px-4 py-2.5 rounded-xl bg-white border border-[#003e79]/30 text-[#003e79] text-sm font-bold hover:bg-[#f0f7ff] transition disabled:opacity-50">
+              Send Test
+            </button>
+            <button onClick={() => { setResult(''); setConfirming(true); }}
+              className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition">
+              {status && status.emails_sent > 0 ? 'Send to New Teams' : 'Send App Invite'}
+            </button>
+          </div>
+        )}
+      </div>
+      {result && <p className="text-sm font-semibold text-green-700 mt-3">{result}</p>}
+    </div>
+  );
+}
+
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   // Which email was just copied to the clipboard (shows a brief "Copied!")
@@ -4828,6 +4927,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
         <div className="space-y-6">
           {/* Tournament guide email send */}
           <TournamentGuideCard eventId={eventId} />
+
+          {/* App adoption email with per-team follow codes */}
+          <AppInviteCard eventId={eventId} />
 
           {/* Info */}
           {event.information && (

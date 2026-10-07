@@ -838,6 +838,24 @@ emailRoutes.post('/event-info/:eventId/send', authMiddleware, requireRole('admin
   return c.json({ success: true, data: result });
 });
 
+// ==================
+// App invite (get parents on the app, per-team follow code) — per-event
+// ==================
+emailRoutes.get('/app-invite/:eventId/status', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { appInviteStatus } = await import('../lib/app-invite');
+  const data = await appInviteStatus(c.env, c.req.param('eventId'));
+  return c.json({ success: true, data });
+});
+
+emailRoutes.post('/app-invite/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const testEmail = typeof body.testEmail === 'string' && body.testEmail.includes('@') ? body.testEmail.trim() : undefined;
+  const { sendAppInviteForEvent } = await import('../lib/app-invite');
+  const result = await sendAppInviteForEvent(c.env, c.req.param('eventId'), testEmail);
+  if ((result as any).error) return c.json({ success: false, error: (result as any).error }, 404);
+  return c.json({ success: true, data: result });
+});
+
 // Get current overrides for a template (returns defaults merged with any DB overrides)
 emailRoutes.get('/automated/:templateId/overrides', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const templateId = c.req.param('templateId');
