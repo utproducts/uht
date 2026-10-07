@@ -1705,6 +1705,25 @@ scoringRoutes.get('/my-events', authMiddleware, async (c) => {
   const db = c.env.DB;
 
   try {
+    // Admins and directors see every current event that has games
+    const roles: string[] = user?.roles || [];
+    if (roles.some((r: string) => ['admin', 'director', 'tournament_director'].includes(r))) {
+      const all = await db.prepare(`
+        SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state,
+          e.venue_id, v.name as venue_name,
+          (SELECT COUNT(*) FROM games g2 WHERE g2.event_id = e.id) as game_count,
+          (SELECT COUNT(*) FROM games g3 WHERE g3.event_id = e.id AND g3.status IN ('scheduled', 'warmup', 'in_progress', 'intermission')) as active_games,
+          1 as is_event_scorekeeper
+        FROM events e
+        LEFT JOIN venues v ON v.id = e.venue_id
+        WHERE COALESCE(e.is_test, 0) = 0
+          AND EXISTS (SELECT 1 FROM games g WHERE g.event_id = e.id)
+        ORDER BY e.start_date DESC
+        LIMIT 50
+      `).all();
+      return c.json({ success: true, data: all.results });
+    }
+
     // Find events where this user has games assigned OR is an event-level scorekeeper
     const events = await db.prepare(`
       SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.city, e.state,
