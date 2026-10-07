@@ -4598,6 +4598,79 @@ function AppInviteCard({ eventId }: { eventId: string }) {
 }
 
 // ── Admin Standings tab: frontend view + drag-and-drop manual ordering ──
+function AdminPhotosTab({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = () => {
+    fetch(`https://uht.chad-157.workers.dev/api/photos/events/${eventId}/photos/admin`, { headers: adminHeaders() })
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setRows(j.data || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [eventId]);
+
+  const setStatus = async (id: string, status: 'approved' | 'hidden') => {
+    setBusy(id);
+    await fetch(`https://uht.chad-157.workers.dev/api/photos/${id}`, {
+      method: 'PATCH', headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }).catch(() => {});
+    setBusy(null);
+    load();
+  };
+  const remove = async (id: string) => {
+    if (!window.confirm('Permanently delete this photo?')) return;
+    setBusy(id);
+    await fetch(`https://uht.chad-157.workers.dev/api/photos/${id}`, { method: 'DELETE', headers: adminHeaders() }).catch(() => {});
+    setBusy(null);
+    load();
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h3 className="text-lg font-bold text-[#1d1d1f]">Event Photos ({rows.length})</h3>
+        <p className="text-xs text-[#6e6e73]">Families upload in the app. Hide anything inappropriate - 3 user reports auto-hide a photo.</p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-[#86868b] py-6 text-center">No photos uploaded yet.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {rows.map(ph => (
+            <div key={ph.id} className={`rounded-xl overflow-hidden border ${ph.status === 'hidden' ? 'border-red-300 opacity-70' : 'border-[#e8e8ed]'}`}>
+              <img src={ph.url} alt="" loading="lazy" className="w-full h-32 object-cover bg-[#f0f0f2]" />
+              <div className="p-2 text-[11px]">
+                <div className="flex items-center gap-1 flex-wrap">
+                  {ph.kind === 'champion' && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold">🏆 {ph.team_name || 'Champions'}</span>}
+                  {ph.status === 'hidden' && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-bold">HIDDEN</span>}
+                  {ph.reports > 0 && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-bold">{ph.reports} report{ph.reports !== 1 ? 's' : ''}</span>}
+                </div>
+                <p className="text-[#86868b] mt-1 truncate">{[ph.first_name, ph.last_name].filter(Boolean).join(' ') || 'Unknown uploader'}</p>
+                <div className="flex gap-1 mt-1.5">
+                  {ph.status === 'approved' ? (
+                    <button onClick={() => setStatus(ph.id, 'hidden')} disabled={busy === ph.id}
+                      className="flex-1 py-1 rounded bg-amber-50 border border-amber-200 text-amber-700 font-semibold">Hide</button>
+                  ) : (
+                    <button onClick={() => setStatus(ph.id, 'approved')} disabled={busy === ph.id}
+                      className="flex-1 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold">Show</button>
+                  )}
+                  <button onClick={() => remove(ph.id)} disabled={busy === ph.id}
+                    className="flex-1 py-1 rounded bg-red-50 border border-red-200 text-red-600 font-semibold">Delete</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StandingsAdminTab({ eventId }: { eventId: string }) {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4990,7 +5063,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     setTimeout(() => setCopiedEmail(c => (c === email ? '' : c)), 1500);
   };
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'photos' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
   const [dragRegId, setDragRegId] = useState<string | null>(null);
   // Full registration editor — the SAME slide-out panel as /admin/registrations,
   // hitting the same API row, so edits on either page always stay in sync.
@@ -5264,7 +5337,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tabs - scrolls within its own bar on mobile instead of stretching the page */}
       <div className="overflow-x-auto mb-6 max-w-full [-webkit-overflow-scrolling:touch]">
         <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
-          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
+          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'photos', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -5272,7 +5345,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
-              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
+              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'photos' ? 'Photos' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
             </button>
           ))}
         </div>
@@ -5933,6 +6006,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'standings' && (
         <StandingsAdminTab eventId={eventId} />
+      )}
+
+      {tab === 'photos' && (
+        <AdminPhotosTab eventId={eventId} />
       )}
 
       {tab === 'locker_rooms' && (
