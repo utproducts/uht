@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
 
   // Event selector
   eventScroll: {
-    maxHeight: 44,
+    flexGrow: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
