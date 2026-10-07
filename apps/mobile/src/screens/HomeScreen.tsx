@@ -234,9 +234,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             activeOpacity={0.85}
             onPress={() => navigation.navigate('EventDetail', { eventId: liveEvent.id, eventName: liveEvent.name, initialTab: 'game_center' })}
           >
-            <View style={styles.gameDayPill}>
-              <View style={styles.gameDayDot} />
-              <Text style={styles.gameDayPillText}>GAME DAY</Text>
+            <View style={styles.gameDayTopRow}>
+              <View style={styles.gameDayPill}>
+                <View style={styles.gameDayDot} />
+                <Text style={styles.gameDayPillText}>GAME DAY</Text>
+              </View>
+              {(liveEvent as any).logo_url ? (
+                <Image source={{ uri: (liveEvent as any).logo_url }} style={styles.eventBannerLogo} resizeMode="contain" />
+              ) : null}
             </View>
             <Text style={styles.gameDayName} numberOfLines={1}>{liveEvent.name}</Text>
             <Text style={styles.gameDaySub}>Live scores, schedules and standings are running now</Text>
@@ -254,6 +259,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             activeOpacity={0.85}
             onPress={() => navigation.navigate('EventDetail', { eventId: nextEvent.id, eventName: nextEvent.name })}
           >
+            {(nextEvent as any).logo_url ? (
+              <Image source={{ uri: (nextEvent as any).logo_url }} style={styles.nextUpLogo} resizeMode="contain" />
+            ) : null}
             <View style={styles.nextUpCount}>
               <Text style={styles.nextUpDays}>{daysToNext}</Text>
               <Text style={styles.nextUpDaysLabel}>{daysToNext === 1 ? 'DAY' : 'DAYS'}</Text>
@@ -430,6 +438,9 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#e74c3c',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
+  gameDayTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  eventBannerLogo: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
+  nextUpLogo: { width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)' },
   gameDayPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#e74c3c', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   gameDayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
   gameDayPillText: { color: '#fff', fontSize: 10, letterSpacing: 1.2, ...fonts.bold },
