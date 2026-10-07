@@ -195,6 +195,49 @@ export async function computeStandings(
     standings.push(...rows);
   }
 
+  // Manual order overrides (admin Standings tab drag-and-drop) apply to
+  // single-pool divisions, then a 6-team division splits Blue (top 3) /
+  // Grey (bottom 3) automatically - which also lets "1st Blue" style
+  // bracket seeds resolve.
+  try {
+    const ov = (await db.prepare(
+      'SELECT event_division_id, team_id, sort_order FROM standings_overrides WHERE event_id = ?'
+    ).bind(eventId).all<any>()).results || [];
+    const ovByDiv = new Map<string, Map<string, number>>();
+    for (const o of ov) {
+      if (!ovByDiv.has(o.event_division_id)) ovByDiv.set(o.event_division_id, new Map());
+      ovByDiv.get(o.event_division_id)!.set(o.team_id, o.sort_order);
+    }
+    const byDiv = new Map<string, StandingRow[]>();
+    for (const r of standings) {
+      if (!byDiv.has(r.event_division_id)) byDiv.set(r.event_division_id, []);
+      byDiv.get(r.event_division_id)!.push(r);
+    }
+    for (const [divId, rows] of byDiv) {
+      const singlePool = rows.every(r => !(r.pool_name || '').trim());
+      if (!singlePool) continue;
+      const ord = ovByDiv.get(divId);
+      if (ord && ord.size > 0) {
+        rows.sort((a, b) => {
+          const oa = ord.has(a.team_id) ? ord.get(a.team_id)! : 1000 + a.rank;
+          const ob = ord.has(b.team_id) ? ord.get(b.team_id)! : 1000 + b.rank;
+          return oa - ob;
+        });
+        rows.forEach((r, i) => { r.rank = i + 1; if (ord.has(r.team_id)) r.tiebreaker = 'manual'; });
+      }
+      if (rows.length === 6) {
+        const baseComplete = poolComplete.get(poolKey(divId, null)) || false;
+        rows.sort((a, b) => a.rank - b.rank);
+        rows.forEach((r, i) => {
+          r.pool_name = i < 3 ? 'Blue' : 'Grey';
+          r.rank = (i % 3) + 1;
+        });
+        poolComplete.set(poolKey(divId, 'Blue'), baseComplete);
+        poolComplete.set(poolKey(divId, 'Grey'), baseComplete);
+      }
+    }
+  } catch {}
+
   standings.sort((a, b) =>
     a.age_group.localeCompare(b.age_group) ||
     (a.division_level || '').localeCompare(b.division_level || '') ||
@@ -287,7 +330,7 @@ interface BracketGame {
   away_score: number;
 }
 
-const PLACE_RE = /^\s*(\d+)\s*(?:st|nd|rd|th)?\s*place\s*(?:pool\s*)?(.*?)\s*$/i;
+const PLACE_RE = /^\s*(\d+)\s*(?:(?:st|nd|rd|th)\s*(?:place)?|place)\s*(?:pool\s*)?(.*?)\s*$/i;
 const WINNER_RE = /^\s*winner\s*(?:of\s*)?(?:game\s*)?#?\s*(\d+)\s*$/i;
 const LOSER_RE = /^\s*loser\s*(?:of\s*)?(?:game\s*)?#?\s*(\d+)\s*$/i;
 

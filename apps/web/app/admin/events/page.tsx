@@ -4597,6 +4597,176 @@ function AppInviteCard({ eventId }: { eventId: string }) {
   );
 }
 
+// ── Admin Standings tab: frontend view + drag-and-drop manual ordering ──
+function StandingsAdminTab({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [order, setOrder] = useState<Record<string, any[]>>({});
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [msg, setMsg] = useState<Record<string, string>>({});
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings`)
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j.success) return;
+        setRows(j.data || []);
+        const byDiv: Record<string, any[]> = {};
+        for (const r of j.data || []) {
+          if (!byDiv[r.event_division_id]) byDiv[r.event_division_id] = [];
+          byDiv[r.event_division_id].push(r);
+        }
+        // Flatten each division in display order (Blue block then Grey)
+        for (const k of Object.keys(byDiv)) {
+          byDiv[k].sort((a, b) => (a.pool_name || '').localeCompare(b.pool_name || '') || a.rank - b.rank);
+        }
+        setOrder(byDiv);
+        setDirty({});
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [eventId]);
+
+  const moveRow = (divId: string, fromIdx: number, toIdx: number) => {
+    setOrder(prev => {
+      const list = [...prev[divId]];
+      const [item] = list.splice(fromIdx, 1);
+      list.splice(toIdx, 0, item);
+      return { ...prev, [divId]: list };
+    });
+    setDirty(prev => ({ ...prev, [divId]: true }));
+  };
+
+  const saveDiv = async (divId: string) => {
+    setSaving(divId);
+    try {
+      const r = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings-order`, {
+        method: 'PUT',
+        headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ divisionId: divId, teamIds: order[divId].map(t => t.team_id) }),
+      }).then(res => res.json()) as any;
+      setMsg(prev => ({ ...prev, [divId]: r.success
+        ? `Order saved${r.data?.bracket_filled ? ` - filled ${r.data.bracket_filled} bracket slot${r.data.bracket_filled !== 1 ? 's' : ''}` : ''}.`
+        : (r.error || 'Save failed') }));
+      if (r.success) { setDirty(prev => ({ ...prev, [divId]: false })); load(); }
+    } catch { setMsg(prev => ({ ...prev, [divId]: 'Save failed' })); }
+    setSaving(null);
+  };
+
+  const resetDiv = async (divId: string) => {
+    setSaving(divId);
+    try {
+      await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings-order/${divId}`, {
+        method: 'DELETE', headers: adminHeaders(),
+      });
+      setMsg(prev => ({ ...prev, [divId]: 'Back to automatic ranking.' }));
+      load();
+    } catch {}
+    setSaving(null);
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+  if (rows.length === 0) {
+    return <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+      <p className="font-semibold text-[#1d1d1f] text-lg">No standings yet</p>
+      <p className="text-sm text-[#6e6e73] mt-1">Upload a schedule first - teams appear here with zero records before games finish.</p>
+    </div>;
+  }
+
+  const divLabel = (list: any[]) => [list[0]?.age_group, list[0]?.division_level].filter(Boolean).join(' ');
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-[#f0f7ff] border border-[#bcd9f5] rounded-xl p-4 text-sm text-[#1d4e89]">
+        Drag teams to set the order manually - the site, app, and bracket seeding follow it. A 6-team division splits automatically: top 3 = <span className="font-bold text-[#2563eb]">Blue</span>, bottom 3 = <span className="font-bold text-[#6b7280]">Grey</span>.
+      </div>
+      {Object.entries(order).map(([divId, list]) => {
+        const six = list.length === 6;
+        return (
+          <div key={divId} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div className="bg-[#003e79] px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-white font-bold text-sm">{divLabel(list)}</h3>
+              <div className="flex items-center gap-2">
+                {list.some(t => t.tiebreaker === 'manual') && !dirty[divId] && (
+                  <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wide">Manual order</span>
+                )}
+                {dirty[divId] && (
+                  <button onClick={() => saveDiv(divId)} disabled={saving === divId}
+                    className="px-4 py-1.5 rounded-lg bg-[#00ccff] text-[#003e79] text-xs font-bold hover:bg-white transition disabled:opacity-50">
+                    {saving === divId ? 'Saving…' : 'Save Order'}
+                  </button>
+                )}
+                <button onClick={() => resetDiv(divId)} disabled={saving === divId}
+                  className="px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-semibold hover:bg-white/25 transition">
+                  Reset to Auto
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#e8e8ed] bg-[#fafafa] text-[10px] font-bold text-[#86868b] uppercase">
+                    <th className="px-3 py-2 w-8"></th>
+                    <th className="text-left px-2 py-2">#</th>
+                    <th className="text-left px-3 py-2">Team</th>
+                    <th className="text-center px-2 py-2">W-L-T</th>
+                    <th className="text-center px-2 py-2">PTS</th>
+                    <th className="text-center px-2 py-2">+/-</th>
+                    <th className="text-center px-2 py-2">GA</th>
+                    <th className="text-center px-2 py-2">PIMS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((t, idx) => {
+                    const pool = six ? (idx < 3 ? 'Blue' : 'Grey') : null;
+                    return (
+                      <tr key={t.team_id}
+                        draggable
+                        onDragStart={() => setDragId(`${divId}|${idx}`)}
+                        onDragEnd={() => setDragId(null)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (!dragId) return;
+                          const [dDiv, dIdx] = dragId.split('|');
+                          if (dDiv === divId) moveRow(divId, parseInt(dIdx), idx);
+                          setDragId(null);
+                        }}
+                        className={`border-b border-[#f0f0f3] ${dragId === `${divId}|${idx}` ? 'opacity-40' : ''} ${pool === 'Blue' ? 'bg-blue-50/60' : pool === 'Grey' ? 'bg-gray-100/70' : idx % 2 === 1 ? 'bg-[#fafafa]' : ''} ${six && idx === 3 ? 'border-t-2 border-t-[#9ca3af]' : ''}`}>
+                        <td className="px-3 py-2.5 cursor-grab active:cursor-grabbing text-[#c7c7cc] select-none">⠿</td>
+                        <td className="px-2 py-2.5">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${pool === 'Blue' ? 'bg-blue-600 text-white' : pool === 'Grey' ? 'bg-gray-500 text-white' : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{six ? (idx % 3) + 1 : idx + 1}</span>
+                            {pool && <span className={`text-[10px] font-bold uppercase ${pool === 'Blue' ? 'text-blue-600' : 'text-gray-500'}`}>{pool}</span>}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">
+                          {t.team_name}
+                          {String(t.team_id).startsWith('ph:') && <span className="ml-2 text-[10px] font-bold text-amber-600 uppercase">not linked</span>}
+                        </td>
+                        <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{t.wins}-{t.losses}-{t.ties}</td>
+                        <td className="px-2 py-2.5 text-center font-bold text-[#003e79] tabular-nums">{t.points}</td>
+                        <td className={`px-2 py-2.5 text-center font-semibold tabular-nums ${t.goal_differential > 0 ? 'text-emerald-600' : t.goal_differential < 0 ? 'text-red-500' : 'text-[#6e6e73]'}`}>{t.goal_differential > 0 ? '+' : ''}{t.goal_differential}</td>
+                        <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{t.goals_against}</td>
+                        <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{t.pims ?? 0}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {msg[divId] && <p className="px-5 py-2.5 text-sm font-semibold text-green-700 bg-green-50 border-t border-green-100">{msg[divId]}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ReplaceTeamCard({ eventId, registeredTeams = [] }: { eventId: string; registeredTeams?: { id: string; name: string }[] }) {
   const [scheduleTeams, setScheduleTeams] = useState<{ id: string; name: string }[]>([]);
   const [fromId, setFromId] = useState('');
@@ -4814,7 +4984,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     setTimeout(() => setCopiedEmail(c => (c === email ? '' : c)), 1500);
   };
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
   const [dragRegId, setDragRegId] = useState<string | null>(null);
   // Full registration editor — the SAME slide-out panel as /admin/registrations,
   // hitting the same API row, so edits on either page always stay in sync.
@@ -5088,7 +5258,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tabs - scrolls within its own bar on mobile instead of stretching the page */}
       <div className="overflow-x-auto mb-6 max-w-full [-webkit-overflow-scrolling:touch]">
         <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
-          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
+          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -5096,7 +5266,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
-              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
+              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
             </button>
           ))}
         </div>
@@ -5753,6 +5923,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
             .map((r: any) => ({ id: r.team_id, name: r.display_name || r.team_name }))} />
           <ScheduleGamesTab eventId={eventId} />
         </div>
+      )}
+
+      {tab === 'standings' && (
+        <StandingsAdminTab eventId={eventId} />
       )}
 
       {tab === 'locker_rooms' && (

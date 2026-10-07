@@ -1938,3 +1938,35 @@ scoringRoutes.delete('/events/:eventId/event-scorekeepers/:userId', authMiddlewa
     return c.json({ success: false, error: err?.message || 'Failed to remove scorekeeper' }, 500);
   }
 });
+
+// ==========================================
+// Admin: manual standings order (drag-and-drop on the Standings tab).
+// Order is per division; display + bracket seeding follow it.
+// ==========================================
+scoringRoutes.put('/events/:eventId/standings-order', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({})) as any;
+  const divisionId = String(body.divisionId || '').trim();
+  const teamIds: string[] = Array.isArray(body.teamIds) ? body.teamIds.map((t: any) => String(t)) : [];
+  if (!divisionId || teamIds.length === 0) {
+    return c.json({ success: false, error: 'divisionId and teamIds are required' }, 400);
+  }
+  await db.prepare('DELETE FROM standings_overrides WHERE event_id = ? AND event_division_id = ?')
+    .bind(eventId, divisionId).run();
+  for (let i = 0; i < teamIds.length; i++) {
+    await db.prepare(
+      'INSERT INTO standings_overrides (id, event_id, event_division_id, team_id, sort_order) VALUES (?, ?, ?, ?, ?)'
+    ).bind(crypto.randomUUID().replace(/-/g, ''), eventId, divisionId, teamIds[i], i).run();
+  }
+  const { resolveBracketGames: rbg } = await import('../lib/standings');
+  const res = await rbg(db, eventId, { force: true }).catch(() => null);
+  return c.json({ success: true, data: { saved: teamIds.length, bracket_filled: res?.filled || 0 } });
+});
+
+scoringRoutes.delete('/events/:eventId/standings-order/:divisionId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  await db.prepare('DELETE FROM standings_overrides WHERE event_id = ? AND event_division_id = ?')
+    .bind(c.req.param('eventId'), c.req.param('divisionId')).run();
+  return c.json({ success: true });
+});
