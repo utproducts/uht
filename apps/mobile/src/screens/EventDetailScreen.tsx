@@ -13,7 +13,10 @@ import {
   Linking,
   Dimensions,
   Share,
+  Modal,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
@@ -29,6 +32,7 @@ type TabKey =
   | 'my_schedule'
   | 'game_center'
   | 'three_stars'
+  | 'photos'
   | 'updates'
   | 'promotions'
   | 'venues'
@@ -47,6 +51,7 @@ const EVENT_TABS: TabDef[] = [
   { key: 'my_schedule', label: 'My Schedule', icon: 'calendar-outline' },
   { key: 'game_center', label: 'Game Center', icon: 'trophy-outline' },
   { key: 'three_stars', label: '3 Stars', icon: 'star-outline' },
+  { key: 'photos', label: 'Photos', icon: 'images-outline' },
   { key: 'venues', label: 'Venues', icon: 'location-outline' },
   { key: 'lodging', label: 'Lodging', icon: 'bed-outline' },
   { key: 'updates', label: 'Event Updates', icon: 'notifications-outline' },
@@ -248,6 +253,13 @@ export default function EventDetailScreen({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  // Event photo gallery
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [photosTotal, setPhotosTotal] = useState(0);
+  const [photosLoaded, setPhotosLoaded] = useState(false);
+  const [photosUploading, setPhotosUploading] = useState(false);
+  const [viewerPhoto, setViewerPhoto] = useState<any | null>(null);
+  const [champPickerOpen, setChampPickerOpen] = useState(false);
   // Teams of mine already registered for THIS event (name + registration status)
   const [myRegs, setMyRegs] = useState<{ teamName: string; status: string }[]>([]);
 
@@ -271,6 +283,9 @@ export default function EventDetailScreen({
   }, [eventId]);
 
   useEffect(() => {
+    if (activeTab === 'photos' && !photosLoaded) {
+      loadPhotos();
+    }
     if (activeTab === 'three_stars' && !scoresLoaded) {
       loadScores();
     }
@@ -1041,6 +1056,190 @@ export default function EventDetailScreen({
   // ==================
   // TAB: 3 Stars (per-game MVPs from every final, with the selection rules)
   // ==================
+  async function loadPhotos() {
+    try {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/photos/events/${eventId}/photos`);
+      const json = await res.json();
+      if (json.success) {
+        setPhotos(json.data.photos || []);
+        setPhotosTotal(json.data.total || 0);
+      }
+    } catch {}
+    setPhotosLoaded(true);
+  }
+
+  async function uploadEventPhotos(kind: 'fan' | 'champion' = 'fan', teamId?: string) {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: kind === 'fan',
+        selectionLimit: 10,
+        quality: 0.5,
+        base64: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      setPhotosUploading(true);
+      let ok = 0;
+      for (const asset of result.assets) {
+        if (!asset.base64) continue;
+        try {
+          const res = await authFetch(`/api/photos/events/${eventId}/photos`, {
+            method: 'POST',
+            body: JSON.stringify({ data: asset.base64, mimeType: 'image/jpeg', kind, teamId }),
+          });
+          const json = await res.json() as any;
+          if (json.success) ok++;
+        } catch {}
+      }
+      setPhotosUploading(false);
+      if (ok > 0) {
+        loadPhotos();
+        Alert.alert(kind === 'champion' ? 'Champions Photo Added!' : 'Photos Added!',
+          kind === 'champion' ? 'The champions photo is live in the gallery.' : `${ok} photo${ok !== 1 ? 's' : ''} added to the event gallery. Keep them coming all weekend!`);
+      } else {
+        Alert.alert('Upload Failed', 'Could not upload. Please try again.');
+      }
+    } catch {
+      setPhotosUploading(false);
+    }
+  }
+
+  function reportPhoto(photoId: string) {
+    Alert.alert('Report Photo', 'Flag this photo for review by event staff?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Report', style: 'destructive', onPress: async () => {
+        try { await authFetch(`/api/photos/${photoId}/report`, { method: 'POST', body: JSON.stringify({}) }); } catch {}
+        setViewerPhoto(null);
+        Alert.alert('Thanks', 'Our staff will take a look.');
+      } },
+    ]);
+  }
+
+  function renderPhotosTab() {
+    const isDirector = (currentUser?.roles || []).some(r => ['admin', 'director', 'tournament_director'].includes(r));
+    const champs = photos.filter(p => p.kind === 'champion');
+    const fans = photos.filter(p => p.kind !== 'champion');
+    const thumb = (SCREEN_WIDTH - spacing.lg * 2 - 8) / 3;
+    const champTeams = sortByAgeGroup(standings.filter((r: any) => !String(r.team_id).startsWith('ph:')), (r: any) => r.age_group || '');
+
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { loadPhotos(); }} tintColor={colors.navy} colors={[colors.navy]} />}
+      >
+        {/* Upload CTA */}
+        <View style={styles.photoCta}>
+          <Ionicons name="images" size={26} color={colors.cyan} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.photoCtaTitle}>Share your weekend</Text>
+            <Text style={styles.photoCtaSub}>Upload photos all weekend - after the event every photo becomes part of the official event mosaic.</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.photoUploadBtn} activeOpacity={0.85} disabled={photosUploading}
+          onPress={() => uploadEventPhotos('fan')}>
+          {photosUploading ? <ActivityIndicator color={colors.white} size="small" /> : <Ionicons name="cloud-upload-outline" size={19} color={colors.white} />}
+          <Text style={styles.photoUploadBtnText}>{photosUploading ? 'Uploading...' : 'Add Your Photos'}</Text>
+        </TouchableOpacity>
+        {isDirector && (
+          <TouchableOpacity style={styles.champUploadBtn} activeOpacity={0.85} disabled={photosUploading}
+            onPress={() => { if (standings.length === 0) loadStandings(); setChampPickerOpen(true); }}>
+            <Ionicons name="trophy" size={17} color="#8a6d1a" />
+            <Text style={styles.champUploadBtnText}>Add Champions Photo</Text>
+          </TouchableOpacity>
+        )}
+
+        {photosTotal > 0 && (
+          <Text style={styles.photoCount}>{photosTotal} photo{photosTotal !== 1 ? 's' : ''} and counting</Text>
+        )}
+
+        {/* Champions spotlight */}
+        {champs.length > 0 && (
+          <View style={{ marginBottom: spacing.md }}>
+            <Text style={styles.champSectionTitle}>CHAMPIONS</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+              {champs.map(p => (
+                <TouchableOpacity key={p.id} style={styles.champCard} activeOpacity={0.85} onPress={() => setViewerPhoto(p)}>
+                  <Image source={{ uri: p.url }} style={styles.champImg} resizeMode="cover" />
+                  <View style={styles.champCardFooter}>
+                    <Text style={styles.champCardTrophy}>🏆</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.champCardTeam} numberOfLines={1}>{p.team_name || 'Champions'}</Text>
+                      {(p.age_group || p.division_level) ? (
+                        <Text style={styles.champCardDiv} numberOfLines={1}>{[p.age_group, p.division_level].filter(Boolean).join(' ')} Champions</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Gallery grid */}
+        {fans.length === 0 && champs.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="camera-outline" size={48} color={colors.textMuted} />
+            <Text style={styles.emptyTitle}>No photos yet</Text>
+            <Text style={styles.emptyText}>Be the first - add a photo from the rink!</Text>
+          </View>
+        ) : (
+          <View style={styles.photoGrid}>
+            {fans.map(p => (
+              <TouchableOpacity key={p.id} activeOpacity={0.8} onPress={() => setViewerPhoto(p)}>
+                <Image source={{ uri: p.url }} style={{ width: thumb, height: thumb, borderRadius: 10, backgroundColor: '#e8ecf1' }} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Full-screen viewer */}
+        <Modal visible={!!viewerPhoto} transparent animationType="fade" onRequestClose={() => setViewerPhoto(null)}>
+          <View style={styles.viewerBackdrop}>
+            <TouchableOpacity style={styles.viewerClose} onPress={() => setViewerPhoto(null)}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            {viewerPhoto ? (
+              <>
+                <Image source={{ uri: viewerPhoto.url }} style={styles.viewerImg} resizeMode="contain" />
+                {viewerPhoto.kind === 'champion' && (
+                  <Text style={styles.viewerChampLabel}>🏆 {viewerPhoto.team_name || 'Champions'}</Text>
+                )}
+                <TouchableOpacity style={styles.viewerReport} onPress={() => reportPhoto(viewerPhoto.id)}>
+                  <Ionicons name="flag-outline" size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.viewerReportText}>Report</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
+        </Modal>
+
+        {/* Champions team picker (directors) */}
+        <Modal visible={champPickerOpen} transparent animationType="slide" onRequestClose={() => setChampPickerOpen(false)}>
+          <View style={styles.champPickerBackdrop}>
+            <View style={styles.champPickerSheet}>
+              <Text style={styles.champPickerTitle}>Who won?</Text>
+              <Text style={styles.champPickerSub}>Pick the champions, then choose their photo.</Text>
+              <ScrollView style={{ maxHeight: 380 }}>
+                {champTeams.map((r: any) => (
+                  <TouchableOpacity key={r.team_id} style={styles.champPickerRow} activeOpacity={0.7}
+                    onPress={() => { setChampPickerOpen(false); uploadEventPhotos('champion', r.team_id); }}>
+                    <Text style={styles.champPickerTeam} numberOfLines={1}>{r.team_name}</Text>
+                    <Text style={styles.champPickerDiv}>{[r.age_group, r.division_level].filter(Boolean).join(' ')}</Text>
+                  </TouchableOpacity>
+                ))}
+                {champTeams.length === 0 && (
+                  <Text style={styles.champPickerSub}>Loading teams...</Text>
+                )}
+              </ScrollView>
+              <TouchableOpacity style={styles.champPickerCancel} onPress={() => setChampPickerOpen(false)}>
+                <Text style={styles.champPickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </ScrollView>
+    );
+  }
+
   function renderThreeStarsTab() {
     const starGames = schedule.filter(g => g.status === 'final' && g.three_stars_str);
     return (
@@ -1773,6 +1972,7 @@ export default function EventDetailScreen({
       case 'my_schedule': return renderMyScheduleTab();
       case 'game_center': return renderGameCenterTab();
       case 'three_stars': return renderThreeStarsTab();
+      case 'photos': return renderPhotosTab();
       case 'updates': return renderUpdatesTab();
       case 'promotions': return renderPromotionsTab();
       case 'venues': return renderVenuesTab();
@@ -2353,6 +2553,39 @@ const styles = StyleSheet.create({
   standingsHeaderCell: { fontSize: 10, color: '#7a8699', ...fonts.bold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.4 },
   standingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
   standingsRowLast: { borderBottomWidth: 0 },
+
+  // Event photos
+  photoCta: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, marginBottom: spacing.sm },
+  photoCtaTitle: { color: colors.white, fontSize: 15, ...fonts.bold },
+  photoCtaSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2, lineHeight: 16 },
+  photoUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 13, marginBottom: spacing.sm },
+  photoUploadBtnText: { color: colors.white, fontSize: 15, ...fonts.bold },
+  champUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#fff4d6', borderWidth: 1, borderColor: '#f0d58a', borderRadius: 12, paddingVertical: 11, marginBottom: spacing.sm },
+  champUploadBtnText: { color: '#8a6d1a', fontSize: 14, ...fonts.bold },
+  photoCount: { fontSize: 12, color: colors.textMuted, ...fonts.semibold, textAlign: 'center', marginBottom: spacing.md },
+  champSectionTitle: { fontSize: 11, color: '#8a6d1a', letterSpacing: 1.5, ...fonts.bold, marginBottom: 8 },
+  champCard: { width: 210, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.card, borderWidth: 2, borderColor: '#e7c45e' },
+  champImg: { width: 210, height: 140, backgroundColor: '#e8ecf1' },
+  champCardFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fffaf0' },
+  champCardTrophy: { fontSize: 18 },
+  champCardTeam: { fontSize: 13, color: '#1d2a3d', ...fonts.bold },
+  champCardDiv: { fontSize: 11, color: '#8a6d1a', ...fonts.semibold, marginTop: 1 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(4,10,20,0.96)', justifyContent: 'center', alignItems: 'center' },
+  viewerClose: { position: 'absolute', top: 54, right: 20, zIndex: 2, padding: 8 },
+  viewerImg: { width: '100%', height: '70%' },
+  viewerChampLabel: { color: '#f5d98d', fontSize: 16, ...fonts.bold, marginTop: 12 },
+  viewerReport: { position: 'absolute', bottom: 44, flexDirection: 'row', alignItems: 'center', gap: 5, padding: 10 },
+  viewerReportText: { color: 'rgba(255,255,255,0.7)', fontSize: 13, ...fonts.semibold },
+  champPickerBackdrop: { flex: 1, backgroundColor: 'rgba(4,10,20,0.5)', justifyContent: 'flex-end' },
+  champPickerSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 34 },
+  champPickerTitle: { fontSize: 19, color: '#101c30', ...fonts.bold },
+  champPickerSub: { fontSize: 13, color: '#5b6b83', marginTop: 3, marginBottom: 12 },
+  champPickerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+  champPickerTeam: { flex: 1, fontSize: 15, color: '#101c30', ...fonts.semibold },
+  champPickerDiv: { fontSize: 12, color: '#5b6b83' },
+  champPickerCancel: { marginTop: 14, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: '#eef2f7' },
+  champPickerCancelText: { fontSize: 15, color: '#101c30', ...fonts.bold },
   standingsRowAlt: { backgroundColor: '#f8f9fa' },
   standingsCell: { fontSize: 12, color: colors.text, ...fonts.regular, textAlign: 'center' },
   standingsRankCol: { width: 24 },
