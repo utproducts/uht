@@ -15,6 +15,8 @@ import ScreenHeader from '../components/ScreenHeader';
  * rink addresses, team codes. Each screen shares the same event picker.
  */
 
+const SCORING_URL = 'https://ultimatetournaments.com/scoring';
+
 interface DirEvent { id: string; name: string; start_date: string; city?: string; state?: string; }
 
 function useDirectorEvents() {
@@ -150,20 +152,48 @@ export function DirectorPinsScreen({ navigation }: any) {
     Alert.alert('Copied', `PIN ${pin} copied to clipboard.`);
   };
 
+  const sharePin = async (p: any) => {
+    const label = p.label || p.rink_name || 'the event';
+    try {
+      await Share.share({
+        message: `Scorekeeping for ${selected?.name || 'the event'} (${label}):\n\n1. Open ${SCORING_URL}\n2. Enter PIN: ${p.pin_code}\n\nThat opens your assigned games.`,
+      });
+    } catch {}
+  };
+
+  const shareScoringLink = async () => {
+    try {
+      await Share.share({ message: `UHT scorekeeper console: ${SCORING_URL} - enter your PIN to see your games.` });
+    } catch {}
+  };
+
   return (
     <View style={s.screen}>
       <Header title="Scorekeeper PINs" subtitle="Tap a PIN to copy it" navigation={navigation} />
       <EventPills events={events} selected={selected} onSelect={setSelected} />
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}>
+          <TouchableOpacity style={s.scoringLinkRow} activeOpacity={0.8} onPress={shareScoringLink}>
+            <Ionicons name="link-outline" size={18} color={colors.navy} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.scoringLinkTitle}>Scoring page</Text>
+              <Text style={s.scoringLinkUrl}>{SCORING_URL}</Text>
+            </View>
+            <Ionicons name="share-outline" size={19} color={colors.navy} />
+          </TouchableOpacity>
           {pins.map(p => (
-            <TouchableOpacity key={p.id} style={s.pinCard} activeOpacity={0.8} onPress={() => copyPin(String(p.pin_code))}>
-              <View style={{ flex: 1 }}>
+            <View key={p.id} style={s.pinCard}>
+              <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.8} onPress={() => copyPin(String(p.pin_code))}>
                 <Text style={s.pinLabel}>{p.label || p.rink_name || 'Event PIN'}</Text>
                 <Text style={s.pinCode}>{p.pin_code}</Text>
-              </View>
-              <Ionicons name="copy-outline" size={22} color={colors.cyan} />
-            </TouchableOpacity>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.pinIconBtn} onPress={() => copyPin(String(p.pin_code))}>
+                <Ionicons name="copy-outline" size={21} color={colors.cyan} />
+              </TouchableOpacity>
+              <TouchableOpacity style={s.pinIconBtn} onPress={() => sharePin(p)}>
+                <Ionicons name="share-outline" size={21} color={colors.cyan} />
+              </TouchableOpacity>
+            </View>
           ))}
           {pins.length === 0 && <Text style={s.empty}>No scorekeeper PINs set for this event yet. PINs are created in the admin panel under Scorekeepers.</Text>}
         </ScrollView>
@@ -376,6 +406,10 @@ const s = StyleSheet.create({
   checkCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#eef2f7', alignItems: 'center', justifyContent: 'center' },
   checkCircleOn: { backgroundColor: '#1e9e55' },
   empty: { textAlign: 'center', color: '#7a8699', fontSize: 14, marginTop: 30, lineHeight: 20 },
+  scoringLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f0f7ff', borderWidth: 1, borderColor: '#bcd9f5', borderRadius: 12, padding: 13, marginBottom: 12 },
+  scoringLinkTitle: { fontSize: 13, color: colors.navy, ...fonts.bold },
+  scoringLinkUrl: { fontSize: 12, color: '#3b6b9b', marginTop: 1 },
+  pinIconBtn: { padding: 8 },
   pinCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 16, padding: 18, marginBottom: 10 },
   pinLabel: { color: colors.cyan, fontSize: 11, letterSpacing: 1.2, ...fonts.bold, textTransform: 'uppercase' },
   pinCode: { color: colors.white, fontSize: 32, letterSpacing: 6, marginTop: 2, ...fonts.bold },
