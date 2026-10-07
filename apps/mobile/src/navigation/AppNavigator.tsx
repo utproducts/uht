@@ -31,7 +31,15 @@ import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
 import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
 import ScoreGameScreen from '../screens/ScoreGameScreen';
 import DirectorGamesScreen from '../screens/DirectorGamesScreen';
-import ScoringConsoleScreen from '../screens/ScoringConsoleScreen';
+// react-native-webview's native module only exists in the 1.0.7+ binary.
+// On older binaries requiring it throws, which would crash the whole app at
+// launch (AppNavigator loads every screen) - fall back to a browser-link screen.
+let ScoringConsoleScreen: any;
+try {
+  ScoringConsoleScreen = require('../screens/ScoringConsoleScreen').default;
+} catch {
+  ScoringConsoleScreen = require('../screens/ScoringConsoleFallback').default;
+}
 import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, DirectorRinksScreen, DirectorTeamCodesScreen, DirectorLockerRoomsScreen, DirectorVenueSetupScreen } from '../screens/DirectorToolsScreen';
 import RewardRevealScreen from '../screens/RewardRevealScreen';
 import ScoresheetScreen from '../screens/ScoresheetScreen';
