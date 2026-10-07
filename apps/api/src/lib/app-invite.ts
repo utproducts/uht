@@ -53,10 +53,12 @@ export function buildAppInviteHtml(opts: {
 <html>
 <body style="margin:0;padding:0;background:#f2f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
-    <div style="background:#003e79;border-radius:16px 16px 0 0;padding:28px 28px 22px;">
+    <div style="background:#003e79;border-radius:16px 16px 0 0;padding:28px 28px 24px;text-align:center;">
+      <img src="https://uht.chad-157.workers.dev/api/assets/brand/app-icon-rounded.png" alt="UHT app" width="80" height="80" style="display:block;margin:0 auto 14px;border-radius:18px;" />
       <div style="color:#00ccff;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Ultimate Hockey Tournaments</div>
-      <div style="color:#ffffff;font-size:24px;font-weight:800;margin-top:8px;line-height:1.25;">Your schedule lives in the UHT app</div>
-      <div style="color:rgba(255,255,255,0.75);font-size:14px;margin-top:6px;">${eventName} &bull; ${eventDates}</div>
+      <div style="color:#ffffff;font-size:26px;font-weight:800;margin-top:8px;line-height:1.25;">Schedules are LIVE</div>
+      <div style="color:#00ccff;font-size:16px;font-weight:700;margin-top:4px;">and can only be found in the UHT app</div>
+      <div style="color:rgba(255,255,255,0.75);font-size:14px;margin-top:10px;">${eventName} &bull; ${eventDates}</div>
     </div>
     <div style="background:#ffffff;border-radius:0 0 16px 16px;padding:28px;">
       <p style="font-size:15px;color:#1d2a3d;line-height:1.6;margin:0 0 14px;">Coaches and managers,</p>
