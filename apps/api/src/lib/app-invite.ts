@@ -82,6 +82,15 @@ export function buildAppInviteHtml(opts: {
         <tr><td style="padding:8px 0;font-size:14px;color:#1d2a3d;line-height:1.5;"><strong style="color:#003e79;">3.</strong> Enter team code <strong>${code}</strong> to follow ${teamName} and get live scores, schedules, and game updates pushed to their phone</td></tr>
       </table>
 
+      <div style="background:#fffaf0;border:1px solid #f0d58a;border-radius:12px;padding:16px 18px;margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:1px;color:#8a6d1a;text-transform:uppercase;margin-bottom:6px;">Bonus for your families</div>
+        <div style="font-size:14px;color:#1d2a3d;line-height:1.6;">
+          Have everyone <strong>upload their photos in the app all weekend</strong> (Photos tab on the event).
+          After the tournament, every single photo becomes part of the official <strong>${eventName} photo mosaic</strong> -
+          a giant version of the event logo built from your families' pictures. Free keepsake, and every kid is in it.
+        </div>
+      </div>
+
       <div style="background:#f7f8fa;border-radius:12px;padding:16px 18px;margin-bottom:20px;">
         <div style="font-size:12px;font-weight:700;letter-spacing:1px;color:#5b6b83;text-transform:uppercase;margin-bottom:8px;">Copy and text this to your team</div>
         <div style="font-size:13px;color:#1d2a3d;line-height:1.6;font-style:italic;">${textForParents}</div>

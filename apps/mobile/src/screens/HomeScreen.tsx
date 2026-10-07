@@ -180,6 +180,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             </View>
           </View>
 
+        <View style={styles.overlapStack}>
         {/* Scorekeeper: direct line to the scoring console PIN page */}
         {activeRole === 'scorekeeper' && (
           <TouchableOpacity
@@ -198,7 +199,6 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         )}
 
-        <View style={styles.overlapStack}>
         {/* Push nudge - permission off means no game alerts reach this user */}
         {(pushStatus === 'denied' || pushStatus === 'undetermined') && (
           <TouchableOpacity
