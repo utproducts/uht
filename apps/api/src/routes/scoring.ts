@@ -1989,3 +1989,40 @@ scoringRoutes.delete('/events/:eventId/standings-order/:divisionId', authMiddlew
     .bind(c.req.param('eventId'), c.req.param('divisionId')).run();
   return c.json({ success: true });
 });
+
+// ==========================================
+// Tournament Director tools
+// ==========================================
+
+// All current events (with or without games) for the director tool screens
+scoringRoutes.get('/director-events', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const rows = (await db.prepare(`
+    SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state, e.logo_url
+    FROM events e
+    WHERE COALESCE(e.is_test, 0) = 0
+      AND date(e.end_date) >= date('now', '-10 days')
+      AND e.status IN ('published', 'registration_open', 'active')
+    ORDER BY e.start_date ASC
+    LIMIT 30
+  `).all()).results || [];
+  return c.json({ success: true, data: rows });
+});
+
+// Approved teams with their follow codes, grouped by division - so a
+// director can hand any parent their team code on the spot
+scoringRoutes.get('/events/:eventId/team-codes', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const rows = (await db.prepare(`
+    SELECT COALESCE(ed.age_group, er.age_group) as age_group,
+      COALESCE(ed.division_level, er.division) as division_level,
+      COALESCE(t.schedule_name, t.name, er.team_name) as team_name,
+      t.parent_invite_code, t.invite_code
+    FROM event_registrations er
+    LEFT JOIN teams t ON t.id = er.team_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.event_id = ? AND er.status = 'approved'
+    ORDER BY age_group, division_level, team_name
+  `).bind(c.req.param('eventId')).all()).results || [];
+  return c.json({ success: true, data: rows });
+});

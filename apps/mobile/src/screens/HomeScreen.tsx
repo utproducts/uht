@@ -279,6 +279,29 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
         </View>
 
+        {/* Director toolkit - replaces the standard tiles for directors */}
+        {['director', 'tournament_director'].includes(activeRole) ? (
+          <View style={styles.qaGrid}>
+            {([
+              { label: 'Team Check-in', sub: 'Check teams in for the event', icon: 'checkbox-outline' as const, go: () => navigation.navigate('DirectorCheckin') },
+              { label: 'Score Management', sub: 'Fix scores and run games', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('DirectorGames') },
+              { label: 'Scorekeeper PIN', sub: 'Look up any rink PIN', icon: 'keypad-outline' as const, go: () => navigation.navigate('DirectorPins') },
+              { label: 'Championship Photos', sub: 'Post the winners', icon: 'trophy-outline' as const, go: () => navigation.navigate('DirectorChampions') },
+              { label: 'Rink Addresses', sub: 'Share directions instantly', icon: 'location-outline' as const, go: () => navigation.navigate('DirectorRinks') },
+              { label: 'Team Codes', sub: 'Help parents follow teams', icon: 'key-outline' as const, go: () => navigation.navigate('DirectorTeamCodes') },
+            ]).map(tool => (
+              <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard]} onPress={tool.go} activeOpacity={0.85}
+                accessibilityLabel={`${tool.label} - ${tool.sub}`}>
+                <View style={styles.dirIconCircle}>
+                  <Ionicons name={tool.icon} size={22} color={colors.cyan} />
+                </View>
+                <Text style={styles.dirLabel}>{tool.label}</Text>
+                <Text style={styles.dirSub} numberOfLines={2}>{tool.sub}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+        <>
         {/* Quick Access - photo tiles */}
         <View style={styles.qaGrid}>
           {([
@@ -293,6 +316,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             </TouchableOpacity>
           ))}
           </View>
+        </>
+        )}
         </View>
       </ScrollView>
     </View>
@@ -495,5 +520,9 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
+  dirCard: { backgroundColor: colors.navy, borderColor: 'rgba(0,204,255,0.5)', padding: 14, justifyContent: 'flex-start' },
+  dirIconCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,204,255,0.14)', borderWidth: 1, borderColor: 'rgba(0,204,255,0.4)', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  dirLabel: { color: colors.white, fontSize: 15, ...fonts.bold },
+  dirSub: { color: 'rgba(255,255,255,0.65)', fontSize: 11.5, marginTop: 3, lineHeight: 15 },
   qaImageInner: { borderRadius: 18 },
 });

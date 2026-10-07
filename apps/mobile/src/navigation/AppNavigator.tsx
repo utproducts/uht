@@ -31,6 +31,7 @@ import AdminRegistrationsScreen from '../screens/AdminRegistrationsScreen';
 import NotificationsInboxScreen from '../screens/NotificationsInboxScreen';
 import ScoreGameScreen from '../screens/ScoreGameScreen';
 import DirectorGamesScreen from '../screens/DirectorGamesScreen';
+import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, DirectorRinksScreen, DirectorTeamCodesScreen } from '../screens/DirectorToolsScreen';
 import RewardRevealScreen from '../screens/RewardRevealScreen';
 import ScoresheetScreen from '../screens/ScoresheetScreen';
 
@@ -73,6 +74,12 @@ function HomeStackNavigator() {
     <HomeStackNav.Navigator screenOptions={{ headerShown: false }}>
       <HomeStackNav.Screen name="HomeScreen" component={HomeScreen} />
       <HomeStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorGames" component={DirectorGamesScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorCheckin" component={DirectorCheckinScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorPins" component={DirectorPinsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorChampions" component={DirectorChampionsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorRinks" component={DirectorRinksScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorTeamCodes" component={DirectorTeamCodesScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
