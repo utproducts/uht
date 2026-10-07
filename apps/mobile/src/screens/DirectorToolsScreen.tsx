@@ -351,11 +351,21 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
     Alert.alert('Copied', `${row.team_name} code ${code} copied.`);
   };
 
-  const byAge: Record<string, any[]> = {};
-  for (const r of rows) {
-    const k = [r.age_group, r.division_level].filter(Boolean).join(' ') || 'Other';
-    (byAge[k] = byAge[k] || []).push(r);
-  }
+  // Division label like the standings page: real event division first,
+  // else the registration age with "(8U)" style noise stripped
+  const divLabel = (r: any) => {
+    if (r.ed_age) return [r.ed_age, r.ed_level].filter(Boolean).join(' ');
+    return String(r.raw_age || 'Other').replace(/\s*\([^)]*\)/g, '').trim() || 'Other';
+  };
+  const AGE_ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget', 'girls'];
+  const ageKey = (label: string) => {
+    const l = label.toLowerCase();
+    const i = AGE_ORDER.findIndex(a => l.startsWith(a));
+    return i === -1 ? 999 : i;
+  };
+  const byDiv: Record<string, any[]> = {};
+  for (const r of rows) { const k = divLabel(r); (byDiv[k] = byDiv[k] || []).push(r); }
+  const divEntries = Object.entries(byDiv).sort((a, b) => ageKey(a[0]) - ageKey(b[0]) || a[0].localeCompare(b[0]));
 
   return (
     <View style={s.screen}>
@@ -363,14 +373,17 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
       <EventPills events={events} selected={selected} onSelect={setSelected} />
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}>
-          {Object.entries(byAge).map(([div, list]) => (
-            <View key={div} style={{ marginBottom: spacing.md }}>
-              <Text style={s.sectionLabel}>{div}</Text>
-              {list.map((r, i) => (
-                <TouchableOpacity key={`${r.team_name}-${i}`} style={s.rowCard} activeOpacity={0.7} onPress={() => copyCode(r)}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.rowTitle} numberOfLines={1}>{r.team_name}</Text>
-                  </View>
+          {divEntries.map(([div, list]) => (
+            <View key={div} style={s.divCard}>
+              <View style={s.divCardHeader}>
+                <Text style={s.divCardTitle}>{div}</Text>
+                <Text style={s.divCardSub}>{list.length} team{list.length !== 1 ? 's' : ''}</Text>
+              </View>
+              {list.sort((a: any, b: any) => String(a.team_name).localeCompare(String(b.team_name))).map((r: any, i: number) => (
+                <TouchableOpacity key={`${r.team_name}-${i}`}
+                  style={[s.divRow, i === list.length - 1 ? s.divRowLast : null]}
+                  activeOpacity={0.7} onPress={() => copyCode(r)}>
+                  <Text style={s.rowTitle} numberOfLines={1}>{r.team_name}</Text>
                   {(r.parent_invite_code || r.invite_code) ? (
                     <View style={s.codeChip}><Text style={s.codeChipText}>{r.parent_invite_code || r.invite_code}</Text></View>
                   ) : (
@@ -422,6 +435,12 @@ const s = StyleSheet.create({
   venueBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.navy, borderRadius: 10, paddingVertical: 9 },
   venueBtnLight: { backgroundColor: '#eef2f7' },
   venueBtnText: { color: colors.white, fontSize: 13, ...fonts.semibold },
+  divCard: { backgroundColor: colors.white, borderRadius: 14, overflow: 'hidden', marginBottom: 14, shadowColor: '#0f2747', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  divCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.navy, paddingHorizontal: 14, paddingVertical: 10 },
+  divCardTitle: { color: colors.white, fontSize: 14, ...fonts.bold },
+  divCardSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, ...fonts.semibold },
+  divRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+  divRowLast: { borderBottomWidth: 0 },
   codeChip: { backgroundColor: '#f0f7ff', borderWidth: 1, borderColor: '#bcd9f5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   codeChipText: { color: colors.navy, fontSize: 14, letterSpacing: 2, ...fonts.bold },
 });

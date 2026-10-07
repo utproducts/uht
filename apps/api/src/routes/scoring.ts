@@ -2014,15 +2014,15 @@ scoringRoutes.get('/director-events', authMiddleware, requireRole('admin', 'dire
 scoringRoutes.get('/events/:eventId/team-codes', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const rows = (await db.prepare(`
-    SELECT COALESCE(ed.age_group, er.age_group) as age_group,
-      COALESCE(ed.division_level, er.division) as division_level,
+    SELECT ed.age_group as ed_age, ed.division_level as ed_level,
+      er.age_group as raw_age,
       COALESCE(t.schedule_name, t.name, er.team_name) as team_name,
       t.parent_invite_code, t.invite_code
     FROM event_registrations er
     LEFT JOIN teams t ON t.id = er.team_id
     LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
     WHERE er.event_id = ? AND er.status = 'approved'
-    ORDER BY age_group, division_level, team_name
+    ORDER BY team_name
   `).bind(c.req.param('eventId')).all()).results || [];
   return c.json({ success: true, data: rows });
 });
