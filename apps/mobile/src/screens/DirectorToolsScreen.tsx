@@ -383,7 +383,11 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
                 <TouchableOpacity key={`${r.team_name}-${i}`}
                   style={[s.divRow, i === list.length - 1 ? s.divRowLast : null]}
                   activeOpacity={0.7} onPress={() => copyCode(r)}>
-                  <Text style={[s.rowTitle, { flex: 1, marginRight: 8 }]} numberOfLines={1}>{r.team_name}</Text>
+                  <Text style={[s.rowTitle, { flex: 1, marginRight: 4 }]} numberOfLines={1}>{r.team_name}</Text>
+                  <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    onPress={() => Alert.alert('Full Team Name', `${r.team_name}\n\n${div}${(r.parent_invite_code || r.invite_code) ? `\nCode: ${r.parent_invite_code || r.invite_code}` : ''}`)}>
+                    <Ionicons name="information-circle-outline" size={19} color="#9aa7ba" />
+                  </TouchableOpacity>
                   {(r.parent_invite_code || r.invite_code) ? (
                     <View style={s.codeChip}><Text style={s.codeChipText}>{r.parent_invite_code || r.invite_code}</Text></View>
                   ) : (
