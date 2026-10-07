@@ -428,23 +428,29 @@ function ageSortKey(label: string): number {
                           <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">W</th>
                           <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">L</th>
                           <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">T</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">PTS</th>
+                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase bg-[#f0f7ff]">PTS</th>
                           <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">+/-</th>
+                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">GA</th>
+                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">PIMS</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.sort((a, b) => b.points - a.points || b.goal_differential - a.goal_differential).map((row, idx) => (
-                          <tr key={row.team_id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}>
-                            <td className="px-3 py-2 text-[#86868b] font-medium">{idx + 1}</td>
-                            <td className="px-3 py-2 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}</td>
-                            <td className="px-2 py-2 text-center text-[#6e6e73]">{row.games_played}</td>
-                            <td className="px-2 py-2 text-center font-semibold text-[#1d1d1f]">{row.wins}</td>
-                            <td className="px-2 py-2 text-center text-[#6e6e73]">{row.losses}</td>
-                            <td className="px-2 py-2 text-center text-[#6e6e73]">{row.ties}</td>
-                            <td className="px-2 py-2 text-center font-bold text-[#003e79]">{row.points}</td>
-                            <td className={`px-2 py-2 text-center font-semibold ${row.goal_differential > 0 ? 'text-emerald-600' : row.goal_differential < 0 ? 'text-red-500' : 'text-[#6e6e73]'}`}>
+                          <tr key={row.team_id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} ${idx === 0 ? 'border-l-2 border-l-[#00ccff]' : ''}`}>
+                            <td className="px-3 py-2.5">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${idx === 0 ? 'bg-[#003e79] text-white' : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{idx + 1}</span>
+                            </td>
+                            <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}</td>
+                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.games_played}</td>
+                            <td className="px-2 py-2.5 text-center font-semibold text-[#1d1d1f] tabular-nums">{row.wins}</td>
+                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.losses}</td>
+                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.ties}</td>
+                            <td className="px-2 py-2.5 text-center font-bold text-[#003e79] text-[15px] bg-[#f0f7ff] tabular-nums">{row.points}</td>
+                            <td className={`px-2 py-2.5 text-center font-semibold tabular-nums ${row.goal_differential > 0 ? 'text-emerald-600' : row.goal_differential < 0 ? 'text-red-500' : 'text-[#6e6e73]'}`}>
                               {row.goal_differential > 0 ? '+' : ''}{row.goal_differential}
                             </td>
+                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.goals_against}</td>
+                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{(row as any).pims ?? 0}</td>
                           </tr>
                         ))}
                       </tbody>

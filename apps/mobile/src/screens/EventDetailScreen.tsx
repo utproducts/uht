@@ -1489,29 +1489,23 @@ export default function EventDetailScreen({
               <View style={styles.standingsHeaderRow}>
                 <Text style={[styles.standingsHeaderCell, styles.standingsRankCol]}>#</Text>
                 <Text style={[styles.standingsHeaderCell, styles.standingsTeamCol]}>Team</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GP</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>W</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>L</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>T</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsRecCol]}>W-L-T</Text>
                 <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PTS</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GF</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>+/-</Text>
                 <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GA</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>DIFF</Text>
+                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PIMS</Text>
               </View>
               {poolGroup.entries.map((entry: any, idx: number) => (
                 <View key={entry.team_id} style={[styles.standingsRow, idx % 2 === 1 ? styles.standingsRowAlt : null]}>
                   <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText]}>{idx + 1}</Text>
                   <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.games_played}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.wins}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.losses}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.ties}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsRecCol]}>{entry.wins}-{entry.losses}-{entry.ties}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>{entry.points}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_for}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_against}</Text>
                   <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsDiffText]}>
                     {entry.goal_differential > 0 ? `+${entry.goal_differential}` : entry.goal_differential}
                   </Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_against}</Text>
+                  <Text style={[styles.standingsCell, styles.standingsStatColWide]}>{entry.pims ?? 0}</Text>
                 </View>
               ))}
             </View>
@@ -2359,6 +2353,7 @@ const styles = StyleSheet.create({
   standingsCell: { fontSize: 12, color: colors.text, ...fonts.regular, textAlign: 'center' },
   standingsRankCol: { width: 24 },
   standingsTeamCol: { flex: 1, textAlign: 'left', paddingRight: 4 },
+  standingsRecCol: { width: 44, textAlign: 'center' as const },
   standingsStatCol: { width: 24 },
   standingsStatColWide: { width: 32 },
   standingsRankText: { ...fonts.bold, color: colors.navy },

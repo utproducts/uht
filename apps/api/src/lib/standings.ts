@@ -38,6 +38,7 @@ export interface StandingRow {
   goals_against: number;
   points: number;
   goal_differential: number;
+  pims: number;
   rank: number;
   tiebreaker: string | null;
 }
@@ -92,6 +93,19 @@ export async function computeStandings(
     if (row) divMeta.set(d, row);
   }
 
+  // Penalty minutes per (game, team) from the scoring feed
+  const pimMap = new Map<string, number>();
+  const finalGameIds = games.filter(g => g.status === 'final').map(g => g.id);
+  for (let i = 0; i < finalGameIds.length; i += 50) {
+    const chunk = finalGameIds.slice(i, i + 50);
+    const rows = await db.prepare(
+      `SELECT game_id, team_id, SUM(COALESCE(penalty_minutes, 2)) as pim
+       FROM game_events WHERE event_type = 'penalty' AND team_id IS NOT NULL
+       AND game_id IN (${chunk.map(() => '?').join(',')}) GROUP BY game_id, team_id`
+    ).bind(...chunk).all<any>();
+    for (const r of (rows.results || [])) pimMap.set(`${r.game_id}|${r.team_id}`, r.pim || 0);
+  }
+
   // Accumulate stats per (division, pool, team) from FINAL games only;
   // scheduled games still register the team so pre-tournament standings show 0s.
   const buckets = new Map<string, Map<string, StandingRow>>();
@@ -128,7 +142,7 @@ export async function computeStandings(
               team_logo: null,
               games_played: 0, wins: 0, losses: 0, ties: 0,
               goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
-              rank: 0, tiebreaker: null,
+              pims: 0, rank: 0, tiebreaker: null,
             });
           }
         }
@@ -148,7 +162,7 @@ export async function computeStandings(
           team_logo: m?.team_logo || null,
           games_played: 0, wins: 0, losses: 0, ties: 0,
           goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
-          rank: 0, tiebreaker: null,
+          pims: 0, rank: 0, tiebreaker: null,
         });
       }
     }
@@ -158,6 +172,8 @@ export async function computeStandings(
       const bucket = buckets.get(key)!;
       const home = bucket.get(g.home_team_id)!;
       const away = bucket.get(g.away_team_id)!;
+      home.pims += pimMap.get(`${g.id}|${g.home_team_id}`) || 0;
+      away.pims += pimMap.get(`${g.id}|${g.away_team_id}`) || 0;
       home.games_played++; away.games_played++;
       home.goals_for += g.home_score; home.goals_against += g.away_score;
       away.goals_for += g.away_score; away.goals_against += g.home_score;
@@ -240,13 +256,14 @@ function resolveByStats(group: StandingRow[]): StandingRow[] {
     b.goal_differential - a.goal_differential ||
     a.goals_against - b.goals_against ||
     b.goals_for - a.goals_for ||
+    a.pims - b.pims ||
     a.team_name.localeCompare(b.team_name)
   );
   for (let j = 0; j < sorted.length; j++) {
     const r = sorted[j];
     const peer = sorted.find(o => o !== r &&
       o.wins === r.wins && o.goal_differential === r.goal_differential &&
-      o.goals_against === r.goals_against && o.goals_for === r.goals_for);
+      o.goals_against === r.goals_against && o.goals_for === r.goals_for && o.pims === r.pims);
     r.tiebreaker = peer ? 'unresolved' : (r.tiebreaker || 'stats');
   }
   return sorted;
