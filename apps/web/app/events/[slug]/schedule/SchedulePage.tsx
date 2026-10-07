@@ -394,71 +394,73 @@ function ageSortKey(label: string): number {
               </svg>
               Standings
             </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-5 max-w-4xl mx-auto">
               {Object.entries(standingsByDiv).sort((a, b) => ageSortKey(a[0]) - ageSortKey(b[0]) || a[0].localeCompare(b[0])).map(([divKey, pools]) => {
                 const poolNames = Object.keys(pools);
                 const multiPool = poolNames.length > 1;
                 const teamCount = poolNames.reduce((n, p) => n + pools[p].length, 0);
+                const accentFor = (name: string, idx: number) => {
+                  const n = (name || '').toLowerCase();
+                  if (n.includes('blue') || (!/gr[ae]y/.test(n) && idx === 1)) return { dot: '#2563eb', text: 'text-blue-600', tint: 'bg-blue-50/70', circle: 'bg-blue-600 text-white' };
+                  if (/gr[ae]y/.test(n) || idx === 0) return { dot: '#6b7280', text: 'text-gray-500', tint: 'bg-gray-100/80', circle: 'bg-gray-500 text-white' };
+                  return { dot: '#00a0cc', text: 'text-cyan-700', tint: 'bg-cyan-50/70', circle: 'bg-cyan-600 text-white' };
+                };
                 return (
-                <div key={divKey} className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden">
+                <div key={divKey} className="bg-white rounded-2xl shadow-lg overflow-hidden">
                   <div className="px-5 py-3 bg-[#003e79] flex items-center justify-between">
                     <h3 className="text-white font-bold text-sm">{divKey}</h3>
                     <span className="text-white/60 text-xs font-semibold">{teamCount} teams{multiPool ? ` · ${poolNames.length} pools` : ''}</span>
                   </div>
-                  {poolNames.map((poolName, pi) => {
-                    const rows = pools[poolName];
-                    const theme = poolTheme(poolName, pi);
-                    return (
-                  <div key={poolName || 'single'}>
-                  {multiPool && (
-                    <div className="px-5 py-2 flex items-center gap-2" style={{ backgroundColor: theme.bg }}>
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.dot }} />
-                      <span className="text-xs font-bold uppercase tracking-widest" style={{ color: theme.text }}>
-                        {poolName || `Pool ${pi + 1}`}{/\bpool\b/i.test(poolName) ? '' : ' Pool'}
-                      </span>
-                    </div>
-                  )}
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-[#e8e8ed] bg-[#fafafa]">
-                          <th className="text-left px-3 py-2 text-[10px] font-bold text-[#86868b] uppercase">#</th>
-                          <th className="text-left px-3 py-2 text-[10px] font-bold text-[#86868b] uppercase">Team</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">GP</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">W</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">L</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">T</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase bg-[#f0f7ff]">PTS</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">+/-</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">GA</th>
-                          <th className="text-center px-2 py-2 text-[10px] font-bold text-[#86868b] uppercase">PIMS</th>
+                        <tr className="border-b border-[#e8e8ed] bg-[#fafafa] text-[10px] font-bold text-[#86868b] uppercase">
+                          <th className="text-left px-3 py-2">#</th>
+                          <th className="text-left px-3 py-2">Team</th>
+                          <th className="text-center px-2 py-2">W-L-T</th>
+                          <th className="text-center px-2 py-2 bg-[#f0f7ff]">PTS</th>
+                          <th className="text-center px-2 py-2">+/-</th>
+                          <th className="text-center px-2 py-2">GA</th>
+                          <th className="text-center px-2 py-2">PIMS</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.sort((a, b) => b.points - a.points || b.goal_differential - a.goal_differential).map((row, idx) => (
-                          <tr key={row.team_id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} ${idx === 0 ? 'border-l-2 border-l-[#00ccff]' : ''}`}>
-                            <td className="px-3 py-2.5">
-                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${idx === 0 ? 'bg-[#003e79] text-white' : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{idx + 1}</span>
-                            </td>
-                            <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}</td>
-                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.games_played}</td>
-                            <td className="px-2 py-2.5 text-center font-semibold text-[#1d1d1f] tabular-nums">{row.wins}</td>
-                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.losses}</td>
-                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.ties}</td>
-                            <td className="px-2 py-2.5 text-center font-bold text-[#003e79] text-[15px] bg-[#f0f7ff] tabular-nums">{row.points}</td>
-                            <td className={`px-2 py-2.5 text-center font-semibold tabular-nums ${row.goal_differential > 0 ? 'text-emerald-600' : row.goal_differential < 0 ? 'text-red-500' : 'text-[#6e6e73]'}`}>
-                              {row.goal_differential > 0 ? '+' : ''}{row.goal_differential}
-                            </td>
-                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.goals_against}</td>
-                            <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{(row as any).pims ?? 0}</td>
-                          </tr>
-                        ))}
+                        {poolNames.map((poolName, pi) => {
+                          const accent = accentFor(poolName, pi);
+                          const rows = pools[poolName].sort((a, b) => b.points - a.points || b.goal_differential - a.goal_differential);
+                          return [
+                            multiPool ? (
+                              <tr key={`strip-${poolName}`} className={accent.tint}>
+                                <td colSpan={7} className="px-4 py-1.5">
+                                  <span className="inline-flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent.dot }} />
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest ${accent.text}`}>
+                                      {poolName || `Pool ${pi + 1}`}{/\bpool\b/i.test(poolName) ? '' : ' Pool'}
+                                    </span>
+                                  </span>
+                                </td>
+                              </tr>
+                            ) : null,
+                            ...rows.map((row, idx) => (
+                              <tr key={row.team_id} className="border-b border-[#f0f0f3] last:border-0">
+                                <td className="px-3 py-2.5">
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${multiPool ? accent.circle : idx === 0 ? 'bg-[#003e79] text-white' : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{idx + 1}</span>
+                                </td>
+                                <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}</td>
+                                <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.wins}-{row.losses}-{row.ties}</td>
+                                <td className="px-2 py-2.5 text-center font-bold text-[#003e79] text-[15px] bg-[#f0f7ff] tabular-nums">{row.points}</td>
+                                <td className={`px-2 py-2.5 text-center font-semibold tabular-nums ${row.goal_differential > 0 ? 'text-emerald-600' : row.goal_differential < 0 ? 'text-red-500' : 'text-[#6e6e73]'}`}>
+                                  {row.goal_differential > 0 ? '+' : ''}{row.goal_differential}
+                                </td>
+                                <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.goals_against}</td>
+                                <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{(row as any).pims ?? 0}</td>
+                              </tr>
+                            )),
+                          ];
+                        })}
                       </tbody>
                     </table>
                   </div>
-                  </div>
-                    );
-                  })}
                 </div>
                 );
               })}
