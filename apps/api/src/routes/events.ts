@@ -133,6 +133,45 @@ eventRoutes.get('/my-registered', authMiddleware, async (c) => {
     } catch {}
   }
 
+  // 3) Teams the user FOLLOWS or coaches (joined by code) - parents and
+  // code-joined coaches get Game Day / Next Up on home like managers do
+  try {
+    const mergeRows = (rows: any[]) => {
+      for (const ev of rows) {
+        if (!eventMap.has(ev.id)) {
+          eventMap.set(ev.id, ev);
+        } else {
+          const existing = eventMap.get(ev.id);
+          const existingNames = (existing.team_names || '').split(',').filter(Boolean);
+          const newNames = (ev.team_names || '').split(',').filter(Boolean);
+          existing.team_names = [...new Set([...existingNames, ...newNames])].join(', ');
+        }
+      }
+    };
+    const viaTeams = await db.prepare(`
+      SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+        GROUP_CONCAT(DISTINCT t.name) as team_names
+      FROM events e
+      INNER JOIN event_registrations er ON er.event_id = e.id AND er.status NOT IN ('denied', 'rejected', 'withdrawn')
+      INNER JOIN teams t ON t.id = er.team_id
+      WHERE t.id IN (SELECT team_id FROM user_follows WHERE user_id = ?)
+         OR t.id IN (SELECT team_id FROM team_coaches WHERE user_id = ?)
+      GROUP BY e.id
+    `).bind(userId, userId).all();
+    mergeRows(viaTeams.results || []);
+    const viaTeamsNew = await db.prepare(`
+      SELECT DISTINCT e.id, e.name, e.slug, e.city, e.state, e.start_date, e.end_date, e.logo_url, e.status,
+        GROUP_CONCAT(DISTINCT t.name) as team_names
+      FROM events e
+      INNER JOIN registrations r ON r.event_id = e.id AND r.status NOT IN ('denied', 'rejected', 'withdrawn')
+      INNER JOIN teams t ON t.id = r.team_id
+      WHERE t.id IN (SELECT team_id FROM user_follows WHERE user_id = ?)
+         OR t.id IN (SELECT team_id FROM team_coaches WHERE user_id = ?)
+      GROUP BY e.id
+    `).bind(userId, userId).all();
+    mergeRows(viaTeamsNew.results || []);
+  } catch {}
+
   const data = Array.from(eventMap.values()).sort((a, b) =>
     (b.start_date || '').localeCompare(a.start_date || '')
   );
