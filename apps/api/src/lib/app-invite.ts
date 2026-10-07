@@ -47,7 +47,7 @@ export function buildAppInviteHtml(opts: {
   code: string;
 }): { subject: string; html: string } {
   const { eventName, eventDates, teamName, code } = opts;
-  const subject = `Action needed: get your ${teamName} families on the UHT app`;
+  const subject = `Schedules are LIVE: get your ${teamName} families on the UHT app`;
   const textForParents = `Follow ${teamName} on the UHT app for ${eventName}! 1) Download the app - iPhone: ${APP_STORE_URL} or Android: ${PLAY_STORE_URL} 2) Create a free account 3) Enter team code ${code} to follow our team for live scores, schedules and updates.`;
 
   const html = `<!doctype html>

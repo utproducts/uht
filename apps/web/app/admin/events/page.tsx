@@ -4554,7 +4554,7 @@ function AppInviteCard({ eventId }: { eventId: string }) {
     <div className="bg-white rounded-2xl shadow-lg p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-bold text-[#1d1d1f]">📱 Get Parents on the App</h3>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">📱 Schedules Are Live - Download the App</h3>
           <p className="text-sm text-[#6e6e73] mt-1">
             Emails every approved team's coaches their team code with download-and-follow steps for families.
             {status && (
@@ -4587,7 +4587,7 @@ function AppInviteCard({ eventId }: { eventId: string }) {
             </button>
             <button onClick={() => { setResult(''); setConfirming(true); }}
               className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition">
-              {status && status.emails_sent > 0 ? 'Send to New Teams' : 'Send App Invite'}
+              {status && status.emails_sent > 0 ? 'Send to New Teams' : 'Send Schedules Are Live Email'}
             </button>
           </div>
         )}
