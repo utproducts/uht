@@ -946,10 +946,10 @@ export default function EventDetailScreen({
               )}
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
-                {item.rink_name || item.rink ? (
-                  <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
-                ) : null}
               </View>
+              {item.rink_name || item.rink ? (
+                <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
+              ) : null}
               {item.division_name ? <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text> : null}
               <View style={styles.matchup}>
                 <View style={styles.teamRow}>
@@ -1253,10 +1253,10 @@ export default function EventDetailScreen({
               )}
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
-                {item.rink_name || item.rink ? (
-                  <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
-                ) : null}
               </View>
+              {item.rink_name || item.rink ? (
+                <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
+              ) : null}
               {item.division_name && selectedDivision === 'all' ? (
                 <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text>
               ) : null}
@@ -1368,7 +1368,7 @@ export default function EventDetailScreen({
                     <View style={styles.scoreCardTopRow}>
                       <View style={styles.scoreCardMeta}>
                         <Text style={styles.scoreCardTime}>{formatScoreTime(game.start_time)}</Text>
-                        {game.rink_name ? <Text style={styles.scoreCardRink}>{[(game as any).venue_name, game.rink_name].filter(Boolean).join(' - ')}</Text> : null}
+                        {game.rink_name ? <Text style={styles.scoreCardRink} numberOfLines={2}>{[(game as any).venue_name, game.rink_name].filter(Boolean).join(' - ')}</Text> : null}
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                         <Text style={styles.statusBadgeText}>{getStatusLabel(game.status)}</Text>
@@ -2230,9 +2230,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
-  gameTimeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  gameTimeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   gameTime: { fontSize: 13, color: colors.textMuted, ...fonts.semibold, textTransform: 'uppercase', letterSpacing: 0.3 },
-  gameRink: { fontSize: 13, color: colors.info, ...fonts.medium },
+  gameRink: { fontSize: 13, color: colors.info, ...fonts.medium, marginBottom: spacing.sm },
   gameDivision: { fontSize: 12, color: colors.navy, ...fonts.semibold, marginBottom: spacing.sm },
   matchup: { gap: spacing.xs },
   teamRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -2323,7 +2323,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
   scoreCardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  scoreCardMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  scoreCardMeta: { flexDirection: 'column', alignItems: 'flex-start', gap: 2, flex: 1, paddingRight: 8 },
   scoreCardTime: { fontSize: 13, color: colors.textMuted, ...fonts.semibold },
   scoreCardRink: { fontSize: 12, color: colors.info, ...fonts.medium },
   scoreCardDivision: { fontSize: 12, color: colors.navy, ...fonts.semibold, marginBottom: spacing.sm },

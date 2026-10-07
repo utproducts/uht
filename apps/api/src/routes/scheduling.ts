@@ -1940,6 +1940,20 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
     const rinkName = dash > 0 ? raw.slice(dash + 3).trim() : null;
     let venue = venues.find((v: any) => norm(v.name) === norm(venueName));
     if (!venue) {
+      // Fuzzy fallback: naming-rights venues carry suffixes the sheet omits
+      // ("BIGGBY Coffee Ice Cube - Kalamazoo" vs "Biggby Coffee Ice Cube").
+      // Prefix match either direction, only when it's unambiguous.
+      const target = norm(venueName);
+      const candidates = venues.filter((v: any) => {
+        const n = norm(v.name);
+        return Math.min(n.length, target.length) >= 8 && (n.startsWith(target) || target.startsWith(n));
+      });
+      if (candidates.length === 1) {
+        venue = candidates[0];
+        warnings.push(`Venue "${venueName}" matched existing "${venue.name}"`);
+      }
+    }
+    if (!venue) {
       const id = crypto.randomUUID().replace(/-/g, '');
       stmts.push(db.prepare('INSERT INTO venues (id, name, city, state) VALUES (?, ?, ?, ?)')
         .bind(id, venueName, event.city || '', event.state || ''));
@@ -2059,4 +2073,42 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
   await db.prepare("UPDATE events SET schedule_published = 1, updated_at = datetime('now') WHERE id = ?").bind(eventId).run().catch(() => {});
 
   return c.json({ success: true, data: { ...summary, committed: true } });
+});
+
+// ==========================================
+// Replace one team with another across an event's ENTIRE schedule.
+// For swapping out filler/fake teams once the real team registers:
+// updates every game plus per-game lineups and locker room assignments.
+// ==========================================
+schedulingRoutes.post('/events/:eventId/replace-team', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({})) as any;
+  const fromTeamId = String(body.fromTeamId || '').trim();
+  const toTeamId = String(body.toTeamId || '').trim();
+  if (!fromTeamId || !toTeamId) return c.json({ success: false, error: 'fromTeamId and toTeamId are required' }, 400);
+  if (fromTeamId === toTeamId) return c.json({ success: false, error: 'Pick two different teams' }, 400);
+
+  const toTeam = await db.prepare('SELECT id, name FROM teams WHERE id = ? AND is_active = 1').bind(toTeamId).first<any>();
+  if (!toTeam) return c.json({ success: false, error: 'Replacement team not found or inactive' }, 404);
+  const fromTeam = await db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(fromTeamId).first<any>();
+
+  const home = await db.prepare('UPDATE games SET home_team_id = ? WHERE event_id = ? AND home_team_id = ?')
+    .bind(toTeamId, eventId, fromTeamId).run();
+  const away = await db.prepare('UPDATE games SET away_team_id = ? WHERE event_id = ? AND away_team_id = ?')
+    .bind(toTeamId, eventId, fromTeamId).run();
+  await db.prepare(`UPDATE game_lineups SET team_id = ? WHERE team_id = ? AND game_id IN (SELECT id FROM games WHERE event_id = ?)`)
+    .bind(toTeamId, fromTeamId, eventId).run().catch(() => {});
+  await db.prepare(`UPDATE game_locker_rooms SET team_id = ? WHERE team_id = ? AND game_id IN (SELECT id FROM games WHERE event_id = ?)`)
+    .bind(toTeamId, fromTeamId, eventId).run().catch(() => {});
+
+  const gamesChanged = (home.meta?.changes || 0) + (away.meta?.changes || 0);
+  return c.json({
+    success: true,
+    data: {
+      games_updated: gamesChanged,
+      from: fromTeam?.name || fromTeamId,
+      to: toTeam.name,
+    },
+  });
 });

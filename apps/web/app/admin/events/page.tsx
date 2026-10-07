@@ -4597,6 +4597,136 @@ function AppInviteCard({ eventId }: { eventId: string }) {
   );
 }
 
+function ReplaceTeamCard({ eventId }: { eventId: string }) {
+  const [scheduleTeams, setScheduleTeams] = useState<{ id: string; name: string }[]>([]);
+  const [fromId, setFromId] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<any[]>([]);
+  const [toTeam, setToTeam] = useState<{ id: string; name: string } | null>(null);
+  const [working, setWorking] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/games`)
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j.success) return;
+        const seen = new Map<string, string>();
+        for (const g of j.data || []) {
+          if (g.home_team_id && g.home_team_name) seen.set(g.home_team_id, g.home_team_name);
+          if (g.away_team_id && g.away_team_name) seen.set(g.away_team_id, g.away_team_name);
+        }
+        setScheduleTeams([...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(() => {});
+  }, [eventId]);
+
+  useEffect(() => {
+    if (query.trim().length < 2) { setResults([]); return; }
+    const t = setTimeout(() => {
+      fetch(`https://uht.chad-157.workers.dev/api/teams/search?q=${encodeURIComponent(query.trim())}`)
+        .then(r => r.json())
+        .then((j: any) => setResults(j.success ? (j.data || []) : []))
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const doReplace = async () => {
+    if (!fromId || !toTeam) return;
+    setWorking(true);
+    setMsg('');
+    try {
+      const r = await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${eventId}/replace-team`, {
+        method: 'POST',
+        headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromTeamId: fromId, toTeamId: toTeam.id }),
+      }).then(res => res.json()) as any;
+      if (r.success) {
+        setMsg(`Replaced ${r.data.from} with ${r.data.to} across ${r.data.games_updated} game${r.data.games_updated !== 1 ? 's' : ''}. Schedule, app, and scoring all updated.`);
+        setFromId('');
+        setToTeam(null);
+        setQuery('');
+        setScheduleTeams(prev => prev.map(t => t.id === fromId ? toTeam : t));
+      } else {
+        setMsg(r.error || 'Replace failed');
+      }
+    } catch {
+      setMsg('Replace failed');
+    }
+    setWorking(false);
+    setConfirming(false);
+  };
+
+  const fromName = scheduleTeams.find(t => t.id === fromId)?.name;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <h3 className="text-lg font-bold text-[#1d1d1f]">Replace a Team in the Schedule</h3>
+      <p className="text-sm text-[#6e6e73] mt-1 mb-4">
+        Swaps a placeholder/filler team for the real one across every game in this event - schedule, lineups, and locker rooms follow automatically.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Team to replace</label>
+          <select value={fromId} onChange={e => { setFromId(e.target.value); setMsg(''); }}
+            className="w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:border-[#003e79] outline-none bg-white">
+            <option value="">Select a team in this schedule...</option>
+            {scheduleTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div className="relative">
+          <label className="block text-[11px] font-semibold text-[#86868b] uppercase tracking-wide mb-1">Replacement team</label>
+          {toTeam ? (
+            <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-sm font-semibold text-emerald-800">
+              <span className="truncate">{toTeam.name}</span>
+              <button onClick={() => { setToTeam(null); setQuery(''); }} className="text-emerald-700 text-xs underline shrink-0">change</button>
+            </div>
+          ) : (
+            <>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search teams by name..."
+                className="w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:border-[#003e79] outline-none" />
+              {results.length > 0 && (
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#e8e8ed] rounded-xl shadow-xl max-h-56 overflow-y-auto">
+                  {results.map((t: any) => (
+                    <button key={t.id} onClick={() => { setToTeam({ id: t.id, name: t.name }); setResults([]); }}
+                      className="block w-full text-left px-3 py-2 text-sm hover:bg-[#f0f7ff] border-b border-[#f5f5f7] last:border-0">
+                      <span className="font-medium text-[#1d1d1f]">{t.name}</span>
+                      {(t.age_group || t.organization_name) && (
+                        <span className="text-xs text-[#86868b]"> - {[t.age_group, t.organization_name].filter(Boolean).join(', ')}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        {confirming ? (
+          <>
+            <span className="text-sm font-semibold text-[#1d1d1f]">Replace {fromName} with {toTeam?.name} in every game?</span>
+            <button onClick={doReplace} disabled={working}
+              className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition disabled:opacity-50">
+              {working ? 'Replacing…' : 'Yes, Replace'}
+            </button>
+            <button onClick={() => setConfirming(false)} disabled={working}
+              className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-[#6e6e73] text-sm font-semibold hover:bg-[#fafafa] transition">Cancel</button>
+          </>
+        ) : (
+          <button onClick={() => setConfirming(true)} disabled={!fromId || !toTeam || fromId === toTeam?.id}
+            className="px-5 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#00509e] transition disabled:opacity-40">
+            Replace Team
+          </button>
+        )}
+      </div>
+      {msg && <p className="text-sm font-semibold text-green-700 mt-3">{msg}</p>}
+    </div>
+  );
+}
+
 function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () => void; onEdit?: (event: any) => void }) {
   const [event, setEvent] = useState<any>(null);
   // Which email was just copied to the clipboard (shows a brief "Copied!")
@@ -5567,7 +5697,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       )}
 
       {tab === 'schedules' && (
-        <ScheduleGamesTab eventId={eventId} />
+        <div className="space-y-4">
+          <ReplaceTeamCard eventId={eventId} />
+          <ScheduleGamesTab eventId={eventId} />
+        </div>
       )}
 
       {tab === 'locker_rooms' && (
