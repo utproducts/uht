@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { authFetch } from '../services/auth';
-import * as ImagePicker from 'expo-image-picker';
 import ScreenHeader from '../components/ScreenHeader';
 
 // ============================================================
@@ -58,43 +57,6 @@ export default function DirectorGamesScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [events, setEvents] = useState<DirectorEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<DirectorEvent | null>(null);
-  // Champions photo (director-only): pick winning team, then their photo
-  const [champPickerOpen, setChampPickerOpen] = useState(false);
-  const [champTeams, setChampTeams] = useState<any[]>([]);
-  const [champUploading, setChampUploading] = useState(false);
-
-  async function openChampPicker() {
-    if (!selectedEvent) return;
-    setChampPickerOpen(true);
-    try {
-      const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${selectedEvent.id}/standings`);
-      const json = await res.json();
-      if (json.success) {
-        setChampTeams((json.data || []).filter((r: any) => !String(r.team_id).startsWith('ph:')));
-      }
-    } catch {}
-  }
-
-  async function uploadChampionPhoto(teamId: string) {
-    if (!selectedEvent) return;
-    setChampPickerOpen(false);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, base64: true });
-      if (result.canceled || !result.assets?.[0]?.base64) return;
-      setChampUploading(true);
-      const res = await authFetch(`/api/photos/events/${selectedEvent.id}/photos`, {
-        method: 'POST',
-        body: JSON.stringify({ data: result.assets[0].base64, mimeType: 'image/jpeg', kind: 'champion', teamId }),
-      });
-      const json = await res.json() as any;
-      setChampUploading(false);
-      Alert.alert(json.success ? 'Champions Photo Posted!' : 'Upload Failed',
-        json.success ? 'It is live in the event gallery, highlighted as champions.' : (json.error || 'Please try again.'));
-    } catch {
-      setChampUploading(false);
-      Alert.alert('Upload Failed', 'Please try again.');
-    }
-  }
   const [games, setGames] = useState<DirectorGame[]>([]);
   const [filter, setFilter] = useState<'all' | 'live' | 'final' | 'upcoming'>('all');
 
@@ -292,35 +254,6 @@ export default function DirectorGamesScreen({ navigation }: any) {
           ))}
         </ScrollView>
       )}
-
-      {/* Champions photo - take the winners' photo and post it highlighted */}
-      {selectedEvent && (
-        <TouchableOpacity style={styles.champBtn} activeOpacity={0.85} disabled={champUploading} onPress={openChampPicker}>
-          <Text style={styles.champBtnTrophy}>🏆</Text>
-          <Text style={styles.champBtnText}>{champUploading ? 'Posting Champions Photo...' : 'Post Champions Photo'}</Text>
-        </TouchableOpacity>
-      )}
-
-      <Modal visible={champPickerOpen} transparent animationType="slide" onRequestClose={() => setChampPickerOpen(false)}>
-        <View style={styles.champBackdrop}>
-          <View style={styles.champSheet}>
-            <Text style={styles.champTitle}>Who won?</Text>
-            <Text style={styles.champSub}>Pick the champions, then choose their photo from your library.</Text>
-            <ScrollView style={{ maxHeight: 380 }}>
-              {champTeams.map((r: any) => (
-                <TouchableOpacity key={r.team_id} style={styles.champRow} activeOpacity={0.7} onPress={() => uploadChampionPhoto(r.team_id)}>
-                  <Text style={styles.champRowTeam} numberOfLines={1}>{r.team_name}</Text>
-                  <Text style={styles.champRowDiv}>{[r.age_group, r.division_level].filter(Boolean).join(' ')}</Text>
-                </TouchableOpacity>
-              ))}
-              {champTeams.length === 0 && <Text style={styles.champSub}>Loading teams...</Text>}
-            </ScrollView>
-            <TouchableOpacity style={styles.champCancel} onPress={() => setChampPickerOpen(false)}>
-              <Text style={styles.champCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Filter Tabs */}
       <View style={styles.filterRow}>
@@ -828,16 +761,4 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     color: '#fff',
   },
-  champBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: spacing.lg, marginBottom: spacing.sm, backgroundColor: '#fff4d6', borderWidth: 1, borderColor: '#f0d58a', borderRadius: 12, paddingVertical: 11 },
-  champBtnTrophy: { fontSize: 16 },
-  champBtnText: { color: '#8a6d1a', fontSize: 14, fontWeight: '700' },
-  champBackdrop: { flex: 1, backgroundColor: 'rgba(4,10,20,0.5)', justifyContent: 'flex-end' },
-  champSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 34 },
-  champTitle: { fontSize: 19, color: '#101c30', fontWeight: '700' },
-  champSub: { fontSize: 13, color: '#5b6b83', marginTop: 3, marginBottom: 12 },
-  champRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
-  champRowTeam: { flex: 1, fontSize: 15, color: '#101c30', fontWeight: '600' },
-  champRowDiv: { fontSize: 12, color: '#5b6b83' },
-  champCancel: { marginTop: 14, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: '#eef2f7' },
-  champCancelText: { fontSize: 15, color: '#101c30', fontWeight: '700' },
 });
