@@ -50,13 +50,15 @@ function Header({ title, subtitle, navigation }: { title: string; subtitle?: str
 function EventPills({ events, selected, onSelect }: { events: DirEvent[]; selected: DirEvent | null; onSelect: (e: DirEvent) => void }) {
   if (events.length <= 1) return null;
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.pillScroll} contentContainerStyle={s.pillRow}>
-      {events.map(ev => (
-        <TouchableOpacity key={ev.id} style={[s.pill, selected?.id === ev.id && s.pillActive]} onPress={() => onSelect(ev)}>
-          <Text style={[s.pillText, selected?.id === ev.id && s.pillTextActive]}>{ev.name}</Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+    <View style={s.pillBand}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pillRow}>
+        {events.map(ev => (
+          <TouchableOpacity key={ev.id} style={[s.pill, selected?.id === ev.id && s.pillActive]} onPress={() => onSelect(ev)}>
+            <Text maxFontSizeMultiplier={1.2} numberOfLines={1} style={[s.pillText, selected?.id === ev.id && s.pillTextActive]}>{ev.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -725,7 +727,7 @@ const s = StyleSheet.create({
   headerSubLine: { color: '#5b6b83', fontSize: 12, ...fonts.semibold, paddingHorizontal: spacing.lg, paddingTop: 10 },
   rowCardAlert: { backgroundColor: '#fdf0f0', borderWidth: 1.5, borderColor: '#f1b3b3' },
   rowAlertText: { color: '#c0392b', fontSize: 11.5, ...fonts.bold, marginTop: 2, letterSpacing: 0.3 },
-  pillScroll: { flexGrow: 0, backgroundColor: colors.bg },
+  pillBand: { backgroundColor: colors.bg },
   pillRow: { paddingHorizontal: spacing.lg, paddingVertical: 10, gap: 8 },
   pill: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#e9eef5' },
   pillActive: { backgroundColor: colors.navy },
