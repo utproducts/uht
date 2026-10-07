@@ -591,6 +591,115 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// 7. Venue Setup - define locker rooms per rink (syncs with the website)
+// ─────────────────────────────────────────────────────────
+export function DirectorVenueSetupScreen({ navigation }: any) {
+  const { events, selected, setSelected, loading } = useDirectorEvents();
+  const [games, setGames] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<Record<string, any[]>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const loadGames = useCallback(() => {
+    if (!selected) return;
+    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${selected.id}/games`)
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setGames(j.data || []); })
+      .catch(() => {});
+  }, [selected]);
+  useEffect(loadGames, [loadGames]);
+
+  const venues: { id: string; name: string; rinks: { id: string; name: string }[] }[] = [];
+  for (const g of games) {
+    if (!g.venue_id || !g.rink_id) continue;
+    let v = venues.find(x => x.id === g.venue_id);
+    if (!v) { v = { id: g.venue_id, name: g.venue_name, rinks: [] }; venues.push(v); }
+    if (!v.rinks.some(r => r.id === g.rink_id)) v.rinks.push({ id: g.rink_id, name: g.rink_name });
+  }
+
+  const loadRooms = useCallback(async (rinkId: string) => {
+    try {
+      const res = await authFetch(`/api/director/rinks/${rinkId}/locker-rooms`);
+      const json = await res.json() as any;
+      if (json.success) setRooms(prev => ({ ...prev, [rinkId]: json.data || [] }));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    for (const v of venues) for (const r of v.rinks) if (!(r.id in rooms)) loadRooms(r.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [games]);
+
+  const addRoom = (rink: { id: string; name: string }) => {
+    Alert.prompt(`Add locker room - ${rink.name}`, 'Room name (e.g. Room A, Locker 3)', async (text) => {
+      const name = (text || '').trim();
+      if (!name) return;
+      setBusy(rink.id);
+      try {
+        const res = await authFetch(`/api/director/rinks/${rink.id}/locker-rooms`, {
+          method: 'POST', body: JSON.stringify({ name }),
+        });
+        const json = await res.json() as any;
+        if (!json.success) Alert.alert('Could not add', json.error || 'Try again.');
+        await loadRooms(rink.id);
+      } catch { Alert.alert('Could not add', 'Try again.'); }
+      setBusy(null);
+    });
+  };
+
+  const removeRoom = (rinkId: string, room: any) => {
+    Alert.alert('Remove locker room', `Delete "${room.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          const res = await authFetch(`/api/director/locker-rooms/${room.id}`, { method: 'DELETE' });
+          const json = await res.json() as any;
+          if (!json.success) Alert.alert('Could not delete', json.error || 'It may be assigned to a game.');
+          await loadRooms(rinkId);
+        } catch {}
+      } },
+    ]);
+  };
+
+  return (
+    <View style={s.screen}>
+      <Header title="Venue Setup" subtitle="Locker rooms you add here sync to the website too" navigation={navigation} />
+      <EventPills events={events} selected={selected} onSelect={setSelected} />
+      {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
+        <ScrollView contentContainerStyle={s.body}>
+          {venues.map(v => (
+            <View key={v.id} style={s.divCard}>
+              <View style={s.divCardHeader}>
+                <Text style={s.divCardTitle}>{v.name}</Text>
+              </View>
+              {v.rinks.map(r => (
+                <View key={r.id} style={s.rinkBlock}>
+                  <View style={s.rinkBlockHead}>
+                    <Text style={s.rowTitle}>{r.name}</Text>
+                    <TouchableOpacity style={s.addRoomBtn} disabled={busy === r.id} onPress={() => addRoom(r)}>
+                      <Ionicons name="add" size={15} color={colors.white} />
+                      <Text style={s.addRoomBtnText}>Add Room</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={s.roomChipWrap}>
+                    {(rooms[r.id] || []).map(room => (
+                      <TouchableOpacity key={room.id} style={s.roomChip} onPress={() => removeRoom(r.id, room)}>
+                        <Text style={s.roomChipText}>{room.name}</Text>
+                        <Ionicons name="close" size={13} color="#7a8699" />
+                      </TouchableOpacity>
+                    ))}
+                    {(rooms[r.id] || []).length === 0 && <Text style={s.rowSub}>No locker rooms yet</Text>}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
+          {venues.length === 0 && <Text style={s.empty}>Rinks appear once the schedule is uploaded.</Text>}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerSubLine: { color: '#5b6b83', fontSize: 12, ...fonts.semibold, paddingHorizontal: spacing.lg, paddingTop: 10 },
@@ -652,6 +761,13 @@ const s = StyleSheet.create({
   sheetRowText: { fontSize: 15, color: '#101c30', ...fonts.semibold },
   sheetCancel: { marginTop: 14, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: '#eef2f7' },
   sheetCancelText: { fontSize: 15, color: '#101c30', ...fonts.bold },
+  rinkBlock: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+  rinkBlockHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 },
+  addRoomBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.navy, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  addRoomBtnText: { color: colors.white, fontSize: 11.5, ...fonts.bold },
+  roomChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  roomChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#eef2f7', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  roomChipText: { fontSize: 12.5, color: '#101c30', ...fonts.semibold },
   codeChip: { backgroundColor: '#f0f7ff', borderWidth: 1, borderColor: '#bcd9f5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   codeChipText: { color: colors.navy, fontSize: 14, letterSpacing: 2, ...fonts.bold },
 });
