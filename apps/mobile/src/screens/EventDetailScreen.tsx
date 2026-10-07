@@ -1475,42 +1475,46 @@ export default function EventDetailScreen({
                 {card.pools.reduce((n, p) => n + p.entries.length, 0)} teams{card.pools.length > 1 ? ` · ${card.pools.length} pools` : ''}
               </Text>
             </View>
-            {card.pools.map((poolGroup, pi) => (
-              <View key={poolGroup.pool || String(pi)}>
-                {card.pools.length > 1 && (
-                  <View style={[styles.poolStrip, { backgroundColor: poolColor(poolGroup.pool, pi) }]}>
-                    <View style={styles.poolStripDot} />
-                    <Text style={styles.poolStripText}>
-                      {(poolGroup.pool || `Pool ${pi + 1}`).toUpperCase()}{/POOL/i.test(poolGroup.pool) ? '' : ' POOL'}
-                    </Text>
-                  </View>
-                )}
-            <View style={styles.standingsTable}>
-              <View style={styles.standingsHeaderRow}>
-                <Text style={[styles.standingsHeaderCell, styles.standingsRankCol]}>#</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsTeamCol]}>Team</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsRecCol]}>W-L-T</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PTS</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>+/-</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GA</Text>
-                <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PIMS</Text>
-              </View>
-              {poolGroup.entries.map((entry: any, idx: number) => (
-                <View key={entry.team_id} style={[styles.standingsRow, idx % 2 === 1 ? styles.standingsRowAlt : null]}>
-                  <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText]}>{idx + 1}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsRecCol]}>{entry.wins}-{entry.losses}-{entry.ties}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>{entry.points}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsDiffText]}>
-                    {entry.goal_differential > 0 ? `+${entry.goal_differential}` : entry.goal_differential}
-                  </Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_against}</Text>
-                  <Text style={[styles.standingsCell, styles.standingsStatColWide]}>{entry.pims ?? 0}</Text>
-                </View>
-              ))}
+            {/* One column header per division - pools share it */}
+            <View style={styles.standingsHeaderRow}>
+              <Text style={[styles.standingsHeaderCell, styles.standingsRankCol]}>#</Text>
+              <Text style={[styles.standingsHeaderCell, styles.standingsTeamCol]}>TEAM</Text>
+              <Text style={[styles.standingsHeaderCell, styles.standingsRecCol]}>W-L-T</Text>
+              <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PTS</Text>
+              <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>+/-</Text>
+              <Text style={[styles.standingsHeaderCell, styles.standingsStatCol]}>GA</Text>
+              <Text style={[styles.standingsHeaderCell, styles.standingsStatColWide]}>PIMS</Text>
             </View>
-              </View>
-            ))}
+            {card.pools.map((poolGroup, pi) => {
+              const accent = poolColor(poolGroup.pool, pi);
+              const tint = /gr[ae]y/.test((poolGroup.pool || '').toLowerCase()) ? '#f1f3f6'
+                : (poolGroup.pool || '').toLowerCase().includes('blue') ? '#eaf2fe' : '#e9f6fc';
+              return (
+                <View key={poolGroup.pool || String(pi)}>
+                  {card.pools.length > 1 && (
+                    <View style={[styles.poolStrip, { backgroundColor: tint }]}>
+                      <View style={[styles.poolStripDot, { backgroundColor: accent }]} />
+                      <Text style={[styles.poolStripText, { color: accent }]}>
+                        {(poolGroup.pool || `Pool ${pi + 1}`).toUpperCase()}{/POOL/i.test(poolGroup.pool) ? '' : ' POOL'}
+                      </Text>
+                    </View>
+                  )}
+                  {poolGroup.entries.map((entry: any, idx: number) => (
+                    <View key={entry.team_id} style={[styles.standingsRow, idx === poolGroup.entries.length - 1 && pi === card.pools.length - 1 ? styles.standingsRowLast : null]}>
+                      <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText, card.pools.length > 1 ? { color: accent } : null]}>{idx + 1}</Text>
+                      <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}</Text>
+                      <Text style={[styles.standingsCell, styles.standingsRecCol]}>{entry.wins}-{entry.losses}-{entry.ties}</Text>
+                      <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>{entry.points}</Text>
+                      <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsDiffText]}>
+                        {entry.goal_differential > 0 ? `+${entry.goal_differential}` : entry.goal_differential}
+                      </Text>
+                      <Text style={[styles.standingsCell, styles.standingsStatCol]}>{entry.goals_against}</Text>
+                      <Text style={[styles.standingsCell, styles.standingsStatColWide]}>{entry.pims ?? 0}</Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
           </View>
         ))}
       </ScrollView>
@@ -2246,9 +2250,9 @@ const styles = StyleSheet.create({
   standingsCardHeader: { backgroundColor: colors.navy, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   standingsCardTitle: { color: '#fff', fontSize: 14, ...fonts.bold },
   standingsCardSub: { color: 'rgba(255,255,255,0.65)', fontSize: 11, ...fonts.semibold },
-  poolStrip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 7 },
-  poolStripDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.6)' },
-  poolStripText: { color: '#fff', fontSize: 10.5, letterSpacing: 1.5, ...fonts.bold },
+  poolStrip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 6 },
+  poolStripDot: { width: 7, height: 7, borderRadius: 4 },
+  poolStripText: { fontSize: 10.5, letterSpacing: 1.5, ...fonts.bold },
   starsRulesCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff8e6', borderWidth: 1, borderColor: '#f5d98d', borderRadius: 14, padding: 14, marginBottom: 12 },
   starsRulesTitle: { fontSize: 13.5, color: '#6b520f', ...fonts.bold },
   starsRulesSub: { fontSize: 11.5, color: '#8a6d1a', marginTop: 2, lineHeight: 15 },
@@ -2345,9 +2349,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border,
     overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
-  standingsHeaderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.navy, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
-  standingsHeaderCell: { fontSize: 10, color: colors.white, ...fonts.bold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
-  standingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  standingsHeaderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f7fa', paddingVertical: 7, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: '#e8ecf1' },
+  standingsHeaderCell: { fontSize: 10, color: '#7a8699', ...fonts.bold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.4 },
+  standingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+  standingsRowLast: { borderBottomWidth: 0 },
   standingsRowAlt: { backgroundColor: '#f8f9fa' },
   standingsCell: { fontSize: 12, color: colors.text, ...fonts.regular, textAlign: 'center' },
   standingsRankCol: { width: 24 },
