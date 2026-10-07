@@ -4597,7 +4597,7 @@ function AppInviteCard({ eventId }: { eventId: string }) {
   );
 }
 
-function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string; registeredTeamIds?: string[] }) {
+function ReplaceTeamCard({ eventId, registeredTeams = [] }: { eventId: string; registeredTeams?: { id: string; name: string }[] }) {
   const [scheduleTeams, setScheduleTeams] = useState<{ id: string; name: string }[]>([]);
   const [fromId, setFromId] = useState('');
   const [query, setQuery] = useState('');
@@ -4676,15 +4676,19 @@ function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string;
     setConfirming(false);
   };
 
+  // Registered = the participants page, verbatim (deduped by team id) -
+  // the one source that is always right about who registered
+  const registered = Array.from(new Map(registeredTeams.map(t => [t.id, t])).values())
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const regIdSet = new Set(registered.map(t => t.id));
+
   const fromName = fromId.startsWith('p:')
     ? fromId.slice(2)
-    : scheduleTeams.find(t => t.id === fromId.slice(2))?.name;
+    : (scheduleTeams.find(t => t.id === fromId.slice(2))?.name || registered.find(t => t.id === fromId.slice(2))?.name);
 
   // Not-registered first: placeholder names the upload could not match, plus
   // any real teams in games without a registration for this event
-  const regIdSet = new Set(registeredTeamIds);
   const unregistered = scheduleTeams.filter(t => !regIdSet.has(t.id));
-  const registered = scheduleTeams.filter(t => regIdSet.has(t.id));
   const notRegisteredCount = placeholders.length + unregistered.length;
 
   return (
@@ -5739,7 +5743,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'schedules' && (
         <div className="space-y-4">
-          <ReplaceTeamCard eventId={eventId} registeredTeamIds={registrations.map((r: any) => r.team_id).filter(Boolean)} />
+          <ReplaceTeamCard eventId={eventId} registeredTeams={registrations
+            .filter((r: any) => r.team_id)
+            .map((r: any) => ({ id: r.team_id, name: r.display_name || r.team_name }))} />
           <ScheduleGamesTab eventId={eventId} />
         </div>
       )}
