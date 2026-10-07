@@ -736,7 +736,7 @@ export default function EventsPage() {
                         <div className="flex items-center gap-2 mt-2.5">
                           {!past && scheduleLive ? (
                             <>
-                              <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
+                              <a href={`/events/${event.slug}/schedule`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
                               <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
                             </>
                           ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
@@ -819,7 +819,7 @@ export default function EventsPage() {
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap pl-4 border-l border-[#e8e8ed]">
                       {!past && scheduleLive ? (
                         <>
-                          <a href={`/events/${event.slug}`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
+                          <a href={`/events/${event.slug}/schedule`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
                           <a href={`/events/${event.slug}`} className="inline-block px-3 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
                         </>
                       ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
