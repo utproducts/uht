@@ -12,6 +12,7 @@ const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
 const STAFF_BCC = ['johnny@ultimatetournaments.com'];
 const APP_STORE_URL = 'https://apps.apple.com/app/id6786085393';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht';
 
 const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
@@ -47,7 +48,7 @@ export function buildAppInviteHtml(opts: {
 }): { subject: string; html: string } {
   const { eventName, eventDates, teamName, code } = opts;
   const subject = `Action needed: get your ${teamName} families on the UHT app`;
-  const textForParents = `Follow ${teamName} on the UHT app for ${eventName}! 1) Download the app: ${APP_STORE_URL} 2) Create a free account 3) Enter team code ${code} to follow our team for live scores, schedules and updates.`;
+  const textForParents = `Follow ${teamName} on the UHT app for ${eventName}! 1) Download the app - iPhone: ${APP_STORE_URL} or Android: ${PLAY_STORE_URL} 2) Create a free account 3) Enter team code ${code} to follow our team for live scores, schedules and updates.`;
 
   const html = `<!doctype html>
 <html>
@@ -76,7 +77,7 @@ export function buildAppInviteHtml(opts: {
 
       <p style="font-size:15px;color:#1d2a3d;line-height:1.6;margin:0 0 10px;"><strong>Three steps for your families:</strong></p>
       <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-        <tr><td style="padding:8px 0;font-size:14px;color:#1d2a3d;line-height:1.5;"><strong style="color:#003e79;">1.</strong> Download the UHT app from the App Store: <a href="${APP_STORE_URL}" style="color:#0a7cc9;font-weight:600;">${APP_STORE_URL}</a></td></tr>
+        <tr><td style="padding:8px 0;font-size:14px;color:#1d2a3d;line-height:1.5;"><strong style="color:#003e79;">1.</strong> Download the UHT app:<br><span style="display:inline-block;margin-top:4px;">iPhone: <a href="${APP_STORE_URL}" style="color:#0a7cc9;font-weight:600;">App Store</a> &nbsp;&bull;&nbsp; Android: <a href="${PLAY_STORE_URL}" style="color:#0a7cc9;font-weight:600;">Google Play</a></span></td></tr>
         <tr><td style="padding:8px 0;font-size:14px;color:#1d2a3d;line-height:1.5;"><strong style="color:#003e79;">2.</strong> Create a free account (choose Parent / Fan)</td></tr>
         <tr><td style="padding:8px 0;font-size:14px;color:#1d2a3d;line-height:1.5;"><strong style="color:#003e79;">3.</strong> Enter team code <strong>${code}</strong> to follow ${teamName} and get live scores, schedules, and game updates pushed to their phone</td></tr>
       </table>
