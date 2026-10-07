@@ -1944,30 +1944,29 @@ const styles = StyleSheet.create({
   // Sub-tabs (Game Center)
   subTabBar: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-    backgroundColor: colors.bg,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.sm,
+    backgroundColor: '#e4e9f0',
+    borderRadius: 12,
+    padding: 3,
   },
   subTab: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.full,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 7,
+    borderRadius: 9,
   },
   subTabActive: {
-    backgroundColor: colors.navy,
-    borderColor: colors.navy,
+    backgroundColor: colors.white,
+    shadowColor: '#0f2747', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
   subTabText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: '#5b6b83',
     ...fonts.semibold,
   },
   subTabTextActive: {
-    color: colors.white,
+    color: colors.navy,
   },
 
   // Common
@@ -2290,8 +2289,8 @@ const styles = StyleSheet.create({
   divisionPickerContainer: { backgroundColor: colors.bg, paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   divisionPickerScroll: { paddingHorizontal: spacing.lg, gap: spacing.xs },
   divisionPill: {
-    paddingVertical: 6, paddingHorizontal: spacing.md, borderRadius: radii.full,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    paddingVertical: 7, paddingHorizontal: spacing.md + 2, borderRadius: radii.full,
+    backgroundColor: '#e9eef5',
   },
   divisionPillActive: { backgroundColor: colors.navy, borderColor: colors.navy },
   divisionPillText: { fontSize: 12, color: colors.textSecondary, ...fonts.semibold },
@@ -2302,9 +2301,9 @@ const styles = StyleSheet.create({
   timeFilterBtn: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 5, paddingHorizontal: spacing.md, borderRadius: radii.full,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: '#e9eef5',
   },
-  timeFilterBtnActive: { backgroundColor: colors.cyan, borderColor: colors.cyan },
+  timeFilterBtnActive: { backgroundColor: colors.navy },
   timeFilterText: { fontSize: 12, color: colors.textSecondary, ...fonts.semibold },
   timeFilterTextActive: { color: colors.white },
 
