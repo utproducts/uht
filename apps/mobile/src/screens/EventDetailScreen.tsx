@@ -934,7 +934,7 @@ export default function EventDetailScreen({
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
                 {item.rink_name || item.rink ? (
-                  <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+                  <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
                 ) : null}
               </View>
               {item.division_name ? <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text> : null}
@@ -1241,7 +1241,7 @@ export default function EventDetailScreen({
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{formatGameTime(item.time, item.date)}</Text>
                 {item.rink_name || item.rink ? (
-                  <Text style={styles.gameRink}>{item.rink_name || item.rink}</Text>
+                  <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
                 ) : null}
               </View>
               {item.division_name && selectedDivision === 'all' ? (
@@ -1355,7 +1355,7 @@ export default function EventDetailScreen({
                     <View style={styles.scoreCardTopRow}>
                       <View style={styles.scoreCardMeta}>
                         <Text style={styles.scoreCardTime}>{formatScoreTime(game.start_time)}</Text>
-                        {game.rink_name ? <Text style={styles.scoreCardRink}>{game.rink_name}</Text> : null}
+                        {game.rink_name ? <Text style={styles.scoreCardRink}>{[(game as any).venue_name, game.rink_name].filter(Boolean).join(' - ')}</Text> : null}
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                         <Text style={styles.statusBadgeText}>{getStatusLabel(game.status)}</Text>

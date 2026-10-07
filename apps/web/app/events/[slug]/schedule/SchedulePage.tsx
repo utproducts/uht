@@ -574,7 +574,9 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
                               {/* Time + Rink */}
                               <div className="w-28 sm:w-36 shrink-0 px-4 py-3 text-center border-r border-[#f0f0f3]">
                                 <p className="text-sm font-bold text-[#1d1d1f]">{formatTime(game.start_time)}</p>
-                                <p className="text-[11px] text-[#86868b] mt-0.5">{game.rink_name}</p>
+                                <p className="text-[11px] text-[#86868b] mt-0.5">
+                                  {(game as any).venue_name ? `${(game as any).venue_name} - ` : ''}{game.rink_name}
+                                </p>
                                 {totalDelay > 0 && (
                                   <p className="text-[11px] text-amber-600 font-semibold mt-0.5">+{totalDelay} min</p>
                                 )}
