@@ -186,7 +186,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <TouchableOpacity
             style={styles.skCard}
             activeOpacity={0.85}
-            onPress={() => Linking.openURL('https://ultimatetournaments.com/scoring')}
+onPress={() => navigation.navigate('ScoringConsole')}
           >
             <View style={styles.skIconCircle}>
               <Ionicons name="stopwatch-outline" size={24} color={colors.cyan} />
