@@ -4617,7 +4617,7 @@ function ReplaceTeamCard({ eventId }: { eventId: string }) {
           if (g.home_team_id && g.home_team_name) seen.set(g.home_team_id, g.home_team_name);
           if (g.away_team_id && g.away_team_name) seen.set(g.away_team_id, g.away_team_name);
         }
-        setScheduleTeams([...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)));
+        setScheduleTeams(Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)));
       })
       .catch(() => {});
   }, [eventId]);
