@@ -198,6 +198,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         )}
 
+        <View style={styles.overlapStack}>
         {/* Push nudge - permission off means no game alerts reach this user */}
         {(pushStatus === 'denied' || pushStatus === 'undetermined') && (
           <TouchableOpacity
@@ -278,6 +279,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           </TouchableOpacity>
         )}
 
+        </View>
+
         {/* Quick Access - photo tiles */}
         <View style={styles.qaGrid}>
           {([
@@ -310,6 +313,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   // Hero
+  overlapStack: { marginTop: -42 },
   heroZone: {
     width: SCREEN_WIDTH,
   },
@@ -339,8 +343,8 @@ const styles = StyleSheet.create({
   hero: {
     width: SCREEN_WIDTH,
     paddingTop: 24,
-    paddingBottom: 46,
-    minHeight: 264,
+    paddingBottom: 26,
+    minHeight: 240,
     justifyContent: 'flex-end',
   },
   heroContent: {
