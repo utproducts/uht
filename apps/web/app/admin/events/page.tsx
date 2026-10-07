@@ -4678,13 +4678,19 @@ function StandingsAdminTab({ eventId }: { eventId: string }) {
   }
 
   const divLabel = (list: any[]) => [list[0]?.age_group, list[0]?.division_level].filter(Boolean).join(' ');
+  const AGE_ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget', 'girls', 'varsity', 'high school'];
+  const ageKey = (label: string) => {
+    const l = (label || '').toLowerCase();
+    const i = AGE_ORDER.findIndex(a => l.startsWith(a));
+    return i === -1 ? 999 : i;
+  };
 
   return (
     <div className="space-y-5">
       <div className="bg-[#f0f7ff] border border-[#bcd9f5] rounded-xl p-4 text-sm text-[#1d4e89]">
         Drag teams to set the order manually - the site, app, and bracket seeding follow it. A 6-team division splits automatically: top 3 = <span className="font-bold text-[#2563eb]">Blue</span>, bottom 3 = <span className="font-bold text-[#6b7280]">Grey</span>.
       </div>
-      {Object.entries(order).map(([divId, list]) => {
+      {Object.entries(order).sort((a, b) => ageKey(divLabel(a[1])) - ageKey(divLabel(b[1])) || divLabel(a[1]).localeCompare(divLabel(b[1]))).map(([divId, list]) => {
         const six = list.length === 6;
         return (
           <div key={divId} className="bg-white rounded-2xl shadow-lg overflow-hidden">
