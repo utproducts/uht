@@ -232,7 +232,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <TouchableOpacity
             style={styles.gameDayCard}
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('EventDetail', { eventId: liveEvent.id, eventName: liveEvent.name, initialTab: 'game_center' })}
+            onPress={() => navigation.navigate('EventDetail', { eventId: liveEvent.id, eventName: liveEvent.name, initialTab: 'my_schedule' })}
           >
             <View style={styles.gameDayTopRow}>
               <View style={styles.gameDayPill}>
@@ -257,7 +257,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <TouchableOpacity
             style={styles.nextUpCard}
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('EventDetail', { eventId: nextEvent.id, eventName: nextEvent.name })}
+            onPress={() => navigation.navigate('EventDetail', { eventId: nextEvent.id, eventName: nextEvent.name, initialTab: 'my_schedule' })}
           >
             {(nextEvent as any).logo_url ? (
               <Image source={{ uri: (nextEvent as any).logo_url }} style={styles.nextUpLogo} resizeMode="contain" />
