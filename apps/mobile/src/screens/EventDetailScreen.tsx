@@ -534,7 +534,15 @@ export default function EventDetailScreen({
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(entry);
   });
-  Object.keys(groupMap).sort().forEach((key) => {
+  Object.keys(groupMap).sort((a, b) => {
+    // Same order as the division pills: age order first, then level/pool
+    const [agA, lvA = '', plA = ''] = a.split('|');
+    const [agB, lvB = '', plB = ''] = b.split('|');
+    const ka = ageGroupSortKey(agA);
+    const kb = ageGroupSortKey(agB);
+    if (ka !== kb) return ka - kb;
+    return `${lvA}|${plA}`.localeCompare(`${lvB}|${plB}`);
+  }).forEach((key) => {
     const parts = key.split('|');
     const label = [parts[0], parts[1], parts[2]].filter(Boolean).join(' ');
     const entries = groupMap[key].sort((a, b) => {

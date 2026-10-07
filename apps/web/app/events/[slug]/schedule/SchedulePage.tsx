@@ -203,10 +203,18 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
     );
   }
 
+
+// Hockey age order for pills and standings sections (not alphabetical)
+const AGE_ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget', 'girls', 'varsity', 'high school'];
+function ageSortKey(label: string): number {
+  const l = (label || '').toLowerCase().trim();
+  for (let i = 0; i < AGE_ORDER.length; i++) if (l.startsWith(AGE_ORDER[i])) return i;
+  return 999;
+}
   // Build unique divisions: "Age Group Level" combos
   const divisions = Array.from(
     new Set(games.map(g => `${g.age_group} ${g.division_level}`.trim()).filter(Boolean))
-  ).sort();
+  ).sort((a, b) => ageSortKey(a) - ageSortKey(b) || a.localeCompare(b));
   const days = Array.from(new Set(games.map(g => formatDay(g.start_time))));
 
   // Filter games by division and day
@@ -387,7 +395,7 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
               Standings
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {Object.entries(standingsByDiv).map(([divKey, pools]) => {
+              {Object.entries(standingsByDiv).sort((a, b) => ageSortKey(a[0]) - ageSortKey(b[0]) || a[0].localeCompare(b[0])).map(([divKey, pools]) => {
                 const poolNames = Object.keys(pools);
                 const multiPool = poolNames.length > 1;
                 const teamCount = poolNames.reduce((n, p) => n + pools[p].length, 0);
