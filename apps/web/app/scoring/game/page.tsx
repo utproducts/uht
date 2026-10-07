@@ -1545,6 +1545,16 @@ function DetailsSection({ game, gameId, pin, onFlash, warnings, onFix, onDismiss
     </div>
   );
   const dt = game.scheduled_time || game.start_time || '';
+  // One readable line ("Fri, Oct 16, 2026 at 5:30 PM") from whatever fields exist
+  function formatScheduledStart(raw: string, fallbackDate?: string): string {
+    const src = raw || fallbackDate || '';
+    if (!src) return '—';
+    const d = new Date(src.includes('T') || !src.includes(' ') ? src : src.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return src;
+    const datePart = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const hasTime = /\d{1,2}:\d{2}/.test(src);
+    return hasTime ? `${datePart} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : datePart;
+  }
   return (
     <div className="p-4 space-y-4 max-w-xl">
       {warnings.map(w => (
@@ -1563,8 +1573,7 @@ function DetailsSection({ game, gameId, pin, onFlash, warnings, onFix, onDismiss
         <Row label="Game #" value={game.game_number} />
         <Row label="Division" value={[game.age_group, game.division_level].filter(Boolean).join(' ')} />
         <Row label="Type" value={(game.game_type || 'pool').replace('_', ' ')} />
-        <Row label="Date" value={game.game_date || game.scheduled_date} />
-        <Row label="Scheduled Start" value={dt} />
+        <Row label="Scheduled Start" value={formatScheduledStart(dt, game.game_date || game.scheduled_date)} />
         <Row label="Venue" value={game.venue_name} />
         <Row label="Rink" value={game.rink_name} />
         <Row label="Status" value={(game.status || '').replace('_', ' ')} />
