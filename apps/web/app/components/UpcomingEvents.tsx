@@ -17,6 +17,7 @@ interface Event {
   information: string | null;
   age_groups: string | null;
   price_cents: number | null;
+  schedule_published?: number;
 }
 
 function formatDateRange(start: string, end: string) {
@@ -78,6 +79,7 @@ function daysUntil(dateStr: string): number {
 function EventCard({ event }: { event: Event }) {
   const ageGroups = parseJsonArray(event.age_groups);
   const isUpcoming = event.status === 'registration_open' || event.status === 'active';
+  const scheduleLive = event.schedule_published === 1;
   const days = daysUntil(event.start_date);
 
   return (
@@ -103,8 +105,8 @@ function EventCard({ event }: { event: Event }) {
 
         {/* Status badge */}
         <div className="absolute top-3 right-3 z-10">
-          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${statusBadge(event.status)} bg-white/90 backdrop-blur-sm`}>
-            {statusLabel(event.status)}
+          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold border ${scheduleLive ? 'bg-blue-50 text-[#003e79] border-blue-200' : statusBadge(event.status)} bg-white/90 backdrop-blur-sm`}>
+            {scheduleLive ? 'Schedule Live' : statusLabel(event.status)}
           </span>
         </div>
 
@@ -164,18 +166,37 @@ function EventCard({ event }: { event: Event }) {
         )}
 
         <div className="mt-5 flex items-center gap-3">
-          <a
-            href={`/register?event=${event.slug}&eventId=${event.id}`}
-            className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all"
-          >
-            Register
-          </a>
-          <a
-            href={`/events/${event.slug}`}
-            className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
-          >
-            Details
-          </a>
+          {scheduleLive ? (
+            <>
+              <a
+                href={`/events/${event.slug}/schedule`}
+                className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all"
+              >
+                View Schedule
+              </a>
+              <a
+                href={`/events/${event.slug}`}
+                className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
+              >
+                Details
+              </a>
+            </>
+          ) : (
+            <>
+              <a
+                href={`/register?event=${event.slug}&eventId=${event.id}`}
+                className="flex-1 text-center px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all"
+              >
+                Register
+              </a>
+              <a
+                href={`/events/${event.slug}`}
+                className="px-4 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors"
+              >
+                Details
+              </a>
+            </>
+          )}
         </div>
       </div>
     </div>
