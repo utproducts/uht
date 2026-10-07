@@ -1910,13 +1910,37 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
       out = { team_id: null, placeholder: seed ? `${seed[1]}${seed[2].toLowerCase()} Place${poolLabel}` : (rest || 'TBD') };
     } else {
       const nameKey = norm(trimmed);
+      // "Club core": drop coach parentheticals, birth years, and age/division
+      // words so "2017 Troy Sting" matches "Troy Sting Squirt (10U) Howe 3"
+      // and the schedule name "Troy Sting (Lopez)".
+      const clean = (s: string) => norm(
+        String(s || '')
+          .replace(/\([^)]*\)/g, ' ')
+          .replace(/\b(19|20)\d{2}\b/g, ' ')
+      )
+        .replace(/\b(mite|squirt|pee wee|peewee|bantam|midget|girls|varsity|high school)\b/g, ' ')
+        .replace(/\b\d{1,2}u\b/g, ' ')
+        .replace(/\bhowe \d\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const cleanKey = clean(trimmed);
       const sameDiv = (t: { age_group: string }) => {
         const ag = normDiv(t.age_group || '');
         return ag !== '' && divKey !== '' && (ag === divKey || ag.startsWith(divKey) || divKey.startsWith(ag));
       };
-      const byName = (pool: typeof regTeams) =>
-        pool.find(t => t.names.some(n => norm(n) === nameKey)) ||
-        pool.find(t => t.names.some(n => norm(n).includes(nameKey) || nameKey.includes(norm(n))));
+      const byName = (pool: typeof regTeams) => {
+        const exact = pool.find(t => t.names.some(n => norm(n) === nameKey)) ||
+          pool.find(t => t.names.some(n => norm(n).includes(nameKey) || nameKey.includes(norm(n))));
+        if (exact) return exact;
+        if (cleanKey.length < 5) return undefined;
+        // Club-core match only when exactly ONE team qualifies - two teams of
+        // the same club (Huskies Brown vs Huskies Silva) must stay unmatched
+        const coreHits = pool.filter(t => t.names.some(n => {
+          const c = clean(n);
+          return c.length >= 5 && (c === cleanKey || c.includes(cleanKey) || cleanKey.includes(c));
+        }));
+        return coreHits.length === 1 ? coreHits[0] : undefined;
+      };
       // Division-scoped match wins; global match only as a fallback
       const partial = byName(regTeams.filter(sameDiv)) || byName(regTeams);
       if (partial?.team_id) {
