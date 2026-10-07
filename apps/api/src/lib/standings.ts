@@ -67,6 +67,7 @@ export async function computeStandings(
 ): Promise<{ standings: StandingRow[]; poolComplete: Map<string, boolean> }> {
   let gq = `
     SELECT g.id, g.event_division_id, g.pool_name, g.home_team_id, g.away_team_id,
+           g.home_placeholder, g.away_placeholder,
            g.home_score, g.away_score, g.status, g.game_number
     FROM games g WHERE g.event_id = ? AND g.game_type = 'pool'`;
   const params: string[] = [eventId];
@@ -106,7 +107,33 @@ export async function computeStandings(
 
     for (const side of ['home', 'away'] as const) {
       const tid = side === 'home' ? g.home_team_id : g.away_team_id;
-      if (!tid) { poolComplete.set(key, false); continue; }
+      if (!tid) {
+        poolComplete.set(key, false);
+        // Unlinked filler name ("Battle Creek Kernels"): show it in the
+        // standings with a 0-0 record so the division never looks half empty.
+        // Bracket seeds ("1st Blue") stay hidden - they are slots, not teams.
+        const ph = String((side === 'home' ? (g as any).home_placeholder : (g as any).away_placeholder) || '').trim();
+        if (ph && !/^\s*\d+\s*(st|nd|rd|th)\b/i.test(ph) && !/winner|loser|place|tbd/i.test(ph)) {
+          const bucket = buckets.get(key)!;
+          const phKey = 'ph:' + ph.toLowerCase();
+          if (!bucket.has(phKey)) {
+            const dm = divMeta.get(g.event_division_id);
+            bucket.set(phKey, {
+              event_division_id: g.event_division_id,
+              age_group: dm?.age_group || '',
+              division_level: dm?.division_level || null,
+              pool_name: g.pool_name,
+              team_id: phKey,
+              team_name: ph,
+              team_logo: null,
+              games_played: 0, wins: 0, losses: 0, ties: 0,
+              goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
+              rank: 0, tiebreaker: null,
+            });
+          }
+        }
+        continue;
+      }
       const bucket = buckets.get(key)!;
       if (!bucket.has(tid)) {
         const m = meta.get(tid);

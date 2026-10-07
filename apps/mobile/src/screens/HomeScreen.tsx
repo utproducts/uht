@@ -17,7 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount, authFetch } from '../services/auth';
-import { refreshBadgeCount } from '../services/notifications';
+import { refreshBadgeCount, getPushPermissionStatus, registerForPushNotifications } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
 
@@ -28,6 +28,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [userName, setUserName] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [activeRole, setActiveRoleState] = useState<string>('');
+  const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   // Registered events drive the Game Day banner and Next Up countdown
@@ -74,6 +75,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       if (user?.name) setUserName(user.name);
       if (user?.roles) setUserRoles(user.roles);
 
+      getPushPermissionStatus().then(setPushStatus).catch(() => {});
       const savedRole = await getActiveRole();
       if (savedRole && user?.roles?.includes(savedRole)) {
         setActiveRoleState(savedRole);
@@ -193,6 +195,35 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <Text style={styles.skSub}>Enter your PIN to start scoring your games</Text>
             </View>
             <Ionicons name="arrow-forward-circle" size={28} color={colors.cyan} />
+          </TouchableOpacity>
+        )}
+
+        {/* Push nudge - permission off means no game alerts reach this user */}
+        {(pushStatus === 'denied' || pushStatus === 'undetermined') && (
+          <TouchableOpacity
+            style={styles.pushNudge}
+            activeOpacity={0.85}
+            onPress={async () => {
+              if (pushStatus === 'undetermined') {
+                await registerForPushNotifications();
+                getPushPermissionStatus().then(setPushStatus).catch(() => {});
+              } else {
+                Linking.openSettings();
+              }
+            }}
+          >
+            <View style={styles.pushNudgeIcon}>
+              <Ionicons name="notifications" size={20} color="#b45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pushNudgeTitle}>Turn on game alerts</Text>
+              <Text style={styles.pushNudgeSub}>
+                {pushStatus === 'denied'
+                  ? 'Notifications are off - tap to open Settings and get live scores, schedule changes, and locker rooms'
+                  : 'Tap to enable live scores, schedule changes, and locker room alerts'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#b45309" />
           </TouchableOpacity>
         )}
 
@@ -367,6 +398,30 @@ const styles = StyleSheet.create({
   },
   skTitle: { color: colors.white, fontSize: 17, ...fonts.bold },
   skSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12.5, marginTop: 2 },
+
+  // Push nudge
+  pushNudge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 16,
+    padding: 14,
+  },
+  pushNudgeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pushNudgeTitle: { color: '#92400e', fontSize: 15, ...fonts.bold },
+  pushNudgeSub: { color: '#a16207', fontSize: 12, marginTop: 2, lineHeight: 16 },
 
   // Game Day banner
   gameDayCard: {
