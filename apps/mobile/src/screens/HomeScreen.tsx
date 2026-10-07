@@ -275,7 +275,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 {fmtRange(nextEvent.start_date, nextEvent.end_date)}{nextEvent.city ? ` · ${nextEvent.city}` : ''}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
+            <Ionicons name="chevron-forward" size={20} color={colors.navy} />
           </TouchableOpacity>
         )}
 
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   },
   gameDayTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   eventBannerLogo: { width: 44, height: 44, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)' },
-  nextUpLogo: { width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)' },
+  nextUpLogo: { width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.6)' },
   gameDayPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: '#e74c3c', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   gameDayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
   gameDayPillText: { color: '#fff', fontSize: 10, letterSpacing: 1.2, ...fonts.bold },
@@ -456,27 +456,27 @@ const styles = StyleSheet.create({
   // Next Up countdown
   nextUpCard: {
     marginHorizontal: spacing.lg, marginTop: spacing.lg,
-    backgroundColor: colors.navy, borderRadius: 18, padding: 16,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: colors.cyan, borderRadius: 18, padding: 16,
+    borderWidth: 2, borderColor: colors.navy,
     flexDirection: 'row', alignItems: 'center', gap: 14,
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
   nextUpTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   nextUpDaysPill: {
-    backgroundColor: 'rgba(0,204,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.5)',
     borderWidth: 1,
-    borderColor: 'rgba(0,204,255,0.4)',
+    borderColor: 'rgba(0,62,121,0.45)',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  nextUpDaysPillText: { color: colors.cyan, fontSize: 12, letterSpacing: 0.5, ...fonts.bold },
+  nextUpDaysPillText: { color: colors.navy, fontSize: 12, letterSpacing: 0.5, ...fonts.bold },
   nextUpCount: { width: 72, height: 72, borderRadius: 16, backgroundColor: 'rgba(0,204,255,0.14)', borderWidth: 1, borderColor: 'rgba(0,204,255,0.35)', alignItems: 'center', justifyContent: 'center' },
   nextUpDays: { color: colors.cyan, fontSize: 28, lineHeight: 30, ...fonts.bold },
   nextUpDaysLabel: { color: colors.cyan, fontSize: 9, letterSpacing: 1.5, ...fonts.bold },
-  nextUpKicker: { color: 'rgba(255,255,255,0.55)', fontSize: 10, letterSpacing: 1.5, ...fonts.bold },
-  nextUpName: { color: '#fff', fontSize: 16, marginTop: 2, ...fonts.bold },
-  nextUpMeta: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 3 },
+  nextUpKicker: { color: 'rgba(0,45,90,0.75)', fontSize: 10, letterSpacing: 1.5, ...fonts.bold },
+  nextUpName: { color: colors.navy, fontSize: 16, marginTop: 2, ...fonts.bold },
+  nextUpMeta: { color: 'rgba(0,45,90,0.8)', fontSize: 12, marginTop: 3 },
   // Quick Access Grid
   qaGrid: {
     flexDirection: 'row',
