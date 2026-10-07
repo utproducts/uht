@@ -411,6 +411,7 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
   const { events, selected, setSelected, loading } = useDirectorEvents();
   const [games, setGames] = useState<any[]>([]);
   const [venueRooms, setVenueRooms] = useState<Record<string, string[]>>({});
+  const [rinkRooms, setRinkRooms] = useState<Record<string, string[]>>({});
   const [selVenue, setSelVenue] = useState<string | null>(null);
   const [selRink, setSelRink] = useState<string | null>(null);
   const [selDay, setSelDay] = useState<string | null>(null);
@@ -427,13 +428,20 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
       .then(r => r.json())
       .then((j: any) => {
         if (!j.success) return;
-        const map: Record<string, string[]> = {};
+        const vmap: Record<string, string[]> = {};
+        const rmap: Record<string, string[]> = {};
         for (const lr of j.data || []) {
-          if (!lr.venue_id) continue;
-          if (!map[lr.venue_id]) map[lr.venue_id] = [];
-          if (!map[lr.venue_id].includes(lr.name)) map[lr.venue_id].push(lr.name);
+          if (lr.venue_id) {
+            if (!vmap[lr.venue_id]) vmap[lr.venue_id] = [];
+            if (!vmap[lr.venue_id].includes(lr.name)) vmap[lr.venue_id].push(lr.name);
+          }
+          if (lr.rink_id) {
+            if (!rmap[lr.rink_id]) rmap[lr.rink_id] = [];
+            if (!rmap[lr.rink_id].includes(lr.name)) rmap[lr.rink_id].push(lr.name);
+          }
         }
-        setVenueRooms(map);
+        setVenueRooms(vmap);
+        setRinkRooms(rmap);
       })
       .catch(() => {});
   }, [selected]);
@@ -484,7 +492,10 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
     setPushing(null);
   };
 
-  const roomsForVenue = activeVenue ? (venueRooms[activeVenue] || []) : [];
+  // Rooms for the SELECTED rink; fall back to the venue pool only when the
+  // rink has none of its own
+  const rinkScoped = activeRink ? (rinkRooms[activeRink] || []) : [];
+  const roomsForVenue = rinkScoped.length > 0 ? rinkScoped : (activeVenue ? (venueRooms[activeVenue] || []) : []);
 
   return (
     <View style={s.screen}>
@@ -493,30 +504,39 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}>
           {venues.length > 1 && (
-            <View style={s.chipWrap}>
-              {venues.map(([id, name]) => (
-                <TouchableOpacity key={id} style={[s.pill, activeVenue === id && s.pillActive]} onPress={() => { setSelVenue(id as string); setSelRink(null); }}>
-                  <Text style={[s.pillText, activeVenue === id && s.pillTextActive]}>{name}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={s.filterRowWrap}>
+              <Text style={s.filterLabel}>VENUE</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterChips}>
+                {venues.map(([id, name]) => (
+                  <TouchableOpacity key={id} style={[s.pill, activeVenue === id && s.pillActive]} onPress={() => { setSelVenue(id as string); setSelRink(null); }}>
+                    <Text style={[s.pillText, activeVenue === id && s.pillTextActive]}>{name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
           {rinks.length > 1 && (
-            <View style={s.chipWrap}>
-              {rinks.map(([id, name]) => (
-                <TouchableOpacity key={id} style={[s.pill, activeRink === id && s.pillActive]} onPress={() => setSelRink(id as string)}>
-                  <Text style={[s.pillText, activeRink === id && s.pillTextActive]}>{name}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={s.filterRowWrap}>
+              <Text style={s.filterLabel}>RINK</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterChips}>
+                {rinks.map(([id, name]) => (
+                  <TouchableOpacity key={id} style={[s.pill, activeRink === id && s.pillActive]} onPress={() => setSelRink(id as string)}>
+                    <Text style={[s.pillText, activeRink === id && s.pillTextActive]}>{name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
           {days.length > 1 && (
-            <View style={s.chipWrap}>
-              {days.map(d => (
-                <TouchableOpacity key={d} style={[s.pill, activeDay === d && s.pillActive]} onPress={() => setSelDay(d)}>
-                  <Text style={[s.pillText, activeDay === d && s.pillTextActive]}>{fmtDay(d)}</Text>
-                </TouchableOpacity>
-              ))}
+            <View style={s.filterRowWrap}>
+              <Text style={s.filterLabel}>DAY</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterChips}>
+                {days.map(d => (
+                  <TouchableOpacity key={d} style={[s.pill, activeDay === d && s.pillActive]} onPress={() => setSelDay(d)}>
+                    <Text style={[s.pillText, activeDay === d && s.pillTextActive]}>{fmtDay(d)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -741,6 +761,9 @@ const s = StyleSheet.create({
   divCardSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, ...fonts.semibold },
   divRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
   divRowLast: { borderBottomWidth: 0 },
+  filterRowWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  filterLabel: { width: 48, fontSize: 10, color: '#7a8699', letterSpacing: 1, ...fonts.bold },
+  filterChips: { gap: 8, paddingRight: 8 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   lrCard: { backgroundColor: colors.white, borderRadius: 14, padding: 13, marginBottom: 10, shadowColor: '#0f2747', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   lrTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
