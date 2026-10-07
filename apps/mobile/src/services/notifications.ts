@@ -101,3 +101,16 @@ export async function clearBadge(): Promise<void> {
     await Notifications.setBadgeCountAsync(0);
   } catch {}
 }
+
+// 'granted' = reachable; 'denied' = user said no (only iOS Settings can undo);
+// 'undetermined' = never asked - the system prompt can still be shown
+export async function getPushPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+  try {
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    if (status === 'granted') return 'granted';
+    if (status === 'undetermined' || canAskAgain) return 'undetermined';
+    return 'denied';
+  } catch {
+    return 'undetermined';
+  }
+}
