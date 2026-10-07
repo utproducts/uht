@@ -18,6 +18,7 @@ interface Event {
   logo_url: string | null;
   age_groups: string | null;
   price_cents: number | null;
+  schedule_published?: number | null;
 }
 
 function isEventPast(ev: Event): boolean {
@@ -440,15 +441,15 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               {upcomingEvents.map((ev) => {
                 const days = daysUntil(ev.start_date);
+                const scheduleLive = ev.schedule_published === 1;
                 return (
-                  <a
+                  <div
                     key={ev.id}
-                    href={`/events/${ev.slug}`}
                     className="group bg-white rounded-2xl overflow-hidden border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_40px_-12px_rgba(0,62,121,0.18)] hover:-translate-y-1 transition-all duration-300"
                   >
                     {/* Accent bar */}
                     <div className="h-1.5 bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff]" />
-                    <div className="p-5">
+                    <a href={`/events/${ev.slug}`} className="block p-5 pb-0">
                       <div className="flex items-start gap-3 mb-3">
                         {ev.logo_url ? (
                           <img src={ev.logo_url} alt="" className="w-12 h-12 object-contain rounded-xl flex-shrink-0" />
@@ -468,16 +469,22 @@ export default function HomePage() {
                       </h3>
                       <p className="text-sm text-[#6e6e73] mt-1.5">{ev.city}, {ev.state}</p>
                       <p className="text-sm text-[#6e6e73] mt-0.5">{formatDateRange(ev.start_date, ev.end_date)}</p>
-                      <div className="mt-4 flex items-center gap-3">
-                        <span className="flex-1 text-center px-3 py-2 rounded-full text-sm font-semibold text-white bg-[#003e79] group-hover:bg-[#002d5a] transition-colors">
+                    </a>
+                    <div className="p-5 pt-4 flex items-center gap-3">
+                      {scheduleLive ? (
+                        <a href={`/events/${ev.slug}/schedule`} className="flex-1 text-center px-3 py-2 rounded-full text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+                          Schedule
+                        </a>
+                      ) : (
+                        <a href={`/register?event=${ev.slug}&eventId=${ev.id}`} className="flex-1 text-center px-3 py-2 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] transition-colors">
                           Register
-                        </span>
-                        <span className="px-3 py-2 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] group-hover:bg-[#e0efff] transition-colors">
-                          Details
-                        </span>
-                      </div>
+                        </a>
+                      )}
+                      <a href={`/events/${ev.slug}`} className="px-3 py-2 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">
+                        Details
+                      </a>
                     </div>
-                  </a>
+                  </div>
                 );
               })}
             </div>

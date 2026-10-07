@@ -334,12 +334,8 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
     if (slug) fetchEvent();
   }, [slug]);
 
-  // Auto-redirect to schedule page when schedule is live
-  useEffect(() => {
-    if (event && event.schedule_published === 1) {
-      router.replace(`/events/${slug}/schedule`);
-    }
-  }, [event, slug, router]);
+  // No auto-redirect when the schedule is live: More Info must still land on
+  // the info page. The View Schedule button covers getting to the schedule.
 
   const scrollToSection = (tab: Tab) => {
     setActiveTab(tab);
