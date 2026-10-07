@@ -259,7 +259,6 @@ export default function EventDetailScreen({
   const [photosLoaded, setPhotosLoaded] = useState(false);
   const [photosUploading, setPhotosUploading] = useState(false);
   const [viewerPhoto, setViewerPhoto] = useState<any | null>(null);
-  const [champPickerOpen, setChampPickerOpen] = useState(false);
   // Teams of mine already registered for THIS event (name + registration status)
   const [myRegs, setMyRegs] = useState<{ teamName: string; status: string }[]>([]);
 
@@ -1116,11 +1115,9 @@ export default function EventDetailScreen({
   }
 
   function renderPhotosTab() {
-    const isDirector = (currentUser?.roles || []).some(r => ['admin', 'director', 'tournament_director'].includes(r));
     const champs = photos.filter(p => p.kind === 'champion');
     const fans = photos.filter(p => p.kind !== 'champion');
     const thumb = (SCREEN_WIDTH - spacing.lg * 2 - 8) / 3;
-    const champTeams = sortByAgeGroup(standings.filter((r: any) => !String(r.team_id).startsWith('ph:')), (r: any) => r.age_group || '');
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent}
@@ -1139,13 +1136,6 @@ export default function EventDetailScreen({
           {photosUploading ? <ActivityIndicator color={colors.white} size="small" /> : <Ionicons name="cloud-upload-outline" size={19} color={colors.white} />}
           <Text style={styles.photoUploadBtnText}>{photosUploading ? 'Uploading...' : 'Add Your Photos'}</Text>
         </TouchableOpacity>
-        {isDirector && (
-          <TouchableOpacity style={styles.champUploadBtn} activeOpacity={0.85} disabled={photosUploading}
-            onPress={() => { if (standings.length === 0) loadStandings(); setChampPickerOpen(true); }}>
-            <Ionicons name="trophy" size={17} color="#8a6d1a" />
-            <Text style={styles.champUploadBtnText}>Add Champions Photo</Text>
-          </TouchableOpacity>
-        )}
 
         {photosTotal > 0 && (
           <Text style={styles.photoCount}>{photosTotal} photo{photosTotal !== 1 ? 's' : ''} and counting</Text>
@@ -1212,30 +1202,6 @@ export default function EventDetailScreen({
           </View>
         </Modal>
 
-        {/* Champions team picker (directors) */}
-        <Modal visible={champPickerOpen} transparent animationType="slide" onRequestClose={() => setChampPickerOpen(false)}>
-          <View style={styles.champPickerBackdrop}>
-            <View style={styles.champPickerSheet}>
-              <Text style={styles.champPickerTitle}>Who won?</Text>
-              <Text style={styles.champPickerSub}>Pick the champions, then choose their photo.</Text>
-              <ScrollView style={{ maxHeight: 380 }}>
-                {champTeams.map((r: any) => (
-                  <TouchableOpacity key={r.team_id} style={styles.champPickerRow} activeOpacity={0.7}
-                    onPress={() => { setChampPickerOpen(false); uploadEventPhotos('champion', r.team_id); }}>
-                    <Text style={styles.champPickerTeam} numberOfLines={1}>{r.team_name}</Text>
-                    <Text style={styles.champPickerDiv}>{[r.age_group, r.division_level].filter(Boolean).join(' ')}</Text>
-                  </TouchableOpacity>
-                ))}
-                {champTeams.length === 0 && (
-                  <Text style={styles.champPickerSub}>Loading teams...</Text>
-                )}
-              </ScrollView>
-              <TouchableOpacity style={styles.champPickerCancel} onPress={() => setChampPickerOpen(false)}>
-                <Text style={styles.champPickerCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
       </ScrollView>
     );
   }
