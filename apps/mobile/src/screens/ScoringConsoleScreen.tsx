@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
 import ScreenHeader from '../components/ScreenHeader';
 
@@ -13,6 +14,15 @@ import ScreenHeader from '../components/ScreenHeader';
 export default function ScoringConsoleScreen({ navigation }: any) {
   const webref = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
+  const insets = useSafeAreaInsets();
+
+  // Full-screen console: the tab bar covered the page's bottom buttons and
+  // invites accidental tab taps mid-game - hide it while scoring
+  useEffect(() => {
+    const tabNav = navigation.getParent();
+    tabNav?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => tabNav?.setOptions({ tabBarStyle: undefined });
+  }, [navigation]);
 
   return (
     <View style={styles.screen}>
@@ -26,7 +36,7 @@ export default function ScoringConsoleScreen({ navigation }: any) {
           </TouchableOpacity>
         }
       />
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingBottom: insets.bottom }}>
         <WebView
           ref={webref}
           source={{ uri: 'https://ultimatetournaments.com/scoring' }}
