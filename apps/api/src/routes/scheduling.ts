@@ -2085,29 +2085,49 @@ schedulingRoutes.post('/events/:eventId/replace-team', authMiddleware, requireRo
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({})) as any;
   const fromTeamId = String(body.fromTeamId || '').trim();
+  const fromPlaceholder = String(body.fromPlaceholder || '').trim();
   const toTeamId = String(body.toTeamId || '').trim();
-  if (!fromTeamId || !toTeamId) return c.json({ success: false, error: 'fromTeamId and toTeamId are required' }, 400);
+  if ((!fromTeamId && !fromPlaceholder) || !toTeamId) {
+    return c.json({ success: false, error: 'fromTeamId or fromPlaceholder, and toTeamId are required' }, 400);
+  }
   if (fromTeamId === toTeamId) return c.json({ success: false, error: 'Pick two different teams' }, 400);
 
   const toTeam = await db.prepare('SELECT id, name FROM teams WHERE id = ? AND is_active = 1').bind(toTeamId).first<any>();
   if (!toTeam) return c.json({ success: false, error: 'Replacement team not found or inactive' }, 404);
-  const fromTeam = await db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(fromTeamId).first<any>();
 
-  const home = await db.prepare('UPDATE games SET home_team_id = ? WHERE event_id = ? AND home_team_id = ?')
-    .bind(toTeamId, eventId, fromTeamId).run();
-  const away = await db.prepare('UPDATE games SET away_team_id = ? WHERE event_id = ? AND away_team_id = ?')
-    .bind(toTeamId, eventId, fromTeamId).run();
-  await db.prepare(`UPDATE game_lineups SET team_id = ? WHERE team_id = ? AND game_id IN (SELECT id FROM games WHERE event_id = ?)`)
-    .bind(toTeamId, fromTeamId, eventId).run().catch(() => {});
-  await db.prepare(`UPDATE game_locker_rooms SET team_id = ? WHERE team_id = ? AND game_id IN (SELECT id FROM games WHERE event_id = ?)`)
-    .bind(toTeamId, fromTeamId, eventId).run().catch(() => {});
+  let gamesChanged = 0;
+  let fromLabel = '';
 
-  const gamesChanged = (home.meta?.changes || 0) + (away.meta?.changes || 0);
+  if (fromPlaceholder) {
+    // Text-only side (upload could not match the sheet name to a team):
+    // assign the real team and clear the placeholder text
+    fromLabel = fromPlaceholder;
+    const home = await db.prepare(
+      'UPDATE games SET home_team_id = ?, home_placeholder = NULL WHERE event_id = ? AND home_team_id IS NULL AND home_placeholder = ?'
+    ).bind(toTeamId, eventId, fromPlaceholder).run();
+    const away = await db.prepare(
+      'UPDATE games SET away_team_id = ?, away_placeholder = NULL WHERE event_id = ? AND away_team_id IS NULL AND away_placeholder = ?'
+    ).bind(toTeamId, eventId, fromPlaceholder).run();
+    gamesChanged = (home.meta?.changes || 0) + (away.meta?.changes || 0);
+  } else {
+    const fromTeam = await db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(fromTeamId).first<any>();
+    fromLabel = fromTeam?.name || fromTeamId;
+    const home = await db.prepare('UPDATE games SET home_team_id = ? WHERE event_id = ? AND home_team_id = ?')
+      .bind(toTeamId, eventId, fromTeamId).run();
+    const away = await db.prepare('UPDATE games SET away_team_id = ? WHERE event_id = ? AND away_team_id = ?')
+      .bind(toTeamId, eventId, fromTeamId).run();
+    await db.prepare(`UPDATE game_lineups SET team_id = ? WHERE team_id = ? AND game_id IN (SELECT id FROM games WHERE event_id = ?)`)
+      .bind(toTeamId, fromTeamId, eventId).run().catch(() => {});
+    await db.prepare(`UPDATE game_locker_rooms SET team_id = ? WHERE team_id = ? AND game_id IN (SELECT id FROM games WHERE event_id = ?)`)
+      .bind(toTeamId, fromTeamId, eventId).run().catch(() => {});
+    gamesChanged = (home.meta?.changes || 0) + (away.meta?.changes || 0);
+  }
+
   return c.json({
     success: true,
     data: {
       games_updated: gamesChanged,
-      from: fromTeam?.name || fromTeamId,
+      from: fromLabel,
       to: toTeam.name,
     },
   });

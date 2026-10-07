@@ -3202,7 +3202,7 @@ function ScheduleCsvUpload({ eventId, hasGames, onDone }: { eventId: string; has
             {preview.createdVenues.length > 0 && <p><span className="font-semibold">New venues to create:</span> {preview.createdVenues.join(', ')}</p>}
             {preview.createdRinks.length > 0 && <p><span className="font-semibold">New rinks to create:</span> {preview.createdRinks.join(', ')}</p>}
             {preview.unmatchedTeams.length > 0 && (
-              <p className="text-amber-700"><span className="font-semibold">⚠ {preview.unmatchedTeams.length} team name{preview.unmatchedTeams.length !== 1 ? 's' : ''} not linked to registrations</span> (they&apos;ll still display exactly as written): {preview.unmatchedTeams.slice(0, 12).join(', ')}{preview.unmatchedTeams.length > 12 ? '…' : ''}</p>
+              <p className="text-amber-700"><span className="font-semibold">⚠ {preview.unmatchedTeams.length} team name{preview.unmatchedTeams.length !== 1 ? 's' : ''} not linked to registrations</span>: {preview.unmatchedTeams.slice(0, 12).join(', ')}{preview.unmatchedTeams.length > 12 ? '…' : ''}. They display as written but have no standings, lineups, or follows - after uploading, link each one with <span className="font-semibold">Replace a Team</span> at the top of the Schedules tab.</p>
             )}
             {preview.warnings.length > 0 && (
               <p className="text-red-600"><span className="font-semibold">Warnings:</span> {preview.warnings.slice(0, 5).join(' · ')}</p>
@@ -4607,17 +4607,25 @@ function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string;
   const [confirming, setConfirming] = useState(false);
   const [msg, setMsg] = useState('');
 
+  const [placeholders, setPlaceholders] = useState<string[]>([]);
+
   useEffect(() => {
     fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/games`)
       .then(r => r.json())
       .then((j: any) => {
         if (!j.success) return;
         const seen = new Map<string, string>();
+        const phSet = new Set<string>();
+        // Bracket seeds ("1st Blue", "Winner Game 4") are slots, not teams
+        const isSeed = (s: string) => /^\s*\d+\s*(st|nd|rd|th)\b/i.test(s) || /winner|loser|place/i.test(s);
         for (const g of j.data || []) {
           if (g.home_team_id && g.home_team_name) seen.set(g.home_team_id, g.home_team_name);
+          else if (!g.home_team_id && g.home_placeholder && !isSeed(g.home_placeholder)) phSet.add(g.home_placeholder);
           if (g.away_team_id && g.away_team_name) seen.set(g.away_team_id, g.away_team_name);
+          else if (!g.away_team_id && g.away_placeholder && !isSeed(g.away_placeholder)) phSet.add(g.away_placeholder);
         }
         setScheduleTeams(Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)));
+        setPlaceholders(Array.from(phSet).sort());
       })
       .catch(() => {});
   }, [eventId]);
@@ -4637,18 +4645,27 @@ function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string;
     if (!fromId || !toTeam) return;
     setWorking(true);
     setMsg('');
+    const isPh = fromId.startsWith('p:');
+    const payload = isPh
+      ? { fromPlaceholder: fromId.slice(2), toTeamId: toTeam.id }
+      : { fromTeamId: fromId.slice(2), toTeamId: toTeam.id };
     try {
       const r = await fetch(`https://uht.chad-157.workers.dev/api/scheduling/events/${eventId}/replace-team`, {
         method: 'POST',
         headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromTeamId: fromId, toTeamId: toTeam.id }),
+        body: JSON.stringify(payload),
       }).then(res => res.json()) as any;
       if (r.success) {
         setMsg(`Replaced ${r.data.from} with ${r.data.to} across ${r.data.games_updated} game${r.data.games_updated !== 1 ? 's' : ''}. Schedule, app, and scoring all updated.`);
+        if (isPh) {
+          setPlaceholders(prev => prev.filter(p => p !== fromId.slice(2)));
+          setScheduleTeams(prev => [...prev.filter(t => t.id !== toTeam.id), toTeam].sort((a, b) => a.name.localeCompare(b.name)));
+        } else {
+          setScheduleTeams(prev => prev.map(t => t.id === fromId.slice(2) ? toTeam : t));
+        }
         setFromId('');
         setToTeam(null);
         setQuery('');
-        setScheduleTeams(prev => prev.map(t => t.id === fromId ? toTeam : t));
       } else {
         setMsg(r.error || 'Replace failed');
       }
@@ -4659,12 +4676,16 @@ function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string;
     setConfirming(false);
   };
 
-  const fromName = scheduleTeams.find(t => t.id === fromId)?.name;
+  const fromName = fromId.startsWith('p:')
+    ? fromId.slice(2)
+    : scheduleTeams.find(t => t.id === fromId.slice(2))?.name;
 
-  // Fillers first: teams in the schedule with NO registration for this event
+  // Not-registered first: placeholder names the upload could not match, plus
+  // any real teams in games without a registration for this event
   const regIdSet = new Set(registeredTeamIds);
   const unregistered = scheduleTeams.filter(t => !regIdSet.has(t.id));
   const registered = scheduleTeams.filter(t => regIdSet.has(t.id));
+  const notRegisteredCount = placeholders.length + unregistered.length;
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -4678,20 +4699,21 @@ function ReplaceTeamCard({ eventId, registeredTeamIds = [] }: { eventId: string;
           <select value={fromId} onChange={e => { setFromId(e.target.value); setMsg(''); }}
             className="w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:border-[#003e79] outline-none bg-white">
             <option value="">Select a team in this schedule...</option>
-            {unregistered.length > 0 && (
-              <optgroup label={`Not registered for this event (${unregistered.length}) - likely fillers`}>
-                {unregistered.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {(placeholders.length > 0 || unregistered.length > 0) && (
+              <optgroup label={`On schedule, NOT registered (${notRegisteredCount})`}>
+                {placeholders.map(p => <option key={`p:${p}`} value={`p:${p}`}>{p} (name only - not linked)</option>)}
+                {unregistered.map(t => <option key={`t:${t.id}`} value={`t:${t.id}`}>{t.name}</option>)}
               </optgroup>
             )}
             {registered.length > 0 && (
               <optgroup label={`Registered teams (${registered.length})`}>
-                {registered.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {registered.map(t => <option key={`t:${t.id}`} value={`t:${t.id}`}>{t.name}</option>)}
               </optgroup>
             )}
           </select>
-          {unregistered.length > 0 && (
+          {notRegisteredCount > 0 && (
             <p className="text-[11px] text-amber-600 font-medium mt-1">
-              {unregistered.length} team{unregistered.length !== 1 ? 's' : ''} in the schedule {unregistered.length !== 1 ? 'are' : 'is'} not registered for this event.
+              {notRegisteredCount} name{notRegisteredCount !== 1 ? 's' : ''} on the schedule {notRegisteredCount !== 1 ? 'are' : 'is'} not linked to a registered team. Replace each with the real team so standings, lineups, and follows work.
             </p>
           )}
         </div>
