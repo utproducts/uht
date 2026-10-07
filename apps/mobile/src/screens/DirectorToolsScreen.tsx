@@ -725,7 +725,7 @@ const s = StyleSheet.create({
   headerSubLine: { color: '#5b6b83', fontSize: 12, ...fonts.semibold, paddingHorizontal: spacing.lg, paddingTop: 10 },
   rowCardAlert: { backgroundColor: '#fdf0f0', borderWidth: 1.5, borderColor: '#f1b3b3' },
   rowAlertText: { color: '#c0392b', fontSize: 11.5, ...fonts.bold, marginTop: 2, letterSpacing: 0.3 },
-  pillScroll: { maxHeight: 54, backgroundColor: colors.bg },
+  pillScroll: { flexGrow: 0, backgroundColor: colors.bg },
   pillRow: { paddingHorizontal: spacing.lg, paddingVertical: 10, gap: 8 },
   pill: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#e9eef5' },
   pillActive: { backgroundColor: colors.navy },
