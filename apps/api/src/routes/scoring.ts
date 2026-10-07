@@ -509,6 +509,25 @@ scoringRoutes.get('/events/:eventId/standings', async (c) => {
   const db = c.env.DB;
   const { division_id } = c.req.query();
 
+  // Hidden schedule hides standings too (they reveal the division fields).
+  // Staff tokens (admin/director) still see them so the admin tab works.
+  const ev = await db.prepare('SELECT schedule_published FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (ev && !ev.schedule_published) {
+    let staff = false;
+    const ah = c.req.header('Authorization');
+    const tk = ah?.startsWith('Bearer ') ? ah.slice(7) : null;
+    if (tk && c.env.JWT_SECRET) {
+      try {
+        const jose = await import('jose');
+        const secret = new TextEncoder().encode(c.env.JWT_SECRET);
+        const { payload } = await jose.jwtVerify(tk, secret) as any;
+        const rr = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?').bind(payload.sub).all<any>();
+        staff = (rr.results || []).some((r: any) => ['admin', 'director'].includes(r.role));
+      } catch { /* bad token = not staff */ }
+    }
+    if (!staff) return c.json({ success: true, data: [] });
+  }
+
   // Tiebreaker-aware standings (lib/standings.ts): points, head-to-head,
   // wins, goal diff, fewest GA, most GF. Teams with no finals yet appear
   // with zeros so pre-tournament standings aren't empty. Response keeps the

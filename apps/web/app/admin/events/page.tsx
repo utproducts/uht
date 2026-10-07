@@ -4706,7 +4706,9 @@ function StandingsAdminTab({ eventId }: { eventId: string }) {
 
   const load = () => {
     setLoading(true);
-    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings`)
+    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/standings`, {
+      headers: (typeof window !== 'undefined' && localStorage.getItem('uht_token')) ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {},
+    })
       .then(r => r.json())
       .then((j: any) => {
         if (!j.success) return;
@@ -4866,6 +4868,58 @@ function StandingsAdminTab({ eventId }: { eventId: string }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Public visibility toggle - schedules stay hidden until staff hits Publish
+function ScheduleVisibilityCard({ eventId }: { eventId: string }) {
+  const [published, setPublished] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/${eventId}`)
+      .then(r => r.json())
+      .then(j => { if (j.success) setPublished(j.data.schedule_published === 1); })
+      .catch(() => {});
+  }, [eventId]);
+
+  const toggle = async () => {
+    if (published === null) return;
+    const next = !published;
+    if (!window.confirm(next
+      ? 'Publish the schedule? It becomes visible on the website and in the app immediately.'
+      : 'Hide the schedule? It disappears from the website and app until you publish again.')) return;
+    setBusy(true);
+    try {
+      const hdrs = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+      const res = await fetch(`${API_BASE}/${eventId}/publish-schedule`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ publish: next }),
+      });
+      const json = await res.json();
+      if (json.success) setPublished(json.data.schedule_published === 1);
+    } catch {}
+    setBusy(false);
+  };
+
+  return (
+    <div className={`border rounded-2xl p-5 ${published ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-[#1d1d1f]">
+            Schedule Visibility: {published === null ? '…' : published ? 'PUBLIC' : 'HIDDEN'}
+          </h3>
+          <p className="text-xs text-[#6e6e73] mt-0.5">
+            {published === null ? 'Checking…' : published
+              ? 'The schedule is live on the website and in the app.'
+              : 'Only staff can see the schedule. Uploads stay hidden until you publish.'}
+          </p>
+        </div>
+        <button onClick={toggle} disabled={busy || published === null}
+          className={`px-4 py-2 rounded-xl text-white text-sm font-semibold transition disabled:opacity-50 ${published ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+          {busy ? 'Saving…' : published ? 'Hide Schedule' : 'Publish Schedule'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -6082,6 +6136,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'schedules' && (
         <div className="space-y-4">
+          <ScheduleVisibilityCard eventId={eventId} />
           <ScheduleChecksCard eventId={eventId} />
           <ReplaceTeamCard eventId={eventId} registeredTeams={registrations
             .filter((r: any) => r.team_id)

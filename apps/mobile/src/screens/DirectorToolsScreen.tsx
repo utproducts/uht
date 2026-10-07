@@ -215,7 +215,7 @@ export function DirectorChampionsScreen({ navigation }: any) {
 
   const load = useCallback(() => {
     if (!selected) return;
-    fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${selected.id}/standings`)
+    authFetch(`/api/scoring/events/${selected.id}/standings`)
       .then(r => r.json())
       .then((j: any) => { if (j.success) setTeams((j.data || []).filter((r: any) => !String(r.team_id).startsWith('ph:'))); })
       .catch(() => {});
