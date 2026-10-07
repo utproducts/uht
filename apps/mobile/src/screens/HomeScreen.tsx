@@ -264,16 +264,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               <Image source={{ uri: (nextEvent as any).logo_url }} style={styles.nextUpLogo} resizeMode="contain" />
             ) : null}
             <View style={{ flex: 1 }}>
-              <View style={styles.nextUpTopRow}>
-                <Text style={styles.nextUpKicker}>NEXT UP</Text>
-                <View style={styles.nextUpDaysPill}>
-                  <Text style={styles.nextUpDaysPillText}>{daysToNext} {daysToNext === 1 ? 'DAY' : 'DAYS'}</Text>
-                </View>
-              </View>
+              <Text style={styles.nextUpKicker}>NEXT UP</Text>
               <Text style={styles.nextUpName} numberOfLines={2}>{nextEvent.name}</Text>
               <Text style={styles.nextUpMeta}>
                 {fmtRange(nextEvent.start_date, nextEvent.end_date)}{nextEvent.city ? ` · ${nextEvent.city}` : ''}
               </Text>
+            </View>
+            <View style={styles.nextUpDaysPill}>
+              <Text style={styles.nextUpDaysPillText}>{daysToNext} {daysToNext === 1 ? 'DAY' : 'DAYS'}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9aa7ba" />
           </TouchableOpacity>
