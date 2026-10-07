@@ -251,7 +251,7 @@ export default function DirectorGamesScreen({ navigation }: any) {
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <ScreenHeader title="Score Management" onBack={() => navigation.goBack()} />
+        <ScreenHeader title="Score Management" showBack onBack={() => navigation.goBack()} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.navy} />
         </View>
@@ -262,7 +262,7 @@ export default function DirectorGamesScreen({ navigation }: any) {
   if (events.length === 0) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <ScreenHeader title="Score Management" onBack={() => navigation.goBack()} />
+        <ScreenHeader title="Score Management" showBack onBack={() => navigation.goBack()} />
         <View style={styles.centered}>
           <Ionicons name="football-outline" size={48} color="#ccc" />
           <Text style={styles.emptyText}>No events assigned</Text>
@@ -274,7 +274,7 @@ export default function DirectorGamesScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScreenHeader title="Score Management" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Score Management" showBack onBack={() => navigation.goBack()} />
 
       {/* Event Selector */}
       {events.length > 1 && (

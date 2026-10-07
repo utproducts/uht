@@ -1103,6 +1103,20 @@ export default function EventDetailScreen({
     }
   }
 
+  function deletePhoto(photoId: string) {
+    Alert.alert('Delete Photo', 'Permanently remove this photo from the gallery?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          const res = await authFetch(`/api/photos/${photoId}`, { method: 'DELETE' });
+          const json = await res.json() as any;
+          if (json.success) { setViewerPhoto(null); loadPhotos(); }
+          else Alert.alert('Error', json.error || 'Could not delete.');
+        } catch { Alert.alert('Error', 'Could not delete.'); }
+      } },
+    ]);
+  }
+
   function reportPhoto(photoId: string) {
     Alert.alert('Report Photo', 'Flag this photo for review by event staff?', [
       { text: 'Cancel', style: 'cancel' },
@@ -1193,10 +1207,18 @@ export default function EventDetailScreen({
                 {viewerPhoto.kind === 'champion' && (
                   <Text style={styles.viewerChampLabel}>🏆 {viewerPhoto.team_name || 'Champions'}</Text>
                 )}
-                <TouchableOpacity style={styles.viewerReport} onPress={() => reportPhoto(viewerPhoto.id)}>
-                  <Ionicons name="flag-outline" size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={styles.viewerReportText}>Report</Text>
-                </TouchableOpacity>
+                <View style={styles.viewerActions}>
+                  <TouchableOpacity style={styles.viewerReport} onPress={() => reportPhoto(viewerPhoto.id)}>
+                    <Ionicons name="flag-outline" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.viewerReportText}>Report</Text>
+                  </TouchableOpacity>
+                  {(currentUser?.roles || []).some(r => ['admin', 'director', 'tournament_director'].includes(r)) && (
+                    <TouchableOpacity style={styles.viewerReport} onPress={() => deletePhoto(viewerPhoto.id)}>
+                      <Ionicons name="trash-outline" size={14} color="#ff8b8b" />
+                      <Text style={[styles.viewerReportText, { color: '#ff8b8b' }]}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </>
             ) : null}
           </View>
@@ -2541,7 +2563,8 @@ const styles = StyleSheet.create({
   viewerClose: { position: 'absolute', top: 54, right: 20, zIndex: 2, padding: 8 },
   viewerImg: { width: '100%', height: '70%' },
   viewerChampLabel: { color: '#f5d98d', fontSize: 16, ...fonts.bold, marginTop: 12 },
-  viewerReport: { position: 'absolute', bottom: 44, flexDirection: 'row', alignItems: 'center', gap: 5, padding: 10 },
+  viewerActions: { position: 'absolute', bottom: 40, flexDirection: 'row', gap: 26 },
+  viewerReport: { flexDirection: 'row', alignItems: 'center', gap: 5, padding: 10 },
   viewerReportText: { color: 'rgba(255,255,255,0.7)', fontSize: 13, ...fonts.semibold },
   champPickerBackdrop: { flex: 1, backgroundColor: 'rgba(4,10,20,0.5)', justifyContent: 'flex-end' },
   champPickerSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 34 },

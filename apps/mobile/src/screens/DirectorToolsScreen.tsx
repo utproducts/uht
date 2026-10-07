@@ -3,12 +3,12 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, Share, Alert, Modal,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, spacing } from '../constants/theme';
 import { authFetch } from '../services/auth';
+import ScreenHeader from '../components/ScreenHeader';
 
 /**
  * Tournament Director tools: check-in, scorekeeper PINs, champions photos,
@@ -37,17 +37,11 @@ function useDirectorEvents() {
 }
 
 function Header({ title, subtitle, navigation }: { title: string; subtitle?: string; navigation: any }) {
-  const insets = useSafeAreaInsets();
   return (
-    <View style={[s.header, { paddingTop: insets.top + 8 }]}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-        <Ionicons name="chevron-back" size={24} color={colors.white} />
-      </TouchableOpacity>
-      <View style={{ flex: 1 }}>
-        <Text style={s.headerTitle}>{title}</Text>
-        {subtitle ? <Text style={s.headerSub}>{subtitle}</Text> : null}
-      </View>
-    </View>
+    <>
+      <ScreenHeader title={title} showBack onBack={() => navigation.goBack()} />
+      {subtitle ? <Text style={s.headerSubLine}>{subtitle}</Text> : null}
+    </>
   );
 }
 
@@ -108,7 +102,7 @@ export function DirectorCheckinScreen({ navigation }: any) {
             <View key={age} style={{ marginBottom: spacing.md }}>
               <Text style={s.sectionLabel}>{age}</Text>
               {list.map(t => (
-                <TouchableOpacity key={t.id} style={s.rowCard} activeOpacity={0.7} disabled={busy === t.id} onPress={() => toggle(t)}>
+                <TouchableOpacity key={t.id} style={[s.rowCard, (t.missing_roster || t.balance_cents > 0) ? s.rowCardAlert : null]} activeOpacity={0.7} disabled={busy === t.id} onPress={() => toggle(t)}>
                   <View style={[s.checkCircle, t.checked_in_at ? s.checkCircleOn : null]}>
                     {busy === t.id
                       ? <ActivityIndicator size="small" color={t.checked_in_at ? colors.white : colors.navy} />
@@ -118,9 +112,12 @@ export function DirectorCheckinScreen({ navigation }: any) {
                     <Text style={s.rowTitle} numberOfLines={1}>{t.display_name || t.team_name}</Text>
                     <Text style={s.rowSub} numberOfLines={1}>
                       {t.checked_in_at ? `Checked in ${String(t.checked_in_at).slice(5, 16)}` : 'Not checked in'}
-                      {t.missing_roster ? '  ·  NO ROSTER' : ''}
-                      {t.balance_cents > 0 ? `  ·  owes $${(t.balance_cents / 100).toLocaleString()}` : ''}
                     </Text>
+                    {(t.missing_roster || t.balance_cents > 0) ? (
+                      <Text style={s.rowAlertText} numberOfLines={1}>
+                        {[t.missing_roster ? 'NO ROSTER' : null, t.balance_cents > 0 ? `OWES $${(t.balance_cents / 100).toLocaleString()}` : null].filter(Boolean).join('  ·  ')}
+                      </Text>
+                    ) : null}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -362,10 +359,9 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0a2240', paddingHorizontal: spacing.md, paddingBottom: 14 },
-  backBtn: { padding: 4 },
-  headerTitle: { color: colors.white, fontSize: 19, ...fonts.bold },
-  headerSub: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 1 },
+  headerSubLine: { color: '#5b6b83', fontSize: 12, ...fonts.semibold, paddingHorizontal: spacing.lg, paddingTop: 10 },
+  rowCardAlert: { backgroundColor: '#fdf0f0', borderWidth: 1.5, borderColor: '#f1b3b3' },
+  rowAlertText: { color: '#c0392b', fontSize: 11.5, ...fonts.bold, marginTop: 2, letterSpacing: 0.3 },
   pillScroll: { maxHeight: 54, backgroundColor: colors.bg },
   pillRow: { paddingHorizontal: spacing.lg, paddingVertical: 10, gap: 8 },
   pill: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#e9eef5' },
