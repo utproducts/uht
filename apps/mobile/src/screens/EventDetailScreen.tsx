@@ -1111,13 +1111,7 @@ export default function EventDetailScreen({
         }
       }
     });
-    // Also add from event divisions
-    eventDivisions.forEach(d => {
-      if (!divMap.has(d.id)) {
-        const label = [d.age_group, d.division_level].filter(Boolean).join(' ');
-        divMap.set(d.id, { id: d.id, label });
-      }
-    });
+    // Pills come from the schedule only - a division with no games gets no pill
     return sortByAgeGroup([...divMap.values()], d => d.label);
   })();
 
