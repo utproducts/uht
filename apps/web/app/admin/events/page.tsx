@@ -3208,6 +3208,30 @@ function ScheduleCsvUpload({ eventId, hasGames, onDone }: { eventId: string; has
               <p className="text-red-600"><span className="font-semibold">Warnings:</span> {preview.warnings.slice(0, 5).join(' · ')}</p>
             )}
           </div>
+          {(preview.checks?.errors?.length > 0 || preview.checks?.warnings?.length > 0) ? (
+            <div className="mt-3 space-y-2">
+              {preview.checks.errors.length > 0 && (
+                <div className="border border-red-200 bg-red-50 rounded-lg px-3 py-2">
+                  <p className="text-xs font-bold text-red-700 mb-1">Schedule checks - {preview.checks.errors.length} problem{preview.checks.errors.length !== 1 ? 's' : ''} found</p>
+                  <ul className="text-xs text-red-700 space-y-0.5 list-disc pl-4">
+                    {preview.checks.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                  </ul>
+                </div>
+              )}
+              {preview.checks.warnings.length > 0 && (
+                <div className="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
+                  <p className="text-xs font-bold text-amber-700 mb-1">Possible conflicts ({preview.checks.warnings.length}) - depends on who advances</p>
+                  <ul className="text-xs text-amber-700 space-y-0.5 list-disc pl-4">
+                    {preview.checks.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              ✓ Schedule checks passed: home/away balance, matchup structure, and 3.5h same-day gaps all look good.
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-3">
             <button onClick={commit} disabled={busy}
               className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50">

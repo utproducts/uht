@@ -2020,6 +2020,8 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
   // ---- build the games ----
   type GameRow = any;
   const games: GameRow[] = [];
+  const checkGames: import('../lib/schedule-checks').CheckGame[] = [];
+  const isSeedName = (s: string) => /^\s*\d+\s*(st|nd|rd|th)\b/i.test(s) || /\b(winner|loser|place|tbd)\b/i.test(s);
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const visDivRaw = (r[ci.visDiv] || '').trim();
@@ -2053,7 +2055,17 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
       gameNumber: parseInt(r[ci.gameNumber], 10) || null,
       gameType,
     });
+    const homeRaw = String(r[ci.homeTeam] || '').trim();
+    const awayRaw = String(r[ci.visTeam] || '').trim();
+    checkGames.push({
+      div: divRaw, start: startTime,
+      homeName: homeRaw, awayName: awayRaw,
+      homeIsSeed: isSeedName(homeRaw), awayIsSeed: isSeedName(awayRaw),
+      isBracket: gameType !== 'pool',
+    });
   }
+  const { runScheduleChecks } = await import('../lib/schedule-checks');
+  const checks = runScheduleChecks(checkGames);
 
   const summary = {
     totalRows: rows.length - 1,
@@ -2064,6 +2076,7 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
     createdDivisions, createdVenues, createdRinks,
     unmatchedTeams: [...unmatchedTeams].sort(),
     warnings,
+    checks,
   };
 
   if (!commit) return c.json({ success: true, data: { ...summary, committed: false } });
