@@ -1765,6 +1765,44 @@ function getEventDays(start: Date, end: Date): Date[] {
 // in as "TBD - 1st blue" etc. and become display placeholders until decided.
 // commit=false returns a dry-run preview; commit=true writes everything.
 // ==========================================
+// ==========================================
+// ADMIN: Run schedule checks against the LIVE schedule (same rules the
+// uploader runs, but on what's already committed)
+// ==========================================
+schedulingRoutes.get('/admin/:eventId/schedule-checks', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  const rows = await db.prepare(`
+    SELECT g.start_time, g.game_type, g.home_placeholder, g.away_placeholder,
+      TRIM(COALESCE(ed.age_group, '') || ' ' || COALESCE(ed.division_level, '')) as div,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name,
+      COALESCE(at.schedule_name, CASE WHEN at.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at.organization_id), at.name) || ' (' || TRIM(SUBSTR(at.head_coach_name, INSTR(at.head_coach_name, ' '))) || ')' ELSE at.name END) as away_team_name
+    FROM games g
+    JOIN event_divisions ed ON ed.id = g.event_division_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at ON at.id = g.away_team_id
+    WHERE g.event_id = ? AND g.start_time IS NOT NULL
+  `).bind(eventId).all<any>();
+
+  const isSeed = (s: string) => /^\s*\d+\s*(st|nd|rd|th)\b/i.test(s) || /\b(winner|loser|place|tbd)\b/i.test(s);
+  const checkGames = (rows.results || []).map((g: any) => {
+    const homeName = g.home_team_name || g.home_placeholder || 'TBD';
+    const awayName = g.away_team_name || g.away_placeholder || 'TBD';
+    return {
+      div: g.div || 'Unknown division',
+      start: String(g.start_time),
+      homeName, awayName,
+      homeIsSeed: !g.home_team_name && isSeed(homeName),
+      awayIsSeed: !g.away_team_name && isSeed(awayName),
+      isBracket: g.game_type !== 'pool',
+    };
+  });
+
+  const { runScheduleChecks } = await import('../lib/schedule-checks');
+  return c.json({ success: true, data: { games: checkGames.length, checks: runScheduleChecks(checkGames) } });
+});
+
 const uploadCsvSchema = z.object({
   csv: z.string().min(10),
   commit: z.boolean().optional(),

@@ -4870,6 +4870,67 @@ function StandingsAdminTab({ eventId }: { eventId: string }) {
   );
 }
 
+// Run the upload-time schedule rules against the LIVE schedule on demand
+function ScheduleChecksCard({ eventId }: { eventId: string }) {
+  const [result, setResult] = useState<any | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const run = async () => {
+    setBusy(true); setError(''); setResult(null);
+    try {
+      const SCHED_API = API_BASE.replace('/api/events', '/api/scheduling');
+      const hdrs = { 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+      const res = await fetch(`${SCHED_API}/admin/${eventId}/schedule-checks`, { headers: hdrs });
+      const json = await res.json();
+      if (json.success) setResult(json.data);
+      else setError(json.error || 'Check failed');
+    } catch { setError('Check failed - try again'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="bg-white border border-[#e8e8ed] rounded-2xl p-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-[#1d1d1f]">Schedule Checks</h3>
+          <p className="text-xs text-[#6e6e73] mt-0.5">Home/away balance, matchup structure, 3.5h same-day gaps, and bracket-day conflicts - the same rules every upload runs.</p>
+        </div>
+        <button onClick={run} disabled={busy}
+          className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#00264d] transition disabled:opacity-50">
+          {busy ? 'Checking…' : 'Run Schedule Checks'}
+        </button>
+      </div>
+      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+      {result && (
+        <div className="mt-3 space-y-2">
+          {result.checks.errors.length === 0 && result.checks.warnings.length === 0 && (
+            <p className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              ✓ All {result.games} games pass every check.
+            </p>
+          )}
+          {result.checks.errors.length > 0 && (
+            <div className="border border-red-200 bg-red-50 rounded-lg px-3 py-2">
+              <p className="text-xs font-bold text-red-700 mb-1">{result.checks.errors.length} problem{result.checks.errors.length !== 1 ? 's' : ''} found</p>
+              <ul className="text-xs text-red-700 space-y-0.5 list-disc pl-4">
+                {result.checks.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+              </ul>
+            </div>
+          )}
+          {result.checks.warnings.length > 0 && (
+            <div className="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2">
+              <p className="text-xs font-bold text-amber-700 mb-1">Possible conflicts ({result.checks.warnings.length}) - depends on who advances</p>
+              <ul className="text-xs text-amber-700 space-y-0.5 list-disc pl-4">
+                {result.checks.warnings.map((w: string, i: number) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReplaceTeamCard({ eventId, registeredTeams = [] }: { eventId: string; registeredTeams?: { id: string; name: string }[] }) {
   const [scheduleTeams, setScheduleTeams] = useState<{ id: string; name: string }[]>([]);
   const [fromId, setFromId] = useState('');
@@ -6021,6 +6082,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'schedules' && (
         <div className="space-y-4">
+          <ScheduleChecksCard eventId={eventId} />
           <ReplaceTeamCard eventId={eventId} registeredTeams={registrations
             .filter((r: any) => r.team_id)
             .map((r: any) => ({ id: r.team_id, name: r.display_name || r.team_name }))} />
