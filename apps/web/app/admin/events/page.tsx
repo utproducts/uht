@@ -4730,7 +4730,12 @@ function ReplaceTeamCard({ eventId, registeredTeams = [] }: { eventId: string; r
             </div>
           ) : (
             <>
-              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search teams by name..."
+              <select value="" onChange={e => { const t = registered.find(x => x.id === e.target.value); if (t) { setToTeam(t); setResults([]); } }}
+                className="w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:border-[#003e79] outline-none bg-white mb-2">
+                <option value="">Pick a registered team...</option>
+                {registered.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="...or search all teams by name"
                 className="w-full px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm focus:border-[#003e79] outline-none" />
               {results.length > 0 && (
                 <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#e8e8ed] rounded-xl shadow-xl max-h-56 overflow-y-auto">
