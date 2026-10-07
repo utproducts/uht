@@ -30,9 +30,20 @@ function fmtMonth(m: string): string {
   return `${MONTH_NAMES[parseInt(mo, 10) - 1] || mo} ${y}`;
 }
 
+interface FollowReportEvent {
+  event_id: string;
+  event_name: string;
+  start_date: string;
+  team_count: number;
+  total_followers: number;
+  teams: { team_id: string; team_name: string; followers: number }[];
+}
+
 export default function AppUsersPage() {
   const [stats, setStats] = useState<AppStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [followReport, setFollowReport] = useState<FollowReportEvent[]>([]);
+  const [openEvent, setOpenEvent] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${API}/api/users/admin/app-stats`, { headers: authHeaders() })
@@ -40,6 +51,10 @@ export default function AppUsersPage() {
       .then((j: any) => { if (j.success) setStats(j.data); })
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch(`${API}/api/users/admin/follow-report`, { headers: authHeaders() })
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setFollowReport(j.data || []); })
+      .catch(() => {});
   }, []);
 
   const maxSignups = Math.max(1, ...(stats?.monthly || []).map(m => m.signups));
@@ -90,6 +105,54 @@ export default function AppUsersPage() {
                     <span className="w-12 text-right text-sm font-semibold text-[#1d1d1f] shrink-0">{m.signups.toLocaleString()}</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Followers per team, by event */}
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-sm mt-8">
+            <h2 className="font-bold text-[#1d1d1f]">Team Followers by Event</h2>
+            <p className="text-xs text-[#86868b] mb-4">How many app users follow each approved team. The adoption scoreboard - zero means that team's families are not on the app yet.</p>
+            {followReport.length === 0 ? (
+              <p className="text-sm text-[#86868b]">No current events with approved teams.</p>
+            ) : (
+              <div className="space-y-3">
+                {followReport.map(ev => {
+                  const open = openEvent === ev.event_id;
+                  const maxF = Math.max(1, ...ev.teams.map(t => t.followers));
+                  const zeroTeams = ev.teams.filter(t => t.followers === 0).length;
+                  return (
+                    <div key={ev.event_id} className="border border-[#e8e8ed] rounded-xl overflow-hidden">
+                      <button onClick={() => setOpenEvent(open ? null : ev.event_id)}
+                        className="w-full flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-[#fafafa] hover:bg-[#f0f7ff] transition text-left">
+                        <div>
+                          <span className="font-semibold text-[#1d1d1f] text-sm">{ev.event_name}</span>
+                          <span className="text-xs text-[#86868b] ml-2">{ev.start_date?.slice(0, 10)}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="font-semibold text-[#003e79]">{ev.total_followers} follower{ev.total_followers !== 1 ? 's' : ''}</span>
+                          <span className="text-[#86868b]">{ev.team_count} teams</span>
+                          {zeroTeams > 0 && <span className="text-amber-600 font-semibold">{zeroTeams} at zero</span>}
+                          <span className="text-[#86868b]">{open ? '▴' : '▾'}</span>
+                        </div>
+                      </button>
+                      {open && (
+                        <div className="divide-y divide-[#f0f0f3]">
+                          {ev.teams.map(t => (
+                            <div key={t.team_id} className="flex items-center gap-3 px-4 py-2">
+                              <span className="flex-1 text-sm text-[#1d1d1f] min-w-0 truncate">{t.team_name}</span>
+                              <div className="w-28 sm:w-48 bg-[#f5f5f7] rounded-full h-3 overflow-hidden shrink-0">
+                                <div className={`h-3 rounded-full ${t.followers === 0 ? '' : 'bg-gradient-to-r from-[#003e79] to-[#00ccff]'}`}
+                                  style={{ width: `${Math.max(t.followers === 0 ? 0 : 6, (t.followers / maxF) * 100)}%` }} />
+                              </div>
+                              <span className={`w-8 text-right text-sm font-semibold shrink-0 ${t.followers === 0 ? 'text-amber-600' : 'text-[#1d1d1f]'}`}>{t.followers}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

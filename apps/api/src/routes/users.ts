@@ -281,6 +281,50 @@ userRoutes.get('/',
 // ADMIN: App user stats (App Users tab) - accounts created via the app and
 // devices registered for push, with recent growth
 // ==================
+// Followers per team, grouped by event - the app adoption scoreboard.
+// Covers events that have not ended more than 14 days ago.
+userRoutes.get('/admin/follow-report', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const NAME_SQL = `COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = t.organization_id), t.name) || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END)`;
+  const base = (regTable: string, statusCol: string) => `
+    SELECT e.id as event_id, e.name as event_name, e.start_date,
+      t.id as team_id, ${NAME_SQL} as team_name,
+      (SELECT COUNT(*) FROM user_follows uf WHERE uf.team_id = t.id) as followers
+    FROM events e
+    JOIN ${regTable} r ON r.event_id = e.id AND r.${statusCol} = 'approved' AND r.team_id IS NOT NULL
+    JOIN teams t ON t.id = r.team_id
+    WHERE COALESCE(e.is_test, 0) = 0 AND date(e.end_date) >= date('now', '-14 days')`;
+
+  const [er, nr] = await Promise.all([
+    db.prepare(base('event_registrations', 'status')).all(),
+    db.prepare(base('registrations', 'status')).all(),
+  ]);
+
+  const events = new Map<string, any>();
+  for (const row of ([...(er.results || []), ...(nr.results || [])] as any[])) {
+    if (!events.has(row.event_id)) {
+      events.set(row.event_id, { event_id: row.event_id, event_name: row.event_name, start_date: row.start_date, teams: new Map() });
+    }
+    events.get(row.event_id).teams.set(row.team_id, { team_id: row.team_id, team_name: row.team_name, followers: row.followers || 0 });
+  }
+
+  const data = Array.from(events.values())
+    .map(ev => {
+      const teams = Array.from(ev.teams.values()).sort((a: any, b: any) => b.followers - a.followers || a.team_name.localeCompare(b.team_name));
+      return {
+        event_id: ev.event_id,
+        event_name: ev.event_name,
+        start_date: ev.start_date,
+        teams,
+        team_count: teams.length,
+        total_followers: teams.reduce((n: number, t: any) => n + t.followers, 0),
+      };
+    })
+    .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+
+  return c.json({ success: true, data });
+});
+
 userRoutes.get('/admin/app-stats', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const one = async (q: string) => ((await db.prepare(q).first<any>()) || {}) as any;
