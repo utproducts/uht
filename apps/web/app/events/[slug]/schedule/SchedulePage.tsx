@@ -444,7 +444,7 @@ function ageSortKey(label: string): number {
                             ...rows.map((row, idx) => (
                               <tr key={row.team_id} className="border-b border-[#f0f0f3] last:border-0">
                                 <td className="px-3 py-2.5">
-                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${multiPool ? accent.circle : idx === 0 ? 'bg-[#003e79] text-white' : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{idx + 1}</span>
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${multiPool ? accent.circle : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{idx + 1}</span>
                                 </td>
                                 <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}</td>
                                 <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.wins}-{row.losses}-{row.ties}</td>
