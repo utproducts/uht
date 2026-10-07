@@ -724,15 +724,23 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
               <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden">
                 <div className="px-8 py-8">
                   <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Schedule</h2>
-                  <p className="text-sm text-[#86868b] mb-6">Game schedules, scores, and standings for this tournament</p>
-                  <a
-                    href={`/events/${event.slug}/schedule`}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors shadow-sm"
-                  >
-                    <CalendarIcon />
-                    View Full Schedule
-                    <ArrowIcon />
-                  </a>
+                  {(event as any).schedule_published === 1 ? (
+                    <>
+                      <p className="text-sm text-[#86868b] mb-6">Game schedules, scores, and standings for this tournament</p>
+                      <a
+                        href={`/events/${event.slug}/schedule`}
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors shadow-sm"
+                      >
+                        <CalendarIcon />
+                        View Full Schedule
+                        <ArrowIcon />
+                      </a>
+                    </>
+                  ) : (
+                    <p className="text-sm text-[#86868b]">
+                      The game schedule hasn&apos;t been posted yet. Check back closer to event day — schedules, live scores, and standings will all appear here.
+                    </p>
+                  )}
                 </div>
               </div>
             </section>
