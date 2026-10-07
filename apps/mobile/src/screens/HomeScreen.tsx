@@ -302,6 +302,25 @@ onPress={() => navigation.navigate('ScoringConsole')}
               </TouchableOpacity>
             ))}
           </View>
+        ) : activeRole === 'organization' ? (
+          <View style={styles.qaGrid}>
+            {([
+              { label: 'Organization Details', sub: 'Your org at a glance', icon: 'business-outline' as const, go: () => navigation.navigate('OrgDetails') },
+              { label: 'Teams', sub: 'Every team in your organization', icon: 'people-outline' as const, go: () => navigation.navigate('OrgTeams') },
+              { label: 'Org Events', sub: 'Where your teams are playing', icon: 'calendar-outline' as const, go: () => navigation.navigate('OrgEvents') },
+              { label: 'Org Stats', sub: 'Wins, losses and goals across the org', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('OrgStats') },
+              { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search-outline' as const, go: () => navigation.navigate('Find Events' as never) },
+            ]).map(tool => (
+              <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard]} onPress={tool.go} activeOpacity={0.85}
+                accessibilityLabel={`${tool.label} - ${tool.sub}`}>
+                <View style={styles.dirIconCircle}>
+                  <Ionicons name={tool.icon} size={22} color={colors.cyan} />
+                </View>
+                <Text style={styles.dirLabel}>{tool.label}</Text>
+                <Text style={styles.dirSub} numberOfLines={2}>{tool.sub}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         ) : (
         <>
         {/* Quick Access - photo tiles */}
@@ -310,11 +329,24 @@ onPress={() => navigation.navigate('ScoringConsole')}
             { label: 'My Teams', sub: 'View and manage all your teams', img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
             { label: 'Find Events', sub: 'Search tournaments across the country', img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
             { label: 'My Events', sub: 'View your schedules, rosters and details', img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
-            { label: 'Shop', sub: 'Official UHT gear, apparel and more', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) },
-          ]).map(tile => (
-            <TouchableOpacity key={tile.label} style={styles.qaCard} onPress={tile.go} activeOpacity={0.85}
+            // Coaches and managers get their record instead of the shop tile
+            ...(['coach', 'manager'].includes(activeRole)
+              ? [{ label: 'Team Stats', sub: 'Your record, goals for and against', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('TeamStats') }]
+              : [{ label: 'Shop', sub: 'Official UHT gear, apparel and more', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) }]),
+          ] as any[]).map(tile => (
+            <TouchableOpacity key={tile.label} style={[styles.qaCard, !tile.img && styles.dirCard]} onPress={tile.go} activeOpacity={0.85}
               accessibilityLabel={`${tile.label} - ${tile.sub}`}>
-              <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner} />
+              {tile.img ? (
+                <ImageBackground source={tile.img} style={styles.qaImage} imageStyle={styles.qaImageInner} />
+              ) : (
+                <>
+                  <View style={styles.dirIconCircle}>
+                    <Ionicons name={tile.icon} size={22} color={colors.cyan} />
+                  </View>
+                  <Text style={styles.dirLabel}>{tile.label}</Text>
+                  <Text style={styles.dirSub} numberOfLines={2}>{tile.sub}</Text>
+                </>
+              )}
             </TouchableOpacity>
           ))}
           </View>

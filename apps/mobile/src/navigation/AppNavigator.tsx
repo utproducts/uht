@@ -41,6 +41,8 @@ try {
   ScoringConsoleScreen = require('../screens/ScoringConsoleFallback').default;
 }
 import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, DirectorRinksScreen, DirectorTeamCodesScreen, DirectorLockerRoomsScreen, DirectorVenueSetupScreen } from '../screens/DirectorToolsScreen';
+import { OrgDetailsScreen, OrgTeamsScreen, OrgEventsScreen, OrgStatsScreen } from '../screens/OrgScreens';
+import TeamStatsScreen from '../screens/TeamStatsScreen';
 import RewardRevealScreen from '../screens/RewardRevealScreen';
 import ScoresheetScreen from '../screens/ScoresheetScreen';
 
@@ -92,6 +94,11 @@ function HomeStackNavigator() {
       <HomeStackNav.Screen name="DirectorLockerRooms" component={DirectorLockerRoomsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="DirectorVenueSetup" component={DirectorVenueSetupScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="ScoringConsole" component={ScoringConsoleScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="OrgDetails" component={OrgDetailsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="OrgTeams" component={OrgTeamsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="OrgEvents" component={OrgEventsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="OrgStats" component={OrgStatsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="TeamStats" component={TeamStatsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />

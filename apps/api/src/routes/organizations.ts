@@ -953,6 +953,51 @@ organizationRoutes.get('/:id/staff', authMiddleware, async (c) => {
 });
 
 // ==================
+// Org game stats — W/L/T and goals across all UHT games for every org team
+// ==================
+organizationRoutes.get('/:id/stats', authMiddleware, async (c) => {
+  const orgId = c.req.param('id');
+  const db = c.env.DB;
+
+  const rows = await db.prepare(`
+    SELECT t.id, COALESCE(t.schedule_name, t.name) as name, t.age_group, t.logo_url,
+      COALESCE(SUM(s.played), 0) as gp,
+      COALESCE(SUM(s.w), 0) as wins,
+      COALESCE(SUM(s.l), 0) as losses,
+      COALESCE(SUM(s.tie), 0) as ties,
+      COALESCE(SUM(s.gf), 0) as goals_for,
+      COALESCE(SUM(s.ga), 0) as goals_against
+    FROM teams t
+    LEFT JOIN (
+      SELECT home_team_id as team_id, 1 as played,
+        CASE WHEN home_score > away_score THEN 1 ELSE 0 END as w,
+        CASE WHEN home_score < away_score THEN 1 ELSE 0 END as l,
+        CASE WHEN home_score = away_score THEN 1 ELSE 0 END as tie,
+        home_score as gf, away_score as ga
+      FROM games WHERE status = 'final' AND home_team_id IS NOT NULL AND away_team_id IS NOT NULL
+      UNION ALL
+      SELECT away_team_id, 1,
+        CASE WHEN away_score > home_score THEN 1 ELSE 0 END,
+        CASE WHEN away_score < home_score THEN 1 ELSE 0 END,
+        CASE WHEN away_score = home_score THEN 1 ELSE 0 END,
+        away_score, home_score
+      FROM games WHERE status = 'final' AND home_team_id IS NOT NULL AND away_team_id IS NOT NULL
+    ) s ON s.team_id = t.id
+    WHERE t.organization_id = ? AND t.is_active = 1
+    GROUP BY t.id
+    ORDER BY t.age_group ASC, name ASC
+  `).bind(orgId).all<any>();
+
+  const teams = (rows.results || []) as any[];
+  const totals = teams.reduce((a, t) => ({
+    gp: a.gp + t.gp, wins: a.wins + t.wins, losses: a.losses + t.losses, ties: a.ties + t.ties,
+    goals_for: a.goals_for + t.goals_for, goals_against: a.goals_against + t.goals_against,
+  }), { gp: 0, wins: 0, losses: 0, ties: 0, goals_for: 0, goals_against: 0 });
+
+  return c.json({ success: true, data: { totals, teams } });
+});
+
+// ==================
 // Get all players across org teams
 // ==================
 organizationRoutes.get('/:id/rosters', authMiddleware, async (c) => {
