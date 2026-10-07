@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   // Next Up countdown
   nextUpCard: {
     marginTop: spacing.lg,
-    backgroundColor: colors.white,
+    backgroundColor: 'rgba(255,255,255,0.5)',
     paddingVertical: 14, paddingHorizontal: spacing.lg,
     borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#e3e9f1',
     flexDirection: 'row', alignItems: 'center', gap: 14,
