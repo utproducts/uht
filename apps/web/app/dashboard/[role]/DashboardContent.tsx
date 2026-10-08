@@ -260,7 +260,8 @@ export function AdminDash() {
       fetch(`${API}/events/admin/list?filter=all`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/analytics/reports/pending-registrations`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/analytics/reports/division-totals`, { headers: devHeaders }).then(r => r.json()),
-    ]).then(([upJson, allJson, pendJson, divJson]) => {
+      fetch(`${API}/users/admin/app-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
+    ]).then(([upJson, allJson, pendJson, divJson, appJson]) => {
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));
       const upcoming = noTest(upJson.success ? upJson.data : []);
       const all = noTest(allJson.success ? allJson.data : []);
@@ -276,6 +277,8 @@ export function AdminDash() {
         totalEvents: all.length,
         totalTeams,
         totalRevenue,
+        appUsers: appJson?.success ? (appJson.data?.app_accounts || 0) : null,
+        pushUsers: appJson?.success ? (appJson.data?.push_users || 0) : 0,
       });
       setLoadingStats(false);
     }).catch(() => setLoadingStats(false));
@@ -288,10 +291,15 @@ export function AdminDash() {
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard label="Upcoming Events" value={stats?.upcomingEvents || 0} sub={`${stats?.totalEvents || 0} total`} />
         <StatCard label="Teams Registered" value={stats?.totalTeams || 0} sub="Across all events" />
         <StatCard label="Total Revenue" value={`$${((stats?.totalRevenue || 0) / 100).toLocaleString()}`} sub="All events" />
+        {stats?.appUsers !== null && (
+          <a href="/admin/app-users" className="block">
+            <StatCard label="App Users" value={(stats?.appUsers || 0).toLocaleString()} sub={`${stats?.pushUsers || 0} with push on`} />
+          </a>
+        )}
         <div className={`bg-white rounded-2xl border p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] ${pendingCount > 0 ? 'border-amber-300 ring-1 ring-amber-200' : 'border-[#e8e8ed]'}`}>
           <p className="text-sm text-[#86868b] mb-1">Pending Approvals</p>
           <p className={`text-2xl font-bold ${pendingCount > 0 ? 'text-amber-600' : 'text-[#1d1d1f]'}`}>{pendingCount}</p>
