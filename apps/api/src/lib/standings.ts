@@ -219,6 +219,7 @@ export async function computeStandings(
       // Stats-based order BEFORE any manual re-sort: once a 6-team division
       // splits, game results (not drag position) must rank teams within a pool
       const statRank = new Map(rows.map(r => [r.team_id, r.rank]));
+      const statTB = new Map(rows.map(r => [r.team_id, r.tiebreaker]));
       const anyFinals = rows.some(r => r.games_played > 0);
       const ord = ovByDiv.get(divId);
       if (ord && ord.size > 0) {
@@ -234,7 +235,7 @@ export async function computeStandings(
       // play) - the 6-team case below keeps the order for pool MEMBERSHIP.
       if (rows.length !== 6 && ord && ord.size > 0 && anyFinals) {
         rows.sort((a, b) => (statRank.get(a.team_id) || 99) - (statRank.get(b.team_id) || 99));
-        rows.forEach((r, i) => { r.rank = i + 1; if (r.tiebreaker === 'manual') r.tiebreaker = 'unresolved'; });
+        rows.forEach((r, i) => { r.rank = i + 1; r.tiebreaker = statTB.get(r.team_id) || r.tiebreaker; });
       }
       if (rows.length === 6) {
         const baseComplete = poolComplete.get(poolKey(divId, null)) || false;
@@ -246,7 +247,7 @@ export async function computeStandings(
         for (const pool of ['Blue', 'Grey']) {
           const trio = rows.filter(r => r.pool_name === pool);
           if (anyFinals) trio.sort((a, b) => (statRank.get(a.team_id) || 99) - (statRank.get(b.team_id) || 99));
-          trio.forEach((r, i) => { r.rank = i + 1; if (anyFinals) r.tiebreaker = r.tiebreaker === 'manual' ? 'unresolved' : r.tiebreaker; });
+          trio.forEach((r, i) => { r.rank = i + 1; if (anyFinals) r.tiebreaker = statTB.get(r.team_id) || r.tiebreaker; });
         }
         poolComplete.set(poolKey(divId, 'Blue'), baseComplete);
         poolComplete.set(poolKey(divId, 'Grey'), baseComplete);
