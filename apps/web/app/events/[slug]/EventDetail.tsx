@@ -380,8 +380,10 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
 
   const ageGroups = parseJsonArray(event.age_groups);
   const divisions = parseJsonArray(event.divisions);
+  const soldOut = (event as any).is_sold_out === 1;
   const isUpcoming = event.status === 'registration_open' || event.status === 'published' || event.status === 'active';
-  const ss = statusStyle(event.status);
+  const displayStatus = soldOut && isUpcoming ? 'sold_out' : event.status;
+  const ss = statusStyle(displayStatus);
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -429,7 +431,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
               <div className="flex items-center gap-3 mb-3">
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${ss.bg} ${ss.text}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${ss.dot}`} />
-                  {statusLabel(event.status)}
+                  {statusLabel(displayStatus)}
                 </span>
                 {event.is_hybrid === 1 && (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-400/25 text-purple-100 border border-purple-300/40">
@@ -483,14 +485,18 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                   <p className="text-white/50 text-xs">per team</p>
                 </div>
               )}
-              {isUpcoming && (
+              {isUpcoming && soldOut ? (
+                <span className="mt-2 px-8 py-3.5 rounded-full bg-white/15 border-2 border-red-400 text-red-200 font-bold text-base tracking-wide">
+                  SOLD OUT
+                </span>
+              ) : isUpcoming ? (
                 <a
                   href={`/register?event=${event.slug}&eventId=${event.id}`}
                   className="mt-2 px-8 py-3.5 rounded-full bg-[#dc2626] text-white font-bold text-base hover:bg-[#b91c1c] active:scale-95 transition-all shadow-lg shadow-red-600/40"
                 >
                   Register Now
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -939,13 +945,19 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
               {/* Register Button */}
               {isUpcoming && (
                 <div className="px-6 pb-6">
-                  <a
-                    href={`/register?event=${event.slug}&eventId=${event.id}`}
-                    className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#dc2626] text-white font-bold text-sm hover:bg-[#b91c1c] transition-colors shadow-sm"
-                  >
-                    Register Your Team
-                    <ArrowIcon />
-                  </a>
+                  {soldOut ? (
+                    <div className="flex items-center justify-center w-full py-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 font-bold text-sm">
+                      This event is sold out
+                    </div>
+                  ) : (
+                    <a
+                      href={`/register?event=${event.slug}&eventId=${event.id}`}
+                      className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#dc2626] text-white font-bold text-sm hover:bg-[#b91c1c] transition-colors shadow-sm"
+                    >
+                      Register Your Team
+                      <ArrowIcon />
+                    </a>
+                  )}
                 </div>
               )}
             </div>

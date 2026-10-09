@@ -232,6 +232,11 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
               <a href={`/events/${event.slug}/schedule`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all whitespace-nowrap">View Schedule</a>
               <a href={`/events/${event.slug}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors whitespace-nowrap">More Info</a>
             </>
+          ) : !past && event.is_sold_out === 1 ? (
+            <>
+              <span className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-bold text-red-700 bg-red-50 border border-red-200 whitespace-nowrap">Sold Out</span>
+              <a href={`/events/${event.slug}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors whitespace-nowrap">More Info</a>
+            </>
           ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
             <>
               <a href={`/register?event=${event.slug}&eventId=${event.id}`} className="flex-1 text-center px-3 py-2.5 rounded-full text-sm font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] active:scale-[0.98] transition-all whitespace-nowrap">Register</a>
@@ -739,6 +744,11 @@ export default function EventsPage() {
                               <a href={`/events/${event.slug}/schedule`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
                               <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
                             </>
+                          ) : !past && event.is_sold_out === 1 ? (
+                            <>
+                              <span className="inline-block px-3 py-1 rounded-full text-[11px] font-bold text-red-700 bg-red-50 border border-red-200">Sold Out</span>
+                              <a href={`/events/${event.slug}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                            </>
                           ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
                             <>
                               <a href={`/register?event=${event.slug}&eventId=${event.id}`} className="inline-block px-3 py-1 rounded-full text-[11px] font-semibold text-white bg-[#003e79] hover:bg-[#002d5a] transition-colors">Register</a>
@@ -820,6 +830,11 @@ export default function EventsPage() {
                       {!past && scheduleLive ? (
                         <>
                           <a href={`/events/${event.slug}/schedule`} className="inline-block px-3.5 py-1.5 rounded-full text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">Schedule</a>
+                          <a href={`/events/${event.slug}`} className="inline-block px-3 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
+                        </>
+                      ) : !past && event.is_sold_out === 1 ? (
+                        <>
+                          <span className="inline-block px-3.5 py-1.5 rounded-full text-xs font-bold text-red-700 bg-red-50 border border-red-200">Sold Out</span>
                           <a href={`/events/${event.slug}`} className="inline-block px-3 py-1.5 rounded-full text-xs font-semibold text-[#003e79] bg-[#f0f7ff] hover:bg-[#e0efff] transition-colors">More Info</a>
                         </>
                       ) : !past && (event.status === 'registration_open' || event.status === 'published') ? (
