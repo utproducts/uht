@@ -1178,6 +1178,36 @@ teamRoutes.get('/my-stats', authMiddleware, async (c) => {
 });
 
 // ==================
+// Scoresheets for the teams the user coaches or manages (final games only;
+// test-event sheets appear for admin/director accounts only)
+// ==================
+teamRoutes.get('/my-gamesheets', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const isStaff = (user.roles || []).some((r: string) => ['admin', 'director'].includes(r)) ? 1 : 0;
+
+  const rows = await db.prepare(`
+    SELECT g.id, g.game_number, g.start_time, g.home_score, g.away_score, g.status,
+      e.id as event_id, e.name as event_name, COALESCE(e.is_test, 0) as is_test,
+      TRIM(COALESCE(ed.age_group, '') || ' ' || COALESCE(ed.division_level, '')) as division_name,
+      COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder, 'Home') as home_team_name,
+      COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder, 'Away') as away_team_name
+    FROM games g
+    JOIN events e ON e.id = g.event_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    WHERE g.status = 'final'
+      AND (COALESCE(e.is_test, 0) = 0 OR ?1 = 1)
+      AND (g.home_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2)
+        OR g.away_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2))
+    ORDER BY g.start_time DESC LIMIT 150
+  `).bind(isStaff, user.id).all<any>();
+
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+// ==================
 // Get teams for current user (coach/manager/org)
 // ==================
 teamRoutes.get('/my-teams', authMiddleware, async (c) => {

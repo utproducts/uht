@@ -229,6 +229,13 @@ export async function computeStandings(
         });
         rows.forEach((r, i) => { r.rank = i + 1; if (ord.has(r.team_id)) r.tiebreaker = 'manual'; });
       }
+      // Non-split divisions: manual order is a pre-tournament display only.
+      // Once ANY game is final, results rank the table (seeds resolve from
+      // play) - the 6-team case below keeps the order for pool MEMBERSHIP.
+      if (rows.length !== 6 && ord && ord.size > 0 && anyFinals) {
+        rows.sort((a, b) => (statRank.get(a.team_id) || 99) - (statRank.get(b.team_id) || 99));
+        rows.forEach((r, i) => { r.rank = i + 1; if (r.tiebreaker === 'manual') r.tiebreaker = 'unresolved'; });
+      }
       if (rows.length === 6) {
         const baseComplete = poolComplete.get(poolKey(divId, null)) || false;
         // Manual order (or stats) decides WHO is Blue vs Grey...

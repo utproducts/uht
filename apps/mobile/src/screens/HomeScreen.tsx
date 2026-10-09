@@ -309,6 +309,7 @@ onPress={() => navigation.navigate('ScoringConsole')}
               { label: 'Teams', sub: 'Every team in your organization', icon: 'people-outline' as const, go: () => navigation.navigate('OrgTeams') },
               { label: 'Org Events', sub: 'Where your teams are playing', icon: 'calendar-outline' as const, go: () => navigation.navigate('OrgEvents') },
               { label: 'Org Stats', sub: 'Wins, losses and goals across the org', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('OrgStats') },
+              { label: 'Game Sheets', sub: 'Scoresheets from every org team', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets', { scope: 'org' }) },
               { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search-outline' as const, go: () => navigation.navigate('Find Events' as never) },
             ]).map(tool => (
               <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard]} onPress={tool.go} activeOpacity={0.85}
@@ -329,9 +330,12 @@ onPress={() => navigation.navigate('ScoringConsole')}
             { label: 'My Teams', sub: 'View and manage all your teams', img: require('../../assets/tiles/teams.jpg'), go: () => navigation.navigate('My Teams') },
             { label: 'Find Events', sub: 'Search tournaments across the country', img: require('../../assets/tiles/find.jpg'), go: () => navigation.navigate('Find Events' as never) },
             { label: 'My Events', sub: 'View your schedules, rosters and details', img: require('../../assets/tiles/events.jpg'), go: () => navigation.navigate('My Events' as never) },
-            // Coaches and managers get their record instead of the shop tile
+            // Coaches and managers get their record and scoresheets instead of the shop tile
             ...(['coach', 'manager'].includes(activeRole)
-              ? [{ label: 'Team Stats', sub: 'Your record, goals for and against', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('TeamStats') }]
+              ? [
+                  { label: 'Team Stats', sub: 'Your record, goals for and against', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('TeamStats') },
+                  { label: 'Game Sheets', sub: 'Official scoresheets for your games', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets') },
+                ]
               : [{ label: 'Shop', sub: 'Official UHT gear, apparel and more', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) }]),
           ] as any[]).map(tile => (
             <TouchableOpacity key={tile.label} style={[styles.qaCard, !tile.img && styles.dirCard]} onPress={tile.go} activeOpacity={0.85}

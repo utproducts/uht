@@ -116,6 +116,33 @@ const EVENT_TEAMS_CTE = `
   )
 `;
 
+/*
+  TEST EVENT GATE: pushes for an is_test event only ever reach admin/director
+  users - staff get the real push experience during dry runs, real parents
+  and followers of the (real) teams attached to the test never hear a thing.
+*/
+async function applyTestGate(
+  db: any,
+  eventId: string | null | undefined,
+  aud: { tokens: string[]; userIds: string[] }
+): Promise<{ tokens: string[]; userIds: string[] }> {
+  try {
+    if (!eventId || aud.userIds.length === 0) return aud;
+    const ev = await db.prepare('SELECT COALESCE(is_test, 0) as t FROM events WHERE id = ?').bind(eventId).first();
+    if (!ev || !ev.t) return aud;
+    const ph = aud.userIds.map(() => '?').join(',');
+    const rows = (await db.prepare(`
+      SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt
+      JOIN user_roles ur ON ur.user_id = pt.user_id AND ur.role IN ('admin', 'director')
+      WHERE pt.user_id IN (${ph})
+    `).bind(...aud.userIds).all()).results || [];
+    return {
+      tokens: rows.map((r: any) => r.token as string),
+      userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
+    };
+  } catch { return aud; }
+}
+
 export async function eventAudience(
   db: any,
   eventId: string,
@@ -133,13 +160,13 @@ export async function eventAudience(
     )
   `).bind(eventId, divisionId || null).all();
   const rows = result.results || [];
-  return {
+  return applyTestGate(db, eventId, {
     tokens: rows.map((r: any) => r.token as string),
     userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
-  };
+  });
 }
 
-export async function teamAudience(db: any, teamIds: string[]): Promise<{ tokens: string[]; userIds: string[] }> {
+export async function teamAudience(db: any, teamIds: string[], eventId?: string): Promise<{ tokens: string[]; userIds: string[] }> {
   const ids = teamIds.filter(Boolean);
   if (ids.length === 0) return { tokens: [], userIds: [] };
   const ph = ids.map(() => '?').join(',');
@@ -154,10 +181,10 @@ export async function teamAudience(db: any, teamIds: string[]): Promise<{ tokens
     )
   `).bind(...ids, ...ids, ...ids, ...ids).all();
   const rows = result.results || [];
-  return {
+  return applyTestGate(db, eventId, {
     tokens: rows.map((r: any) => r.token as string),
     userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
-  };
+  });
 }
 
 /*
@@ -179,7 +206,7 @@ export async function notifyGameFinalPush(db: any, gameId: string) {
   `).bind(gameId).first();
   if (!g || g.final_push_sent) return;
 
-  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id]);
+  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id], g.event_id);
   await db.prepare("UPDATE games SET final_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
   if (tokens.length === 0) return;
 
@@ -274,7 +301,7 @@ export async function notifyThreeStarsPush(db: any, gameId: string) {
   const line = stars.map((s: any) =>
     `${label(s.star_number)}: ${s.player_name || `#${s.jersey_number}`} (${teamName(s.team_id)})`).join(' · ');
 
-  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id]);
+  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id], g.event_id);
   await db.prepare("UPDATE games SET stars_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
   if (tokens.length === 0) return;
 
@@ -313,7 +340,7 @@ export async function notifyGameStartPush(db: any, gameId: string) {
   `).bind(gameId).first();
   if (!g || g.start_push_sent) return;
 
-  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id]);
+  const { tokens, userIds } = await teamAudience(db, [g.home_team_id, g.away_team_id], g.event_id);
   await db.prepare("UPDATE games SET start_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
   if (tokens.length === 0) return;
 

@@ -1735,7 +1735,7 @@ scoringRoutes.get('/my-events', authMiddleware, async (c) => {
           1 as is_event_scorekeeper
         FROM events e
         LEFT JOIN venues v ON v.id = e.venue_id
-        WHERE COALESCE(e.is_test, 0) = 0
+        WHERE (COALESCE(e.is_test, 0) = 0 OR date(e.end_date) >= date('now', '-3 days'))
           AND EXISTS (SELECT 1 FROM games g WHERE g.event_id = e.id)
         ORDER BY e.start_date DESC
         LIMIT 50
@@ -2019,9 +2019,9 @@ scoringRoutes.get('/director-events', authMiddleware, requireRole('admin', 'dire
   const rows = (await db.prepare(`
     SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state, e.logo_url
     FROM events e
-    WHERE COALESCE(e.is_test, 0) = 0
+    WHERE (COALESCE(e.is_test, 0) = 0 OR date(e.end_date) >= date('now', '-3 days'))
       AND date(e.end_date) >= date('now', '-10 days')
-      AND e.status IN ('published', 'registration_open', 'active')
+      AND (e.status IN ('published', 'registration_open', 'active') OR COALESCE(e.is_test, 0) = 1)
     ORDER BY e.start_date ASC
     LIMIT 30
   `).all()).results || [];

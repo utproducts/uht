@@ -43,6 +43,7 @@ try {
 import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, DirectorRinksScreen, DirectorTeamCodesScreen, DirectorLockerRoomsScreen, DirectorVenueSetupScreen } from '../screens/DirectorToolsScreen';
 import { OrgDetailsScreen, OrgTeamsScreen, OrgEventsScreen, OrgStatsScreen } from '../screens/OrgScreens';
 import TeamStatsScreen from '../screens/TeamStatsScreen';
+import GameSheetsScreen from '../screens/GameSheetsScreen';
 import RewardRevealScreen from '../screens/RewardRevealScreen';
 import ScoresheetScreen from '../screens/ScoresheetScreen';
 
@@ -99,6 +100,7 @@ function HomeStackNavigator() {
       <HomeStackNav.Screen name="OrgEvents" component={OrgEventsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="OrgStats" component={OrgStatsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="TeamStats" component={TeamStatsScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="GameSheets" component={GameSheetsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="TeamDetail" component={TeamDetailScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
