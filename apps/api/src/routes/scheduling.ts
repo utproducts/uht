@@ -941,74 +941,116 @@ schedulingRoutes.post('/games', authMiddleware, requireRole('admin', 'director')
 
 // Replace one team with another across all games in an event
 const replaceTeamSchema = z.object({
-  old_team_id: z.string().min(1),
-  new_team_id: z.string().min(1),
+  // current admin UI
+  fromTeamId: z.string().min(1).optional(),
+  fromPlaceholder: z.string().min(1).optional(),
+  toTeamId: z.string().min(1).optional(),
+  // legacy payload
+  old_team_id: z.string().min(1).optional(),
+  new_team_id: z.string().min(1).optional(),
+}).refine(d => (d.toTeamId || d.new_team_id) && (d.fromTeamId || d.fromPlaceholder || d.old_team_id), {
+  message: 'Need a replacement team and either a team or placeholder to replace',
 });
 
 schedulingRoutes.post('/events/:eventId/replace-team', authMiddleware, requireRole('admin', 'director'), zValidator('json', replaceTeamSchema), async (c) => {
   const eventId = c.req.param('eventId');
-  const { old_team_id, new_team_id } = c.req.valid('json');
+  const body = c.req.valid('json');
   const db = c.env.DB;
 
-  if (old_team_id === new_team_id) {
+  const newId = body.toTeamId || body.new_team_id!;
+  const fromId = body.fromTeamId || body.old_team_id || null;
+  const fromPh = body.fromPlaceholder || null;
+
+  if (fromId === newId) {
     return c.json({ success: false, error: 'Old and new team cannot be the same' }, 400);
   }
 
-  // Verify both teams exist
-  const [oldTeam, newTeam] = await Promise.all([
-    db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(old_team_id).first<any>(),
-    db.prepare('SELECT id, name FROM teams WHERE id = ?').bind(new_team_id).first<any>(),
-  ]);
-  if (!oldTeam) return c.json({ success: false, error: 'Original team not found' }, 404);
+  const newTeam = await db.prepare('SELECT id, COALESCE(schedule_name, name) as name FROM teams WHERE id = ?').bind(newId).first<any>();
   if (!newTeam) return c.json({ success: false, error: 'Replacement team not found' }, 404);
 
-  // Count affected games
-  const countResult = await db.prepare(
-    'SELECT COUNT(*) as cnt FROM games WHERE event_id = ? AND (home_team_id = ? OR away_team_id = ?)'
-  ).bind(eventId, old_team_id, old_team_id).first<any>();
-  const affected = countResult?.cnt || 0;
+  let affected = 0;
+  let fromLabel = '';
 
-  if (affected === 0) {
-    return c.json({ success: false, error: `${oldTeam.name} has no games in this event` }, 400);
-  }
+  if (fromPh) {
+    // ---- placeholder path: text-named filler sides become the real team ----
+    const countResult = await db.prepare(
+      'SELECT COUNT(*) as cnt FROM games WHERE event_id = ? AND (home_placeholder = ? OR away_placeholder = ?)'
+    ).bind(eventId, fromPh, fromPh).first<any>();
+    affected = countResult?.cnt || 0;
+    if (affected === 0) return c.json({ success: false, error: `"${fromPh}" has no games in this event` }, 400);
 
-  // Update home_team_id
-  await db.prepare(
-    'UPDATE games SET home_team_id = ? WHERE event_id = ? AND home_team_id = ?'
-  ).bind(new_team_id, eventId, old_team_id).run();
+    await db.prepare(
+      "UPDATE games SET home_team_id = ?, home_placeholder = NULL, updated_at = datetime('now') WHERE event_id = ? AND home_placeholder = ?"
+    ).bind(newId, eventId, fromPh).run();
+    await db.prepare(
+      "UPDATE games SET away_team_id = ?, away_placeholder = NULL, updated_at = datetime('now') WHERE event_id = ? AND away_placeholder = ?"
+    ).bind(newId, eventId, fromPh).run();
+    fromLabel = fromPh;
+  } else {
+    // ---- team path: swap one registered team for another ----
+    const oldTeam = await db.prepare('SELECT id, COALESCE(schedule_name, name) as name FROM teams WHERE id = ?').bind(fromId).first<any>();
+    if (!oldTeam) return c.json({ success: false, error: 'Original team not found' }, 404);
 
-  // Update away_team_id
-  await db.prepare(
-    'UPDATE games SET away_team_id = ? WHERE event_id = ? AND away_team_id = ?'
-  ).bind(new_team_id, eventId, old_team_id).run();
+    const countResult = await db.prepare(
+      'SELECT COUNT(*) as cnt FROM games WHERE event_id = ? AND (home_team_id = ? OR away_team_id = ?)'
+    ).bind(eventId, fromId, fromId).first<any>();
+    affected = countResult?.cnt || 0;
+    if (affected === 0) return c.json({ success: false, error: `${oldTeam.name} has no games in this event` }, 400);
 
-  // Also update the registration if one exists for the old team in this event
-  // (swap the team on the registration so standings etc. carry over)
-  const oldReg = await db.prepare(
-    'SELECT id, event_division_id FROM registrations WHERE event_id = ? AND team_id = ?'
-  ).bind(eventId, old_team_id).first<any>();
+    await db.prepare(
+      "UPDATE games SET home_team_id = ?, updated_at = datetime('now') WHERE event_id = ? AND home_team_id = ?"
+    ).bind(newId, eventId, fromId).run();
+    await db.prepare(
+      "UPDATE games SET away_team_id = ?, updated_at = datetime('now') WHERE event_id = ? AND away_team_id = ?"
+    ).bind(newId, eventId, fromId).run();
 
-  if (oldReg) {
-    // Check if new team already has a registration in this division
-    const existingNewReg = await db.prepare(
-      'SELECT id FROM registrations WHERE event_id = ? AND team_id = ? AND event_division_id = ?'
-    ).bind(eventId, new_team_id, oldReg.event_division_id).first<any>();
-
-    if (!existingNewReg) {
-      // Reassign the registration from old team to new team
-      await db.prepare(
-        'UPDATE registrations SET team_id = ? WHERE id = ?'
-      ).bind(new_team_id, oldReg.id).run();
+    // Carry per-game records that reference the old team in this event
+    const gf = 'game_id IN (SELECT id FROM games WHERE event_id = ?)';
+    for (const t of ['game_lineups', 'game_locker_rooms']) {
+      try {
+        await db.prepare(`UPDATE ${t} SET team_id = ? WHERE ${gf} AND team_id = ?`).bind(newId, eventId, fromId).run();
+      } catch { /* table may not track team_id */ }
     }
+
+    // Swap the registration so standings and participants carry over
+    const oldReg = await db.prepare(
+      'SELECT id, event_division_id FROM registrations WHERE event_id = ? AND team_id = ?'
+    ).bind(eventId, fromId).first<any>();
+    if (oldReg) {
+      const existingNewReg = await db.prepare(
+        'SELECT id FROM registrations WHERE event_id = ? AND team_id = ? AND event_division_id = ?'
+      ).bind(eventId, newId, oldReg.event_division_id).first<any>();
+      if (!existingNewReg) {
+        await db.prepare('UPDATE registrations SET team_id = ? WHERE id = ?').bind(newId, oldReg.id).run();
+      }
+    }
+    const oldEr = await db.prepare(
+      'SELECT id FROM event_registrations WHERE event_id = ? AND team_id = ?'
+    ).bind(eventId, fromId).first<any>();
+    if (oldEr) {
+      const existingNewEr = await db.prepare(
+        'SELECT id FROM event_registrations WHERE event_id = ? AND team_id = ?'
+      ).bind(eventId, newId).first<any>();
+      if (!existingNewEr) {
+        await db.prepare('UPDATE event_registrations SET team_id = ? WHERE id = ?').bind(newId, oldEr.id).run();
+      }
+    }
+    fromLabel = oldTeam.name;
   }
+
+  // Bracket seeds may reference standings that just changed shape
+  try {
+    const { resolveBracketGames } = await import('../lib/standings');
+    c.executionCtx.waitUntil(resolveBracketGames(db, eventId).catch(() => {}));
+  } catch { /* non-Workers env */ }
 
   return c.json({
     success: true,
     data: {
       games_updated: affected,
-      old_team: oldTeam.name,
-      new_team: newTeam.name,
-      message: `Replaced "${oldTeam.name}" with "${newTeam.name}" in ${affected} game${affected !== 1 ? 's' : ''}.`,
+      from: fromLabel,
+      to: newTeam.name,
+      message: `Replaced "${fromLabel}" with "${newTeam.name}" in ${affected} game${affected !== 1 ? 's' : ''}.`,
     },
   });
 });
