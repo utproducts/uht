@@ -1,5 +1,7 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
+
 import { useState, useRef, useEffect } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
@@ -10,6 +12,9 @@ interface Message {
 }
 
 export default function ChatWidget() {
+  // Scorekeepers get a bare console - no chat bubble floating over the pads
+  const pathname = usePathname();
+  if (pathname && pathname.startsWith('/scoring')) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
