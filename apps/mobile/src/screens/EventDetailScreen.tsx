@@ -275,30 +275,50 @@ export default function EventDetailScreen({
       .then((j: any) => { if (j.success) setCoachTeamIds((j.data?.teams || []).map((t: any) => t.id)); })
       .catch(() => {});
   }, [eventId]);
-  const toggleGameCheckin = async (gameId: string, teamId: string, done: boolean, teamName: string) => {
-    const key = `${gameId}|${teamId}`;
-    if (!done) {
-      setGameCheckins(prev => ({ ...prev, [key]: new Date().toISOString() }));
-      try {
-        const r = await authFetch(`/api/registrations/game-checkins/${gameId}/${teamId}`, { method: 'POST' });
-        const j = await r.json() as any;
-        if (!j.success) {
-          setGameCheckins(prev => { const n = { ...prev }; delete n[key]; return n; });
-          Alert.alert('Check-in failed', j.error || 'Please try again or see the tournament desk.');
-        }
-      } catch {
-        setGameCheckins(prev => { const n = { ...prev }; delete n[key]; return n; });
-        Alert.alert('Check-in failed', 'Please try again or see the tournament desk.');
-      }
-    } else if (isStaffUser) {
-      Alert.alert('Undo check-in?', `${teamName} will show as NOT checked in for this game.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Undo', style: 'destructive', onPress: async () => {
-          setGameCheckins(prev => { const n = { ...prev }; delete n[key]; return n; });
-          try { await authFetch(`/api/registrations/game-checkins/${gameId}/${teamId}`, { method: 'DELETE' }); } catch {}
-        } },
-      ]);
-    }
+  // Check-in opens the game roster: every player defaults to Playing, the
+  // coach flips anyone to Out or Suspended, and saving checks the team in.
+  const [ciSheet, setCiSheet] = useState<{ gameId: string; teamId: string; teamName: string; gameLabel: string } | null>(null);
+  const [ciRoster, setCiRoster] = useState<any[]>([]);
+  const [ciLoading, setCiLoading] = useState(false);
+  const [ciSaving, setCiSaving] = useState(false);
+  const openCheckinRoster = async (item: GameSlot, teamId: string, teamName: string) => {
+    setCiSheet({ gameId: item.id as string, teamId, teamName, gameLabel: `${item.game_number ? `Game #${item.game_number} · ` : ''}${gameTimeLabel(item)}` });
+    setCiLoading(true); setCiRoster([]);
+    try {
+      const r = await authFetch(`/api/registrations/game-checkins/${item.id}/${teamId}/roster`);
+      const j = await r.json() as any;
+      if (j.success) setCiRoster(j.data.players || []);
+      else { Alert.alert('Could not load roster', j.error || 'Try again at the rink desk.'); setCiSheet(null); }
+    } catch { Alert.alert('Could not load roster', 'Check your connection and try again.'); setCiSheet(null); }
+    setCiLoading(false);
+  };
+  const saveCheckinRoster = async () => {
+    if (!ciSheet) return;
+    setCiSaving(true);
+    try {
+      const r = await authFetch(`/api/registrations/game-checkins/${ciSheet.gameId}/${ciSheet.teamId}/roster`, {
+        method: 'PUT',
+        body: JSON.stringify({ statuses: ciRoster.map(pl => ({ lineup_id: pl.lineup_id, status: pl.status })) }),
+      });
+      const j = await r.json() as any;
+      if (j.success) {
+        setGameCheckins(prev => ({ ...prev, [`${ciSheet.gameId}|${ciSheet.teamId}`]: new Date().toISOString() }));
+        setCiSheet(null);
+      } else Alert.alert('Check-in failed', j.error || 'Please try again.');
+    } catch { Alert.alert('Check-in failed', 'Please try again.'); }
+    setCiSaving(false);
+  };
+  const undoCheckin = () => {
+    if (!ciSheet || !isStaffUser) return;
+    const { gameId, teamId, teamName } = ciSheet;
+    Alert.alert('Undo check-in?', `${teamName} will show as NOT checked in for this game.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Undo', style: 'destructive', onPress: async () => {
+        setGameCheckins(prev => { const n = { ...prev }; delete n[`${gameId}|${teamId}`]; return n; });
+        setCiSheet(null);
+        try { await authFetch(`/api/registrations/game-checkins/${gameId}/${teamId}`, { method: 'DELETE' }); } catch {}
+      } },
+    ]);
   };
   function renderGameCheckinRow(item: GameSlot) {
     if (!item.id || item.status === 'final') return null;
@@ -316,9 +336,8 @@ export default function EventDetailScreen({
             <TouchableOpacity
               key={key}
               style={[styles.gcChip, done && styles.gcChipDone]}
-              disabled={done && !isStaffUser}
               activeOpacity={0.8}
-              onPress={() => toggleGameCheckin(item.id as string, s0.teamId as string, done, s0.name)}
+              onPress={() => openCheckinRoster(item, s0.teamId as string, s0.name)}
             >
               <Ionicons name={done ? 'checkmark-circle' : 'log-in-outline'} size={14} color={done ? '#047857' : colors.navy} />
               <Text numberOfLines={1} style={[styles.gcChipText, done && styles.gcChipTextDone]} maxFontSizeMultiplier={1.2}>
@@ -2135,6 +2154,62 @@ export default function EventDetailScreen({
       ) : (
         renderTabContent()
       )}
+
+      {/* Game check-in roster sheet: set each player Playing / Out / Suspended */}
+      <Modal visible={!!ciSheet} transparent animationType="slide" onRequestClose={() => setCiSheet(null)}>
+        <View style={styles.ciOverlay}>
+          <View style={styles.ciSheet}>
+            <View style={styles.ciHead}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.ciTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>{ciSheet?.teamName}</Text>
+                <Text style={styles.ciSub} numberOfLines={1} maxFontSizeMultiplier={1.2}>{ciSheet?.gameLabel}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setCiSheet(null)} style={{ padding: 6 }}>
+                <Ionicons name="close" size={22} color={colors.navy} />
+              </TouchableOpacity>
+            </View>
+            {ciLoading ? (
+              <ActivityIndicator style={{ marginVertical: 30 }} color={colors.navy} />
+            ) : ciRoster.length === 0 ? (
+              <Text style={styles.ciEmpty}>No roster on file for this team yet. Add players on the team page, then check in.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 420 }}>
+                {ciRoster.map((pl, i) => (
+                  <View key={pl.lineup_id} style={[styles.ciRow, i === ciRoster.length - 1 && { borderBottomWidth: 0 }]}>
+                    <Text style={styles.ciJersey} maxFontSizeMultiplier={1.2}>#{pl.jersey_number}</Text>
+                    <Text style={styles.ciName} numberOfLines={1} maxFontSizeMultiplier={1.2}>{pl.first_name} {pl.last_name}</Text>
+                    <View style={styles.ciPills}>
+                      {(['playing', 'out', 'suspended'] as const).map(st => (
+                        <TouchableOpacity
+                          key={st}
+                          style={[styles.ciPill, pl.status === st && (st === 'playing' ? styles.ciPillPlaying : st === 'out' ? styles.ciPillOut : styles.ciPillSusp)]}
+                          onPress={() => setCiRoster(prev => prev.map(q => q.lineup_id === pl.lineup_id ? { ...q, status: st } : q))}
+                        >
+                          <Text style={[styles.ciPillText, pl.status === st && styles.ciPillTextOn]} maxFontSizeMultiplier={1.1}>
+                            {st === 'playing' ? 'Playing' : st === 'out' ? 'Out' : 'Susp'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+            {ciRoster.length > 0 && (
+              <TouchableOpacity style={styles.ciSaveBtn} disabled={ciSaving} onPress={saveCheckinRoster} activeOpacity={0.85}>
+                <Text style={styles.ciSaveBtnText} maxFontSizeMultiplier={1.2}>
+                  {ciSaving ? 'Saving...' : (ciSheet && gameCheckins[`${ciSheet.gameId}|${ciSheet.teamId}`] ? 'Save Roster' : 'Check In Team')}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {isStaffUser && ciSheet && gameCheckins[`${ciSheet.gameId}|${ciSheet.teamId}`] ? (
+              <TouchableOpacity onPress={undoCheckin} style={{ paddingVertical: 10 }}>
+                <Text style={styles.ciUndoText} maxFontSizeMultiplier={1.2}>Undo check-in</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2178,6 +2253,26 @@ const styles = StyleSheet.create({
   possibleChipText: { fontSize: 9.5, color: colors.navy, letterSpacing: 0.8, ...fonts.bold },
   possibleMatchup: { fontSize: 14.5, color: colors.navy, ...fonts.bold },
   possibleMeta: { fontSize: 11.5, color: '#7a8699', ...fonts.semibold, marginTop: 3 },
+  // Game check-in roster sheet
+  ciOverlay: { flex: 1, backgroundColor: 'rgba(10,20,35,0.55)', justifyContent: 'flex-end' },
+  ciSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 28 },
+  ciHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  ciTitle: { fontSize: 16, color: colors.navy, ...fonts.bold },
+  ciSub: { fontSize: 12, color: '#7a8699', ...fonts.semibold, marginTop: 1 },
+  ciEmpty: { fontSize: 13, color: '#5b6b83', ...fonts.semibold, textAlign: 'center', marginVertical: 24, lineHeight: 19 },
+  ciRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f0f2f5' },
+  ciJersey: { width: 34, fontSize: 12.5, color: '#7a8699', ...fonts.bold },
+  ciName: { flex: 1, minWidth: 0, fontSize: 13.5, color: colors.navy, ...fonts.semibold },
+  ciPills: { flexDirection: 'row', gap: 4 },
+  ciPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#eef2f7' },
+  ciPillPlaying: { backgroundColor: '#10b981' },
+  ciPillOut: { backgroundColor: '#f59e0b' },
+  ciPillSusp: { backgroundColor: '#dc2626' },
+  ciPillText: { fontSize: 11, color: '#5b6b83', ...fonts.bold },
+  ciPillTextOn: { color: '#fff' },
+  ciSaveBtn: { backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
+  ciSaveBtnText: { color: '#fff', fontSize: 15, ...fonts.bold },
+  ciUndoText: { color: '#b91c1c', fontSize: 12.5, ...fonts.bold, textAlign: 'center' },
   // Per-game check-in chips
   gcRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   gcChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#e9eef5', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, maxWidth: '100%' },

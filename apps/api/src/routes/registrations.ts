@@ -529,6 +529,81 @@ registrationRoutes.post('/game-checkins/:gameId/:teamId', authMiddleware, async 
   return c.json({ success: true, data: { checked_in: true } });
 });
 
+// Roster for a game check-in: ensures game_lineups rows exist for the team
+// (copied from the active roster), returns them with per-game statuses.
+// Shared permission rule: team's coach/manager, or admin/director.
+async function canActOnTeam(db: any, user: any, teamId: string): Promise<boolean> {
+  if ((user.roles || []).some((r: string) => ['admin', 'director'].includes(r))) return true;
+  const mine = await db.prepare(`
+    SELECT 1 as ok FROM (
+      SELECT team_id FROM team_coaches WHERE user_id = ?1
+      UNION SELECT team_id FROM team_managers WHERE user_id = ?1
+    ) WHERE team_id = ?2
+  `).bind(user.id, teamId).first();
+  return !!mine;
+}
+
+registrationRoutes.get('/game-checkins/:gameId/:teamId/roster', authMiddleware, async (c) => {
+  const { gameId, teamId } = c.req.param();
+  const user = c.get('user');
+  const db = c.env.DB;
+  const game = await db.prepare('SELECT id, home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
+  if (!game || (game.home_team_id !== teamId && game.away_team_id !== teamId)) {
+    return c.json({ success: false, error: 'Game or team not found' }, 404);
+  }
+  if (!(await canActOnTeam(db, user, teamId))) {
+    return c.json({ success: false, error: 'Only that team\'s coach or manager can open this roster' }, 403);
+  }
+  // Seed lineups from the active roster (idempotent)
+  const players = await db.prepare(`
+    SELECT p.id, p.jersey_number, p.position FROM team_players tp
+    JOIN players p ON p.id = tp.player_id
+    WHERE tp.team_id = ? AND tp.status = 'active'
+  `).bind(teamId).all<any>();
+  for (const pl of (players.results || []) as any[]) {
+    await db.prepare(`
+      INSERT OR IGNORE INTO game_lineups (id, game_id, team_id, player_id, jersey_number, position, is_starter)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, teamId, pl.id, pl.jersey_number || '0', pl.position || 'F').run().catch(() => {});
+  }
+  const rows = await db.prepare(`
+    SELECT gl.id as lineup_id, gl.jersey_number, gl.position, COALESCE(gl.status, 'playing') as status,
+      p.first_name, p.last_name
+    FROM game_lineups gl JOIN players p ON p.id = gl.player_id
+    WHERE gl.game_id = ? AND gl.team_id = ?
+    ORDER BY CAST(gl.jersey_number AS INTEGER), p.last_name
+  `).bind(gameId, teamId).all<any>();
+  const checked = await db.prepare('SELECT checked_in_at FROM game_checkins WHERE game_id = ? AND team_id = ?').bind(gameId, teamId).first<any>();
+  return c.json({ success: true, data: { players: rows.results || [], checked_in_at: checked?.checked_in_at || null } });
+});
+
+registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, zValidator('json', z.object({
+  statuses: z.array(z.object({
+    lineup_id: z.string().min(1),
+    status: z.enum(['playing', 'out', 'suspended']),
+  })).max(60),
+})), async (c) => {
+  const { gameId, teamId } = c.req.param();
+  const { statuses } = c.req.valid('json');
+  const user = c.get('user');
+  const db = c.env.DB;
+  const game = await db.prepare('SELECT id, home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
+  if (!game || (game.home_team_id !== teamId && game.away_team_id !== teamId)) {
+    return c.json({ success: false, error: 'Game or team not found' }, 404);
+  }
+  if (!(await canActOnTeam(db, user, teamId))) {
+    return c.json({ success: false, error: 'Only that team\'s coach or manager can check this team in' }, 403);
+  }
+  for (const s of statuses) {
+    await db.prepare(
+      "UPDATE game_lineups SET status = ?, is_scratched = ? WHERE id = ? AND game_id = ? AND team_id = ?"
+    ).bind(s.status, s.status === 'playing' ? 0 : 1, s.lineup_id, gameId, teamId).run();
+  }
+  await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
+    .bind(gameId, teamId, user.id).run();
+  return c.json({ success: true, data: { checked_in: true, updated: statuses.length } });
+});
+
 registrationRoutes.delete('/game-checkins/:gameId/:teamId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const { gameId, teamId } = c.req.param();
   await c.env.DB.prepare('DELETE FROM game_checkins WHERE game_id = ? AND team_id = ?').bind(gameId, teamId).run();

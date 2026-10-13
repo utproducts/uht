@@ -256,8 +256,8 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                       {p.first_name} {p.last_name}{p.is_starting_goalie ? '  ★G' : ''}
                     </Text>
                     <Text style={[styles.td, { width: 90, fontSize: 11, fontWeight: '700' },
-                      st === 'playing' ? { color: '#059669' } : st === 'suspended' ? { color: '#dc2626' } : { color: colors.textMuted }]}>
-                      {st === 'playing' ? 'Playing' : st === 'suspended' ? 'Suspended' : 'Not Playing'}
+                      st === 'playing' ? { color: '#059669' } : st === 'suspended' ? { color: '#dc2626' } : st === 'out' ? { color: '#d97706' } : { color: colors.textMuted }]}>
+                      {st === 'playing' ? 'Playing' : st === 'suspended' ? 'Suspended' : st === 'out' ? 'Out' : 'Not Playing'}
                     </Text>
                   </View>
                 );
