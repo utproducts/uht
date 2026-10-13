@@ -76,28 +76,33 @@ export default function SignUpScreen({ navigation }: { navigation: any }) {
       });
 
       if (result.success) {
-        // If they entered a team code, follow/join the team
+        // If they entered a team code, follow/join the team RIGHT NOW - and
+        // when it works, skip the follow-a-team step entirely
+        let codeWorked = false;
         if (hasTeamCode && teamCode.trim()) {
           try {
-            if (role === 'coach') {
-              // Coaches join as team members via /api/teams/join
-              await authFetch('/api/teams/join', {
-                method: 'POST',
-                body: JSON.stringify({ inviteCode: teamCode.trim().toUpperCase() }),
-              });
-            } else {
-              // Parents/Players/Fans follow the team via /api/follows/by-code
-              await authFetch('/api/follows/by-code', {
-                method: 'POST',
-                body: JSON.stringify({ inviteCode: teamCode.trim().toUpperCase() }),
-              });
-            }
-          } catch {
-            // Don't block signup if team code fails — they can enter it later
-          }
+            const path = role === 'coach' ? '/api/teams/join' : '/api/follows/by-code';
+            const r = await authFetch(path, {
+              method: 'POST',
+              body: JSON.stringify({ inviteCode: teamCode.trim().toUpperCase() }),
+            });
+            const j = await r.json() as any;
+            codeWorked = !!j.success;
+          } catch { /* fall through to the follow screen */ }
         }
 
-        navigation.replace(role === 'coach' ? 'CoachOnboarding' : 'FollowTeams');
+        if (codeWorked) {
+          // Already on their team - straight into the app
+          navigation.replace('Main');
+        } else if (hasTeamCode && teamCode.trim()) {
+          Alert.alert(
+            'Team code didn\'t work',
+            'Your account was created, but we didn\'t recognize that team code. Double-check it with your coach, or search for your team.',
+          );
+          navigation.replace(role === 'coach' ? 'CoachOnboarding' : 'FollowTeams');
+        } else {
+          navigation.replace(role === 'coach' ? 'CoachOnboarding' : 'FollowTeams');
+        }
       } else {
         setError(result.error || 'Registration failed. Please try again.');
       }
