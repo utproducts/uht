@@ -34,10 +34,14 @@ async function ensureStaffColumns(db: any) {
   }
 }
 
-// AUTO-MIGRATE: Add mhr_rating to registrations (pulled from USA Hockey)
+// AUTO-MIGRATE: Add mhr_rating to BOTH registration tables (most events,
+// Windmill included, live entirely in event_registrations)
 async function ensureMhrColumn(db: any) {
   try {
     await db.prepare('ALTER TABLE registrations ADD COLUMN mhr_rating INTEGER').run();
+  } catch (_) { /* column already exists */ }
+  try {
+    await db.prepare('ALTER TABLE event_registrations ADD COLUMN mhr_rating INTEGER').run();
   } catch (_) { /* column already exists */ }
 }
 
@@ -99,8 +103,16 @@ schedulingRoutes.get('/events/:eventId/team-ratings', authMiddleware, requireRol
     JOIN teams t ON t.id = r.team_id
     JOIN event_divisions ed ON ed.id = r.event_division_id
     WHERE r.event_id = ? AND r.status = 'approved'
-    ORDER BY ed.age_group, t.name
-  `).bind(eventId).all();
+    UNION ALL
+    SELECT er.id as registration_id, er.team_id, er.mhr_rating, er.event_division_id,
+      COALESCE(t.name, er.team_name) as team_name, t.city as team_city, t.state as team_state,
+      COALESCE(ed.age_group, er.age_group) as age_group, ed.division_level
+    FROM event_registrations er
+    LEFT JOIN teams t ON t.id = er.team_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.event_id = ? AND er.status = 'approved'
+    ORDER BY age_group, team_name
+  `).bind(eventId, eventId).all();
   return c.json({ success: true, data: result.results });
 });
 
@@ -111,7 +123,10 @@ schedulingRoutes.put('/events/:eventId/team-ratings', authMiddleware, requireRol
   await ensureMhrColumn(db);
   const body = await c.req.json() as { ratings: { registration_id: string; mhr_rating: number | null }[] };
   for (const r of body.ratings) {
+    // ids are unique UUIDs, so updating both tables hits exactly one row
     await db.prepare('UPDATE registrations SET mhr_rating = ? WHERE id = ? AND event_id = ?')
+      .bind(r.mhr_rating, r.registration_id, eventId).run();
+    await db.prepare('UPDATE event_registrations SET mhr_rating = ? WHERE id = ? AND event_id = ?')
       .bind(r.mhr_rating, r.registration_id, eventId).run();
   }
   return c.json({ success: true, message: `${body.ratings.length} ratings updated` });

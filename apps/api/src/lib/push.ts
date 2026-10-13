@@ -126,21 +126,31 @@ async function applyTestGate(
   eventId: string | null | undefined,
   aud: { tokens: string[]; userIds: string[] }
 ): Promise<{ tokens: string[]; userIds: string[] }> {
+  if (!eventId || aud.userIds.length === 0) return aud;
+  let isTest = false;
   try {
-    if (!eventId || aud.userIds.length === 0) return aud;
     const ev = await db.prepare('SELECT COALESCE(is_test, 0) as t FROM events WHERE id = ?').bind(eventId).first();
-    if (!ev || !ev.t) return aud;
-    const ph = aud.userIds.map(() => '?').join(',');
-    const rows = (await db.prepare(`
-      SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt
-      JOIN user_roles ur ON ur.user_id = pt.user_id AND ur.role IN ('admin', 'director')
-      WHERE pt.user_id IN (${ph})
-    `).bind(...aud.userIds).all()).results || [];
-    return {
-      tokens: rows.map((r: any) => r.token as string),
-      userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
-    };
-  } catch { return aud; }
+    isTest = !!(ev && ev.t);
+  } catch { return aud; /* can't read the event - treat as real */ }
+  if (!isTest) return aud;
+  // From here the event IS a test: any failure must FAIL CLOSED (send to
+  // nobody), never leak the full audience. D1 caps bound params at 100, so
+  // chunk the membership query.
+  try {
+    const tokens: string[] = [];
+    const userIds = new Set<string>();
+    for (let i = 0; i < aud.userIds.length; i += 50) {
+      const chunk = aud.userIds.slice(i, i + 50);
+      const ph = chunk.map(() => '?').join(',');
+      const rows = (await db.prepare(`
+        SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt
+        JOIN user_roles ur ON ur.user_id = pt.user_id AND ur.role IN ('admin', 'director')
+        WHERE pt.user_id IN (${ph})
+      `).bind(...chunk).all()).results || [];
+      for (const r of rows) { tokens.push(r.token as string); userIds.add(r.user_id as string); }
+    }
+    return { tokens: [...new Set(tokens)], userIds: [...userIds] };
+  } catch { return { tokens: [], userIds: [] }; }
 }
 
 export async function eventAudience(
@@ -254,8 +264,10 @@ export async function notifyScoresheetPush(db: any, gameId: string) {
     )
   `).bind(...teamIds, ...teamIds).all();
   const rows = result.results || [];
-  const tokens = rows.map((r: any) => r.token as string);
-  const userIds = [...new Set(rows.map((r: any) => r.user_id as string))] as string[];
+  const { tokens, userIds } = await applyTestGate(db, g.event_id, {
+    tokens: rows.map((r: any) => r.token as string),
+    userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
+  });
 
   await db.prepare("UPDATE games SET scoresheet_push_sent = 1, updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
   if (tokens.length === 0) return;

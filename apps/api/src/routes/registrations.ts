@@ -428,6 +428,48 @@ registrationRoutes.post('/admin/checkin/:eventId/toggle/:regId', authMiddleware,
   return c.json({ success: true, data: { checked_in: true } });
 });
 
+// ==================
+// COACH SELF CHECK-IN: a coach or manager checks in their own team from the
+// app. GET lists their teams' check-in state for the event; POST checks one
+// in (no self-UNcheck - directors undo mistakes from their tool).
+// ==================
+registrationRoutes.get('/checkin/:eventId/mine', authMiddleware, async (c) => {
+  const eventId = c.req.param('eventId');
+  const user = c.get('user');
+  const db = c.env.DB;
+  const rows = await db.prepare(`
+    SELECT er.id as reg_id, er.checked_in_at,
+      COALESCE(t.schedule_name, t.name, er.team_name) as team_name
+    FROM event_registrations er
+    JOIN teams t ON t.id = er.team_id
+    WHERE er.event_id = ?1 AND er.status = 'approved'
+      AND er.team_id IN (
+        SELECT team_id FROM team_coaches WHERE user_id = ?2
+        UNION SELECT team_id FROM team_managers WHERE user_id = ?2
+      )
+  `).bind(eventId, user.id).all<any>();
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+registrationRoutes.post('/checkin/:eventId/mine/:regId', authMiddleware, async (c) => {
+  const { eventId, regId } = c.req.param();
+  const user = c.get('user');
+  const db = c.env.DB;
+  const reg = await db.prepare(`
+    SELECT er.id, er.checked_in_at FROM event_registrations er
+    WHERE er.id = ? AND er.event_id = ? AND er.status = 'approved'
+      AND er.team_id IN (
+        SELECT team_id FROM team_coaches WHERE user_id = ?3
+        UNION SELECT team_id FROM team_managers WHERE user_id = ?3
+      )
+  `).bind(regId, eventId, user.id).first<any>();
+  if (!reg) return c.json({ success: false, error: 'Not your team, or not approved for this event' }, 403);
+  if (!reg.checked_in_at) {
+    await db.prepare("UPDATE event_registrations SET checked_in_at = datetime('now'), checked_in_by = ? WHERE id = ?").bind(user.id, regId).run();
+  }
+  return c.json({ success: true, data: { checked_in: true } });
+});
+
 registrationRoutes.put('/admin/checkin/:eventId/player-status', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
   teamId: z.string(),
   playerId: z.string(),

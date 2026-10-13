@@ -369,7 +369,7 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
         .then((g: any) => g && resolveBracketGames(db, g.event_id)));
       keepAlive(c, notifyGameFinalPush(db, gameId));
-      keepAlive(c, notifyScoresheetPush(db, gameId));
+      // Scoresheet push fires at referee sign-off, not at final
       keepAlive(c, autoAssignThreeStars(db, gameId).then(() => notifyThreeStarsPush(db, gameId)));
     } else if (data.eventType === 'period_start' && data.period) {
       await db.prepare("UPDATE games SET period = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?").bind(data.period, gameId).run();
@@ -953,7 +953,7 @@ scoringRoutes.put('/games/:gameId/score', authMiddleware, requireRole('admin', '
     if (status === 'final') {
       keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
       keepAlive(c, notifyGameFinalPush(db, gameId));
-      keepAlive(c, notifyScoresheetPush(db, gameId));
+      // Scoresheet push fires at referee sign-off, not at final
       keepAlive(c, autoAssignThreeStars(db, gameId).then(() => notifyThreeStarsPush(db, gameId)));
     }
     keepAlive(c, db.prepare('SELECT event_id FROM games WHERE id = ?').bind(gameId).first<any>()
@@ -1388,6 +1388,10 @@ scoringRoutes.post('/games/:gameId/officials-signoff', scorekeeperOrStaff, zVali
   await db.prepare(
     "UPDATE games SET officials_signed_by = ?, officials_signed_number = ?, officials_signed_at = datetime('now') WHERE id = ?"
   ).bind(name.trim(), (usaHockeyNumber || '').trim() || null, gameId).run();
+
+  // Referee sign-off is the moment the sheet is official: push it to both
+  // teams' coaches and managers (idempotent via scoresheet_push_sent)
+  keepAlive(c, notifyScoresheetPush(db, gameId));
 
   return c.json({ success: true, data: { name: name.trim() } });
 });

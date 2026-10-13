@@ -253,6 +253,31 @@ export default function EventDetailScreen({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  // Coach/manager self check-in (empty for everyone else)
+  const [checkins, setCheckins] = useState<any[]>([]);
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  useEffect(() => {
+    if (!eventId) return;
+    authFetch(`/api/registrations/checkin/${eventId}/mine`)
+      .then((r) => r.json())
+      .then((j: any) => { if (j.success) setCheckins(j.data || []); })
+      .catch(() => {});
+  }, [eventId]);
+  const checkInTeam = async (regId: string) => {
+    setCheckingIn(regId);
+    try {
+      const r = await authFetch(`/api/registrations/checkin/${eventId}/mine/${regId}`, { method: 'POST' });
+      const j = await r.json() as any;
+      if (j.success) {
+        setCheckins(prev => prev.map(c0 => c0.reg_id === regId ? { ...c0, checked_in_at: new Date().toISOString() } : c0));
+      } else {
+        Alert.alert('Check-in failed', j.error || 'Please try again or see the tournament desk.');
+      }
+    } catch {
+      Alert.alert('Check-in failed', 'Please try again or see the tournament desk.');
+    }
+    setCheckingIn(null);
+  };
   // Event photo gallery
   const [photos, setPhotos] = useState<any[]>([]);
   const [photosTotal, setPhotosTotal] = useState(0);
@@ -940,6 +965,33 @@ export default function EventDetailScreen({
         data={myGames}
         keyExtractor={(item, index) => item.id || String(index)}
         contentContainerStyle={styles.tabContent}
+        ListHeaderComponent={checkins.length > 0 ? (
+          <View style={{ marginBottom: 12, gap: 8 }}>
+            {checkins.map(c0 => (
+              <View key={c0.reg_id} style={c0.checked_in_at ? styles.checkinCardDone : styles.checkinCard}>
+                <View style={c0.checked_in_at ? styles.checkinIconDone : styles.checkinIcon}>
+                  <Ionicons name={c0.checked_in_at ? 'checkmark' : 'checkbox-outline'} size={20} color={c0.checked_in_at ? '#fff' : colors.cyan} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={c0.checked_in_at ? styles.checkinTitleDone : styles.checkinTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                    {c0.checked_in_at ? 'Checked In' : 'Team Check-in'}
+                  </Text>
+                  <Text style={c0.checked_in_at ? styles.checkinSubDone : styles.checkinSub} numberOfLines={1} maxFontSizeMultiplier={1.2}>{c0.team_name}</Text>
+                </View>
+                {!c0.checked_in_at && (
+                  <TouchableOpacity
+                    style={styles.checkinBtn}
+                    disabled={checkingIn === c0.reg_id}
+                    onPress={() => checkInTeam(c0.reg_id)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.checkinBtnText} maxFontSizeMultiplier={1.2}>{checkingIn === c0.reg_id ? '...' : 'Check In'}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </View>
+        ) : null}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         renderItem={({ item }) => {
           const isMyHome = myTeamIds.includes(item.home_team_id || '');
@@ -2056,6 +2108,17 @@ function CollapsibleSection({ title, iconName, children }: { title: string; icon
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
+  // Coach self check-in
+  checkinCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)' },
+  checkinCardDone: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ecfdf5', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#a7f3d0' },
+  checkinIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,204,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  checkinIconDone: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' },
+  checkinTitle: { fontSize: 14, color: '#fff', ...fonts.bold },
+  checkinTitleDone: { fontSize: 14, color: '#065f46', ...fonts.bold },
+  checkinSub: { fontSize: 11.5, color: 'rgba(255,255,255,0.75)', ...fonts.semibold, marginTop: 1 },
+  checkinSubDone: { fontSize: 11.5, color: '#047857', ...fonts.semibold, marginTop: 1 },
+  checkinBtn: { backgroundColor: '#00ccff', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
+  checkinBtnText: { fontSize: 13, color: '#003e79', ...fonts.bold },
   container: { flex: 1, backgroundColor: colors.bg },
 
   // Header
