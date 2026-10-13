@@ -28,12 +28,13 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [userName, setUserName] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [activeRole, setActiveRoleState] = useState<string>('');
-  const [lockerAlertCount, setLockerAlertCount] = useState(0);
+  const [lockerAlerts, setLockerAlerts] = useState<any[]>([]);
+  const lockerAlertCount = lockerAlerts.length;
   useEffect(() => {
     if (!['director', 'tournament_director', 'admin'].includes(activeRole)) return;
     authFetch('/api/scoring/locker-alerts')
       .then(r => r.json())
-      .then((j: any) => { if (j.success) setLockerAlertCount((j.data || []).length); })
+      .then((j: any) => { if (j.success) setLockerAlerts(j.data || []); })
       .catch(() => {});
   }, [activeRole]);
   const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
@@ -293,11 +294,11 @@ onPress={() => navigation.navigate('ScoringConsole')}
             {([
               { label: 'Team Check-in', sub: 'Check teams in for the event', icon: 'checkbox-outline' as const, go: () => navigation.navigate('DirectorCheckin') },
               { label: 'Score Management', sub: 'Fix scores and run games', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('DirectorGames') },
-              { label: 'Scorekeeper PIN', sub: 'Look up any rink PIN', icon: 'keypad-outline' as const, go: () => navigation.navigate('DirectorPins') },
+              { label: 'Locker Rooms', sub: 'Assign rooms by rink and day', icon: 'lock-closed-outline' as const, go: () => navigation.navigate('DirectorLockerRooms', lockerAlerts.length > 0 ? { alert: lockerAlerts[0] } : {}) },
               { label: 'Championship Photos', sub: 'Post the winners', icon: 'trophy-outline' as const, go: () => navigation.navigate('DirectorChampions') },
               { label: 'Rink Addresses', sub: 'Share directions instantly', icon: 'location-outline' as const, go: () => navigation.navigate('DirectorRinks') },
               { label: 'Team Codes', sub: 'Help parents follow teams', icon: 'key-outline' as const, go: () => navigation.navigate('DirectorTeamCodes') },
-              { label: 'Locker Rooms', sub: 'Assign rooms by rink and day', icon: 'lock-closed-outline' as const, go: () => navigation.navigate('DirectorLockerRooms') },
+              { label: 'Scorekeeper PIN', sub: 'Look up any rink PIN', icon: 'keypad-outline' as const, go: () => navigation.navigate('DirectorPins') },
               { label: 'Venue Setup', sub: 'Add locker rooms to rinks', icon: 'business-outline' as const, go: () => navigation.navigate('DirectorVenueSetup') },
             ]).map(tool => (
               <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard, tool.label === 'Locker Rooms' && lockerAlertCount > 0 && styles.dirCardAlert]} onPress={tool.go} activeOpacity={0.85}

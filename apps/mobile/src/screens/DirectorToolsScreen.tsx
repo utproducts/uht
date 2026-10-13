@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, Share, Alert, Modal,
@@ -409,7 +409,7 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
 // ─────────────────────────────────────────────────────────
 // 6. Locker Room Assignments
 // ─────────────────────────────────────────────────────────
-export function DirectorLockerRoomsScreen({ navigation }: any) {
+export function DirectorLockerRoomsScreen({ navigation, route }: any) {
   const { events, selected, setSelected, loading } = useDirectorEvents();
   const [games, setGames] = useState<any[]>([]);
   const [venueRooms, setVenueRooms] = useState<Record<string, string[]>>({});
@@ -417,6 +417,23 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
   const [selVenue, setSelVenue] = useState<string | null>(null);
   const [selRink, setSelRink] = useState<string | null>(null);
   const [selDay, setSelDay] = useState<string | null>(null);
+  // Arriving from a red alert: jump straight to the flagged game's event,
+  // venue, rink, and day
+  const alertTarget = route?.params?.alert;
+  const appliedAlert = useRef(false);
+  useEffect(() => {
+    if (!alertTarget || events.length === 0) return;
+    const ev = events.find((e: any) => e.id === alertTarget.event_id);
+    if (ev && (!selected || selected.id !== ev.id)) setSelected(ev);
+  }, [alertTarget, events]);
+  useEffect(() => {
+    if (!alertTarget || appliedAlert.current) return;
+    if (!selected || selected.id !== alertTarget.event_id || games.length === 0) return;
+    appliedAlert.current = true;
+    if (alertTarget.venue_id) setSelVenue(String(alertTarget.venue_id));
+    if (alertTarget.rink_id) setSelRink(String(alertTarget.rink_id));
+    if (alertTarget.start_time) setSelDay(String(alertTarget.start_time).slice(0, 10));
+  }, [alertTarget, selected, games]);
   const [sheet, setSheet] = useState<{ game: any; side: 'home' | 'away' } | null>(null);
   const [pushing, setPushing] = useState<string | null>(null);
 

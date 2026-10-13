@@ -556,7 +556,8 @@ scoringRoutes.get('/locker-alerts', authMiddleware, requireRole('admin', 'direct
     const nowLocal = eventLocalNow(ev.timezone);
     const windowEnd = eventLocalNow(ev.timezone, 120);
     const games = (await db.prepare(`
-      SELECT g.id as game_id, g.game_number, g.start_time, vr.name as rink_name, v.name as venue_name,
+      SELECT g.id as game_id, g.game_number, g.start_time, g.venue_id, g.rink_id,
+        vr.name as rink_name, v.name as venue_name,
         g.home_locker_room, g.away_locker_room
       FROM games g
       LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
