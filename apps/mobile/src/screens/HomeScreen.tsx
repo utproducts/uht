@@ -258,16 +258,24 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         <View style={styles.overlapStack}>
         {/* Role-scoped meeting announcements */}
         {myMeetings.map(m => (
-          <View key={m.id} style={styles.meetingCard}>
+          <TouchableOpacity
+            key={m.id}
+            style={styles.meetingCard}
+            activeOpacity={m.link ? 0.8 : 1}
+            onPress={() => { if (m.link) Linking.openURL(m.link); }}
+          >
             <View style={styles.meetingIcon}>
-              <Ionicons name="megaphone-outline" size={20} color={colors.cyan} />
+              <Ionicons name={m.link ? 'videocam-outline' : 'megaphone-outline'} size={20} color={colors.cyan} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.meetingTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>{m.title}</Text>
               <Text style={styles.meetingWhen} numberOfLines={2} maxFontSizeMultiplier={1.2}>{m.when_text}</Text>
-              <Text style={styles.meetingEvent} numberOfLines={1} maxFontSizeMultiplier={1.2}>{m.event_name}{m.details ? ` · ${m.details}` : ''}</Text>
+              <Text style={styles.meetingEvent} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                {m.event_name}{m.link ? ' · Tap to join on Zoom' : (m.details ? ` · ${m.details}` : '')}
+              </Text>
             </View>
-          </View>
+            {m.link ? <Ionicons name="open-outline" size={18} color={colors.cyan} /> : null}
+          </TouchableOpacity>
         ))}
         {/* Scorekeeper: direct line to the scoring console PIN page */}
         {activeRole === 'scorekeeper' && (

@@ -4969,6 +4969,91 @@ function ScheduleVisibilityCard({ eventId }: { eventId: string }) {
   );
 }
 
+// Zoom meetings for an event: role-scoped home-screen banners + pushes.
+// Coaches meetings only reach coaches/managers; parents meetings only reach
+// followers and family.
+function MeetingsCard({ eventId }: { eventId: string }) {
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [form, setForm] = useState({ title: 'Coaches Meeting', audience: 'coaches', when_text: '', date: '', time: '', link: '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const hdrs = () => ({ 'Content-Type': 'application/json', 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
+  const API2 = 'https://uht.chad-157.workers.dev/api/push';
+
+  const load = () => {
+    fetch(`${API2}/meetings/event/${eventId}`, { headers: hdrs() }).then(r => r.json())
+      .then(j => { if (j.success) setMeetings(j.data || []); }).catch(() => {});
+  };
+  useEffect(load, [eventId]);
+
+  const add = async () => {
+    if (!form.title || !form.when_text || !form.date || !form.time) { setMsg('Title, display text, date, and time are required'); return; }
+    setBusy(true); setMsg('');
+    try {
+      const utc = new Date(`${form.date}T${form.time}:00`).toISOString().slice(0, 19).replace('T', ' ');
+      const r = await fetch(`${API2}/meetings`, { method: 'POST', headers: hdrs(), body: JSON.stringify({
+        event_id: eventId, title: form.title, audience: form.audience, when_text: form.when_text,
+        meeting_at_utc: utc, link: form.link || null,
+      }) }).then(res => res.json());
+      if (r.success) { setForm({ ...form, when_text: '', link: '' }); load(); setMsg('Meeting added - it shows on the right home screens immediately.'); }
+      else setMsg(r.error || 'Could not add meeting');
+    } catch { setMsg('Could not add meeting'); }
+    setBusy(false);
+  };
+  const announce = async (m: any) => {
+    if (!window.confirm(`Push this meeting to all ${m.audience === 'coaches' ? 'coaches and managers' : 'parents and fans'} now?`)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API2}/meetings/${m.id}/announce`, { method: 'POST', headers: hdrs(), body: '{}' }).then(res => res.json());
+      setMsg(r.success ? `Pushed to ${r.data?.sent ?? 0} devices.` : (r.error || 'Push failed'));
+    } catch { setMsg('Push failed'); }
+    setBusy(false);
+  };
+  const remove = async (m: any) => {
+    if (!window.confirm('Delete this meeting? The home screen banner disappears for everyone.')) return;
+    await fetch(`${API2}/meetings/${m.id}`, { method: 'DELETE', headers: hdrs() }).catch(() => {});
+    load();
+  };
+
+  return (
+    <div className="bg-white border border-[#e8e8ed] rounded-2xl p-5 mb-6">
+      <h3 className="text-sm font-bold text-[#1d1d1f]">Meetings (Zoom)</h3>
+      <p className="text-xs text-[#6e6e73] mt-0.5 mb-3">Banners on the app home screen, scoped by role - coaches meetings only reach coaches and managers, parents meetings only reach families. Announce sends the push.</p>
+      {meetings.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {meetings.map(m => (
+            <div key={m.id} className="flex items-center gap-3 border border-[#e8e8ed] rounded-xl px-3 py-2">
+              <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${m.audience === 'coaches' ? 'bg-[#003e79] text-white' : 'bg-emerald-600 text-white'}`}>{m.audience === 'coaches' ? 'COACHES' : 'PARENTS'}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[#1d1d1f] truncate">{m.title} <span className="font-normal text-[#6e6e73]">- {m.when_text}</span></p>
+                {m.link && <a href={m.link} target="_blank" rel="noreferrer" className="text-xs text-[#0a7cc9] truncate block">{m.link}</a>}
+              </div>
+              <button onClick={() => announce(m)} disabled={busy} className="px-3 py-1.5 rounded-lg bg-[#003e79] text-white text-xs font-bold disabled:opacity-50">Announce</button>
+              <button onClick={() => remove(m)} className="px-2 py-1.5 rounded-lg text-red-600 text-xs font-bold hover:bg-red-50">Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Title (e.g. Coaches Meeting)" className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
+        <select value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value, title: e.target.value === 'coaches' ? 'Coaches Meeting' : 'Parents & Fans Meeting' })} className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm bg-white">
+          <option value="coaches">Coaches + Managers</option>
+          <option value="parents">Parents + Fans</option>
+        </select>
+        <input value={form.when_text} onChange={e => setForm({ ...form, when_text: e.target.value })} placeholder='Display text (e.g. "Thursday, Oct 16 · 6:30 PM Central")' className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
+        <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
+        <input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
+        <input value={form.link} onChange={e => setForm({ ...form, link: e.target.value })} placeholder="Zoom link (optional)" className="px-3 py-2 border border-[#e8e8ed] rounded-lg text-sm" />
+      </div>
+      <div className="flex items-center gap-3 mt-3">
+        <button onClick={add} disabled={busy} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">Add Meeting</button>
+        {msg && <p className="text-xs text-[#1d1d1f]">{msg}</p>}
+      </div>
+      <p className="text-[11px] text-[#86868b] mt-2">Date and time are your local clock - they only control when the banner expires (2 hours after start). The display text is exactly what people see.</p>
+    </div>
+  );
+}
+
 // Run the upload-time schedule rules against the LIVE schedule on demand
 function ScheduleChecksCard({ eventId }: { eventId: string }) {
   const [result, setResult] = useState<any | null>(null);
@@ -5536,6 +5621,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       </div>
 
       {/* Tab Content */}
+      {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && (
         <div className="space-y-6">
           {/* Tournament guide email send */}

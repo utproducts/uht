@@ -267,7 +267,7 @@ pushRoutes.post('/send-all', authMiddleware, requireRole('admin'), zValidator('j
 pushRoutes.get('/meetings', authMiddleware, async (c) => {
   const db = c.env.DB;
   const rows = await db.prepare(`
-    SELECT m.id, m.event_id, m.title, m.audience, m.when_text, m.details, e.name as event_name
+    SELECT m.id, m.event_id, m.title, m.audience, m.when_text, m.details, m.link, e.name as event_name
     FROM event_meetings m JOIN events e ON e.id = m.event_id
     WHERE m.meeting_at_utc >= datetime('now', '-2 hours')
     ORDER BY m.meeting_at_utc ASC LIMIT 10
@@ -292,6 +292,55 @@ pushRoutes.post('/send-group', authMiddleware, requireRole('admin', 'director'),
   if (tokens.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No devices in that group' });
   const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
   await logNotification(db, { type: 'event_update', title, body, audience: `event_${group}`, target_id: event_id, sent_count: sent, sent_by: user.id });
+  await createUserNotifications(db, userIds, title, body, 'event_update', pushData);
+  return c.json({ success: true, data: { sent, users: userIds.length } });
+});
+
+
+// Admin meeting management: list (incl. recent past), create, delete, announce
+pushRoutes.get('/meetings/event/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT * FROM event_meetings WHERE event_id = ? ORDER BY meeting_at_utc ASC"
+  ).bind(c.req.param('eventId')).all<any>();
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+pushRoutes.post('/meetings', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  event_id: z.string().min(1),
+  title: z.string().min(1).max(80),
+  audience: z.enum(['coaches', 'parents']),
+  when_text: z.string().min(1).max(120),
+  meeting_at_utc: z.string().min(10),
+  link: z.string().max(500).nullable().optional(),
+})), async (c) => {
+  const b = c.req.valid('json');
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await c.env.DB.prepare(
+    "INSERT INTO event_meetings (id, event_id, title, audience, when_text, meeting_at_utc, link, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(id, b.event_id, b.title, b.audience, b.when_text, b.meeting_at_utc, b.link || null, b.link ? 'Join on Zoom' : null).run();
+  return c.json({ success: true, data: { id } });
+});
+
+pushRoutes.delete('/meetings/:id', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  await c.env.DB.prepare('DELETE FROM event_meetings WHERE id = ?').bind(c.req.param('id')).run();
+  return c.json({ success: true });
+});
+
+// Announce: push the meeting to its audience (coaches OR parents, never both)
+pushRoutes.post('/meetings/:id/announce', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const m = await db.prepare(
+    'SELECT m.*, e.name as event_name FROM event_meetings m JOIN events e ON e.id = m.event_id WHERE m.id = ?'
+  ).bind(c.req.param('id')).first<any>();
+  if (!m) return c.json({ success: false, error: 'Meeting not found' }, 404);
+  const title = `${m.audience === 'coaches' ? '📋' : '📣'} ${m.title} - ${m.when_text}`;
+  const body = `${m.event_name}: ${m.title} ${m.when_text}${m.link ? ' on Zoom. Open the app - the banner on your home screen has the join link.' : '. Details on your home screen in the app.'}`;
+  const pushData = { type: 'event_update', event_id: m.event_id };
+  const { tokens, userIds } = await groupAudience(db, m.event_id, m.audience);
+  if (tokens.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No devices in that group' });
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, { type: 'event_update', title, body, audience: `event_${m.audience}`, target_id: m.event_id, sent_count: sent, sent_by: user.id, metadata: JSON.stringify({ meeting_id: m.id }) });
   await createUserNotifications(db, userIds, title, body, 'event_update', pushData);
   return c.json({ success: true, data: { sent, users: userIds.length } });
 });
