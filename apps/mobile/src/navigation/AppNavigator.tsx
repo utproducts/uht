@@ -233,6 +233,19 @@ export default function AppNavigator() {
           screen: 'Home',
           params: { screen: 'EventDetail', params: { eventId: data.event_id } },
         });
+      } else if (data?.event_id) {
+        // Any other push that names an event (event_update, division_update, ...)
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'EventDetail', params: { eventId: data.event_id } },
+        });
+      } else {
+        // No destination in the payload: open the alerts inbox so the full
+        // message is one tap away
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'NotificationsInbox' },
+        });
       }
     });
 

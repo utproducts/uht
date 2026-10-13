@@ -57,6 +57,7 @@ function getNotifIcon(type: string): { name: keyof typeof Ionicons.glyphMap; col
 export default function NotificationsInboxScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [total, setTotal] = useState(0);
@@ -96,9 +97,39 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
     } catch {}
   };
 
+  // Where a notification can take the user, if anywhere
+  const destinationFor = (item: UserNotification): (() => void) | null => {
+    let data: any = null;
+    try { data = item.data ? JSON.parse(item.data) : null; } catch {}
+    if (item.type === 'meeting_reward') {
+      return () => navigation.dispatch(CommonActions.navigate({ name: 'RewardReveal' }));
+    }
+    if (item.type === 'three_stars' && data?.event_id) {
+      return () => navigation.dispatch(CommonActions.navigate({
+        name: 'Main',
+        params: { screen: 'Home', params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'three_stars' } } },
+      }));
+    }
+    if (item.type === 'scoresheet' && data?.game_id) {
+      return () => navigation.dispatch(CommonActions.navigate({
+        name: 'Main',
+        params: { screen: 'Home', params: { screen: 'Scoresheet', params: { gameId: data.game_id } } },
+      }));
+    }
+    if (data?.event_id) {
+      return () => navigation.dispatch(CommonActions.navigate({
+        name: 'Main',
+        params: { screen: 'Home', params: { screen: 'EventDetail', params: { eventId: data.event_id } } },
+      }));
+    }
+    return null;
+  };
+
   const renderNotification = ({ item }: { item: UserNotification }) => {
     const icon = getNotifIcon(item.type);
     const isUnread = !item.is_read;
+    const expanded = expandedId === item.id;
+    const goTo = destinationFor(item);
 
     return (
       <TouchableOpacity
@@ -106,35 +137,8 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
         activeOpacity={0.7}
         onPress={() => {
           markAsRead(item.id);
-          let data: any = null;
-          try { data = item.data ? JSON.parse(item.data) : null; } catch {}
-          if (item.type === 'meeting_reward') {
-            // Use CommonActions.navigate to reach root Stack from nested navigator
-            navigation.dispatch(
-              CommonActions.navigate({ name: 'RewardReveal' })
-            );
-          } else if (item.type === 'three_stars' && data?.event_id) {
-            navigation.dispatch(
-              CommonActions.navigate({
-                name: 'Main',
-                params: { screen: 'Home', params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'three_stars' } } },
-              })
-            );
-          } else if (item.type === 'scoresheet' && data?.game_id) {
-            navigation.dispatch(
-              CommonActions.navigate({
-                name: 'Main',
-                params: { screen: 'Home', params: { screen: 'Scoresheet', params: { gameId: data.game_id } } },
-              })
-            );
-          } else if ((item.type === 'game_final' || item.type === 'game_start' || item.type === 'game_delay' || item.type === 'locker_room' || item.type === 'event_update' || item.type === 'division_update') && data?.event_id) {
-            navigation.dispatch(
-              CommonActions.navigate({
-                name: 'Main',
-                params: { screen: 'Home', params: { screen: 'EventDetail', params: { eventId: data.event_id } } },
-              })
-            );
-          }
+          // Tap expands to the full message; the Open chip navigates
+          setExpandedId(prev => (prev === item.id ? null : item.id));
         }}
       >
         {/* Unread dot */}
@@ -147,14 +151,23 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
 
         {/* Content */}
         <View style={styles.notifContent}>
-          <Text style={[styles.notifTitle, isUnread && styles.notifTitleUnread]} numberOfLines={1}>
+          <Text style={[styles.notifTitle, isUnread && styles.notifTitleUnread]} numberOfLines={expanded ? undefined : 1}>
             {item.title}
           </Text>
-          <Text style={styles.notifBody} numberOfLines={2}>
+          <Text style={styles.notifBody} numberOfLines={expanded ? undefined : 2}>
             {item.body}
           </Text>
           <Text style={styles.notifTime}>{timeAgo(item.created_at)}</Text>
+          {expanded && goTo ? (
+            <TouchableOpacity style={styles.openChip} activeOpacity={0.85} onPress={() => { markAsRead(item.id); goTo(); }}>
+              <Text style={styles.openChipText} maxFontSizeMultiplier={1.2}>
+                {item.type === 'scoresheet' ? 'Open Scoresheet' : item.type === 'meeting_reward' ? 'Open Reward' : 'Open Event'}
+              </Text>
+              <Ionicons name="arrow-forward" size={13} color="#fff" />
+            </TouchableOpacity>
+          ) : null}
         </View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color="#9aa7ba" style={{ marginLeft: 4, alignSelf: 'center' }} />
       </TouchableOpacity>
     );
   };
@@ -244,6 +257,8 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
 }
 
 const styles = StyleSheet.create({
+  openChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: '#003e79', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginTop: 10 },
+  openChipText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: colors.bg,

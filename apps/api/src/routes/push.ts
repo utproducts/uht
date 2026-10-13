@@ -141,6 +141,8 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
   const db = c.env.DB;
   const user = c.get('user') as { id: string };
   const { event_id, title, body, data } = c.req.valid('json');
+  // Taps need a destination: always carry type + event_id in the payload
+  const pushData = { type: 'event_update', event_id, ...(data || {}) };
 
   const { tokens, userIds } = await eventAudience(db, event_id);
 
@@ -148,7 +150,7 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for event followers' });
   }
 
-  const sent = await sendExpoPushNotifications(tokens, title, body, data);
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
 
   await logNotification(db, {
     type: 'event_update',
@@ -160,7 +162,7 @@ pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'),
     sent_by: user.id,
   });
 
-  await createUserNotifications(db, userIds, title, body, 'event_update', data);
+  await createUserNotifications(db, userIds, title, body, 'event_update', pushData);
 
   return c.json({ success: true, data: { sent } });
 });
@@ -180,6 +182,7 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
   const db = c.env.DB;
   const user = c.get('user') as { id: string };
   const { event_id, event_division_id, title, body, data } = c.req.valid('json');
+  const pushData = { type: 'division_update', event_id, event_division_id, ...(data || {}) };
 
   const { tokens, userIds } = await eventAudience(db, event_id, event_division_id);
 
@@ -187,7 +190,7 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for division followers' });
   }
 
-  const sent = await sendExpoPushNotifications(tokens, title, body, data);
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
 
   // Get division info for logging
   const divInfo = await db.prepare(`
@@ -209,7 +212,7 @@ pushRoutes.post('/send-division', authMiddleware, requireRole('admin', 'director
     metadata: JSON.stringify({ event_division_id, division_name: divInfo ? `${divInfo.age_group || ''} ${divInfo.division_level || ''}`.trim() : '' }),
   });
 
-  await createUserNotifications(db, userIds, title, body, 'division_update', data);
+  await createUserNotifications(db, userIds, title, body, 'division_update', pushData);
 
   return c.json({ success: true, data: { sent } });
 });
