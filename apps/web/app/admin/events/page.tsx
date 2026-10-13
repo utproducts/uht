@@ -3832,6 +3832,8 @@ function CheckInTab({ eventId }: { eventId: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [rosters, setRosters] = useState<Record<string, any[]>>({});
   const [notifying, setNotifying] = useState(false);
+  const [games, setGames] = useState<any[]>([]);
+  const [gcMap, setGcMap] = useState<Record<string, string>>({});
   const [notifyMsg, setNotifyMsg] = useState('');
   const API_ROOT2 = 'https://uht.chad-157.workers.dev/api';
   const ciFetch = (url: string, opts?: any) => fetch(url, { ...opts, headers: { ...adminHeaders(), 'Content-Type': 'application/json', ...(opts?.headers || {}) } });
@@ -3846,6 +3848,30 @@ function CheckInTab({ eventId }: { eventId: string }) {
       }
       setLoading(false);
     }).catch(() => setLoading(false));
+    // per-game check-ins: every team checks in before EVERY game
+    ciFetch(`${API_ROOT2}/events/${eventId}/schedule`).then(r => r.json()).then((j: any) => {
+      if (j.success) setGames(j.data || []);
+    }).catch(() => {});
+    ciFetch(`${API_ROOT2}/registrations/game-checkins/${eventId}`).then(r => r.json()).then((j: any) => {
+      if (!j.success) return;
+      const m: Record<string, string> = {};
+      (j.data || []).forEach((row: any) => { m[`${row.game_id}|${row.team_id}`] = row.checked_in_at; });
+      setGcMap(m);
+    }).catch(() => {});
+  };
+  const toggleGameChip = async (gameId: string, teamId: string, done: boolean) => {
+    const key = `${gameId}|${teamId}`;
+    setGcMap(prev => {
+      const n = { ...prev };
+      if (done) delete n[key]; else n[key] = new Date().toISOString();
+      return n;
+    });
+    await ciFetch(`${API_ROOT2}/registrations/game-checkins/${gameId}/${teamId}`, { method: done ? 'DELETE' : 'POST' }).catch(() => {});
+  };
+  const chipLabel = (g: any) => {
+    const d = new Date(String(g.start_time || '').replace(' ', 'T'));
+    const when = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `#${g.game_number ?? '?'} ${when}`;
   };
   useEffect(() => { load(); }, [eventId]);
 
@@ -3930,6 +3956,25 @@ function CheckInTab({ eventId }: { eventId: string }) {
                       : <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">Paid</span>}
                   </div>
                 </div>
+                {t.team_id && games.some((g: any) => g.home_team_id === t.team_id || g.away_team_id === t.team_id) && (
+                  <div className="px-5 pb-3 -mt-1 flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-wide mr-1">Game check-ins:</span>
+                    {games.filter((g: any) => g.home_team_id === t.team_id || g.away_team_id === t.team_id)
+                      .sort((a: any, b: any) => String(a.start_time || '').localeCompare(String(b.start_time || '')))
+                      .map((g: any) => {
+                        const done = !!gcMap[`${g.id}|${t.team_id}`];
+                        const final = g.status === 'final';
+                        return (
+                          <button key={g.id} disabled={final && !done}
+                            onClick={(e) => { e.stopPropagation(); toggleGameChip(g.id, t.team_id, done); }}
+                            title={done ? 'Checked in - click to undo' : 'Click to check in for this game'}
+                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition ${done ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : final ? 'bg-gray-50 border-gray-200 text-gray-400' : 'bg-white border-[#c9d6e4] text-[#003e79] hover:bg-[#f0f7ff]'}`}>
+                            {done ? '✓ ' : ''}{chipLabel(g)}
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
                 {expanded === t.id && (
                   <div className="px-5 pb-4 bg-[#fafafa]">
                     {!t.team_id ? (
