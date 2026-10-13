@@ -5010,13 +5010,24 @@ function MeetingsCard({ eventId }: { eventId: string }) {
     } catch { setMsg('Push failed'); }
     setBusy(false);
   };
-  const emailBlast = async (m: any) => {
-    const note = window.prompt(`Email the Zoom invite to all ${m.audience === 'coaches' ? 'coaches and managers' : 'parents and fans'}.\n\nOptional note (e.g. "Starting in 5 minutes!") - leave blank for the standard invite:`);
-    if (note === null) return;
+  const [emailPrev, setEmailPrev] = useState<any | null>(null); // { meeting, note, subject, html, recipients }
+  const loadEmailPreview = async (m: any, note: string) => {
     setBusy(true);
     try {
-      const r = await fetch(`${API2}/meetings/${m.id}/email`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ note: note.trim() }) }).then(res => res.json());
+      const r = await fetch(`${API2}/meetings/${m.id}/email`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ note, preview: true }) }).then(res => res.json());
+      if (r.success) setEmailPrev({ meeting: m, note, subject: r.data.subject, html: r.data.html, recipients: r.data.recipients });
+      else setMsg(r.error || 'Preview failed');
+    } catch { setMsg('Preview failed'); }
+    setBusy(false);
+  };
+  const emailBlast = (m: any) => loadEmailPreview(m, '');
+  const sendPreviewedEmail = async () => {
+    if (!emailPrev) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API2}/meetings/${emailPrev.meeting.id}/email`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ note: emailPrev.note }) }).then(res => res.json());
       setMsg(r.success ? `Emailed ${r.data?.sent ?? 0} people.` : (r.error || 'Email failed'));
+      if (r.success) setEmailPrev(null);
     } catch { setMsg('Email failed'); }
     setBusy(false);
   };
@@ -5062,6 +5073,35 @@ function MeetingsCard({ eventId }: { eventId: string }) {
         {msg && <p className="text-xs text-[#1d1d1f]">{msg}</p>}
       </div>
       <p className="text-[11px] text-[#86868b] mt-2">Date and time are your local clock - they only control when the banner expires (2 hours after start). The display text is exactly what people see.</p>
+
+      {emailPrev && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setEmailPrev(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[#e8e8ed]">
+              <p className="text-sm font-bold text-[#1d1d1f]">Email preview - {emailPrev.meeting.audience === 'coaches' ? 'Coaches and Managers' : 'Parents and Fans'} ({emailPrev.recipients} recipients)</p>
+              <p className="text-xs text-[#6e6e73] mt-0.5 truncate">Subject: {emailPrev.subject}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  value={emailPrev.note}
+                  onChange={e => setEmailPrev({ ...emailPrev, note: e.target.value })}
+                  placeholder='Optional note (e.g. "Starting in 5 minutes!")'
+                  className="flex-1 px-3 py-1.5 border border-[#e8e8ed] rounded-lg text-sm"
+                />
+                <button onClick={() => loadEmailPreview(emailPrev.meeting, emailPrev.note.trim())} disabled={busy}
+                  className="px-3 py-1.5 rounded-lg bg-[#f0f7ff] text-[#003e79] text-xs font-bold disabled:opacity-50">Update Preview</button>
+              </div>
+            </div>
+            <iframe srcDoc={emailPrev.html} className="flex-1 min-h-[320px] w-full" title="Email preview" />
+            <div className="px-5 py-3 border-t border-[#e8e8ed] flex items-center justify-end gap-2">
+              <button onClick={() => setEmailPrev(null)} className="px-4 py-2 rounded-xl text-sm text-[#6e6e73] font-semibold">Cancel</button>
+              <button onClick={sendPreviewedEmail} disabled={busy}
+                className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50">
+                {busy ? 'Sending...' : `Send to ${emailPrev.recipients} people`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

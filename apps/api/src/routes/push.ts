@@ -403,6 +403,11 @@ pushRoutes.post('/meetings/:id/email', authMiddleware, requireRole('admin', 'dir
     </div>
   </div></body></html>`;
 
+  // preview: true returns the rendered email + recipient count, sends nothing
+  if (reqBody.preview) {
+    return c.json({ success: true, data: { preview: true, subject, html, recipients: emails.length } });
+  }
+
   let sent = 0;
   for (let i = 0; i < emails.length; i += 40) {
     const chunk = emails.slice(i, i + 40);
