@@ -403,8 +403,8 @@ onPress={() => navigation.navigate('ScoringConsole')}
             // Coaches and managers get their record and scoresheets instead of the shop tile
             ...(['coach', 'manager'].includes(activeRole)
               ? [
-                  { label: 'Team Stats', sub: 'Your record, goals for and against', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('TeamStats') },
                   { label: 'Score Sheets', sub: 'Official scoresheets for your games', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets') },
+                  { label: 'Team Stats', sub: 'Your record, goals for and against', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('TeamStats') },
                 ]
               : [{ label: 'Shop', sub: 'Official UHT gear, apparel and more', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) }]),
           ] as any[]).map(tile => (
