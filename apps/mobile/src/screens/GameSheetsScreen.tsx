@@ -59,7 +59,7 @@ export default function GameSheetsScreen({ navigation, route }: any) {
 
   return (
     <View style={s.screen}>
-      <ScreenHeader title="Game Sheets" showBack onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Score Sheets" showBack onBack={() => navigation.goBack()} />
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : games.length === 0 ? (
         <Text style={s.emptyText}>No completed games yet. Scoresheets appear here as soon as games go final.</Text>
       ) : (

@@ -65,6 +65,7 @@ const EVENT_TABS: TabDef[] = [
 // Interfaces
 // ==================
 interface GameSlot {
+  game_type?: string;
   id: string;
   time?: string;
   date?: string;
@@ -960,6 +961,17 @@ export default function EventDetailScreen({
       ? schedule.filter(g => myTeamIds.includes(g.home_team_id || '') || myTeamIds.includes(g.away_team_id || ''))
       : [];
 
+    // Bracket games in my divisions that still have an open seed - games my
+    // team COULD land in once standings decide (shown until teams assign)
+    const myDivIds = new Set(myGames.map(g => g.event_division_id).filter(Boolean));
+    const possibleGames = schedule
+      .filter(g =>
+        (g.game_type && g.game_type !== 'pool') &&
+        (!g.home_team_id || !g.away_team_id) &&
+        myDivIds.has(g.event_division_id) &&
+        !(myTeamIds.includes(g.home_team_id || '') || myTeamIds.includes(g.away_team_id || '')))
+      .sort((a, b) => String(a.start_time || '').localeCompare(String(b.start_time || '')));
+
     return (
       <FlatList
         data={myGames}
@@ -988,6 +1000,30 @@ export default function EventDetailScreen({
                     <Text style={styles.checkinBtnText} maxFontSizeMultiplier={1.2}>{checkingIn === c0.reg_id ? '...' : 'Check In'}</Text>
                   </TouchableOpacity>
                 )}
+              </View>
+            ))}
+          </View>
+        ) : null}
+        ListFooterComponent={possibleGames.length > 0 ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={styles.possibleHeader} maxFontSizeMultiplier={1.2}>POSSIBLE BRACKET GAMES</Text>
+            <Text style={styles.possibleSub} maxFontSizeMultiplier={1.2}>
+              Depending on standings, your team could play in these games. Matchups fill in automatically as pool play finishes.
+            </Text>
+            {possibleGames.map((g, i) => (
+              <View key={g.id || i} style={styles.possibleCard}>
+                <View style={styles.possibleChip}>
+                  <Ionicons name="git-branch-outline" size={11} color={colors.navy} />
+                  <Text style={styles.possibleChipText} maxFontSizeMultiplier={1.2}>
+                    {g.game_type === 'championship' ? 'CHAMPIONSHIP' : g.game_type === 'placement' ? 'PLACEMENT' : 'BRACKET'}
+                  </Text>
+                </View>
+                <Text style={styles.possibleMatchup} maxFontSizeMultiplier={1.2}>
+                  {g.away_team_name} at {g.home_team_name}
+                </Text>
+                <Text style={styles.possibleMeta} maxFontSizeMultiplier={1.2}>
+                  {[gameTimeLabel(g), [g.venue_name, g.rink_name || g.rink].filter(Boolean).join(' - ')].filter(Boolean).join('  ·  ')}
+                </Text>
               </View>
             ))}
           </View>
@@ -2108,6 +2144,14 @@ function CollapsibleSection({ title, iconName, children }: { title: string; icon
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
+  // Possible bracket games (My Schedule footer)
+  possibleHeader: { fontSize: 11, color: '#7a8699', letterSpacing: 1.2, ...fonts.bold, marginBottom: 4 },
+  possibleSub: { fontSize: 11.5, color: '#8a96a8', ...fonts.semibold, lineHeight: 16, marginBottom: 10 },
+  possibleCard: { backgroundColor: '#ffffff', borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1.5, borderColor: '#cfd9e6', borderStyle: 'dashed' },
+  possibleChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, backgroundColor: 'rgba(0,204,255,0.12)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, marginBottom: 7 },
+  possibleChipText: { fontSize: 9.5, color: colors.navy, letterSpacing: 0.8, ...fonts.bold },
+  possibleMatchup: { fontSize: 14.5, color: colors.navy, ...fonts.bold },
+  possibleMeta: { fontSize: 11.5, color: '#7a8699', ...fonts.semibold, marginTop: 3 },
   // Coach self check-in
   checkinCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)' },
   checkinCardDone: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ecfdf5', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#a7f3d0' },

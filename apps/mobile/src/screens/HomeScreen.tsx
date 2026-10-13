@@ -309,7 +309,7 @@ onPress={() => navigation.navigate('ScoringConsole')}
               { label: 'Teams', sub: 'Every team in your organization', icon: 'people-outline' as const, go: () => navigation.navigate('OrgTeams') },
               { label: 'Org Events', sub: 'Where your teams are playing', icon: 'calendar-outline' as const, go: () => navigation.navigate('OrgEvents') },
               { label: 'Org Stats', sub: 'Wins, losses and goals across the org', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('OrgStats') },
-              { label: 'Game Sheets', sub: 'Scoresheets from every org team', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets', { scope: 'org' }) },
+              { label: 'Score Sheets', sub: 'Scoresheets from every org team', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets', { scope: 'org' }) },
               { label: 'Find Events', sub: 'Search tournaments across the country', icon: 'search-outline' as const, go: () => navigation.navigate('Find Events' as never) },
             ]).map(tool => (
               <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard]} onPress={tool.go} activeOpacity={0.85}
@@ -334,7 +334,7 @@ onPress={() => navigation.navigate('ScoringConsole')}
             ...(['coach', 'manager'].includes(activeRole)
               ? [
                   { label: 'Team Stats', sub: 'Your record, goals for and against', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('TeamStats') },
-                  { label: 'Game Sheets', sub: 'Official scoresheets for your games', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets') },
+                  { label: 'Score Sheets', sub: 'Official scoresheets for your games', icon: 'document-text-outline' as const, go: () => navigation.navigate('GameSheets') },
                 ]
               : [{ label: 'Shop', sub: 'Official UHT gear, apparel and more', img: require('../../assets/tiles/shop.jpg'), go: () => navigation.navigate('Menu', { screen: 'Shop' }) }]),
           ] as any[]).map(tile => (
