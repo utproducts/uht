@@ -14,6 +14,7 @@ import {
   Dimensions,
   Share,
   Modal,
+  TextInput,
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -282,6 +283,9 @@ export default function EventDetailScreen({
   const [ciLoading, setCiLoading] = useState(false);
   const [ciSaving, setCiSaving] = useState(false);
   const [ciGoalie, setCiGoalie] = useState<string | null>(null);
+  const [ciGoalieError, setCiGoalieError] = useState(false);
+  const [ciStep, setCiStep] = useState<'roster' | 'sign'>('roster');
+  const [ciSignName, setCiSignName] = useState('');
   const openCheckinRoster = async (item: GameSlot, teamId: string, teamName: string) => {
     setCiSheet({ gameId: item.id as string, teamId, teamName, gameLabel: `${item.game_number ? `Game #${item.game_number} · ` : ''}${gameTimeLabel(item)}` });
     setCiLoading(true); setCiRoster([]);
@@ -294,6 +298,10 @@ export default function EventDetailScreen({
         const preset = players.find((pl: any) => pl.is_starting_goalie);
         const goalies = players.filter((pl: any) => String(pl.position || '').toUpperCase() === 'G');
         setCiGoalie(preset ? preset.lineup_id : (goalies.length === 1 ? goalies[0].lineup_id : null));
+        setCiGoalieError(false);
+        setCiStep('roster');
+        const prevName = j.data?.signoff?.coach_name || currentUser?.name || '';
+        setCiSignName(prevName || '');
       }
       else { Alert.alert('Could not load roster', j.error || 'Try again at the rink desk.'); setCiSheet(null); }
     } catch { Alert.alert('Could not load roster', 'Check your connection and try again.'); setCiSheet(null); }
@@ -308,6 +316,7 @@ export default function EventDetailScreen({
         body: JSON.stringify({
           statuses: ciRoster.map(pl => ({ lineup_id: pl.lineup_id, status: pl.status })),
           starting_goalie_lineup_id: ciGoalie,
+          signoff: { name: ciSignName.trim() },
         }),
       });
       const j = await r.json() as any;
@@ -2178,7 +2187,34 @@ export default function EventDetailScreen({
                 <Ionicons name="close" size={22} color={colors.navy} />
               </TouchableOpacity>
             </View>
-            {ciLoading ? (
+            {ciStep === 'sign' ? (
+              <View>
+                <Text style={styles.ciSignTitle} maxFontSizeMultiplier={1.2}>Coach Sign-Off</Text>
+                <Text style={styles.ciSignLegal} maxFontSizeMultiplier={1.2}>
+                  By signing, you confirm this roster, the player statuses, and the starting goalie are accurate for this game. Your sign-off goes to the scorekeeper and appears on the official scoresheet.
+                </Text>
+                <TextInput
+                  style={styles.ciSignInput}
+                  value={ciSignName}
+                  onChangeText={setCiSignName}
+                  placeholder="Type your full name to sign"
+                  placeholderTextColor="#9aa7ba"
+                  autoCapitalize="words"
+                  maxFontSizeMultiplier={1.2}
+                />
+                <TouchableOpacity
+                  style={[styles.ciSaveBtn, ciSignName.trim().length < 2 && { opacity: 0.5 }]}
+                  disabled={ciSaving || ciSignName.trim().length < 2}
+                  onPress={saveCheckinRoster}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.ciSaveBtnText} maxFontSizeMultiplier={1.2}>{ciSaving ? 'Saving...' : 'Sign & Check In'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setCiStep('roster')} style={{ paddingVertical: 10 }}>
+                  <Text style={styles.ciBackText} maxFontSizeMultiplier={1.2}>Back to roster</Text>
+                </TouchableOpacity>
+              </View>
+            ) : ciLoading ? (
               <ActivityIndicator style={{ marginVertical: 30 }} color={colors.navy} />
             ) : ciRoster.length === 0 ? (
               <Text style={styles.ciEmpty}>No roster on file for this team yet. Add players on the team page, then check in.</Text>
@@ -2205,9 +2241,9 @@ export default function EventDetailScreen({
                 ))}
               </ScrollView>
             )}
-            {ciRoster.length > 0 && (
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.ciGoalieLabel} maxFontSizeMultiplier={1.2}>STARTING GOALIE</Text>
+            {ciStep === 'roster' && ciRoster.length > 0 && (
+              <View style={[{ marginTop: 12 }, ciGoalieError && styles.ciGoalieErrorBox]}>
+                <Text style={[styles.ciGoalieLabel, ciGoalieError && { color: '#b91c1c' }]} maxFontSizeMultiplier={1.2}>STARTING GOALIE</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
                   {[...ciRoster].sort((a, b) =>
                     (String(b.position || '').toUpperCase() === 'G' ? 1 : 0) - (String(a.position || '').toUpperCase() === 'G' ? 1 : 0)
@@ -2215,7 +2251,7 @@ export default function EventDetailScreen({
                     <TouchableOpacity
                       key={pl.lineup_id}
                       style={[styles.ciGoalieChip, ciGoalie === pl.lineup_id && styles.ciGoalieChipOn]}
-                      onPress={() => setCiGoalie(prev => (prev === pl.lineup_id ? null : pl.lineup_id))}
+                      onPress={() => { setCiGoalieError(false); setCiGoalie(prev => (prev === pl.lineup_id ? null : pl.lineup_id)); }}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.ciGoalieChipText, ciGoalie === pl.lineup_id && styles.ciGoalieChipTextOn]} maxFontSizeMultiplier={1.1}>
@@ -2226,10 +2262,21 @@ export default function EventDetailScreen({
                 </ScrollView>
               </View>
             )}
-            {ciRoster.length > 0 && (
-              <TouchableOpacity style={styles.ciSaveBtn} disabled={ciSaving} onPress={saveCheckinRoster} activeOpacity={0.85}>
+            {ciGoalieError ? (
+              <Text style={styles.ciGoalieErrorText} maxFontSizeMultiplier={1.2}>You must select a starting goalie</Text>
+            ) : null}
+            {ciStep === 'roster' && ciRoster.length > 0 && (
+              <TouchableOpacity
+                style={styles.ciSaveBtn}
+                disabled={ciSaving}
+                onPress={() => {
+                  if (!ciGoalie) { setCiGoalieError(true); return; }
+                  setCiStep('sign');
+                }}
+                activeOpacity={0.85}
+              >
                 <Text style={styles.ciSaveBtnText} maxFontSizeMultiplier={1.2}>
-                  {ciSaving ? 'Saving...' : (ciSheet && gameCheckins[`${ciSheet.gameId}|${ciSheet.teamId}`] ? 'Save Roster' : 'Check In Team')}
+                  {ciSheet && gameCheckins[`${ciSheet.gameId}|${ciSheet.teamId}`] ? 'Save Roster' : 'Check In Team'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -2306,6 +2353,12 @@ const styles = StyleSheet.create({
   ciGoalieChipOn: { backgroundColor: colors.navy, borderColor: colors.navy },
   ciGoalieChipText: { fontSize: 11.5, color: '#44536a', ...fonts.bold },
   ciGoalieChipTextOn: { color: '#00ccff' },
+  ciGoalieErrorBox: { borderWidth: 1.5, borderColor: '#fca5a5', backgroundColor: '#fef2f2', borderRadius: 12, padding: 10 },
+  ciGoalieErrorText: { color: '#b91c1c', fontSize: 12.5, ...fonts.bold, marginTop: 8, textAlign: 'center' },
+  ciSignTitle: { fontSize: 15, color: colors.navy, ...fonts.bold, marginTop: 4, marginBottom: 8 },
+  ciSignLegal: { fontSize: 12, color: '#5b6b83', ...fonts.semibold, lineHeight: 18, marginBottom: 14 },
+  ciSignInput: { borderWidth: 1.5, borderColor: '#c9d6e4', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 17, color: colors.navy, fontStyle: 'italic', backgroundColor: '#fafcff' },
+  ciBackText: { color: '#5b6b83', fontSize: 12.5, ...fonts.bold, textAlign: 'center' },
   ciSaveBtn: { backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
   ciSaveBtnText: { color: '#fff', fontSize: 15, ...fonts.bold },
   ciUndoText: { color: '#b91c1c', fontSize: 12.5, ...fonts.bold, textAlign: 'center' },

@@ -575,7 +575,10 @@ registrationRoutes.get('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
     ORDER BY CAST(gl.jersey_number AS INTEGER), p.last_name
   `).bind(gameId, teamId).all<any>();
   const checked = await db.prepare('SELECT checked_in_at FROM game_checkins WHERE game_id = ? AND team_id = ?').bind(gameId, teamId).first<any>();
-  return c.json({ success: true, data: { players: rows.results || [], checked_in_at: checked?.checked_in_at || null } });
+  const signoff = await db.prepare(
+    "SELECT coach_name, signed_off_at FROM game_coaches WHERE game_id = ? AND team_id = ? AND role = 'roster_signoff'"
+  ).bind(gameId, teamId).first<any>();
+  return c.json({ success: true, data: { players: rows.results || [], checked_in_at: checked?.checked_in_at || null, signoff: signoff || null } });
 });
 
 registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, zValidator('json', z.object({
@@ -584,9 +587,10 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
     status: z.enum(['playing', 'out', 'suspended']),
   })).max(60),
   starting_goalie_lineup_id: z.string().nullable().optional(),
+  signoff: z.object({ name: z.string().min(2).max(80) }).optional(),
 })), async (c) => {
   const { gameId, teamId } = c.req.param();
-  const { statuses, starting_goalie_lineup_id } = c.req.valid('json');
+  const { statuses, starting_goalie_lineup_id, signoff } = c.req.valid('json');
   const user = c.get('user');
   const db = c.env.DB;
   const game = await db.prepare('SELECT id, home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
@@ -607,6 +611,19 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
       await db.prepare('UPDATE game_lineups SET is_starting_goalie = 1 WHERE id = ? AND game_id = ? AND team_id = ?')
         .bind(starting_goalie_lineup_id, gameId, teamId).run();
     }
+  }
+  if (signoff?.name) {
+    // Same row the scoring console's signature pad writes - the scorekeeper
+    // and the official scoresheet read this sign-off
+    await db.prepare(`
+      INSERT INTO game_coaches (id, game_id, team_id, user_id, coach_name, role, signature_data, signed_off_at)
+      VALUES (?, ?, ?, ?, ?, 'roster_signoff', ?, datetime('now'))
+      ON CONFLICT (game_id, team_id, role) DO UPDATE SET
+        coach_name = excluded.coach_name,
+        user_id = excluded.user_id,
+        signature_data = excluded.signature_data,
+        signed_off_at = excluded.signed_off_at
+    `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, teamId, user.id, signoff.name.trim(), signoff.name.trim()).run();
   }
   await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
     .bind(gameId, teamId, user.id).run();
