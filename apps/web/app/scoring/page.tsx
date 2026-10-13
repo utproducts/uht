@@ -29,7 +29,7 @@ export default function ScorekeeperPage() {
   const [pin, setPin] = useState('');
   const [liveEvent, setLiveEvent] = useState<any | null>(null);
   useEffect(() => {
-    fetch(`${API_BASE}/events`).then(r => r.json()).then((j: any) => {
+    fetch(`${API_BASE}/events?per_page=200`).then(r => r.json()).then((j: any) => {
       const list = (j.success ? j.data : []) || [];
       const today = new Date(); today.setHours(0, 0, 0, 0);
       const soon = new Date(today.getTime() + 10 * 86400000);
