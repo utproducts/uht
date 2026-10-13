@@ -27,6 +27,24 @@ interface Game {
 export default function ScorekeeperPage() {
   const router = useRouter();
   const [pin, setPin] = useState('');
+  const [liveEvent, setLiveEvent] = useState<any | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/events`).then(r => r.json()).then((j: any) => {
+      const list = (j.success ? j.data : []) || [];
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const soon = new Date(today.getTime() + 10 * 86400000);
+      const current = list
+        .filter((e: any) => !e.is_test && e.schedule_published === 1)
+        .filter((e: any) => new Date(e.end_date + 'T23:59:59') >= today && new Date(e.start_date + 'T00:00:00') <= soon)
+        .sort((a: any, b: any) => String(a.start_date).localeCompare(String(b.start_date)));
+      if (current.length > 0) setLiveEvent(current[0]);
+    }).catch(() => {});
+  }, []);
+  const fmtRange = (s?: string, e?: string) => {
+    if (!s) return '';
+    const f = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return e && e !== s ? `${f(s)} - ${f(e)}` : f(s);
+  };
   const [games, setGames] = useState<Game[] | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -327,9 +345,24 @@ export default function ScorekeeperPage() {
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col">
       {/* Hero Header */}
-      <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-12">
-        <h1 className="text-4xl font-bold text-white text-center">UHT Scorekeeper</h1>
-        <p className="text-white/70 text-center mt-2 text-sm">Enter your PIN to access games</p>
+      <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-10">
+        {liveEvent ? (
+          <div className="flex flex-col items-center">
+            {liveEvent.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={liveEvent.logo_url} alt="" className="h-20 w-20 object-contain mb-3 rounded-xl bg-white/10 p-1" />
+            )}
+            <h1 className="text-3xl font-bold text-white text-center">{liveEvent.name}</h1>
+            <p className="text-white/80 text-center mt-1 text-sm font-semibold">{fmtRange(liveEvent.start_date, liveEvent.end_date)}{liveEvent.city ? ` · ${liveEvent.city}` : ''}</p>
+            <p className="text-[#aef] text-center mt-3 text-sm font-bold uppercase tracking-widest">Scorekeeper Console</p>
+            <p className="text-white/70 text-center mt-1 text-sm">Enter your PIN to start scoring</p>
+          </div>
+        ) : (
+          <>
+            <h1 className="text-4xl font-bold text-white text-center">UHT Scorekeeper</h1>
+            <p className="text-white/70 text-center mt-2 text-sm">Enter your PIN to access games</p>
+          </>
+        )}
       </div>
 
       {/* Main Content */}
