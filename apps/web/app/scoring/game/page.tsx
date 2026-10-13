@@ -468,10 +468,10 @@ function ScoringPageInner() {
 
   // Game control events
   const startGame = () => {
-    const missing = warnings.map(w => (w.fix === 'visitor' ? 'Visitor' : 'Home'));
+    const missing = warnings.map(w => (w.fix === 'visitor' ? 'Away' : 'Home'));
     if (missing.length > 0) {
       const ok = confirm(`${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.\n\nPress Cancel to collect sign-off first, or OK to start anyway.`);
-      if (!ok) { setSection(missing[0] === 'Visitor' ? 'visitor' : 'home'); return; }
+      if (!ok) { setSection(missing[0] === 'Away' ? 'visitor' : 'home'); return; }
     }
     postEvent({ eventType: 'game_start' });
   };
@@ -520,7 +520,7 @@ function ScoringPageInner() {
   const navWarnings = warnings.length;
   const NAV: { key: 'details' | 'visitor' | 'home' | 'scoring' | 'postgame'; label: string; short: string; badge?: string; ok?: boolean }[] = [
     { key: 'details', label: 'Game Details', short: 'Details', badge: navWarnings > 0 ? `${navWarnings} WARNING${navWarnings > 1 ? 'S' : ''}` : undefined },
-    { key: 'visitor', label: 'Visitor Lineup', short: 'Visitor', ok: awaySigned },
+    { key: 'visitor', label: 'Away Lineup', short: 'Away', ok: awaySigned },
     { key: 'home', label: 'Home Lineup', short: 'Home', ok: homeSigned },
     { key: 'scoring', label: 'Scoring', short: 'Scoring' },
     { key: 'postgame', label: 'Officials / Post Game', short: 'Officials', ok: !!lineupState?.officialsSignoff },
@@ -591,7 +591,7 @@ function ScoringPageInner() {
               warnings={warnings} onFix={(sec) => setSection(sec)} onDismiss={dismissWarning} />
           )}
           {section === 'visitor' && (
-            <LineupSection label="VISITOR" teamName={game.away_team_name} side={lineupState?.away}
+            <LineupSection label="AWAY" teamName={game.away_team_name} side={lineupState?.away}
               gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
           )}
           {section === 'home' && (
@@ -699,7 +699,7 @@ function ScoringPageInner() {
           const evs = game.events || [];
           const teams = [
             { id: game.home_team_id, name: game.home_team_name, tag: 'HOME' },
-            { id: game.away_team_id, name: game.away_team_name, tag: 'VISITOR' },
+            { id: game.away_team_id, name: game.away_team_name, tag: 'AWAY' },
           ];
           const sortByClock = (a: any, b: any) =>
             (a.period || 0) - (b.period || 0) ||
