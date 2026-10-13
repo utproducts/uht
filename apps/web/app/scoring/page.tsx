@@ -345,30 +345,32 @@ export default function ScorekeeperPage() {
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col">
       {/* Hero Header */}
-      <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-10">
+      <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-4">
         {liveEvent ? (
-          <div className="flex flex-col items-center">
+          <div className="flex items-center justify-center gap-3">
             {liveEvent.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={liveEvent.logo_url} alt="" className="h-20 w-20 object-contain mb-3 rounded-xl bg-white/10 p-1" />
+              <img src={liveEvent.logo_url} alt="" className="h-12 w-12 object-contain rounded-lg bg-white/10 p-0.5 shrink-0" />
             )}
-            <h1 className="text-3xl font-bold text-white text-center">{liveEvent.name}</h1>
-            <p className="text-white/80 text-center mt-1 text-sm font-semibold">{fmtRange(liveEvent.start_date, liveEvent.end_date)}{liveEvent.city ? ` · ${liveEvent.city}` : ''}</p>
-            <p className="text-[#aef] text-center mt-3 text-sm font-bold uppercase tracking-widest">Scorekeeper Console</p>
-            <p className="text-white/70 text-center mt-1 text-sm">Enter your PIN to start scoring</p>
+            <div className="text-center">
+              <h1 className="text-xl font-bold text-white leading-tight">{liveEvent.name}</h1>
+              <p className="text-white/80 text-xs font-semibold mt-0.5">
+                {fmtRange(liveEvent.start_date, liveEvent.end_date)}{liveEvent.city ? ` · ${liveEvent.city}` : ''} · Enter your PIN to start scoring
+              </p>
+            </div>
           </div>
         ) : (
           <>
-            <h1 className="text-4xl font-bold text-white text-center">UHT Scorekeeper</h1>
-            <p className="text-white/70 text-center mt-2 text-sm">Enter your PIN to access games</p>
+            <h1 className="text-2xl font-bold text-white text-center">UHT Scorekeeper</h1>
+            <p className="text-white/70 text-center mt-1 text-xs">Enter your PIN to access games</p>
           </>
         )}
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
         {/* PIN Display */}
-        <div className="w-full max-w-xs mb-8">
+        <div className="w-full max-w-xs mb-5">
           <div
             className={`flex justify-center gap-3 mb-3 transition-transform ${shake ? 'animate-shake' : ''}`}
           >
@@ -399,7 +401,7 @@ export default function ScorekeeperPage() {
                 key={num}
                 onClick={() => handleNumberClick(num)}
                 disabled={loading}
-                className="h-16 rounded-xl bg-white border border-[#e8e8ed] text-2xl font-bold text-[#003e79] active:bg-[#f0f7ff] transition-colors disabled:opacity-50"
+                className="h-14 rounded-xl bg-white border border-[#e8e8ed] text-2xl font-bold text-[#003e79] active:bg-[#f0f7ff] transition-colors disabled:opacity-50"
               >
                 {num}
               </button>
@@ -407,21 +409,21 @@ export default function ScorekeeperPage() {
             <button
               onClick={handleBackspace}
               disabled={loading || pin.length === 0}
-              className="h-16 rounded-xl bg-white border border-[#e8e8ed] text-lg font-semibold text-[#6e6e73] active:bg-[#f5f5f7] transition-colors disabled:opacity-30"
+              className="h-14 rounded-xl bg-white border border-[#e8e8ed] text-lg font-semibold text-[#6e6e73] active:bg-[#f5f5f7] transition-colors disabled:opacity-30"
             >
               ←
             </button>
             <button
               onClick={() => handleNumberClick('0')}
               disabled={loading}
-              className="h-16 rounded-xl bg-white border border-[#e8e8ed] text-2xl font-bold text-[#003e79] active:bg-[#f0f7ff] transition-colors disabled:opacity-50"
+              className="h-14 rounded-xl bg-white border border-[#e8e8ed] text-2xl font-bold text-[#003e79] active:bg-[#f0f7ff] transition-colors disabled:opacity-50"
             >
               0
             </button>
             <button
               onClick={handleClear}
               disabled={loading || pin.length === 0}
-              className="h-16 rounded-xl bg-white border border-[#e8e8ed] text-sm font-semibold text-[#6e6e73] active:bg-[#f5f5f7] transition-colors disabled:opacity-30"
+              className="h-14 rounded-xl bg-white border border-[#e8e8ed] text-sm font-semibold text-[#6e6e73] active:bg-[#f5f5f7] transition-colors disabled:opacity-30"
             >
               Clear
             </button>

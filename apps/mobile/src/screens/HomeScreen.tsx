@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,15 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [activeRole, setActiveRoleState] = useState<string>('');
   const [lockerAlerts, setLockerAlerts] = useState<any[]>([]);
+  // Scorekeepers skip home: role selected -> straight into the console
+  // (once per session, so backing out doesn't bounce them right back in)
+  const autoOpenedConsole = useRef(false);
+  useEffect(() => {
+    if (activeRole === 'scorekeeper' && !autoOpenedConsole.current) {
+      autoOpenedConsole.current = true;
+      navigation.navigate('ScoringConsole');
+    }
+  }, [activeRole]);
   const lockerAlertCount = lockerAlerts.length;
   useEffect(() => {
     if (!['director', 'tournament_director', 'admin'].includes(activeRole)) return;
