@@ -235,6 +235,12 @@ export default function AppNavigator() {
           screen: 'Home',
           params: { screen: 'EventDetail', params: { eventId: data.event_id } },
         });
+      } else if (data?.type === 'checkin_reminder' && data?.event_id) {
+        // Straight to My Schedule, where the check-in chips live
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'my_schedule' } },
+        });
       } else if (data?.event_id) {
         // Any other push that names an event (event_update, division_update, ...)
         (navigationRef.current as any)?.navigate('Main', {

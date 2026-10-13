@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
@@ -116,6 +117,12 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
         params: { screen: 'Home', params: { screen: 'Scoresheet', params: { gameId: data.game_id } } },
       }));
     }
+    if (item.type === 'checkin_reminder' && data?.event_id) {
+      return () => navigation.dispatch(CommonActions.navigate({
+        name: 'Main',
+        params: { screen: 'Home', params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'my_schedule' } } },
+      }));
+    }
     if (data?.event_id) {
       return () => navigation.dispatch(CommonActions.navigate({
         name: 'Main',
@@ -123,6 +130,20 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
       }));
     }
     return null;
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    authFetch(`/api/push/notifications/${id}`, { method: 'DELETE' }).catch(() => {});
+  };
+  const clearAll = () => {
+    Alert.alert('Clear all notifications?', 'This removes every notification from your inbox.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Clear All', style: 'destructive', onPress: () => {
+        setNotifications([]);
+        authFetch('/api/push/notifications/clear', { method: 'POST' }).catch(() => {});
+      } },
+    ]);
   };
 
   const renderNotification = ({ item }: { item: UserNotification }) => {
@@ -158,13 +179,21 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
             {item.body}
           </Text>
           <Text style={styles.notifTime}>{timeAgo(item.created_at)}</Text>
-          {expanded && goTo ? (
-            <TouchableOpacity style={styles.openChip} activeOpacity={0.85} onPress={() => { markAsRead(item.id); goTo(); }}>
-              <Text style={styles.openChipText} maxFontSizeMultiplier={1.2}>
-                {item.type === 'scoresheet' ? 'Open Scoresheet' : item.type === 'meeting_reward' ? 'Open Reward' : 'Open Event'}
-              </Text>
-              <Ionicons name="arrow-forward" size={13} color="#fff" />
-            </TouchableOpacity>
+          {expanded ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              {goTo ? (
+                <TouchableOpacity style={styles.openChip} activeOpacity={0.85} onPress={() => { markAsRead(item.id); goTo(); }}>
+                  <Text style={styles.openChipText} maxFontSizeMultiplier={1.2}>
+                    {item.type === 'scoresheet' ? 'Open Scoresheet' : item.type === 'meeting_reward' ? 'Open Reward' : item.type === 'checkin_reminder' ? 'Check In Now' : 'Open Event'}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={13} color="#fff" />
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity style={styles.deleteChip} activeOpacity={0.85} onPress={() => deleteNotification(item.id)}>
+                <Ionicons name="trash-outline" size={13} color="#b91c1c" />
+                <Text style={styles.deleteChipText} maxFontSizeMultiplier={1.2}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color="#9aa7ba" style={{ marginLeft: 4, alignSelf: 'center' }} />
@@ -214,6 +243,11 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
               <Text style={styles.markAllText}>Mark all read</Text>
             </TouchableOpacity>
           )}
+          {notifications.length > 0 && (
+            <TouchableOpacity style={styles.markAllBtn} onPress={clearAll} activeOpacity={0.7}>
+              <Text style={[styles.markAllText, { color: '#b91c1c' }]}>Clear all</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -257,7 +291,9 @@ export default function NotificationsInboxScreen({ navigation }: { navigation: a
 }
 
 const styles = StyleSheet.create({
-  openChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: '#003e79', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginTop: 10 },
+  openChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#003e79', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  deleteChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#fca5a5', backgroundColor: '#fef2f2' },
+  deleteChipText: { color: '#b91c1c', fontSize: 12, fontWeight: '700' },
   openChipText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
   container: {
     flex: 1,

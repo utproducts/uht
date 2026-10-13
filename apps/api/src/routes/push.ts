@@ -478,6 +478,21 @@ pushRoutes.get('/unread-count', authMiddleware, async (c) => {
 });
 
 // ==================
+// DELETE /notifications/:id — delete one of the user's own notifications
+pushRoutes.delete('/notifications/:id', authMiddleware, async (c) => {
+  const user = c.get('user') as { id: string };
+  await c.env.DB.prepare('DELETE FROM user_notifications WHERE id = ? AND user_id = ?')
+    .bind(c.req.param('id'), user.id).run();
+  return c.json({ success: true });
+});
+
+// POST /notifications/clear — delete ALL of the user's notifications
+pushRoutes.post('/notifications/clear', authMiddleware, async (c) => {
+  const user = c.get('user') as { id: string };
+  const r = await c.env.DB.prepare('DELETE FROM user_notifications WHERE user_id = ?').bind(user.id).run();
+  return c.json({ success: true, data: { deleted: r.meta?.changes || 0 } });
+});
+
 // POST /mark-read/:id — Mark a single notification as read
 // ==================
 pushRoutes.post('/mark-read/:id', authMiddleware, async (c) => {
