@@ -118,6 +118,7 @@ function MyTeamsStackNavigator() {
       <MyTeamsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
+      <MyTeamsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
     </MyTeamsStackNav.Navigator>
   );
 }
@@ -141,6 +142,7 @@ function FindEventsStackNavigator() {
       <FindEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <FindEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <FindEventsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
+      <FindEventsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
     </FindEventsStackNav.Navigator>
   );
 }

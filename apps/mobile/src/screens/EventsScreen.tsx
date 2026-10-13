@@ -288,6 +288,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
       <View style={styles.container}>
         <AppHeader
           onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+        onRolePress={() => navigation.navigate('Home' as never)}
           unreadCount={unreadCount}
           hasMultipleRoles={userRoles.length > 1}
         />
@@ -303,6 +304,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
     <View style={styles.container}>
       <AppHeader
         onNotificationPress={() => navigation.navigate('NotificationsInbox' as never)}
+        onRolePress={() => navigation.navigate('Home' as never)}
         unreadCount={unreadCount}
         hasMultipleRoles={userRoles.length > 1}
       />

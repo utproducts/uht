@@ -449,6 +449,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
       <View style={styles.container}>
         <AppHeader
           onNotificationPress={() => navigation.navigate('NotificationsInbox')}
+        onRolePress={() => navigation.navigate('Home' as never)}
           unreadCount={unreadCount}
           hasMultipleRoles={userRoles.length > 1}
         />
@@ -467,6 +468,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
     >
       <AppHeader
         onNotificationPress={() => navigation.navigate('NotificationsInbox')}
+        onRolePress={() => navigation.navigate('Home' as never)}
         unreadCount={unreadCount}
         hasMultipleRoles={userRoles.length > 1}
       />

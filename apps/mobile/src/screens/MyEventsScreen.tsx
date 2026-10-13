@@ -326,7 +326,7 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
     <View style={styles.screen}>
       <AppHeader
         onNotificationPress={() => navigation.navigate('NotificationsInbox')}
-        onRolePress={() => {}}
+        onRolePress={() => navigation.navigate('Home' as never)}
         unreadCount={unreadCount}
         hasMultipleRoles={userRoles.length > 1}
       />
