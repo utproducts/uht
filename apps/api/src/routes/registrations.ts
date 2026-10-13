@@ -523,9 +523,15 @@ registrationRoutes.post('/game-checkins/:gameId/:teamId', authMiddleware, async 
     `).bind(user.id, teamId).first<any>();
     if (!mine) return c.json({ success: false, error: 'Only that team\'s coach or manager can check them in' }, 403);
   }
-  await db.prepare(
+  const ins = await db.prepare(
     "INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)"
   ).bind(gameId, teamId, user.id).run();
+  if ((ins.meta?.changes || 0) > 0) {
+    try {
+      const { notifyLockerOnCheckin } = await import('../lib/push');
+      c.executionCtx.waitUntil(notifyLockerOnCheckin(db, gameId as string, teamId as string).catch(() => {}));
+    } catch { /* non-Workers env */ }
+  }
   return c.json({ success: true, data: { checked_in: true } });
 });
 
@@ -625,8 +631,14 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
         signed_off_at = excluded.signed_off_at
     `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, teamId, user.id, signoff.name.trim(), signoff.signature || signoff.name.trim()).run();
   }
-  await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
+  const ins = await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
     .bind(gameId, teamId, user.id).run();
+  if ((ins.meta?.changes || 0) > 0) {
+    try {
+      const { notifyLockerOnCheckin } = await import('../lib/push');
+      c.executionCtx.waitUntil(notifyLockerOnCheckin(db, gameId as string, teamId as string).catch(() => {}));
+    } catch { /* non-Workers env */ }
+  }
   return c.json({ success: true, data: { checked_in: true, updated: statuses.length } });
 });
 

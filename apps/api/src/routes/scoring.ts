@@ -543,6 +543,33 @@ scoringRoutes.get('/events/:eventId/standings', async (c) => {
 // ==========================================
 // ADMIN: Force bracket resolution (also runs automatically on every final)
 // ==========================================
+// Games starting within 2 hours (event-local) with unassigned locker rooms -
+// drives the red banners on the director home card and Locker Rooms tool
+scoringRoutes.get('/locker-alerts', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const { eventLocalNow } = await import('../lib/push');
+  const events = (await db.prepare(
+    "SELECT id, name, timezone FROM events WHERE schedule_published = 1 AND date(end_date) >= date('now', '-1 day')"
+  ).all()).results || [];
+  const alerts: any[] = [];
+  for (const ev of events as any[]) {
+    const nowLocal = eventLocalNow(ev.timezone);
+    const windowEnd = eventLocalNow(ev.timezone, 120);
+    const games = (await db.prepare(`
+      SELECT g.id as game_id, g.game_number, g.start_time, vr.name as rink_name, v.name as venue_name,
+        g.home_locker_room, g.away_locker_room
+      FROM games g
+      LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+      LEFT JOIN venues v ON v.id = g.venue_id
+      WHERE g.event_id = ? AND g.status = 'scheduled'
+        AND g.start_time > ? AND g.start_time <= ?
+        AND (g.home_locker_room IS NULL OR g.home_locker_room = '' OR g.away_locker_room IS NULL OR g.away_locker_room = '')
+    `).bind(ev.id, nowLocal, windowEnd).all()).results || [];
+    for (const g of games as any[]) alerts.push({ ...g, event_id: ev.id, event_name: ev.name });
+  }
+  return c.json({ success: true, data: alerts });
+});
+
 scoringRoutes.post('/events/:eventId/resolve-bracket', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const body = await c.req.json().catch(() => ({})) as { force?: boolean };

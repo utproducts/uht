@@ -470,3 +470,177 @@ export async function runLockerRoomSweep(db: any): Promise<{ games_checked: numb
 
   return { games_checked: (games.results || []).length, games_notified: gamesNotified, total_sent: totalSent };
 }
+
+
+/*
+  CHECK-IN REMINDERS: 90 minutes before each game, the coaches and managers
+  of each side that has not checked in yet get a push. Game times are stored
+  in EVENT-LOCAL time, so "now" is computed in the event's timezone (the
+  events.timezone human label maps to an IANA zone). Idempotent via
+  checkin_alert_log; runs from the worker cron every minute.
+*/
+const TZ_LABELS: [string, string][] = [
+  ['eastern', 'America/New_York'],
+  ['central', 'America/Chicago'],
+  ['mountain', 'America/Denver'],
+  ['pacific', 'America/Los_Angeles'],
+  ['arizona', 'America/Phoenix'],
+];
+export function eventLocalNow(tzLabel?: string | null, offsetMinutes = 0): string {
+  let tz = 'America/New_York';
+  const l = (tzLabel || '').toLowerCase();
+  for (const [key, zone] of TZ_LABELS) { if (l.includes(key)) { tz = zone; break; } }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(new Date(Date.now() + offsetMinutes * 60_000));
+  const g = (t: string) => parts.find(pp => pp.type === t)?.value || '00';
+  const hh = g('hour') === '24' ? '00' : g('hour');
+  return `${g('year')}-${g('month')}-${g('day')} ${hh}:${g('minute')}:${g('second')}`;
+}
+function fmt12(start: string): string {
+  const hh = parseInt(start.slice(11, 13), 10); const mm = start.slice(14, 16);
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${h12}:${mm} ${hh >= 12 ? 'PM' : 'AM'}`;
+}
+
+export async function runCheckinReminderSweep(db: any) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS checkin_alert_log (
+    game_id TEXT NOT NULL, team_id TEXT NOT NULL,
+    sent_at TEXT DEFAULT (datetime('now')), UNIQUE(game_id, team_id))`).run();
+
+  const events = (await db.prepare(
+    "SELECT id, name, timezone FROM events WHERE schedule_published = 1 AND date(end_date) >= date('now', '-1 day')"
+  ).all()).results || [];
+
+  for (const ev of events as any[]) {
+    const nowLocal = eventLocalNow(ev.timezone);
+    const windowEnd = eventLocalNow(ev.timezone, 90);
+    const games = (await db.prepare(`
+      SELECT g.id, g.game_number, g.start_time, g.home_team_id, g.away_team_id,
+        COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_name,
+        COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_name,
+        vr.name as rink_name, v.name as venue_name
+      FROM games g
+      LEFT JOIN teams ht ON ht.id = g.home_team_id
+      LEFT JOIN teams at2 ON at2.id = g.away_team_id
+      LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+      LEFT JOIN venues v ON v.id = g.venue_id
+      WHERE g.event_id = ? AND g.status = 'scheduled'
+        AND g.start_time > ? AND g.start_time <= ?
+    `).bind(ev.id, nowLocal, windowEnd).all()).results || [];
+
+    for (const g of games as any[]) {
+      const sides = [
+        { teamId: g.home_team_id, name: g.home_name, opp: g.away_name },
+        { teamId: g.away_team_id, name: g.away_name, opp: g.home_name },
+      ].filter(s0 => s0.teamId);
+      for (const side of sides) {
+        const already = await db.prepare('SELECT 1 as x FROM checkin_alert_log WHERE game_id = ? AND team_id = ?').bind(g.id, side.teamId).first();
+        if (already) continue;
+        const checked = await db.prepare('SELECT 1 as x FROM game_checkins WHERE game_id = ? AND team_id = ?').bind(g.id, side.teamId).first();
+        await db.prepare('INSERT OR IGNORE INTO checkin_alert_log (game_id, team_id) VALUES (?, ?)').bind(g.id, side.teamId).run();
+        if (checked) continue;
+        // coaches + managers of this team only
+        const rows = (await db.prepare(`
+          SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt
+          WHERE pt.user_id IN (
+            SELECT tc.user_id FROM team_coaches tc WHERE tc.team_id = ?1
+            UNION SELECT tm.user_id FROM team_managers tm WHERE tm.team_id = ?1
+          )
+        `).bind(side.teamId).all()).results || [];
+        const { tokens, userIds } = await applyTestGate(db, ev.id, {
+          tokens: rows.map((r: any) => r.token as string),
+          userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
+        });
+        if (tokens.length === 0) continue;
+        const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
+        const title = `⏰ Check-in time: ${side.name}`;
+        const body = `Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(g.start_time)} vs ${side.opp || 'TBD'}${where ? ` (${where})` : ''}. Open the app to confirm your roster, pick your starting goalie, and sign off.`;
+        const pushData = { type: 'checkin_reminder', event_id: ev.id, game_id: g.id };
+        const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+        await logNotification(db, { type: 'checkin_reminder', title, body, audience: 'team_staff', target_id: ev.id, sent_count: sent, sent_by: 'system', metadata: JSON.stringify({ game_id: g.id, team_id: side.teamId }) });
+        await createUserNotifications(db, userIds, title, body, 'checkin_reminder', pushData);
+      }
+    }
+  }
+}
+
+/*
+  LOCKER ROOM ON CHECK-IN: the moment a team checks in for a game, everyone
+  on that team (followers, family, staff) gets their locker room assignment,
+  if one is set on the game.
+*/
+export async function notifyLockerOnCheckin(db: any, gameId: string, teamId: string) {
+  const g = await db.prepare(`
+    SELECT g.id, g.event_id, g.game_number, g.start_time, g.home_team_id, g.away_team_id,
+      g.home_locker_room, g.away_locker_room,
+      COALESCE(t.schedule_name, t.name) as team_name,
+      vr.name as rink_name, v.name as venue_name
+    FROM games g
+    JOIN teams t ON t.id = ?2
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    WHERE g.id = ?1
+  `).bind(gameId, teamId).first();
+  if (!g) return;
+  const locker = g.home_team_id === teamId ? g.home_locker_room : g.away_team_id === teamId ? g.away_locker_room : null;
+  const { tokens, userIds } = await teamAudience(db, [teamId], g.event_id);
+  if (tokens.length === 0) return;
+  const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
+  const title = `🚪 Locker Room ${locker || 'TBD'}`;
+  const body = locker
+    ? `${g.team_name} is checked in. Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(String(g.start_time))}${where ? ` - ${where}` : ''}.`
+    : `${g.team_name} is checked in. Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(String(g.start_time))}${where ? ` - ${where}` : ''}. Locker room not posted yet - you'll get an alert when it is.`;
+  const pushData = { type: 'locker_room', event_id: g.event_id, game_id: g.id };
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, { type: 'locker_room', title, body, audience: 'team_followers', target_id: g.event_id, sent_count: sent, sent_by: 'system', metadata: JSON.stringify({ game_id: g.id, team_id: teamId }) });
+  await createUserNotifications(db, userIds, title, body, 'locker_room', pushData);
+}
+
+
+/*
+  MISSING LOCKER ROOM ALARM: any scheduled game starting within 2 hours with
+  an unassigned locker room pushes once to all admin/director devices.
+  Idempotent via locker_missing_log.
+*/
+export async function runLockerMissingSweep(db: any) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS locker_missing_log (
+    game_id TEXT PRIMARY KEY, sent_at TEXT DEFAULT (datetime('now')))`).run();
+  const events = (await db.prepare(
+    "SELECT id, name, timezone, COALESCE(is_test,0) as is_test FROM events WHERE schedule_published = 1 AND date(end_date) >= date('now', '-1 day')"
+  ).all()).results || [];
+  for (const ev of events as any[]) {
+    const nowLocal = eventLocalNow(ev.timezone);
+    const windowEnd = eventLocalNow(ev.timezone, 120);
+    const games = (await db.prepare(`
+      SELECT g.id, g.game_number, g.start_time, vr.name as rink_name, v.name as venue_name,
+        g.home_locker_room, g.away_locker_room
+      FROM games g
+      LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+      LEFT JOIN venues v ON v.id = g.venue_id
+      WHERE g.event_id = ? AND g.status = 'scheduled'
+        AND g.start_time > ? AND g.start_time <= ?
+        AND (g.home_locker_room IS NULL OR g.home_locker_room = '' OR g.away_locker_room IS NULL OR g.away_locker_room = '')
+    `).bind(ev.id, nowLocal, windowEnd).all()).results || [];
+    for (const g of games as any[]) {
+      const logged = await db.prepare('SELECT 1 as x FROM locker_missing_log WHERE game_id = ?').bind(g.id).first();
+      if (logged) continue;
+      await db.prepare('INSERT OR IGNORE INTO locker_missing_log (game_id) VALUES (?)').bind(g.id).run();
+      const rows = (await db.prepare(`
+        SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt
+        JOIN user_roles ur ON ur.user_id = pt.user_id AND ur.role IN ('admin', 'director')
+      `).all()).results || [];
+      const tokens = rows.map((r: any) => r.token as string);
+      const userIds = [...new Set(rows.map((r: any) => r.user_id as string))] as string[];
+      if (tokens.length === 0) continue;
+      const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
+      const title = '🚨 Locker rooms not assigned';
+      const body = `Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(String(g.start_time))}${where ? ` (${where})` : ''} starts in under 2 hours without locker rooms. Open Locker Rooms in director tools to assign.`;
+      const pushData = { type: 'locker_missing', event_id: ev.id, game_id: g.id };
+      const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+      await logNotification(db, { type: 'locker_missing', title, body, audience: 'staff', target_id: ev.id, sent_count: sent, sent_by: 'system', metadata: JSON.stringify({ game_id: g.id }) });
+      await createUserNotifications(db, userIds, title, body, 'locker_missing', pushData);
+    }
+  }
+}

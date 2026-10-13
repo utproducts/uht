@@ -502,6 +502,25 @@ export function DirectorLockerRoomsScreen({ navigation }: any) {
   return (
     <View style={s.screen}>
       <Header title="Locker Rooms" subtitle="Pick a venue and rink, then assign rooms per game" navigation={navigation} />
+      {(() => {
+        const soon = games.filter((g: any) => {
+          if (g.status !== 'scheduled') return false;
+          if (g.home_locker_room && g.away_locker_room) return false;
+          const d = new Date(String(g.start_time || '').replace(' ', 'T'));
+          if (isNaN(d.getTime())) return false;
+          const mins = (d.getTime() - Date.now()) / 60000;
+          return mins > 0 && mins <= 120;
+        });
+        if (soon.length === 0) return null;
+        return (
+          <View style={s.lockerUrgent}>
+            <Ionicons name="warning" size={16} color="#fff" />
+            <Text style={s.lockerUrgentText} maxFontSizeMultiplier={1.2}>
+              {soon.length} game{soon.length !== 1 ? 's' : ''} within 2 hours {soon.length !== 1 ? 'have' : 'has'} no locker rooms - assign now
+            </Text>
+          </View>
+        );
+      })()}
       <EventPills events={events} selected={selected} onSelect={setSelected} />
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}>
@@ -767,6 +786,8 @@ const s = StyleSheet.create({
   filterLabel: { width: 48, fontSize: 10, color: '#7a8699', letterSpacing: 1, ...fonts.bold },
   filterChips: { gap: 8, paddingRight: 8 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  lockerUrgent: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#dc2626', marginHorizontal: spacing.lg, marginTop: 10, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  lockerUrgentText: { flex: 1, color: '#fff', fontSize: 12.5, ...fonts.bold },
   lrCard: { backgroundColor: colors.white, borderRadius: 14, padding: 13, marginBottom: 10, shadowColor: '#0f2747', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   lrTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   lrTime: { fontSize: 12, color: '#7a8699', ...fonts.bold, textTransform: 'uppercase', letterSpacing: 0.4 },

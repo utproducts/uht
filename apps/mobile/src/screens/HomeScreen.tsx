@@ -28,6 +28,14 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [userName, setUserName] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [activeRole, setActiveRoleState] = useState<string>('');
+  const [lockerAlertCount, setLockerAlertCount] = useState(0);
+  useEffect(() => {
+    if (!['director', 'tournament_director', 'admin'].includes(activeRole)) return;
+    authFetch('/api/scoring/locker-alerts')
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setLockerAlertCount((j.data || []).length); })
+      .catch(() => {});
+  }, [activeRole]);
   const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -292,13 +300,20 @@ onPress={() => navigation.navigate('ScoringConsole')}
               { label: 'Locker Rooms', sub: 'Assign rooms by rink and day', icon: 'lock-closed-outline' as const, go: () => navigation.navigate('DirectorLockerRooms') },
               { label: 'Venue Setup', sub: 'Add locker rooms to rinks', icon: 'business-outline' as const, go: () => navigation.navigate('DirectorVenueSetup') },
             ]).map(tool => (
-              <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard]} onPress={tool.go} activeOpacity={0.85}
+              <TouchableOpacity key={tool.label} style={[styles.qaCard, styles.dirCard, tool.label === 'Locker Rooms' && lockerAlertCount > 0 && styles.dirCardAlert]} onPress={tool.go} activeOpacity={0.85}
                 accessibilityLabel={`${tool.label} - ${tool.sub}`}>
                 <View style={styles.dirIconCircle}>
                   <Ionicons name={tool.icon} size={22} color={colors.cyan} />
                 </View>
                 <Text style={styles.dirLabel}>{tool.label}</Text>
                 <Text style={styles.dirSub} numberOfLines={2}>{tool.sub}</Text>
+                {tool.label === 'Locker Rooms' && lockerAlertCount > 0 && (
+                  <View style={styles.lockerAlertBanner} pointerEvents="none">
+                    <Text style={styles.lockerAlertBannerText} maxFontSizeMultiplier={1.1}>
+                      {lockerAlertCount} GAME{lockerAlertCount !== 1 ? 'S' : ''} NEED ROOMS
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -558,6 +573,9 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
+  dirCardAlert: { borderColor: '#f87171', borderWidth: 2 },
+  lockerAlertBanner: { position: 'absolute', left: -6, right: -6, top: '45%', backgroundColor: '#dc2626', paddingVertical: 5, alignItems: 'center', transform: [{ rotate: '-4deg' }], borderRadius: 4, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
+  lockerAlertBannerText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   dirCard: { backgroundColor: colors.navy, borderColor: 'rgba(0,204,255,0.5)', padding: 14, justifyContent: 'flex-start' },
   dirIconCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,204,255,0.14)', borderWidth: 1, borderColor: 'rgba(0,204,255,0.4)', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   dirLabel: { color: colors.white, fontSize: 15, ...fonts.bold },
