@@ -437,17 +437,29 @@ registrationRoutes.get('/checkin/:eventId/mine', authMiddleware, async (c) => {
   const eventId = c.req.param('eventId');
   const user = c.get('user');
   const db = c.env.DB;
-  const rows = await db.prepare(`
-    SELECT er.id as reg_id, er.checked_in_at,
-      COALESCE(t.schedule_name, t.name, er.team_name) as team_name
-    FROM event_registrations er
-    JOIN teams t ON t.id = er.team_id
-    WHERE er.event_id = ?1 AND er.status = 'approved'
-      AND er.team_id IN (
-        SELECT team_id FROM team_coaches WHERE user_id = ?2
-        UNION SELECT team_id FROM team_managers WHERE user_id = ?2
-      )
-  `).bind(eventId, user.id).all<any>();
+  const isStaff = (user.roles || []).some((r: string) => ['admin', 'director'].includes(r));
+  // Staff see every approved team (rink-side check-in from any screen);
+  // coaches and managers see just their own
+  const rows = isStaff
+    ? await db.prepare(`
+        SELECT er.id as reg_id, er.checked_in_at, er.age_group,
+          COALESCE(t.schedule_name, t.name, er.team_name) as team_name
+        FROM event_registrations er
+        LEFT JOIN teams t ON t.id = er.team_id
+        WHERE er.event_id = ? AND er.status = 'approved'
+        ORDER BY er.age_group, team_name
+      `).bind(eventId).all<any>()
+    : await db.prepare(`
+        SELECT er.id as reg_id, er.checked_in_at, er.age_group,
+          COALESCE(t.schedule_name, t.name, er.team_name) as team_name
+        FROM event_registrations er
+        JOIN teams t ON t.id = er.team_id
+        WHERE er.event_id = ?1 AND er.status = 'approved'
+          AND er.team_id IN (
+            SELECT team_id FROM team_coaches WHERE user_id = ?2
+            UNION SELECT team_id FROM team_managers WHERE user_id = ?2
+          )
+      `).bind(eventId, user.id).all<any>();
   return c.json({ success: true, data: rows.results || [] });
 });
 
@@ -455,19 +467,72 @@ registrationRoutes.post('/checkin/:eventId/mine/:regId', authMiddleware, async (
   const { eventId, regId } = c.req.param();
   const user = c.get('user');
   const db = c.env.DB;
-  const reg = await db.prepare(`
-    SELECT er.id, er.checked_in_at FROM event_registrations er
-    WHERE er.id = ? AND er.event_id = ? AND er.status = 'approved'
-      AND er.team_id IN (
-        SELECT team_id FROM team_coaches WHERE user_id = ?3
-        UNION SELECT team_id FROM team_managers WHERE user_id = ?3
-      )
-  `).bind(regId, eventId, user.id).first<any>();
+  const isStaff = (user.roles || []).some((r: string) => ['admin', 'director'].includes(r));
+  const reg = isStaff
+    ? await db.prepare(`
+        SELECT er.id, er.checked_in_at FROM event_registrations er
+        WHERE er.id = ? AND er.event_id = ? AND er.status = 'approved'
+      `).bind(regId, eventId).first<any>()
+    : await db.prepare(`
+        SELECT er.id, er.checked_in_at FROM event_registrations er
+        WHERE er.id = ? AND er.event_id = ? AND er.status = 'approved'
+          AND er.team_id IN (
+            SELECT team_id FROM team_coaches WHERE user_id = ?3
+            UNION SELECT team_id FROM team_managers WHERE user_id = ?3
+          )
+      `).bind(regId, eventId, user.id).first<any>();
   if (!reg) return c.json({ success: false, error: 'Not your team, or not approved for this event' }, 403);
   if (!reg.checked_in_at) {
     await db.prepare("UPDATE event_registrations SET checked_in_at = datetime('now'), checked_in_by = ? WHERE id = ?").bind(user.id, regId).run();
   }
   return c.json({ success: true, data: { checked_in: true } });
+});
+
+// ==================
+// PER-GAME CHECK-IN: teams check in before EVERY game. Coaches/managers
+// check their own team in; admins/directors can check in (and undo) either
+// team of any game.
+// ==================
+registrationRoutes.get('/game-checkins/:eventId', authMiddleware, async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const rows = await db.prepare(`
+    SELECT gc.game_id, gc.team_id, gc.checked_in_at
+    FROM game_checkins gc JOIN games g ON g.id = gc.game_id
+    WHERE g.event_id = ?
+  `).bind(eventId).all<any>();
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+registrationRoutes.post('/game-checkins/:gameId/:teamId', authMiddleware, async (c) => {
+  const { gameId, teamId } = c.req.param();
+  const user = c.get('user');
+  const db = c.env.DB;
+  const game = await db.prepare('SELECT id, home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+  if (game.home_team_id !== teamId && game.away_team_id !== teamId) {
+    return c.json({ success: false, error: 'That team is not in this game' }, 400);
+  }
+  const isStaff = (user.roles || []).some((r: string) => ['admin', 'director'].includes(r));
+  if (!isStaff) {
+    const mine = await db.prepare(`
+      SELECT 1 as ok FROM (
+        SELECT team_id FROM team_coaches WHERE user_id = ?1
+        UNION SELECT team_id FROM team_managers WHERE user_id = ?1
+      ) WHERE team_id = ?2
+    `).bind(user.id, teamId).first<any>();
+    if (!mine) return c.json({ success: false, error: 'Only that team\'s coach or manager can check them in' }, 403);
+  }
+  await db.prepare(
+    "INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)"
+  ).bind(gameId, teamId, user.id).run();
+  return c.json({ success: true, data: { checked_in: true } });
+});
+
+registrationRoutes.delete('/game-checkins/:gameId/:teamId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { gameId, teamId } = c.req.param();
+  await c.env.DB.prepare('DELETE FROM game_checkins WHERE game_id = ? AND team_id = ?').bind(gameId, teamId).run();
+  return c.json({ success: true, data: { checked_in: false } });
 });
 
 registrationRoutes.put('/admin/checkin/:eventId/player-status', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({

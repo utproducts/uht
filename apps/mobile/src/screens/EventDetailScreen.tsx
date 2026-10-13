@@ -254,31 +254,82 @@ export default function EventDetailScreen({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
-  // Coach/manager self check-in (empty for everyone else)
-  const [checkins, setCheckins] = useState<any[]>([]);
-  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  // PER-GAME check-in: teams check in before every game. Coaches check their
+  // own team in; admins/directors can check in (and undo) either side.
+  const [gameCheckins, setGameCheckins] = useState<Record<string, string>>({});
+  const [coachTeamIds, setCoachTeamIds] = useState<string[]>([]);
+  const isStaffUser = !!currentUser?.roles?.some(r => ['admin', 'director', 'tournament_director'].includes(r));
   useEffect(() => {
     if (!eventId) return;
-    authFetch(`/api/registrations/checkin/${eventId}/mine`)
+    authFetch(`/api/registrations/game-checkins/${eventId}`)
       .then((r) => r.json())
-      .then((j: any) => { if (j.success) setCheckins(j.data || []); })
+      .then((j: any) => {
+        if (!j.success) return;
+        const map: Record<string, string> = {};
+        for (const row of j.data || []) map[`${row.game_id}|${row.team_id}`] = row.checked_in_at;
+        setGameCheckins(map);
+      })
+      .catch(() => {});
+    authFetch('/api/teams/my-stats')
+      .then((r) => r.json())
+      .then((j: any) => { if (j.success) setCoachTeamIds((j.data?.teams || []).map((t: any) => t.id)); })
       .catch(() => {});
   }, [eventId]);
-  const checkInTeam = async (regId: string) => {
-    setCheckingIn(regId);
-    try {
-      const r = await authFetch(`/api/registrations/checkin/${eventId}/mine/${regId}`, { method: 'POST' });
-      const j = await r.json() as any;
-      if (j.success) {
-        setCheckins(prev => prev.map(c0 => c0.reg_id === regId ? { ...c0, checked_in_at: new Date().toISOString() } : c0));
-      } else {
-        Alert.alert('Check-in failed', j.error || 'Please try again or see the tournament desk.');
+  const toggleGameCheckin = async (gameId: string, teamId: string, done: boolean, teamName: string) => {
+    const key = `${gameId}|${teamId}`;
+    if (!done) {
+      setGameCheckins(prev => ({ ...prev, [key]: new Date().toISOString() }));
+      try {
+        const r = await authFetch(`/api/registrations/game-checkins/${gameId}/${teamId}`, { method: 'POST' });
+        const j = await r.json() as any;
+        if (!j.success) {
+          setGameCheckins(prev => { const n = { ...prev }; delete n[key]; return n; });
+          Alert.alert('Check-in failed', j.error || 'Please try again or see the tournament desk.');
+        }
+      } catch {
+        setGameCheckins(prev => { const n = { ...prev }; delete n[key]; return n; });
+        Alert.alert('Check-in failed', 'Please try again or see the tournament desk.');
       }
-    } catch {
-      Alert.alert('Check-in failed', 'Please try again or see the tournament desk.');
+    } else if (isStaffUser) {
+      Alert.alert('Undo check-in?', `${teamName} will show as NOT checked in for this game.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Undo', style: 'destructive', onPress: async () => {
+          setGameCheckins(prev => { const n = { ...prev }; delete n[key]; return n; });
+          try { await authFetch(`/api/registrations/game-checkins/${gameId}/${teamId}`, { method: 'DELETE' }); } catch {}
+        } },
+      ]);
     }
-    setCheckingIn(null);
   };
+  function renderGameCheckinRow(item: GameSlot) {
+    if (!item.id || item.status === 'final') return null;
+    const sides = [
+      { teamId: item.home_team_id, name: item.home_team_name || 'Home team' },
+      { teamId: item.away_team_id, name: item.away_team_name || 'Away team' },
+    ].filter(s0 => s0.teamId && (isStaffUser || coachTeamIds.includes(s0.teamId as string)));
+    if (sides.length === 0) return null;
+    return (
+      <View style={styles.gcRow}>
+        {sides.map(s0 => {
+          const key = `${item.id}|${s0.teamId}`;
+          const done = !!gameCheckins[key];
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.gcChip, done && styles.gcChipDone]}
+              disabled={done && !isStaffUser}
+              activeOpacity={0.8}
+              onPress={() => toggleGameCheckin(item.id as string, s0.teamId as string, done, s0.name)}
+            >
+              <Ionicons name={done ? 'checkmark-circle' : 'log-in-outline'} size={14} color={done ? '#047857' : colors.navy} />
+              <Text numberOfLines={1} style={[styles.gcChipText, done && styles.gcChipTextDone]} maxFontSizeMultiplier={1.2}>
+                {done ? `${s0.name} checked in` : `Check in ${s0.name}`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  }
   // Event photo gallery
   const [photos, setPhotos] = useState<any[]>([]);
   const [photosTotal, setPhotosTotal] = useState(0);
@@ -977,33 +1028,6 @@ export default function EventDetailScreen({
         data={myGames}
         keyExtractor={(item, index) => item.id || String(index)}
         contentContainerStyle={styles.tabContent}
-        ListHeaderComponent={checkins.length > 0 ? (
-          <View style={{ marginBottom: 12, gap: 8 }}>
-            {checkins.map(c0 => (
-              <View key={c0.reg_id} style={c0.checked_in_at ? styles.checkinCardDone : styles.checkinCard}>
-                <View style={c0.checked_in_at ? styles.checkinIconDone : styles.checkinIcon}>
-                  <Ionicons name={c0.checked_in_at ? 'checkmark' : 'checkbox-outline'} size={20} color={c0.checked_in_at ? '#fff' : colors.cyan} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={c0.checked_in_at ? styles.checkinTitleDone : styles.checkinTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                    {c0.checked_in_at ? 'Checked In' : 'Team Check-in'}
-                  </Text>
-                  <Text style={c0.checked_in_at ? styles.checkinSubDone : styles.checkinSub} numberOfLines={1} maxFontSizeMultiplier={1.2}>{c0.team_name}</Text>
-                </View>
-                {!c0.checked_in_at && (
-                  <TouchableOpacity
-                    style={styles.checkinBtn}
-                    disabled={checkingIn === c0.reg_id}
-                    onPress={() => checkInTeam(c0.reg_id)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.checkinBtnText} maxFontSizeMultiplier={1.2}>{checkingIn === c0.reg_id ? '...' : 'Check In'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </View>
-        ) : null}
         ListFooterComponent={possibleGames.length > 0 ? (
           <View style={{ marginTop: 14 }}>
             <Text style={styles.possibleHeader} maxFontSizeMultiplier={1.2}>POSSIBLE BRACKET GAMES</Text>
@@ -1102,6 +1126,7 @@ export default function EventDetailScreen({
               </View>
               {renderAnnouncementStrip(item)}
               {renderStarsStrip(item)}
+              {renderGameCheckinRow(item)}
               {isFinal && item.id ? (
                 <TouchableOpacity
                   style={styles.scoresheetBtn}
@@ -1571,6 +1596,7 @@ export default function EventDetailScreen({
               </View>
               {renderAnnouncementStrip(item)}
               {renderStarsStrip(item)}
+              {renderGameCheckinRow(item)}
             </View>
           );
         }}
@@ -2152,17 +2178,12 @@ const styles = StyleSheet.create({
   possibleChipText: { fontSize: 9.5, color: colors.navy, letterSpacing: 0.8, ...fonts.bold },
   possibleMatchup: { fontSize: 14.5, color: colors.navy, ...fonts.bold },
   possibleMeta: { fontSize: 11.5, color: '#7a8699', ...fonts.semibold, marginTop: 3 },
-  // Coach self check-in
-  checkinCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)' },
-  checkinCardDone: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ecfdf5', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#a7f3d0' },
-  checkinIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,204,255,0.15)', alignItems: 'center', justifyContent: 'center' },
-  checkinIconDone: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' },
-  checkinTitle: { fontSize: 14, color: '#fff', ...fonts.bold },
-  checkinTitleDone: { fontSize: 14, color: '#065f46', ...fonts.bold },
-  checkinSub: { fontSize: 11.5, color: 'rgba(255,255,255,0.75)', ...fonts.semibold, marginTop: 1 },
-  checkinSubDone: { fontSize: 11.5, color: '#047857', ...fonts.semibold, marginTop: 1 },
-  checkinBtn: { backgroundColor: '#00ccff', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
-  checkinBtnText: { fontSize: 13, color: '#003e79', ...fonts.bold },
+  // Per-game check-in chips
+  gcRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  gcChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#e9eef5', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, maxWidth: '100%' },
+  gcChipDone: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#a7f3d0' },
+  gcChipText: { fontSize: 12, color: colors.navy, ...fonts.bold, flexShrink: 1 },
+  gcChipTextDone: { color: '#047857' },
   container: { flex: 1, backgroundColor: colors.bg },
 
   // Header
