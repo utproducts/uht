@@ -411,7 +411,36 @@ registrationRoutes.get('/admin/checkin/:eventId', authMiddleware, requireRole('a
     'SELECT team_id, player_id, status FROM event_player_status WHERE event_id = ?'
   ).bind(eventId).all<any>();
 
-  return c.json({ success: true, data: { teams: rows, player_statuses: statuses.results || [] } });
+  // Coach and manager contacts per team, so staff can call a missing team.
+  // App users (team_coaches/team_managers -> users.phone) plus the phone
+  // from the registration form as a fallback.
+  const contacts = await db.prepare(`
+    SELECT x.team_id, u.first_name || ' ' || u.last_name as name, u.phone, x.role
+    FROM (
+      SELECT team_id, user_id, 'Coach' as role FROM team_coaches
+      UNION SELECT team_id, user_id, 'Manager' FROM team_managers
+    ) x
+    JOIN users u ON u.id = x.user_id
+    WHERE x.team_id IN (SELECT team_id FROM event_registrations WHERE event_id = ?1 AND team_id IS NOT NULL)
+      AND u.phone IS NOT NULL AND u.phone != ''
+  `).bind(eventId).all<any>();
+  const contactsByTeam: Record<string, any[]> = {};
+  for (const ct of (contacts.results || []) as any[]) {
+    (contactsByTeam[ct.team_id] = contactsByTeam[ct.team_id] || []).push({ name: ct.name, phone: ct.phone, role: ct.role });
+  }
+  const regPhones = await db.prepare(
+    "SELECT team_id, coach_name, coach_phone, phone FROM event_registrations WHERE event_id = ?1 AND team_id IS NOT NULL"
+  ).bind(eventId).all<any>();
+  for (const r of (regPhones.results || []) as any[]) {
+    const ph = r.coach_phone || r.phone;
+    if (!ph) continue;
+    const list = (contactsByTeam[r.team_id] = contactsByTeam[r.team_id] || []);
+    if (!list.some(c0 => String(c0.phone).replace(/\D/g, '') === String(ph).replace(/\D/g, ''))) {
+      list.push({ name: r.coach_name || 'Registration contact', phone: ph, role: 'Registration' });
+    }
+  }
+
+  return c.json({ success: true, data: { teams: rows, player_statuses: statuses.results || [], contacts: contactsByTeam } });
 });
 
 registrationRoutes.post('/admin/checkin/:eventId/toggle/:regId', authMiddleware, requireRole('admin', 'director'), async (c) => {

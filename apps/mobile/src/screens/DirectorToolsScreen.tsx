@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, Share, Alert, Modal,
+  RefreshControl, Share, Alert, Modal, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -70,13 +70,17 @@ export function DirectorCheckinScreen({ navigation }: any) {
   const [teams, setTeams] = useState<any[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [contacts, setContacts] = useState<Record<string, any[]>>({});
 
   const load = useCallback(async () => {
     if (!selected) return;
     try {
       const res = await authFetch(`/api/registrations/admin/checkin/${selected.id}`);
       const json = await res.json() as any;
-      if (json.success) setTeams(json.data.teams || json.data || []);
+      if (json.success) {
+        setTeams(json.data.teams || json.data || []);
+        setContacts(json.data.contacts || {});
+      }
     } catch {}
     setRefreshing(false);
   }, [selected]);
@@ -122,6 +126,23 @@ export function DirectorCheckinScreen({ navigation }: any) {
                         {[t.missing_roster ? 'NO ROSTER' : null, t.balance_cents > 0 ? `OWES $${(t.balance_cents / 100).toLocaleString()}` : null].filter(Boolean).join('  ·  ')}
                       </Text>
                     ) : null}
+                    {(contacts[t.team_id] || []).length > 0 && (
+                      <View style={s.phoneRow}>
+                        {(contacts[t.team_id] || []).slice(0, 3).map((c0: any, ci: number) => (
+                          <TouchableOpacity
+                            key={ci}
+                            style={s.phoneChip}
+                            activeOpacity={0.75}
+                            onPress={(e: any) => { e.stopPropagation?.(); Linking.openURL(`tel:${String(c0.phone).replace(/[^0-9+]/g, '')}`); }}
+                          >
+                            <Ionicons name="call-outline" size={11} color={colors.navy} />
+                            <Text style={s.phoneChipText} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                              {c0.name}{c0.role === 'Manager' ? ' (M)' : ''} · {c0.phone}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -761,6 +782,9 @@ export function DirectorVenueSetupScreen({ navigation }: any) {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerSubLine: { color: '#5b6b83', fontSize: 12, ...fonts.semibold, paddingHorizontal: spacing.lg, paddingTop: 10 },
+  phoneRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  phoneChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e9eef5', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, maxWidth: '100%' },
+  phoneChipText: { fontSize: 10.5, color: colors.navy, ...fonts.bold, flexShrink: 1 },
   rowCardAlert: { backgroundColor: '#fdf0f0', borderWidth: 1.5, borderColor: '#f1b3b3' },
   rowAlertText: { color: '#c0392b', fontSize: 11.5, ...fonts.bold, marginTop: 2, letterSpacing: 0.3 },
   pillBand: { backgroundColor: colors.bg },
