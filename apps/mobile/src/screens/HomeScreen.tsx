@@ -19,6 +19,9 @@ import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount, authFetch } from '../services/auth';
 import { refreshBadgeCount, getPushPermissionStatus, registerForPushNotifications } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
+// WebView only exists in the 1.0.7+ binary - never crash older ones
+let ConsoleWebView: any = null;
+try { ConsoleWebView = require('react-native-webview').WebView; } catch { /* older binary */ }
 import RoleBar from '../components/RoleBar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -29,14 +32,12 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [activeRole, setActiveRoleState] = useState<string>('');
   const [lockerAlerts, setLockerAlerts] = useState<any[]>([]);
-  // Scorekeepers skip home: role selected -> straight into the console
-  // (once per session, so backing out doesn't bounce them right back in)
-  const autoOpenedConsole = useRef(false);
+  // Scorekeeper role is a locked experience: the console IS the screen and
+  // the tab bar disappears - only the role switcher gets them out
   useEffect(() => {
-    if (activeRole === 'scorekeeper' && !autoOpenedConsole.current) {
-      autoOpenedConsole.current = true;
-      navigation.navigate('ScoringConsole');
-    }
+    const tabNav = navigation.getParent();
+    if (activeRole === 'scorekeeper') tabNav?.setOptions({ tabBarStyle: { display: 'none' } });
+    else tabNav?.setOptions({ tabBarStyle: undefined });
   }, [activeRole]);
   const lockerAlertCount = lockerAlerts.length;
   useEffect(() => {
@@ -152,6 +153,50 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   }
 
   const firstName = userName ? userName.split(' ')[0] : '';
+
+  if (activeRole === 'scorekeeper') {
+    return (
+      <View style={styles.screen}>
+        <AppHeader
+          onNotificationPress={() => navigation.navigate('NotificationsInbox')}
+          onRolePress={() => {}}
+          unreadCount={unreadCount}
+          hasMultipleRoles={userRoles.length > 1}
+        />
+        <RoleBar
+          activeRole={activeRole}
+          userRoles={userRoles}
+          onSwitchRole={handleSwitchRole}
+          onAddRole={handleAddRole}
+        />
+        {ConsoleWebView ? (
+          <ConsoleWebView
+            source={{ uri: `https://ultimatetournaments.com/scoring?v=${Math.floor(Date.now() / 60000)}` }}
+            cacheEnabled={false}
+            style={{ flex: 1 }}
+            allowsBackForwardNavigationGestures
+            pullToRefreshEnabled
+            domStorageEnabled
+            javaScriptEnabled
+            setSupportMultipleWindows={false}
+          />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <TouchableOpacity style={styles.skCard} activeOpacity={0.85} onPress={() => navigation.navigate('ScoringConsole')}>
+              <View style={styles.skIconCircle}>
+                <Ionicons name="stopwatch-outline" size={24} color={colors.cyan} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.skTitle}>Scorekeeper Console</Text>
+                <Text style={styles.skSub}>Enter your PIN to start scoring your games</Text>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={28} color={colors.cyan} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
