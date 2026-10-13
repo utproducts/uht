@@ -644,3 +644,35 @@ export async function runLockerMissingSweep(db: any) {
     }
   }
 }
+
+
+/*
+  GROUP AUDIENCES for an event's approved teams, strictly separated:
+  - 'coaches': team_coaches + team_managers of the event's teams
+  - 'parents': followers + active team members of the event's teams,
+    MINUS anyone who is a coach or manager of any of them
+  Used by meeting announcements and other role-scoped sends.
+*/
+export async function groupAudience(db: any, eventId: string, group: 'coaches' | 'parents'):
+  Promise<{ tokens: string[]; userIds: string[] }> {
+  const staffSel = `
+    SELECT tc.user_id FROM team_coaches tc WHERE tc.team_id IN (SELECT tid FROM evt_teams)
+    UNION SELECT tm.user_id FROM team_managers tm WHERE tm.team_id IN (SELECT tid FROM evt_teams)`;
+  const famSel = `
+    SELECT uf.user_id FROM user_follows uf WHERE uf.team_id IN (SELECT tid FROM evt_teams)
+    UNION SELECT tmem.user_id FROM team_members tmem WHERE tmem.team_id IN (SELECT tid FROM evt_teams) AND tmem.status = 'active'`;
+  const member = group === 'coaches'
+    ? staffSel
+    : `${famSel} EXCEPT ${staffSel}`;
+  const result = await db.prepare(`
+    ${EVENT_TEAMS_CTE}
+    SELECT DISTINCT pt.token, pt.user_id
+    FROM push_tokens pt
+    WHERE pt.user_id IN (${member})
+  `).bind(eventId, null).all();
+  const rows = result.results || [];
+  return applyTestGate(db, eventId, {
+    tokens: rows.map((r: any) => r.token as string),
+    userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
+  });
+}

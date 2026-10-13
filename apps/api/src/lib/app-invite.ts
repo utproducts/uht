@@ -45,9 +45,11 @@ export function buildAppInviteHtml(opts: {
   eventDates: string;
   teamName: string;
   code: string;
+  subjectOverride?: string;
+  introHtml?: string;
 }): { subject: string; html: string } {
   const { eventName, eventDates, teamName, code } = opts;
-  const subject = `Schedules are LIVE: get your ${teamName} families on the UHT app`;
+  const subject = opts.subjectOverride || `Schedules are LIVE: get your ${teamName} families on the UHT app`;
   const textForParents = `Follow ${teamName} on the UHT app for ${eventName}! 1) Download the app - iPhone: ${APP_STORE_URL} or Android: ${PLAY_STORE_URL} 2) Create a free account 3) Enter team code ${code} to follow our team for live scores, schedules and updates.`;
 
   const html = `<!doctype html>
@@ -63,6 +65,7 @@ export function buildAppInviteHtml(opts: {
     </div>
     <div style="background:#ffffff;border-radius:0 0 16px 16px;padding:28px;">
       <p style="font-size:15px;color:#1d2a3d;line-height:1.6;margin:0 0 14px;">Coaches and managers,</p>
+      ${opts.introHtml || ''}
       <p style="font-size:15px;color:#1d2a3d;line-height:1.6;margin:0 0 14px;">
         The full schedule, live scores, standings, and locker room assignments for <strong>${eventName}</strong>
         will be posted <strong>in the UHT app only</strong>. Please have every parent and family member on
@@ -233,5 +236,95 @@ export async function sendAppInviteForEvent(env: any, eventId: string, testEmail
     }
   }
 
+  return out;
+}
+
+
+/*
+  LOW APP ADOPTION PUSH: re-send the app invite to teams whose linked app
+  users are at or below a threshold, with a per-team urgency line showing
+  their exact count. Preview mode returns the list without sending.
+*/
+export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
+  threshold?: number; testEmail?: string; commit?: boolean;
+} = {}) {
+  const db = env.DB;
+  const threshold = opts.threshold ?? 7;
+  const event = await db.prepare('SELECT id, name, start_date, end_date FROM events WHERE id = ?').bind(eventId).first();
+  if (!event) return { error: 'Event not found' };
+  const eventDates = fmtRange(event.start_date, event.end_date);
+
+  const teams = (await db.prepare(`
+    SELECT er.id as reg_id, er.team_id, er.email1, er.email2, er.coach_email,
+      t.name as team_name, COALESCE(t.schedule_name, t.name, er.team_name) as display_name,
+      COALESCE(t.parent_invite_code, t.invite_code) as code,
+      (
+        SELECT COUNT(DISTINCT u.id) FROM users u
+        JOIN (
+          SELECT user_id FROM user_follows WHERE team_id = er.team_id
+          UNION SELECT user_id FROM team_coaches WHERE team_id = er.team_id
+          UNION SELECT user_id FROM team_managers WHERE team_id = er.team_id
+          UNION SELECT user_id FROM team_members WHERE team_id = er.team_id AND status = 'active'
+        ) x ON x.user_id = u.id
+        WHERE COALESCE(u.is_app_user, 0) = 1
+      ) as app_users
+    FROM event_registrations er
+    JOIN teams t ON t.id = er.team_id
+    WHERE er.event_id = ? AND er.status = 'approved'
+    ORDER BY app_users ASC, display_name ASC
+  `).bind(eventId).all()).results || [];
+
+  const low = (teams as any[]).filter(t => (t.app_users ?? 0) <= threshold);
+  const out: any = { threshold, teams: low.map(t => ({ team: t.display_name, app_users: t.app_users, code: t.code })), sent: 0, skipped: 0 };
+  if (!opts.commit && !opts.testEmail) return out;
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  for (const t of low as any[]) {
+    if (!t.code) { out.skipped++; continue; }
+    const n = t.app_users ?? 0;
+    const urgency = `
+      <div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:12px;padding:14px 18px;margin:0 0 16px;">
+        <div style="font-size:15px;color:#b91c1c;font-weight:800;">${n === 0 ? 'None of your families are on the app yet.' : `Only ${n} ${n === 1 ? 'person from your team has' : 'people from your team have'} the app so far.`}</div>
+        <div style="font-size:13px;color:#7f1d1d;margin-top:4px;">The tournament starts Thursday - schedules, live scores, locker rooms, and photos all live in the app. Please send the team code below to every family today.</div>
+      </div>`;
+    const { subject, html } = buildAppInviteHtml({
+      eventName: event.name, eventDates, teamName: t.display_name, code: t.code,
+      subjectOverride: `${n === 0 ? 'Your team is missing out' : `Only ${n} of your team on the app`} - ${event.name} starts Thursday`,
+      introHtml: urgency,
+    });
+    if (opts.testEmail) {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [opts.testEmail], subject: `[TEST - ${t.display_name}] ${subject}`, html }),
+      });
+      return { ...out, test: true, teamName: t.display_name, ok: resp.ok };
+    }
+    const already = await db.prepare(
+      "SELECT 1 as x FROM automated_email_log WHERE template_id = 'app_adoption_push' AND registration_id = ?"
+    ).bind(t.reg_id).first();
+    if (already) { out.skipped++; continue; }
+    const staffEmails = (await db.prepare(`
+      SELECT DISTINCT u.email FROM users u JOIN (
+        SELECT user_id FROM team_coaches WHERE team_id = ?1
+        UNION SELECT user_id FROM team_managers WHERE team_id = ?1
+      ) x ON x.user_id = u.id WHERE u.email IS NOT NULL
+    `).bind(t.team_id).all()).results || [];
+    const recipients = [...new Set(
+      [t.email1, t.email2, t.coach_email, ...(staffEmails as any[]).map((s: any) => s.email)]
+        .map((e: any) => String(e || '').trim().toLowerCase())
+        .filter((e: string) => emailRe.test(e))
+    )];
+    if (recipients.length === 0) { out.skipped++; continue; }
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: recipients, bcc: STAFF_BCC, subject, html }),
+    });
+    if (resp.ok) {
+      out.sent++;
+      await db.prepare(
+        "INSERT INTO automated_email_log (id, template_id, registration_id, event_id, email) VALUES (lower(hex(randomblob(16))), 'app_adoption_push', ?, ?, ?)"
+      ).bind(t.reg_id, eventId, recipients.join(',')).run().catch(() => {});
+    } else out.skipped++;
+  }
   return out;
 }

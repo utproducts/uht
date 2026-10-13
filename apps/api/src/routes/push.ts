@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
-import { sendExpoPushNotifications, logNotification, createUserNotifications, eventAudience, runLockerRoomSweep } from '../lib/push';
+import { sendExpoPushNotifications, logNotification, createUserNotifications, eventAudience, runLockerRoomSweep , groupAudience } from '../lib/push';
 
 export const pushRoutes = new Hono<{ Bindings: Env }>();
 
@@ -260,6 +260,42 @@ pushRoutes.post('/send-all', authMiddleware, requireRole('admin'), zValidator('j
 });
 
 // ==================
+
+// ==========================================
+// MEETINGS: role-scoped announcements on the app home screen
+// ==========================================
+pushRoutes.get('/meetings', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const rows = await db.prepare(`
+    SELECT m.id, m.event_id, m.title, m.audience, m.when_text, m.details, e.name as event_name
+    FROM event_meetings m JOIN events e ON e.id = m.event_id
+    WHERE m.meeting_at_utc >= datetime('now', '-2 hours')
+    ORDER BY m.meeting_at_utc ASC LIMIT 10
+  `).all<any>();
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+// POST /send-group — push to the coaches OR the parents/fans of an event,
+// never both (meeting announcements etc.)
+pushRoutes.post('/send-group', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  event_id: z.string().min(1),
+  group: z.enum(['coaches', 'parents']),
+  title: z.string().min(1),
+  body: z.string().min(1),
+  data: z.record(z.unknown()).optional(),
+})), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const { event_id, group, title, body, data } = c.req.valid('json');
+  const pushData = { type: 'event_update', event_id, ...(data || {}) };
+  const { tokens, userIds } = await groupAudience(db, event_id, group);
+  if (tokens.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No devices in that group' });
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, { type: 'event_update', title, body, audience: `event_${group}`, target_id: event_id, sent_count: sent, sent_by: user.id });
+  await createUserNotifications(db, userIds, title, body, 'event_update', pushData);
+  return c.json({ success: true, data: { sent, users: userIds.length } });
+});
+
 // POST /send-locker-room — Send locker room assignment push to team followers
 // ==================
 const lockerRoomPushSchema = z.object({

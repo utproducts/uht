@@ -32,6 +32,18 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [activeRole, setActiveRoleState] = useState<string>('');
   const [lockerAlerts, setLockerAlerts] = useState<any[]>([]);
+  // Role-scoped meeting banners (coaches see coaches meetings, parents see
+  // parents meetings - never each other's)
+  const [meetings, setMeetings] = useState<any[]>([]);
+  useEffect(() => {
+    authFetch('/api/push/meetings')
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setMeetings(j.data || []); })
+      .catch(() => {});
+  }, [activeRole]);
+  const myMeetings = meetings.filter(m =>
+    (['coach', 'manager'].includes(activeRole) && m.audience === 'coaches') ||
+    (activeRole === 'parent' && m.audience === 'parents'));
   // Scorekeeper role is a locked experience: the console IS the screen and
   // the tab bar disappears - only the role switcher gets them out
   useEffect(() => {
@@ -244,6 +256,19 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           </View>
 
         <View style={styles.overlapStack}>
+        {/* Role-scoped meeting announcements */}
+        {myMeetings.map(m => (
+          <View key={m.id} style={styles.meetingCard}>
+            <View style={styles.meetingIcon}>
+              <Ionicons name="megaphone-outline" size={20} color={colors.cyan} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.meetingTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>{m.title}</Text>
+              <Text style={styles.meetingWhen} numberOfLines={2} maxFontSizeMultiplier={1.2}>{m.when_text}</Text>
+              <Text style={styles.meetingEvent} numberOfLines={1} maxFontSizeMultiplier={1.2}>{m.event_name}{m.details ? ` · ${m.details}` : ''}</Text>
+            </View>
+          </View>
+        ))}
         {/* Scorekeeper: direct line to the scoring console PIN page */}
         {activeRole === 'scorekeeper' && (
           <TouchableOpacity
@@ -628,6 +653,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
+  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginBottom: 10 },
+  meetingIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,204,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  meetingTitle: { fontSize: 14.5, color: '#fff', fontWeight: '800' },
+  meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
+  meetingEvent: { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 2 },
   dirCardAlert: { borderColor: '#f87171', borderWidth: 2 },
   lockerAlertBanner: { position: 'absolute', left: -6, right: -6, bottom: 6, backgroundColor: '#dc2626', paddingVertical: 5, alignItems: 'center', transform: [{ rotate: '-3deg' }], borderRadius: 4, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   lockerAlertBannerText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },

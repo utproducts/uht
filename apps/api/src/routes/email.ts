@@ -841,6 +841,21 @@ emailRoutes.post('/event-info/:eventId/send', authMiddleware, requireRole('admin
 // ==================
 // App invite (get parents on the app, per-team follow code) — per-event
 // ==================
+// Low app-adoption resend: preview, test, or commit
+emailRoutes.get('/app-adoption/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { sendLowAdoptionInvites } = await import('../lib/app-invite');
+  const r = await sendLowAdoptionInvites(c.env, c.req.param('eventId'), {});
+  return c.json({ success: true, data: r });
+});
+emailRoutes.post('/app-adoption/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const { sendLowAdoptionInvites } = await import('../lib/app-invite');
+  const r = await sendLowAdoptionInvites(c.env, c.req.param('eventId'), {
+    testEmail: body.testEmail, commit: !!body.commit, threshold: body.threshold,
+  });
+  return c.json({ success: true, data: r });
+});
+
 emailRoutes.get('/app-invite/:eventId/status', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const { appInviteStatus } = await import('../lib/app-invite');
   const data = await appInviteStatus(c.env, c.req.param('eventId'));
