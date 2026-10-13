@@ -568,6 +568,7 @@ registrationRoutes.get('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
   }
   const rows = await db.prepare(`
     SELECT gl.id as lineup_id, gl.jersey_number, gl.position, COALESCE(gl.status, 'playing') as status,
+      COALESCE(gl.is_starting_goalie, 0) as is_starting_goalie,
       p.first_name, p.last_name
     FROM game_lineups gl JOIN players p ON p.id = gl.player_id
     WHERE gl.game_id = ? AND gl.team_id = ?
@@ -582,9 +583,10 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
     lineup_id: z.string().min(1),
     status: z.enum(['playing', 'out', 'suspended']),
   })).max(60),
+  starting_goalie_lineup_id: z.string().nullable().optional(),
 })), async (c) => {
   const { gameId, teamId } = c.req.param();
-  const { statuses } = c.req.valid('json');
+  const { statuses, starting_goalie_lineup_id } = c.req.valid('json');
   const user = c.get('user');
   const db = c.env.DB;
   const game = await db.prepare('SELECT id, home_team_id, away_team_id FROM games WHERE id = ?').bind(gameId).first<any>();
@@ -598,6 +600,13 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
     await db.prepare(
       "UPDATE game_lineups SET status = ?, is_scratched = ? WHERE id = ? AND game_id = ? AND team_id = ?"
     ).bind(s.status, s.status === 'playing' ? 0 : 1, s.lineup_id, gameId, teamId).run();
+  }
+  if (starting_goalie_lineup_id !== undefined) {
+    await db.prepare('UPDATE game_lineups SET is_starting_goalie = 0 WHERE game_id = ? AND team_id = ?').bind(gameId, teamId).run();
+    if (starting_goalie_lineup_id) {
+      await db.prepare('UPDATE game_lineups SET is_starting_goalie = 1 WHERE id = ? AND game_id = ? AND team_id = ?')
+        .bind(starting_goalie_lineup_id, gameId, teamId).run();
+    }
   }
   await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
     .bind(gameId, teamId, user.id).run();

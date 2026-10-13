@@ -281,13 +281,20 @@ export default function EventDetailScreen({
   const [ciRoster, setCiRoster] = useState<any[]>([]);
   const [ciLoading, setCiLoading] = useState(false);
   const [ciSaving, setCiSaving] = useState(false);
+  const [ciGoalie, setCiGoalie] = useState<string | null>(null);
   const openCheckinRoster = async (item: GameSlot, teamId: string, teamName: string) => {
     setCiSheet({ gameId: item.id as string, teamId, teamName, gameLabel: `${item.game_number ? `Game #${item.game_number} · ` : ''}${gameTimeLabel(item)}` });
     setCiLoading(true); setCiRoster([]);
     try {
       const r = await authFetch(`/api/registrations/game-checkins/${item.id}/${teamId}/roster`);
       const j = await r.json() as any;
-      if (j.success) setCiRoster(j.data.players || []);
+      if (j.success) {
+        const players = j.data.players || [];
+        setCiRoster(players);
+        const preset = players.find((pl: any) => pl.is_starting_goalie);
+        const goalies = players.filter((pl: any) => String(pl.position || '').toUpperCase() === 'G');
+        setCiGoalie(preset ? preset.lineup_id : (goalies.length === 1 ? goalies[0].lineup_id : null));
+      }
       else { Alert.alert('Could not load roster', j.error || 'Try again at the rink desk.'); setCiSheet(null); }
     } catch { Alert.alert('Could not load roster', 'Check your connection and try again.'); setCiSheet(null); }
     setCiLoading(false);
@@ -298,7 +305,10 @@ export default function EventDetailScreen({
     try {
       const r = await authFetch(`/api/registrations/game-checkins/${ciSheet.gameId}/${ciSheet.teamId}/roster`, {
         method: 'PUT',
-        body: JSON.stringify({ statuses: ciRoster.map(pl => ({ lineup_id: pl.lineup_id, status: pl.status })) }),
+        body: JSON.stringify({
+          statuses: ciRoster.map(pl => ({ lineup_id: pl.lineup_id, status: pl.status })),
+          starting_goalie_lineup_id: ciGoalie,
+        }),
       });
       const j = await r.json() as any;
       if (j.success) {
@@ -2196,6 +2206,27 @@ export default function EventDetailScreen({
               </ScrollView>
             )}
             {ciRoster.length > 0 && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.ciGoalieLabel} maxFontSizeMultiplier={1.2}>STARTING GOALIE</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                  {[...ciRoster].sort((a, b) =>
+                    (String(b.position || '').toUpperCase() === 'G' ? 1 : 0) - (String(a.position || '').toUpperCase() === 'G' ? 1 : 0)
+                  ).map(pl => (
+                    <TouchableOpacity
+                      key={pl.lineup_id}
+                      style={[styles.ciGoalieChip, ciGoalie === pl.lineup_id && styles.ciGoalieChipOn]}
+                      onPress={() => setCiGoalie(prev => (prev === pl.lineup_id ? null : pl.lineup_id))}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.ciGoalieChipText, ciGoalie === pl.lineup_id && styles.ciGoalieChipTextOn]} maxFontSizeMultiplier={1.1}>
+                        {ciGoalie === pl.lineup_id ? '★ ' : ''}#{pl.jersey_number} {pl.last_name}{String(pl.position || '').toUpperCase() === 'G' ? ' (G)' : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            {ciRoster.length > 0 && (
               <TouchableOpacity style={styles.ciSaveBtn} disabled={ciSaving} onPress={saveCheckinRoster} activeOpacity={0.85}>
                 <Text style={styles.ciSaveBtnText} maxFontSizeMultiplier={1.2}>
                   {ciSaving ? 'Saving...' : (ciSheet && gameCheckins[`${ciSheet.gameId}|${ciSheet.teamId}`] ? 'Save Roster' : 'Check In Team')}
@@ -2270,6 +2301,11 @@ const styles = StyleSheet.create({
   ciPillSusp: { backgroundColor: '#dc2626' },
   ciPillText: { fontSize: 11, color: '#5b6b83', ...fonts.bold },
   ciPillTextOn: { color: '#fff' },
+  ciGoalieLabel: { fontSize: 10, color: '#7a8699', letterSpacing: 1, ...fonts.bold, marginBottom: 6 },
+  ciGoalieChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#eef2f7', borderWidth: 1, borderColor: '#dfe6ee' },
+  ciGoalieChipOn: { backgroundColor: colors.navy, borderColor: colors.navy },
+  ciGoalieChipText: { fontSize: 11.5, color: '#44536a', ...fonts.bold },
+  ciGoalieChipTextOn: { color: '#00ccff' },
   ciSaveBtn: { backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 14 },
   ciSaveBtnText: { color: '#fff', fontSize: 15, ...fonts.bold },
   ciUndoText: { color: '#b91c1c', fontSize: 12.5, ...fonts.bold, textAlign: 'center' },
