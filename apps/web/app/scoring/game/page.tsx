@@ -1717,6 +1717,19 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
             // eslint-disable-next-line @next/next/no-img-element
             <img src={signoff.signature_data} alt="Coach signature" className="mt-3 h-16 bg-white rounded-xl border border-emerald-200 px-3" />
           )}
+          {typeof signoff.signature_data === 'string' && signoff.signature_data.startsWith('strokes:') && (() => {
+            try {
+              const sig = JSON.parse(signoff.signature_data.slice(8));
+              return (
+                <svg viewBox={`0 0 ${sig.w} ${sig.h}`} className="mt-3 h-16 bg-white rounded-xl border border-emerald-200 px-3">
+                  {(sig.s || []).map((st: number[], i: number) => (
+                    <polyline key={i} fill="none" stroke="#13294b" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+                      points={st.reduce((acc: string[], v: number, idx: number) => { if (idx % 2 === 0) acc.push(`${v},${st[idx + 1]}`); return acc; }, [] as string[]).join(' ')} />
+                  ))}
+                </svg>
+              );
+            } catch { return null; }
+          })()}
         </div>
       ) : (
         <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 space-y-3">

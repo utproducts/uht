@@ -15,11 +15,15 @@ import {
   Share,
   Modal,
   TextInput,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
+import SignaturePad, { serializeStrokes, Stroke } from '../components/SignaturePad';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
 import { getUser, User, authFetch } from '../services/auth';
 import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
@@ -286,6 +290,9 @@ export default function EventDetailScreen({
   const [ciGoalieError, setCiGoalieError] = useState(false);
   const [ciStep, setCiStep] = useState<'roster' | 'sign'>('roster');
   const [ciSignName, setCiSignName] = useState('');
+  const [ciStrokes, setCiStrokes] = useState<Stroke[]>([]);
+  const [ciPadSize, setCiPadSize] = useState({ w: 0, h: 140 });
+  const [ciSignError, setCiSignError] = useState('');
   const openCheckinRoster = async (item: GameSlot, teamId: string, teamName: string) => {
     setCiSheet({ gameId: item.id as string, teamId, teamName, gameLabel: `${item.game_number ? `Game #${item.game_number} · ` : ''}${gameTimeLabel(item)}` });
     setCiLoading(true); setCiRoster([]);
@@ -302,6 +309,7 @@ export default function EventDetailScreen({
         setCiStep('roster');
         const prevName = j.data?.signoff?.coach_name || currentUser?.name || '';
         setCiSignName(prevName || '');
+        setCiStrokes([]); setCiSignError('');
       }
       else { Alert.alert('Could not load roster', j.error || 'Try again at the rink desk.'); setCiSheet(null); }
     } catch { Alert.alert('Could not load roster', 'Check your connection and try again.'); setCiSheet(null); }
@@ -309,6 +317,8 @@ export default function EventDetailScreen({
   };
   const saveCheckinRoster = async () => {
     if (!ciSheet) return;
+    const drawn = ciStrokes.some(st => st.length > 1);
+    if (!drawn) { setCiSignError('Please sign with your finger in the box'); return; }
     setCiSaving(true);
     try {
       const r = await authFetch(`/api/registrations/game-checkins/${ciSheet.gameId}/${ciSheet.teamId}/roster`, {
@@ -316,7 +326,10 @@ export default function EventDetailScreen({
         body: JSON.stringify({
           statuses: ciRoster.map(pl => ({ lineup_id: pl.lineup_id, status: pl.status })),
           starting_goalie_lineup_id: ciGoalie,
-          signoff: { name: ciSignName.trim() },
+          signoff: {
+            name: ciSignName.trim(),
+            signature: serializeStrokes(ciStrokes, ciPadSize.w || 320, ciPadSize.h),
+          },
         }),
       });
       const j = await r.json() as any;
@@ -2176,8 +2189,8 @@ export default function EventDetailScreen({
 
       {/* Game check-in roster sheet: set each player Playing / Out / Suspended */}
       <Modal visible={!!ciSheet} transparent animationType="slide" onRequestClose={() => setCiSheet(null)}>
-        <View style={styles.ciOverlay}>
-          <View style={styles.ciSheet}>
+        <KeyboardAvoidingView style={styles.ciOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.ciSheet} onStartShouldSetResponder={() => { Keyboard.dismiss(); return false; }}>
             <View style={styles.ciHead}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.ciTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>{ciSheet?.teamName}</Text>
@@ -2193,13 +2206,17 @@ export default function EventDetailScreen({
                 <Text style={styles.ciSignLegal} maxFontSizeMultiplier={1.2}>
                   By signing, you confirm this roster, the player statuses, and the starting goalie are accurate for this game. Your sign-off goes to the scorekeeper and appears on the official scoresheet.
                 </Text>
+                <SignaturePad height={140} onChange={(st, size) => { setCiStrokes(st); setCiPadSize(size); if (st.length > 0) setCiSignError(''); }} />
+                {ciSignError ? <Text style={styles.ciGoalieErrorText} maxFontSizeMultiplier={1.2}>{ciSignError}</Text> : null}
                 <TextInput
-                  style={styles.ciSignInput}
+                  style={[styles.ciSignInput, { marginTop: 10 }]}
                   value={ciSignName}
                   onChangeText={setCiSignName}
-                  placeholder="Type your full name to sign"
+                  placeholder="Type your full name"
                   placeholderTextColor="#9aa7ba"
                   autoCapitalize="words"
+                  returnKeyType="done"
+                  onSubmitEditing={() => Keyboard.dismiss()}
                   maxFontSizeMultiplier={1.2}
                 />
                 <TouchableOpacity
@@ -2286,7 +2303,7 @@ export default function EventDetailScreen({
               </TouchableOpacity>
             ) : null}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

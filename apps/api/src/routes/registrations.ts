@@ -587,7 +587,7 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
     status: z.enum(['playing', 'out', 'suspended']),
   })).max(60),
   starting_goalie_lineup_id: z.string().nullable().optional(),
-  signoff: z.object({ name: z.string().min(2).max(80) }).optional(),
+  signoff: z.object({ name: z.string().min(2).max(80), signature: z.string().max(200000).nullable().optional() }).optional(),
 })), async (c) => {
   const { gameId, teamId } = c.req.param();
   const { statuses, starting_goalie_lineup_id, signoff } = c.req.valid('json');
@@ -623,7 +623,7 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
         user_id = excluded.user_id,
         signature_data = excluded.signature_data,
         signed_off_at = excluded.signed_off_at
-    `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, teamId, user.id, signoff.name.trim(), signoff.name.trim()).run();
+    `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, teamId, user.id, signoff.name.trim(), signoff.signature || signoff.name.trim()).run();
   }
   await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
     .bind(gameId, teamId, user.id).run();

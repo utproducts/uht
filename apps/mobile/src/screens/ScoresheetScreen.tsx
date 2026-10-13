@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Share } from 'react-native';
 import { colors } from '../constants/theme';
 import { authFetch } from '../services/auth';
+import { StrokeDrawing } from '../components/SignaturePad';
 
 // Official game scoresheet — the GameSheet-style record coaches and managers
 // open from the "Scoresheet Ready" push or from My Schedule's completed games.
@@ -235,9 +236,27 @@ export default function ScoresheetScreen({ route, navigation }: any) {
             <View key={`lu-${team.tag}`} style={styles.card}>
               <Text style={styles.cardHeader}>{team.tag} - {team.name}</Text>
               {so ? (
-                <View style={styles.signRow}>
-                  <Ionicons name="checkmark-circle" size={15} color="#059669" />
-                  <Text style={styles.signText}>Roster signed off by {so.coach_name}</Text>
+                <View>
+                  {typeof so.signature_data === 'string' && so.signature_data.startsWith('strokes:') ? (() => {
+                    try {
+                      const sig = JSON.parse(so.signature_data.slice(8));
+                      const scale = Math.min(1, 220 / (sig.w || 320));
+                      const strokes = (sig.s || []).map((st: number[]) => {
+                        const pts: { x: number; y: number }[] = [];
+                        for (let i = 0; i < st.length; i += 2) pts.push({ x: st[i], y: st[i + 1] });
+                        return pts;
+                      });
+                      return (
+                        <View style={{ width: (sig.w || 320) * scale, height: (sig.h || 140) * scale, marginBottom: 4 }}>
+                          <StrokeDrawing strokes={strokes} scale={scale} width={2} />
+                        </View>
+                      );
+                    } catch { return null; }
+                  })() : null}
+                  <View style={styles.signRow}>
+                    <Ionicons name="checkmark-circle" size={15} color="#059669" />
+                    <Text style={styles.signText}>Roster signed off by {so.coach_name}</Text>
+                  </View>
                 </View>
               ) : (
                 <View style={styles.signRow}>
