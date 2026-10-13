@@ -27,24 +27,6 @@ interface Game {
 export default function ScorekeeperPage() {
   const router = useRouter();
   const [pin, setPin] = useState('');
-  const [liveEvent, setLiveEvent] = useState<any | null>(null);
-  useEffect(() => {
-    fetch(`${API_BASE}/events?per_page=200`).then(r => r.json()).then((j: any) => {
-      const list = (j.success ? j.data : []) || [];
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const soon = new Date(today.getTime() + 10 * 86400000);
-      const current = list
-        .filter((e: any) => !e.is_test && e.schedule_published === 1)
-        .filter((e: any) => new Date(e.end_date + 'T23:59:59') >= today && new Date(e.start_date + 'T00:00:00') <= soon)
-        .sort((a: any, b: any) => String(a.start_date).localeCompare(String(b.start_date)));
-      if (current.length > 0) setLiveEvent(current[0]);
-    }).catch(() => {});
-  }, []);
-  const fmtRange = (s?: string, e?: string) => {
-    if (!s) return '';
-    const f = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return e && e !== s ? `${f(s)} - ${f(e)}` : f(s);
-  };
   const [games, setGames] = useState<Game[] | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -346,25 +328,8 @@ export default function ScorekeeperPage() {
     <div className="min-h-screen bg-[#fafafa] flex flex-col">
       {/* Hero Header */}
       <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-4">
-        {liveEvent ? (
-          <div className="flex items-center justify-center gap-3">
-            {liveEvent.logo_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={liveEvent.logo_url} alt="" className="h-12 w-12 object-contain rounded-lg bg-white/10 p-0.5 shrink-0" />
-            )}
-            <div className="text-center">
-              <h1 className="text-xl font-bold text-white leading-tight">{liveEvent.name}</h1>
-              <p className="text-white/80 text-xs font-semibold mt-0.5">
-                {fmtRange(liveEvent.start_date, liveEvent.end_date)}{liveEvent.city ? ` · ${liveEvent.city}` : ''} · Enter your PIN to start scoring
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold text-white text-center">UHT Scorekeeper</h1>
-            <p className="text-white/70 text-center mt-1 text-xs">Enter your PIN to access games</p>
-          </>
-        )}
+        <h1 className="text-2xl font-bold text-white text-center">UHT Scorekeeper</h1>
+        <p className="text-white/70 text-center mt-0.5 text-xs">Enter your PIN to start scoring</p>
       </div>
 
       {/* Main Content */}
