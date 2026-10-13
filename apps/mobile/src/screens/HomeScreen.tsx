@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
   dirCardAlert: { borderColor: '#f87171', borderWidth: 2 },
-  lockerAlertBanner: { position: 'absolute', left: -6, right: -6, top: '45%', backgroundColor: '#dc2626', paddingVertical: 5, alignItems: 'center', transform: [{ rotate: '-4deg' }], borderRadius: 4, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
+  lockerAlertBanner: { position: 'absolute', left: -6, right: -6, bottom: 6, backgroundColor: '#dc2626', paddingVertical: 5, alignItems: 'center', transform: [{ rotate: '-3deg' }], borderRadius: 4, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   lockerAlertBannerText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   dirCard: { backgroundColor: colors.navy, borderColor: 'rgba(0,204,255,0.5)', padding: 14, justifyContent: 'flex-start' },
   dirIconCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,204,255,0.14)', borderWidth: 1, borderColor: 'rgba(0,204,255,0.4)', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
