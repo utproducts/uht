@@ -39,7 +39,9 @@ export default function ScoringConsoleScreen({ navigation }: any) {
       <View style={{ flex: 1, paddingBottom: insets.bottom }}>
         <WebView
           ref={webref}
-          source={{ uri: 'https://ultimatetournaments.com/scoring' }}
+          // cache-bust per mount so scorekeepers always get the latest console
+          source={{ uri: `https://ultimatetournaments.com/scoring?v=${Math.floor(Date.now() / 60000)}` }}
+          cacheEnabled={false}
           style={{ flex: 1 }}
           onLoadEnd={() => setLoading(false)}
           allowsBackForwardNavigationGestures
