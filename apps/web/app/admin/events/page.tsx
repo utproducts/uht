@@ -5001,12 +5001,23 @@ function MeetingsCard({ eventId }: { eventId: string }) {
     setBusy(false);
   };
   const announce = async (m: any) => {
-    if (!window.confirm(`Push this meeting to all ${m.audience === 'coaches' ? 'coaches and managers' : 'parents and fans'} now?`)) return;
+    const note = window.prompt(`Push to all ${m.audience === 'coaches' ? 'coaches and managers' : 'parents and fans'}.\n\nOptional note (e.g. "Starting in 5 minutes!") - leave blank for the standard announcement:`);
+    if (note === null) return;
     setBusy(true);
     try {
-      const r = await fetch(`${API2}/meetings/${m.id}/announce`, { method: 'POST', headers: hdrs(), body: '{}' }).then(res => res.json());
+      const r = await fetch(`${API2}/meetings/${m.id}/announce`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ note: note.trim() }) }).then(res => res.json());
       setMsg(r.success ? `Pushed to ${r.data?.sent ?? 0} devices.` : (r.error || 'Push failed'));
     } catch { setMsg('Push failed'); }
+    setBusy(false);
+  };
+  const emailBlast = async (m: any) => {
+    const note = window.prompt(`Email the Zoom invite to all ${m.audience === 'coaches' ? 'coaches and managers' : 'parents and fans'}.\n\nOptional note (e.g. "Starting in 5 minutes!") - leave blank for the standard invite:`);
+    if (note === null) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API2}/meetings/${m.id}/email`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ note: note.trim() }) }).then(res => res.json());
+      setMsg(r.success ? `Emailed ${r.data?.sent ?? 0} people.` : (r.error || 'Email failed'));
+    } catch { setMsg('Email failed'); }
     setBusy(false);
   };
   const remove = async (m: any) => {
@@ -5028,7 +5039,8 @@ function MeetingsCard({ eventId }: { eventId: string }) {
                 <p className="text-sm font-semibold text-[#1d1d1f] truncate">{m.title} <span className="font-normal text-[#6e6e73]">- {m.when_text}</span></p>
                 {m.link && <a href={m.link} target="_blank" rel="noreferrer" className="text-xs text-[#0a7cc9] truncate block">{m.link}</a>}
               </div>
-              <button onClick={() => announce(m)} disabled={busy} className="px-3 py-1.5 rounded-lg bg-[#003e79] text-white text-xs font-bold disabled:opacity-50">Announce</button>
+              <button onClick={() => announce(m)} disabled={busy} className="px-3 py-1.5 rounded-lg bg-[#003e79] text-white text-xs font-bold disabled:opacity-50">Send Push</button>
+              <button onClick={() => emailBlast(m)} disabled={busy} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50">Send Email</button>
               <button onClick={() => remove(m)} className="px-2 py-1.5 rounded-lg text-red-600 text-xs font-bold hover:bg-red-50">Delete</button>
             </div>
           ))}

@@ -330,12 +330,16 @@ pushRoutes.delete('/meetings/:id', authMiddleware, requireRole('admin', 'directo
 pushRoutes.post('/meetings/:id/announce', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const user = c.get('user') as { id: string };
+  const reqBody = await c.req.json().catch(() => ({})) as any;
+  const note = typeof reqBody.note === 'string' ? reqBody.note.trim().slice(0, 140) : '';
   const m = await db.prepare(
     'SELECT m.*, e.name as event_name FROM event_meetings m JOIN events e ON e.id = m.event_id WHERE m.id = ?'
   ).bind(c.req.param('id')).first<any>();
   if (!m) return c.json({ success: false, error: 'Meeting not found' }, 404);
-  const title = `${m.audience === 'coaches' ? '📋' : '📣'} ${m.title} - ${m.when_text}`;
-  const body = `${m.event_name}: ${m.title} ${m.when_text}${m.link ? ' on Zoom. Open the app - the banner on your home screen has the join link.' : '. Details on your home screen in the app.'}`;
+  const title = note
+    ? `${m.audience === 'coaches' ? '📋' : '📣'} ${m.title}: ${note}`
+    : `${m.audience === 'coaches' ? '📋' : '📣'} ${m.title} - ${m.when_text}`;
+  const body = `${m.event_name}: ${m.title} ${m.when_text}${note ? ` - ${note}` : ''}${m.link ? ' Open the app - the banner on your home screen has the Zoom link.' : ' Details on your home screen in the app.'}`;
   const pushData = { type: 'event_update', event_id: m.event_id };
   const { tokens, userIds } = await groupAudience(db, m.event_id, m.audience);
   if (tokens.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No devices in that group' });
@@ -343,6 +347,78 @@ pushRoutes.post('/meetings/:id/announce', authMiddleware, requireRole('admin', '
   await logNotification(db, { type: 'event_update', title, body, audience: `event_${m.audience}`, target_id: m.event_id, sent_count: sent, sent_by: user.id, metadata: JSON.stringify({ meeting_id: m.id }) });
   await createUserNotifications(db, userIds, title, body, 'event_update', pushData);
   return c.json({ success: true, data: { sent, users: userIds.length } });
+});
+
+
+// Email the meeting (with Zoom link) to its audience group. Optional note
+// turns it into a "Starting in 5 minutes" style reminder. Recipients are
+// BCC'd in batches so addresses never leak.
+pushRoutes.post('/meetings/:id/email', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const reqBody = await c.req.json().catch(() => ({})) as any;
+  const note = typeof reqBody.note === 'string' ? reqBody.note.trim().slice(0, 140) : '';
+  const m = await db.prepare(
+    'SELECT m.*, e.name as event_name FROM event_meetings m JOIN events e ON e.id = m.event_id WHERE m.id = ?'
+  ).bind(c.req.param('id')).first<any>();
+  if (!m) return c.json({ success: false, error: 'Meeting not found' }, 404);
+
+  const staffSel = `
+    SELECT tc.user_id FROM team_coaches tc WHERE tc.team_id IN (SELECT tid FROM evt_teams)
+    UNION SELECT tm.user_id FROM team_managers tm WHERE tm.team_id IN (SELECT tid FROM evt_teams)`;
+  const famSel = `
+    SELECT uf.user_id FROM user_follows uf WHERE uf.team_id IN (SELECT tid FROM evt_teams)
+    UNION SELECT tmem.user_id FROM team_members tmem WHERE tmem.team_id IN (SELECT tid FROM evt_teams) AND tmem.status = 'active'`;
+  const member = m.audience === 'coaches' ? staffSel : `${famSel} EXCEPT ${staffSel}`;
+  const CTE = `WITH evt_teams AS (
+    SELECT er.team_id AS tid FROM event_registrations er
+    WHERE er.event_id = ?1 AND er.status = 'approved' AND er.team_id IS NOT NULL)`;
+  const userRows = (await db.prepare(`${CTE}
+    SELECT DISTINCT u.email FROM users u WHERE u.id IN (${member}) AND u.email IS NOT NULL AND u.email != ''
+  `).bind(m.event_id).all()).results || [];
+  let emails = (userRows as any[]).map((r: any) => String(r.email).trim().toLowerCase());
+  if (m.audience === 'coaches') {
+    const regRows = (await db.prepare(
+      "SELECT email1, email2, coach_email FROM event_registrations WHERE event_id = ? AND status = 'approved'"
+    ).bind(m.event_id).all()).results || [];
+    for (const r of regRows as any[]) emails.push(...[r.email1, r.email2, r.coach_email].map((e: any) => String(e || '').trim().toLowerCase()));
+  }
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  emails = [...new Set(emails.filter(e => emailRe.test(e)))];
+  if (emails.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No email addresses in that group' });
+
+  const subject = note ? `${note} - ${m.title} (${m.event_name})` : `${m.title}: ${m.when_text} (${m.event_name})`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f2f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
+    <div style="background:#003e79;border-radius:16px 16px 0 0;padding:24px 28px;text-align:center;">
+      <div style="color:#00ccff;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">${m.event_name}</div>
+      <div style="color:#ffffff;font-size:24px;font-weight:800;margin-top:6px;">${m.title}</div>
+      <div style="color:#aee6ff;font-size:15px;font-weight:700;margin-top:4px;">${m.when_text}</div>
+    </div>
+    <div style="background:#ffffff;border-radius:0 0 16px 16px;padding:28px;text-align:center;">
+      ${note ? `<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:12px;padding:12px 16px;margin:0 0 18px;font-size:16px;font-weight:800;color:#b91c1c;">${note}</div>` : ''}
+      ${m.link ? `<a href="${m.link}" style="display:inline-block;background:#dc2626;color:#ffffff;font-size:17px;font-weight:800;text-decoration:none;border-radius:999px;padding:14px 36px;">Join Zoom Meeting</a>
+      <p style="font-size:12px;color:#86868b;margin:14px 0 0;word-break:break-all;"><a href="${m.link}" style="color:#0a7cc9;">${m.link}</a></p>` :
+      '<p style="font-size:14px;color:#1d2a3d;">Details are on your home screen in the UHT app.</p>'}
+      <p style="font-size:13px;color:#5b6b83;margin:18px 0 0;">The join link is also on your home screen in the UHT app.</p>
+    </div>
+  </div></body></html>`;
+
+  let sent = 0;
+  for (let i = 0; i < emails.length; i += 40) {
+    const chunk = emails.slice(i, i + 40);
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
+        reply_to: 'johnny@ultimatetournaments.com',
+        to: ['johnny@ultimatetournaments.com'],
+        bcc: chunk, subject, html,
+      }),
+    });
+    if (resp.ok) sent += chunk.length;
+  }
+  return c.json({ success: true, data: { sent, recipients: emails.length } });
 });
 
 // POST /send-locker-room — Send locker room assignment push to team followers

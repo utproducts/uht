@@ -128,10 +128,37 @@ hotelRoutes.patch('/master/:id', authMiddleware, requireRole('admin'), zValidato
     if (val !== undefined) { setClauses.push(`${key} = ?`); params.push(val as any); }
   }
   if (setClauses.length === 0) return c.json({ success: false, error: 'No fields' }, 400);
+
+  // Linked event_hotels rows are SNAPSHOTS taken at link time, and the
+  // acceptance email reads those - so master edits must flow through to
+  // them. Only rows still matching the OLD master value update; a value
+  // someone deliberately overrode per-event is left alone.
+  const before = await db.prepare('SELECT * FROM master_hotels WHERE id = ?').bind(id).first<any>();
+
   setClauses.push("updated_at = datetime('now')");
   params.push(id);
   await db.prepare(`UPDATE master_hotels SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
   const updated = await db.prepare('SELECT * FROM master_hotels WHERE id = ?').bind(id).first();
+
+  if (before) {
+    const FIELD_MAP: Record<string, string> = {
+      hotel_name: 'hotel_name', address: 'address', city: 'city', state: 'state', phone: 'phone',
+      contact_name: 'contact_name', contact_email: 'contact_email',
+      contact_phone: 'contact_phone', contact_title: 'contact_title',
+      image_url: 'image_url',
+      default_rate_description: 'rate_description',
+      default_booking_url: 'booking_url',
+    };
+    for (const [masterKey, val] of Object.entries(data)) {
+      const ehKey = FIELD_MAP[masterKey];
+      if (!ehKey || val === undefined) continue;
+      const oldVal = before[masterKey];
+      await db.prepare(
+        `UPDATE event_hotels SET ${ehKey} = ? WHERE master_hotel_id = ? AND (${ehKey} IS ? OR ${ehKey} = '' OR ${ehKey} IS NULL)`
+      ).bind(val as any, id, oldVal ?? null).run().catch(() => {});
+    }
+  }
+
   return c.json({ success: true, data: updated });
 });
 
