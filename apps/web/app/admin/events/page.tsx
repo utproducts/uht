@@ -5428,30 +5428,58 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
   const [copiedEmail, setCopiedEmail] = useState('');
   const [mhrRefreshing, setMhrRefreshing] = useState(false);
   const [mhrResult, setMhrResult] = useState<string>('');
+  // Runs in THIS browser, not the worker: r.jina.ai rate-limits Cloudflare's
+  // shared IPs (429s), but an admin's own IP sails through.
   const refreshMhr = async () => {
     setMhrRefreshing(true);
     setMhrResult('');
     try {
-      const res = await fetch(`${API_BASE}/admin/${eventId}/refresh-mhr`, {
-        method: 'POST',
-        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
-      });
-      const json = await res.json() as any;
-      if (json.success) {
-        const d = json.data;
-        setMhrResult(d.linked_teams === 0 ? 'No teams have MHR links yet' : `Updated ${d.updated} of ${d.linked_teams} linked team${d.linked_teams !== 1 ? 's' : ''}`);
-        // Re-pull the event detail so the new ratings render
-        try {
-          const evRes = await fetch(`${API_BASE}/admin/detail/${eventId}`, { headers: adminHeaders() });
-          const evJson = await evRes.json() as any;
-          if (evJson.success) setEvent(evJson.data);
-        } catch {}
-      } else {
-        setMhrResult('Refresh failed');
+      const hdrs = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+      const linksRes = await fetch(`${API_BASE}/admin/${eventId}/mhr-links`, { headers: hdrs });
+      const linksJson = await linksRes.json() as any;
+      if (!linksJson.success) { setMhrResult('Refresh failed'); setMhrRefreshing(false); return; }
+      const teams: any[] = linksJson.data || [];
+      if (teams.length === 0) { setMhrResult('No teams have MHR links yet'); setMhrRefreshing(false); return; }
+      const ratings: any[] = [];
+      let unrated = 0;
+      for (let i = 0; i < teams.length; i++) {
+        const t = teams[i];
+        setMhrResult(`Checking ${i + 1} of ${teams.length}…`);
+        const url = String(t.mhr_url).trim();
+        const target = url.startsWith('http') ? url : `https://${url}`;
+        let found = false;
+        for (let attempt = 0; attempt < 3 && !found; attempt++) {
+          try {
+            const r = await fetch(`https://r.jina.ai/${target}`, { headers: { Accept: 'text/plain' } });
+            if (r.status === 429) { await new Promise(res => setTimeout(res, 4000 * (attempt + 1))); continue; }
+            if (!r.ok) break;
+            const text = await r.text();
+            const m = text.match(/#+\s*Rating\s*\n+\s*([0-9]+(?:\.[0-9]+)?)/i) || text.match(/\bRating\b[^0-9]{0,40}([0-9]{1,3}\.[0-9])/i);
+            if (m) {
+              const rating = parseFloat(m[1]);
+              if (rating > 0 && rating < 200) { ratings.push({ team_id: t.id, rating }); found = true; }
+              else { unrated++; found = true; } // page loaded, team just has no rating yet
+            } else if (attempt < 2) {
+              await new Promise(res => setTimeout(res, 2500)); // flaky render - try again
+            }
+          } catch { break; }
+        }
+        await new Promise(res => setTimeout(res, 700));
       }
+      if (ratings.length > 0) {
+        await fetch(`${API_BASE}/admin/${eventId}/mhr-ratings`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...hdrs }, body: JSON.stringify({ ratings }),
+        });
+      }
+      setMhrResult(`Updated ${ratings.length} of ${teams.length} linked team${teams.length !== 1 ? 's' : ''}${unrated ? ` (${unrated} unrated on MHR)` : ''}`);
+      try {
+        const evRes = await fetch(`${API_BASE}/admin/detail/${eventId}`, { headers: adminHeaders() });
+        const evJson = await evRes.json() as any;
+        if (evJson.success) setEvent(evJson.data);
+      } catch {}
     } catch { setMhrResult('Refresh failed'); }
     setMhrRefreshing(false);
-    setTimeout(() => setMhrResult(''), 6000);
+    setTimeout(() => setMhrResult(''), 10000);
   };
   const copyEmail = (email: string) => {
     try { navigator.clipboard.writeText(email); } catch {}

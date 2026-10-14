@@ -1728,13 +1728,14 @@ eventRoutes.post('/admin/registration/:regId/resend-discount-code', authMiddlewa
 // ── MHR ratings refresh: pull each linked team's current MyHockeyRankings
 // rating. MHR sits behind a bot challenge, so pages are fetched through the
 // r.jina.ai reader proxy; failures leave the stored rating untouched.
-eventRoutes.post('/admin/:eventId/refresh-mhr', authMiddleware, requireRole('admin', 'director'), async (c) => {
+// MHR refresh now runs in the ADMIN'S BROWSER (r.jina.ai rate-limits
+// Cloudflare's shared egress IPs to death). These two endpoints feed it:
+// the linked-team list, and the save-back of scraped ratings.
+eventRoutes.get('/admin/:eventId/mhr-links', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
-
-  // Distinct teams registered for this event that have an MHR link
   const teams = await db.prepare(`
-    SELECT DISTINCT t.id, t.mhr_url FROM teams t
+    SELECT DISTINCT t.id, t.mhr_url, t.name FROM teams t
     WHERE t.mhr_url IS NOT NULL AND t.mhr_url != '' AND t.id IN (
       SELECT r.team_id FROM registrations r WHERE r.event_id = ? AND r.team_id IS NOT NULL
       UNION
@@ -1744,19 +1745,67 @@ eventRoutes.post('/admin/:eventId/refresh-mhr', authMiddleware, requireRole('adm
       WHERE er2.event_id = ? AND er2.team_id IS NULL
     )
   `).bind(eventId, eventId, eventId).all<any>();
+  return c.json({ success: true, data: teams.results || [] });
+});
 
-  let updated = 0, failed = 0;
+eventRoutes.post('/admin/:eventId/mhr-ratings', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({})) as any;
+  const ratings = Array.isArray(body.ratings) ? body.ratings : [];
+  let updated = 0;
+  for (const r of ratings) {
+    const rating = Number(r.rating);
+    if (!r.team_id || !(rating > 0 && rating < 200)) continue;
+    await db.prepare("UPDATE teams SET mhr_rating = ?, mhr_rating_updated_at = datetime('now') WHERE id = ?")
+      .bind(rating, String(r.team_id)).run();
+    updated++;
+  }
+  return c.json({ success: true, data: { updated } });
+});
+
+eventRoutes.post('/admin/:eventId/refresh-mhr', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+
+  // Distinct teams registered for this event that have an MHR link,
+  // stalest ratings first so repeated clicks keep making progress
+  const teams = await db.prepare(`
+    SELECT DISTINCT t.id, t.mhr_url, t.mhr_rating_updated_at FROM teams t
+    WHERE t.mhr_url IS NOT NULL AND t.mhr_url != '' AND t.id IN (
+      SELECT r.team_id FROM registrations r WHERE r.event_id = ? AND r.team_id IS NOT NULL
+      UNION
+      SELECT er.team_id FROM event_registrations er WHERE er.event_id = ? AND er.team_id IS NOT NULL
+      UNION
+      SELECT t2.id FROM event_registrations er2 JOIN teams t2 ON LOWER(t2.name) = LOWER(er2.team_name)
+      WHERE er2.event_id = ? AND er2.team_id IS NULL
+    )
+    ORDER BY t.mhr_rating_updated_at IS NOT NULL, t.mhr_rating_updated_at ASC
+  `).bind(eventId, eventId, eventId).all<any>();
+
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const deadline = Date.now() + 110_000; // stay under platform limits; UI says to click again
+  let updated = 0, failed = 0, skipped = 0;
   const results: any[] = [];
+  let first = true;
   for (const team of (teams.results || [])) {
+    if (Date.now() > deadline) { skipped++; results.push({ team_id: team.id, ok: false, reason: 'skipped - time budget' }); continue; }
+    if (!first) await sleep(1500); // the proxy rate-limits bursts (429)
+    first = false;
     try {
       const url = String(team.mhr_url).trim();
       const target = url.startsWith('http') ? url : `https://${url}`;
-      const res = await fetch(`https://r.jina.ai/${target}`, {
-        headers: { 'Accept': 'text/plain' },
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!res.ok) { failed++; results.push({ team_id: team.id, ok: false, status: res.status }); continue; }
-      const text = await res.text();
+      let text: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(`https://r.jina.ai/${target}`, {
+          headers: { 'Accept': 'text/plain' },
+          signal: AbortSignal.timeout(20000),
+        });
+        if (res.ok) { text = await res.text(); break; }
+        if (res.status === 429 && attempt < 2 && Date.now() < deadline) { await sleep(4000 * (attempt + 1)); continue; }
+        results.push({ team_id: team.id, ok: false, status: res.status });
+        break;
+      }
+      if (text === null) { failed++; continue; }
       const m = text.match(/#+\s*Rating\s*\n+\s*([0-9]+(?:\.[0-9]+)?)/i) || text.match(/\bRating\b[^0-9]{0,40}([0-9]{1,3}\.[0-9])/i);
       if (m) {
         const rating = parseFloat(m[1]);
@@ -1776,7 +1825,7 @@ eventRoutes.post('/admin/:eventId/refresh-mhr', authMiddleware, requireRole('adm
     }
   }
 
-  return c.json({ success: true, data: { linked_teams: (teams.results || []).length, updated, failed, results } });
+  return c.json({ success: true, data: { linked_teams: (teams.results || []).length, updated, failed, skipped, results } });
 });
 
 eventRoutes.get('/admin/registration/:regId/payments', authMiddleware, requireRole('admin', 'director'), async (c) => {
