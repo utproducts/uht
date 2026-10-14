@@ -3398,7 +3398,7 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
                         </td>
                         <td className="px-4 py-2.5 text-xs text-[#6e6e73]">{divLabel || '—'}</td>
                         <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{formatTime(g.start_time)}</td>
-                        <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{g.rink_name || '—'}</td>
+                        <td className="px-4 py-2.5 text-xs text-[#3d3d3d]">{[g.venue_name, g.rink_name].filter(Boolean).join(' - ') || '—'}</td>
                         <td className="px-4 py-2.5 text-center">
                           {(g.status === 'in_progress' || g.status === 'final' || g.status === 'intermission') ? (
                             <span className="font-bold text-[#1d1d1f]">{g.home_score} - {g.away_score}</span>
@@ -3710,7 +3710,7 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-sm text-[#1d1d1f]">#{g.game_number}</span>
                   <span className="text-xs text-[#6e6e73] text-right">
-                    {formatTime(g.start_time)}{g.rink_name ? ` · ${g.rink_name}` : ''}
+                    {formatTime(g.start_time)}{(g.venue_name || g.rink_name) ? ` · ${[g.venue_name, g.rink_name].filter(Boolean).join(' - ')}` : ''}
                   </span>
                 </div>
                 <p className="text-sm text-[#1d1d1f] mt-1 mb-3">
@@ -3780,7 +3780,7 @@ function LockerRoomsTab({ eventId }: { eventId: string }) {
                     <td className="px-3 py-2.5 font-medium text-[#1d1d1f]">#{g.game_number}</td>
                     <td className="px-3 py-2.5 text-[#1d1d1f]">{g.home_team_name || g.notes?.split(' vs ')?.[0] || 'TBD'} vs {g.away_team_name || g.notes?.split(' vs ')?.[1] || 'TBD'}</td>
                     <td className="px-3 py-2.5 text-[#6e6e73]">{formatTime(g.start_time)}</td>
-                    <td className="px-3 py-2.5 text-[#6e6e73]">{g.rink_name || '—'}</td>
+                    <td className="px-3 py-2.5 text-[#6e6e73]">{[g.venue_name, g.rink_name].filter(Boolean).join(' - ') || '—'}</td>
                     <td className="px-3 py-2">
                       {renderLockerField(g, 'home', false)}
                     </td>
