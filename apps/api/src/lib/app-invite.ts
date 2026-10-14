@@ -10,7 +10,20 @@
 const TEMPLATE_ID = 'app_invite';
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
-const STAFF_BCC = ['johnny@ultimatetournaments.com'];
+
+
+// Johnny asked OFF the per-email BCC but still wants one copy per blast
+async function sendBlastCopy(env: any, subject: string, html: string, sent: number) {
+  if (sent <= 0) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to: ['johnny@ultimatetournaments.com'], subject: `[Blast copy - ${sent} sent] ${subject}`, html }),
+    });
+  } catch {}
+}
+
 const APP_STORE_URL = 'https://apps.apple.com/app/id6786085393';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht';
 
@@ -183,6 +196,7 @@ export async function sendAppInviteForEvent(env: any, eventId: string, testEmail
   const eventDates = fmtRange(event.start_date, event.end_date);
   const campaignId = testEmail ? null : await campaignFor(db, event);
 
+  let lastSample: { subject: string; html: string } | null = null;
   for (const reg of regs) {
     out.teams++;
     const team = await teamFor(db, reg);
@@ -191,6 +205,7 @@ export async function sendAppInviteForEvent(env: any, eventId: string, testEmail
 
     const teamName = team?.name || reg.team_name || 'Your Team';
     const { subject, html } = buildAppInviteHtml({ eventName: event.name, eventDates, teamName, code });
+    lastSample = { subject, html };
 
     if (testEmail) {
       const resp = await fetch('https://api.resend.com/emails', {
@@ -218,7 +233,7 @@ export async function sendAppInviteForEvent(env: any, eventId: string, testEmail
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], bcc: STAFF_BCC, subject, html }),
+          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], subject, html }),
         });
         if (!resp.ok) {
           console.error(`App invite failed for ${email}: ${resp.status} ${await resp.text()}`);
@@ -236,6 +251,7 @@ export async function sendAppInviteForEvent(env: any, eventId: string, testEmail
     }
   }
 
+  if (lastSample) await sendBlastCopy(env, lastSample.subject, lastSample.html, out.sent);
   return out;
 }
 
@@ -283,6 +299,7 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
   if (!opts.commit && !opts.testEmail) return out;
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  let lastLow: { subject: string; html: string } | null = null;
   for (const t of low as any[]) {
     if (!t.code) { out.skipped++; continue; }
     const n = t.app_users ?? 0;
@@ -321,14 +338,16 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
     if (recipients.length === 0) { out.skipped++; continue; }
     const resp = await fetch('https://api.resend.com/emails', {
       method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: recipients, bcc: STAFF_BCC, subject, html }),
+      body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: recipients, subject, html }),
     });
     if (resp.ok) {
       out.sent++;
       await db.prepare(
         "INSERT INTO automated_email_log (id, template_id, registration_id, event_id, email) VALUES (lower(hex(randomblob(16))), 'app_adoption_push', ?, ?, ?)"
       ).bind(t.reg_id, eventId, recipients.join(',')).run().catch(() => {});
+      lastLow = { subject, html };
     } else out.skipped++;
   }
+  if (lastLow) await sendBlastCopy(env, lastLow.subject, lastLow.html, out.sent);
   return out;
 }

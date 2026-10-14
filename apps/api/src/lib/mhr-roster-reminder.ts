@@ -12,8 +12,20 @@ import { sendExpoPushNotifications, createUserNotifications, logNotification } f
 
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
-const STAFF_BCC = ['johnny@ultimatetournaments.com'];
+
 const SITE = 'https://ultimatetournaments.com';
+
+// Johnny asked OFF the per-email BCC but still wants one copy per blast
+async function sendBlastCopy(env: any, subject: string, html: string, sent: number) {
+  if (sent <= 0) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to: ['johnny@ultimatetournaments.com'], subject: `[Blast copy - ${sent} sent] ${subject}`, html }),
+    });
+  } catch {}
+}
 
 const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
@@ -113,6 +125,7 @@ export async function sendMhrRosterReminders(env: any, eventId: string, opts: { 
   const templateId = weeklyTemplateId();
   const out: any = { teams: teams.length, emails_sent: 0, emails_skipped: 0, pushes_sent: 0, no_email: 0, detail: [] as any[] };
 
+  let lastSample: { subject: string; html: string } | null = null;
   for (const t of teams) {
     const { subject, html } = buildMhrRosterHtml({
       eventName: event.name, eventDates, teamName: t.team_name || 'Your Team',
@@ -136,13 +149,14 @@ export async function sendMhrRosterReminders(env: any, eventId: string, opts: { 
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], bcc: STAFF_BCC, subject, html }),
+          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], subject, html }),
         });
         if (!resp.ok) { console.error(`MHR reminder failed for ${email}: ${resp.status}`); continue; }
         await db.prepare(
           'INSERT OR IGNORE INTO automated_email_log (template_id, event_id, registration_id, email) VALUES (?, ?, ?, ?)'
         ).bind(templateId, event.id, t.reg_id, email).run();
         out.emails_sent++;
+        lastSample = { subject, html };
       } catch (e: any) {
         console.error(`MHR reminder error for ${email}:`, e?.message || String(e));
       }
@@ -179,6 +193,7 @@ export async function sendMhrRosterReminders(env: any, eventId: string, opts: { 
       }
     }
   }
+  if (lastSample) await sendBlastCopy(env, lastSample.subject, lastSample.html, out.emails_sent);
   return out;
 }
 

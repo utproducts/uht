@@ -14,7 +14,7 @@ const TEMPLATE_ID = 'event_info_30day';
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
 // Staff copies of every tournament guide that goes out (Johnny, 9/26)
-const STAFF_BCC = ['johnny@ultimatetournaments.com'];
+
 
 /*
   Every guide send is recorded under a per-event campaign in email_campaigns /
@@ -66,6 +66,18 @@ function fmtRange(start: string, end?: string | null): string {
   if (sy === ey && sm === em) return `${MONTHS[sm - 1]} ${sd} - ${ed}, ${sy}`;
   if (sy === ey) return `${MONTHS[sm - 1]} ${sd} - ${MONTHS[em - 1]} ${ed}, ${sy}`;
   return `${fmtDate(start)} - ${fmtDate(end)}`;
+}
+
+// Johnny asked OFF the per-email BCC but still wants one copy per blast
+async function sendBlastCopy(env: any, subject: string, html: string, sent: number) {
+  if (sent <= 0) return;
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to: ['johnny@ultimatetournaments.com'], subject: `[Blast copy - ${sent} sent] ${subject}`, html }),
+    });
+  } catch {}
 }
 
 const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -214,6 +226,7 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
   const ctx = await getEventInfoContext(db, event);
   const campaignId = await guideCampaignFor(db, event, fields.subject);
 
+  let lastSample: { subject: string; html: string } | null = null;
   for (const reg of regs) {
     out.teams++;
     // One send wave per call stays well under subrequest limits for
@@ -256,7 +269,7 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], bcc: STAFF_BCC, subject, html }),
+          body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [email], subject, html }),
         });
         if (!resp.ok) {
           console.error(`30-day email failed for ${email}: ${resp.status} ${await resp.text()}`);
@@ -268,12 +281,14 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
         ).bind(TEMPLATE_ID, event.id, reg.id, email).run();
         await recordGuideSend(db, campaignId, email, `${reg.team_name || ''}`, respJson?.id || null);
         out.sent++;
+        lastSample = { subject, html };
       } catch (e: any) {
         console.error(`30-day email error for ${email}:`, e?.message || String(e));
       }
     }
   }
 
+  if (lastSample) await sendBlastCopy(env, lastSample.subject, lastSample.html, out.sent);
   return out;
 }
 
