@@ -4969,6 +4969,81 @@ function ScheduleVisibilityCard({ eventId }: { eventId: string }) {
   );
 }
 
+// Director event PIN: directors enter this in the app to unlock the director
+// toolkit scoped to this event only. Admin accounts never need a PIN.
+function DirectorPinCard({ eventId }: { eventId: string }) {
+  const ROOT = 'https://uht.chad-157.workers.dev/api';
+  const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
+  const [pin, setPin] = useState<string | null>(null);
+  const [directors, setDirectors] = useState<any[]>([]);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const load = () => {
+    fetch(`${ROOT}/director/pins/${eventId}`, { headers: hdrs() })
+      .then(r => r.json())
+      .then(j => { if (j.success) { setPin(j.data.pin); setDirectors(j.data.directors || []); } })
+      .catch(() => {});
+  };
+  useEffect(load, [eventId]);
+
+  const save = async () => {
+    const p = draft.trim();
+    if (!/^[0-9]{3,8}$/.test(p)) { setErr('PIN must be 3-8 digits'); return; }
+    setBusy(true); setErr('');
+    try {
+      const r = await fetch(`${ROOT}/director/pins/${eventId}`, { method: 'PUT', headers: hdrs(), body: JSON.stringify({ pin: p }) });
+      const j = await r.json();
+      if (j.success) { setPin(j.data.pin); setDraft(''); }
+      else setErr(j.error || 'Could not save PIN');
+    } catch { setErr('Could not save PIN'); }
+    setBusy(false);
+  };
+
+  const revoke = async (userId: string, name: string) => {
+    if (!window.confirm(`Remove ${name || 'this director'} from this event? They lose director access to it in the app.`)) return;
+    try {
+      await fetch(`${ROOT}/director/pins/${eventId}/directors/${userId}`, { method: 'DELETE', headers: hdrs() });
+      load();
+    } catch {}
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Director PIN</h3>
+          <p className="text-xs text-[#6e6e73] mt-0.5">Directors enter this PIN in the app (Director role) to unlock this event&apos;s tools. They only see this event. Admin accounts see everything without a PIN.</p>
+        </div>
+        {pin && <span className="font-mono font-extrabold text-2xl text-[#003e79] tracking-widest bg-[#eaf6ff] border border-[#bfe6ff] rounded-xl px-4 py-1.5">{pin}</span>}
+      </div>
+      <div className="flex items-center gap-2 mt-4">
+        <input value={draft} onChange={e => { setDraft(e.target.value.replace(/[^0-9]/g, '')); setErr(''); }} placeholder={pin ? 'New PIN' : 'Set a PIN (3-8 digits)'} maxLength={8}
+          className="border border-gray-300 rounded-xl px-3 py-2 text-sm font-mono tracking-widest w-44" />
+        <button onClick={save} disabled={busy || !draft}
+          className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-semibold hover:bg-[#00529e] transition disabled:opacity-50">
+          {busy ? 'Saving…' : pin ? 'Change PIN' : 'Set PIN'}
+        </button>
+        {err && <span className="text-xs text-red-600 font-medium">{err}</span>}
+      </div>
+      {directors.length > 0 && (
+        <div className="mt-4 border-t border-gray-100 pt-3">
+          <div className="text-xs font-bold text-[#6e6e73] uppercase tracking-wide mb-2">Directors who unlocked this event</div>
+          <div className="space-y-1.5">
+            {directors.map(d => (
+              <div key={d.user_id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="text-[#1d1d1f]">{d.name || d.user_id}{d.email ? <span className="text-[#6e6e73]"> · {d.email}</span> : null}</span>
+                <button onClick={() => revoke(d.user_id, d.name)} className="text-xs text-red-600 hover:text-red-700 font-semibold">Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Zoom meetings for an event: role-scoped home-screen banners + pushes.
 // Coaches meetings only reach coaches/managers; parents meetings only reach
 // followers and family.
@@ -5674,6 +5749,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tab Content */}
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
+      {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && (
         <div className="space-y-6">
           {/* Tournament guide email send */}

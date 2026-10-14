@@ -7,6 +7,80 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 export const directorRoutes = new Hono<{ Bindings: Env }>();
 
 // ==========================================
+// EVENT PIN CLAIM: an event director enters the event's director PIN once;
+// their account gains the director role scoped (in the app) to that event.
+// Admins never need this - they see every event.
+// ==========================================
+directorRoutes.post('/claim', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user');
+  const body = await c.req.json().catch(() => ({})) as any;
+  const pin = String(body.pin || '').trim();
+  if (pin.length < 3) return c.json({ success: false, error: 'Enter the event director PIN' }, 400);
+  const row = await db.prepare(`
+    SELECT dp.event_id, e.name as event_name FROM director_pins dp
+    JOIN events e ON e.id = dp.event_id
+    WHERE dp.pin_code = ? AND dp.is_active = 1
+  `).bind(pin).first<any>();
+  if (!row) return c.json({ success: false, error: 'Invalid director PIN' }, 404);
+  await db.prepare('INSERT OR IGNORE INTO event_directors (event_id, user_id) VALUES (?, ?)')
+    .bind(row.event_id, user.id).run();
+  await db.prepare("INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (lower(hex(randomblob(16))), ?, 'director')")
+    .bind(user.id).run().catch(() => {});
+  return c.json({ success: true, data: { event_id: row.event_id, event_name: row.event_name } });
+});
+
+// Which events has this user claimed with a PIN? (empty + non-admin = show the PIN gate)
+directorRoutes.get('/claims', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const rows = await c.env.DB.prepare(`
+    SELECT ed.event_id, e.name as event_name FROM event_directors ed
+    JOIN events e ON e.id = ed.event_id WHERE ed.user_id = ?
+  `).bind(user.id).all<any>();
+  return c.json({ success: true, data: rows.results || [] });
+});
+
+// ==========================================
+// ADMIN: director PIN management (admin panel card)
+// ==========================================
+directorRoutes.get('/pins/:eventId', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const pin = await db.prepare('SELECT pin_code, is_active FROM director_pins WHERE event_id = ? ORDER BY created_at DESC LIMIT 1')
+    .bind(eventId).first<any>().catch(() => null);
+  const claims = (await db.prepare(`
+    SELECT ed.user_id, ed.created_at, TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')) as name, u.email FROM event_directors ed
+    LEFT JOIN users u ON u.id = ed.user_id WHERE ed.event_id = ?
+    ORDER BY ed.created_at DESC
+  `).bind(eventId).all<any>()).results || [];
+  return c.json({ success: true, data: { pin: pin?.is_active ? pin.pin_code : null, directors: claims } });
+});
+
+directorRoutes.put('/pins/:eventId', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const body = await c.req.json().catch(() => ({})) as any;
+  const pin = String(body.pin || '').trim();
+  if (!/^[0-9]{3,8}$/.test(pin)) return c.json({ success: false, error: 'PIN must be 3-8 digits' }, 400);
+  // One PIN per event; a PIN must be unique across events so the claim can find the event
+  const clash = await db.prepare('SELECT event_id FROM director_pins WHERE pin_code = ? AND is_active = 1 AND event_id != ?')
+    .bind(pin, eventId).first<any>();
+  if (clash) return c.json({ success: false, error: 'That PIN is already used by another event' }, 409);
+  await db.prepare('DELETE FROM director_pins WHERE event_id = ?').bind(eventId).run();
+  await db.prepare("INSERT INTO director_pins (id, event_id, pin_code, is_active, created_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, datetime('now'))")
+    .bind(eventId, pin).run();
+  return c.json({ success: true, data: { pin } });
+});
+
+// Revoke one claimed director from an event
+directorRoutes.delete('/pins/:eventId/directors/:userId', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  await db.prepare('DELETE FROM event_directors WHERE event_id = ? AND user_id = ?')
+    .bind(c.req.param('eventId'), c.req.param('userId')).run();
+  return c.json({ success: true });
+});
+
+// ==========================================
 // HELPER: Validate director access to event
 // ==========================================
 async function validateDirectorAccess(

@@ -11,6 +11,7 @@ import {
   Dimensions,
   Alert,
   Linking,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -52,13 +53,54 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     else tabNav?.setOptions({ tabBarStyle: undefined });
   }, [activeRole]);
   const lockerAlertCount = lockerAlerts.length;
+  // Event-PIN gate: non-admin directors must claim an event with its PIN
+  // before the toolkit shows; the API then scopes every tool to claimed events
+  const isAdminUser = userRoles.includes('admin');
+  const [dirClaims, setDirClaims] = useState<any[] | null>(null);
+  const [dirPin, setDirPin] = useState('');
+  const [dirPinError, setDirPinError] = useState('');
+  const [dirPinBusy, setDirPinBusy] = useState(false);
+  useEffect(() => {
+    if (!['director', 'tournament_director'].includes(activeRole) || isAdminUser) return;
+    authFetch('/api/director/claims')
+      .then(r => r.json())
+      .then((j: any) => setDirClaims(j.success ? (j.data || []) : []))
+      .catch(() => setDirClaims([]));
+  }, [activeRole, isAdminUser]);
+  const needsDirectorPin = ['director', 'tournament_director'].includes(activeRole)
+    && !isAdminUser && dirClaims !== null && dirClaims.length === 0;
+  const submitDirectorPin = async () => {
+    const pin = dirPin.trim();
+    if (!pin) { setDirPinError('Enter the event PIN from your tournament director.'); return; }
+    setDirPinBusy(true);
+    setDirPinError('');
+    try {
+      const r = await authFetch('/api/director/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const j = await r.json();
+      if (j.success) {
+        setDirPin('');
+        setDirClaims([{ event_id: j.data?.event_id, event_name: j.data?.event_name }]);
+      } else {
+        setDirPinError(j.error || 'That PIN did not match an event. Check it and try again.');
+      }
+    } catch {
+      setDirPinError('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setDirPinBusy(false);
+    }
+  };
   useEffect(() => {
     if (!['director', 'tournament_director', 'admin'].includes(activeRole)) return;
+    if (needsDirectorPin) return;
     authFetch('/api/scoring/locker-alerts')
       .then(r => r.json())
       .then((j: any) => { if (j.success) setLockerAlerts(j.data || []); })
       .catch(() => {});
-  }, [activeRole]);
+  }, [activeRole, needsDirectorPin]);
   const [pushStatus, setPushStatus] = useState<'granted' | 'denied' | 'undetermined' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -379,7 +421,39 @@ onPress={() => navigation.navigate('ScoringConsole')}
         </View>
 
         {/* Director toolkit - replaces the standard tiles for directors */}
-        {['director', 'tournament_director'].includes(activeRole) ? (
+        {['director', 'tournament_director'].includes(activeRole) && needsDirectorPin ? (
+          <View style={styles.pinGateCard}>
+            <View style={styles.dirIconCircle}>
+              <Ionicons name="key-outline" size={22} color={colors.cyan} />
+            </View>
+            <Text style={styles.pinGateTitle} maxFontSizeMultiplier={1.2}>Unlock Your Event</Text>
+            <Text style={styles.pinGateSub}>
+              Enter the event PIN from your tournament organizer to open the director tools for that event.
+            </Text>
+            <TextInput
+              style={styles.pinGateInput}
+              value={dirPin}
+              onChangeText={(t) => { setDirPin(t); if (dirPinError) setDirPinError(''); }}
+              placeholder="Event PIN"
+              placeholderTextColor="#7d8aa0"
+              keyboardType="number-pad"
+              returnKeyType="done"
+              maxLength={8}
+              onSubmitEditing={submitDirectorPin}
+            />
+            {!!dirPinError && <Text style={styles.pinGateError}>{dirPinError}</Text>}
+            <TouchableOpacity
+              style={[styles.pinGateBtn, dirPinBusy && { opacity: 0.6 }]}
+              onPress={submitDirectorPin}
+              disabled={dirPinBusy}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.pinGateBtnText} maxFontSizeMultiplier={1.2}>
+                {dirPinBusy ? 'Unlocking...' : 'Unlock Event'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : ['director', 'tournament_director'].includes(activeRole) ? (
           <View style={styles.qaGrid}>
             {([
               { label: 'Team Arrivals', sub: 'Mark teams arrived; game check-ins live on each game', icon: 'checkbox-outline' as const, go: () => navigation.navigate('DirectorCheckin') },
@@ -670,6 +744,13 @@ const styles = StyleSheet.create({
   meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
   meetingEvent: { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 2 },
   dirCardAlert: { borderColor: '#f87171', borderWidth: 2 },
+  pinGateCard: { backgroundColor: colors.navy, borderColor: 'rgba(0,204,255,0.5)', borderWidth: 1, borderRadius: radii.lg, padding: spacing.lg, marginHorizontal: spacing.lg, marginBottom: spacing.lg, alignItems: 'center' },
+  pinGateTitle: { color: '#fff', fontSize: 18, ...fonts.bold, marginTop: spacing.sm },
+  pinGateSub: { color: '#b9c4d4', fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: spacing.md, lineHeight: 18 },
+  pinGateInput: { alignSelf: 'stretch', backgroundColor: '#0a2240', borderColor: 'rgba(0,204,255,0.4)', borderWidth: 1, borderRadius: radii.md, color: '#fff', fontSize: 20, textAlign: 'center', paddingVertical: 12, letterSpacing: 4 },
+  pinGateError: { color: '#f87171', fontSize: 13, marginTop: 8, textAlign: 'center' },
+  pinGateBtn: { alignSelf: 'stretch', backgroundColor: colors.cyan, borderRadius: radii.md, paddingVertical: 13, alignItems: 'center', marginTop: spacing.md },
+  pinGateBtnText: { color: '#003e79', fontSize: 16, ...fonts.bold },
   lockerAlertBanner: { position: 'absolute', left: -6, right: -6, bottom: 6, backgroundColor: '#dc2626', paddingVertical: 5, alignItems: 'center', transform: [{ rotate: '-3deg' }], borderRadius: 4, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   lockerAlertBannerText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   dirCard: { backgroundColor: colors.navy, borderColor: 'rgba(0,204,255,0.5)', padding: 14, justifyContent: 'flex-start' },

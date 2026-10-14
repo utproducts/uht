@@ -19,6 +19,15 @@ function keepAlive(c: any, p: Promise<any>) {
   try { c.executionCtx.waitUntil(guarded); } catch { /* non-Workers env — let it float */ }
 }
 
+
+// Claimed-events scope for PIN directors (admins exempt): returns SQL filter
+async function directorClaimFilter(db: any, user: any, alias = 'e'): Promise<{ sql: string; binds: any[] }> {
+  if ((user.roles || []).includes('admin')) return { sql: '', binds: [] };
+  const claims = (await db.prepare('SELECT event_id FROM event_directors WHERE user_id = ?').bind(user.id).all()).results || [];
+  if (claims.length === 0) return { sql: '', binds: [] };
+  return { sql: ` AND ${alias}.id IN (${claims.map(() => '?').join(',')})`, binds: (claims as any[]).map((r: any) => r.event_id) };
+}
+
 const scorekeeperOrStaff = async (c: any, next: any) => {
   const access = await verifyGameWriteAccess(c, c.req.param('gameId'));
   if (!access.ok) {
@@ -547,10 +556,12 @@ scoringRoutes.get('/events/:eventId/standings', async (c) => {
 // drives the red banners on the director home card and Locker Rooms tool
 scoringRoutes.get('/locker-alerts', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
+  const user = c.get('user');
   const { eventLocalNow } = await import('../lib/push');
+  const cf = await directorClaimFilter(db, user, 'events');
   const events = (await db.prepare(
-    "SELECT id, name, timezone FROM events WHERE schedule_published = 1 AND date(end_date) >= date('now', '-1 day')"
-  ).all()).results || [];
+    `SELECT id, name, timezone FROM events WHERE schedule_published = 1 AND date(end_date) >= date('now', '-1 day')${cf.sql.replace(' AND events.id', ' AND id')}`
+  ).bind(...cf.binds).all()).results || [];
   const alerts: any[] = [];
   for (const ev of events as any[]) {
     const nowLocal = eventLocalNow(ev.timezone);
@@ -1760,6 +1771,7 @@ scoringRoutes.get('/my-events', authMiddleware, async (c) => {
     // Admins and directors see every current event that has games
     const roles: string[] = user?.roles || [];
     if (roles.some((r: string) => ['admin', 'director', 'tournament_director'].includes(r))) {
+      const cf = await directorClaimFilter(db, user);
       const all = await db.prepare(`
         SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state,
           e.venue_id, v.name as venue_name,
@@ -1769,10 +1781,10 @@ scoringRoutes.get('/my-events', authMiddleware, async (c) => {
         FROM events e
         LEFT JOIN venues v ON v.id = e.venue_id
         WHERE (COALESCE(e.is_test, 0) = 0 OR date(e.end_date) >= date('now', '-3 days'))
-          AND EXISTS (SELECT 1 FROM games g WHERE g.event_id = e.id)
+          AND EXISTS (SELECT 1 FROM games g WHERE g.event_id = e.id)${cf.sql}
         ORDER BY e.start_date DESC
         LIMIT 50
-      `).all();
+      `).bind(...cf.binds).all();
       return c.json({ success: true, data: all.results });
     }
 
@@ -2049,15 +2061,27 @@ scoringRoutes.delete('/events/:eventId/standings-order/:divisionId', authMiddlew
 // All current events (with or without games) for the director tool screens
 scoringRoutes.get('/director-events', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
+  const user = c.get('user');
+  // PIN-claimed directors (non-admin) see ONLY their claimed events
+  const isAdmin = (user.roles || []).includes('admin');
+  let claimFilter = '';
+  const binds: any[] = [];
+  if (!isAdmin) {
+    const claims = (await db.prepare('SELECT event_id FROM event_directors WHERE user_id = ?').bind(user.id).all()).results || [];
+    if (claims.length > 0) {
+      claimFilter = ` AND e.id IN (${claims.map(() => '?').join(',')})`;
+      binds.push(...(claims as any[]).map((r: any) => r.event_id));
+    }
+  }
   const rows = (await db.prepare(`
     SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state, e.logo_url
     FROM events e
     WHERE (COALESCE(e.is_test, 0) = 0 OR date(e.end_date) >= date('now', '-3 days'))
       AND date(e.end_date) >= date('now', '-10 days')
-      AND (e.status IN ('published', 'registration_open', 'active') OR COALESCE(e.is_test, 0) = 1)
+      AND (e.status IN ('published', 'registration_open', 'active') OR COALESCE(e.is_test, 0) = 1)${claimFilter}
     ORDER BY e.start_date ASC
     LIMIT 30
-  `).all()).results || [];
+  `).bind(...binds).all()).results || [];
   return c.json({ success: true, data: rows });
 });
 
