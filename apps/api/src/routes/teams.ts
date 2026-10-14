@@ -2398,8 +2398,8 @@ const addPlayerSchema = z.object({
   usaHockeyNumber: z.string().optional(),
   jerseyNumber: z.string().optional(),
   awayJerseyNumber: z.string().optional(),
-  position: z.enum(['forward', 'defense', 'goalie']).optional(),
-  shoots: z.enum(['left', 'right']).optional(),
+  position: z.enum(['forward', 'defense', 'goalie']).or(z.literal('')).optional(),
+  shoots: z.enum(['left', 'right']).or(z.literal('')).optional(),
 });
 
 teamRoutes.post('/:id/players', authMiddleware, zValidator('json', addPlayerSchema), async (c) => {

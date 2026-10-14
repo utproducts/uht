@@ -631,9 +631,15 @@ export default function CreateTeamScreen({
     setImporting(true);
     setRosterMessage(null);
     try {
+      // Empty optional fields stay out of the payload, and the error message
+      // must be a STRING - a validator error object inside <Text> crashes RN
+      const payload: any = { firstName: newPlayer.firstName.trim(), lastName: newPlayer.lastName.trim() };
+      if (newPlayer.jerseyNumber.trim()) payload.jerseyNumber = newPlayer.jerseyNumber.trim();
+      if (newPlayer.position) payload.position = newPlayer.position;
+      if (newPlayer.shoots) payload.shoots = newPlayer.shoots;
       const res = await authFetch(`/api/teams/${createdTeamId}/players`, {
         method: 'POST',
-        body: JSON.stringify(newPlayer),
+        body: JSON.stringify(payload),
       });
       const data = await res.json() as any;
       if (data.success) {
@@ -641,7 +647,7 @@ export default function CreateTeamScreen({
         setNewPlayer({ firstName: '', lastName: '', jerseyNumber: '', position: '', shoots: '' });
         setRosterMessage({ type: 'success', text: `Added ${newPlayer.firstName} ${newPlayer.lastName}` });
       } else {
-        setRosterMessage({ type: 'error', text: data.error || 'Failed to add player' });
+        setRosterMessage({ type: 'error', text: typeof data.error === 'string' ? data.error : 'Failed to add player' });
       }
     } catch {
       setRosterMessage({ type: 'error', text: 'Network error' });

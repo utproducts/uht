@@ -266,7 +266,7 @@ export default function EventDetailScreen({
   const isStaffUser = !!currentUser?.roles?.some(r => ['admin', 'director', 'tournament_director'].includes(r));
   useEffect(() => {
     if (!eventId) return;
-    authFetch(`/api/registrations/game-checkins/${eventId}`)
+    const loadCheckins = () => authFetch(`/api/registrations/game-checkins/${eventId}`)
       .then((r) => r.json())
       .then((j: any) => {
         if (!j.success) return;
@@ -275,10 +275,14 @@ export default function EventDetailScreen({
         setGameCheckins(map);
       })
       .catch(() => {});
+    loadCheckins();
+    // Live-ish: other coaches' check-ins appear without a manual refresh
+    const iv = setInterval(loadCheckins, 20000);
     authFetch('/api/teams/my-stats')
       .then((r) => r.json())
       .then((j: any) => { if (j.success) setCoachTeamIds((j.data?.teams || []).map((t: any) => t.id)); })
       .catch(() => {});
+    return () => clearInterval(iv);
   }, [eventId]);
   // Check-in opens the game roster: every player defaults to Playing, the
   // coach flips anyone to Out or Suspended, and saving checks the team in.
