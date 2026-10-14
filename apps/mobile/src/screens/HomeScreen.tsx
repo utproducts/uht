@@ -316,28 +316,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
         {/* A meeting banner or the director PIN gate cancels the hero overlap
             so neither ever covers the hero text */}
-        <View style={[styles.overlapStack, (myMeetings.length > 0 || showDirectorGrid) && styles.overlapStackClear, needsDirectorPin && styles.overlapStackFlush]}>
-        {/* Role-scoped meeting announcements */}
-        {myMeetings.map(m => (
-          <TouchableOpacity
-            key={m.id}
-            style={styles.meetingCard}
-            activeOpacity={m.link ? 0.8 : 1}
-            onPress={() => { if (m.link) Linking.openURL(m.link); }}
-          >
-            <View style={styles.meetingIcon}>
-              <Ionicons name={m.link ? 'videocam-outline' : 'megaphone-outline'} size={20} color={colors.cyan} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.meetingTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>{m.title}</Text>
-              <Text style={styles.meetingWhen} numberOfLines={2} maxFontSizeMultiplier={1.2}>{m.when_text}</Text>
-              <Text style={styles.meetingEvent} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                {m.event_name}{m.link ? ' · Tap to join on Zoom' : (m.details ? ` · ${m.details}` : '')}
-              </Text>
-            </View>
-            {m.link ? <Ionicons name="open-outline" size={18} color={colors.cyan} /> : null}
-          </TouchableOpacity>
-        ))}
+        <View style={[styles.overlapStack, showDirectorGrid && styles.overlapStackClear, needsDirectorPin && styles.overlapStackFlush]}>
         {/* Scorekeeper: direct line to the scoring console PIN page */}
         {activeRole === 'scorekeeper' && (
           <TouchableOpacity
@@ -433,6 +412,28 @@ onPress={() => navigation.navigate('ScoringConsole')}
             <Ionicons name="chevron-forward" size={20} color="#9aa7ba" />
           </TouchableOpacity>
         )}
+
+        {/* Role-scoped meeting announcements */}
+        {myMeetings.map(m => (
+          <TouchableOpacity
+            key={m.id}
+            style={styles.meetingCard}
+            activeOpacity={m.link ? 0.8 : 1}
+            onPress={() => { if (m.link) Linking.openURL(m.link); }}
+          >
+            <View style={styles.meetingIcon}>
+              <Ionicons name={m.link ? 'videocam-outline' : 'megaphone-outline'} size={20} color={colors.cyan} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.meetingTitle} numberOfLines={1} maxFontSizeMultiplier={1.2}>{m.title}</Text>
+              <Text style={styles.meetingWhen} numberOfLines={2} maxFontSizeMultiplier={1.2}>{m.when_text}</Text>
+              <Text style={styles.meetingEvent} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                {m.event_name}{m.link ? ' · Tap to join on Zoom' : (m.details ? ` · ${m.details}` : '')}
+              </Text>
+            </View>
+            {m.link ? <Ionicons name="open-outline" size={18} color={colors.cyan} /> : null}
+          </TouchableOpacity>
+        ))}
 
         </View>
 
@@ -758,7 +759,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
-  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginBottom: 10, marginHorizontal: spacing.lg },
+  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, paddingVertical: 12, paddingHorizontal: spacing.lg, borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginTop: spacing.md, width: SCREEN_WIDTH },
   meetingIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,204,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   meetingTitle: { fontSize: 14.5, color: '#fff', fontWeight: '800' },
   meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
