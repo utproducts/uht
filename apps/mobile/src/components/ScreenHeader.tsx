@@ -41,7 +41,7 @@ export default function ScreenHeader({ title, showBack, onBack, rightAction, hid
           ) : null}
           <Text style={[styles.title, compact ? styles.titleCompact : null]} numberOfLines={1}>{title}</Text>
         </View>
-        {rightAction ? <View style={styles.rightSection}>{rightAction}</View> : null}
+        {rightAction ? <View style={styles.rightSection}>{rightAction as any}</View> : null}
       </View>
     </View>
   );
