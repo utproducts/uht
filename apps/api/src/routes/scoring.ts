@@ -24,7 +24,9 @@ function keepAlive(c: any, p: Promise<any>) {
 async function directorClaimFilter(db: any, user: any, alias = 'e'): Promise<{ sql: string; binds: any[] }> {
   if ((user.roles || []).includes('admin')) return { sql: '', binds: [] };
   const claims = (await db.prepare('SELECT event_id FROM event_directors WHERE user_id = ?').bind(user.id).all()).results || [];
-  if (claims.length === 0) return { sql: '', binds: [] };
+  // No claims = no events. Director is self-addable in the app, so an
+  // unclaimed director must see nothing until they enter an event PIN.
+  if (claims.length === 0) return { sql: ' AND 1 = 0', binds: [] };
   return { sql: ` AND ${alias}.id IN (${claims.map(() => '?').join(',')})`, binds: (claims as any[]).map((r: any) => r.event_id) };
 }
 
@@ -2062,17 +2064,11 @@ scoringRoutes.delete('/events/:eventId/standings-order/:divisionId', authMiddlew
 scoringRoutes.get('/director-events', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const user = c.get('user');
-  // PIN-claimed directors (non-admin) see ONLY their claimed events
-  const isAdmin = (user.roles || []).includes('admin');
-  let claimFilter = '';
-  const binds: any[] = [];
-  if (!isAdmin) {
-    const claims = (await db.prepare('SELECT event_id FROM event_directors WHERE user_id = ?').bind(user.id).all()).results || [];
-    if (claims.length > 0) {
-      claimFilter = ` AND e.id IN (${claims.map(() => '?').join(',')})`;
-      binds.push(...(claims as any[]).map((r: any) => r.event_id));
-    }
-  }
+  // PIN-claimed directors (non-admin) see ONLY their claimed events;
+  // no claims at all = no events (fail closed - director is self-addable)
+  const cf = await directorClaimFilter(db, user);
+  const claimFilter = cf.sql;
+  const binds: any[] = cf.binds;
   const rows = (await db.prepare(`
     SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state, e.logo_url
     FROM events e

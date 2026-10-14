@@ -612,6 +612,8 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       { key: 'parent', label: 'Parent / Fan' },
       { key: 'referee', label: 'Referee' },
       { key: 'scorekeeper', label: 'Scorekeeper' },
+      // Safe to self-add: an unclaimed director sees only the event PIN gate
+      { key: 'director', label: 'Event Director' },
     ];
     const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
     if (available.length === 0) {

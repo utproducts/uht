@@ -711,7 +711,7 @@ authRoutes.post('/admin-pin', rateLimit(10, 60_000), zValidator('json', adminPin
 // SELF-ADD ROLE
 // ==================
 const addRoleSchema = z.object({
-  role: z.enum(['coach', 'parent', 'referee', 'scorekeeper']),
+  role: z.enum(['coach', 'parent', 'referee', 'scorekeeper', 'director']),
 });
 
 authRoutes.post('/add-role', authMiddleware, zValidator('json', addRoleSchema), async (c) => {
