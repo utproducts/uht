@@ -66,8 +66,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     && !isAdminUser && (dirClaims === null || dirClaims.length === 0);
   // Directors want tools, not the hero photo - grid goes straight to the top
   const showDirectorGrid = ['director', 'tournament_director'].includes(activeRole) && !needsDirectorPin;
-  // The whole director experience (PIN gate included) skips the hero photo
-  const hideHero = ['director', 'tournament_director'].includes(activeRole);
+  // Only the unlocked director grid skips the hero - the PIN gate keeps it
+  const hideHero = showDirectorGrid;
   const submitDirectorPin = async () => {
     const pin = dirPin.trim();
     if (!pin) { setDirPinError('Enter the event PIN from your tournament director.'); return; }
@@ -315,7 +315,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
 
         {/* A meeting banner or the director PIN gate cancels the hero overlap
             so neither ever covers the hero text */}
-        <View style={[styles.overlapStack, (myMeetings.length > 0 || needsDirectorPin || showDirectorGrid) && styles.overlapStackClear]}>
+        <View style={[styles.overlapStack, (myMeetings.length > 0 || showDirectorGrid) && styles.overlapStackClear, needsDirectorPin && styles.overlapStackFlush]}>
         {/* Role-scoped meeting announcements */}
         {myMeetings.map(m => (
           <TouchableOpacity
@@ -571,6 +571,7 @@ const styles = StyleSheet.create({
   // Hero
   overlapStack: { marginTop: -42 },
   overlapStackClear: { marginTop: 4 },
+  overlapStackFlush: { marginTop: 0 },
   dirWelcomeRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   dirWelcomeText: { fontSize: 15, ...fonts.semibold, color: colors.navy },
   heroZone: {
@@ -762,7 +763,7 @@ const styles = StyleSheet.create({
   meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
   meetingEvent: { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 2 },
   dirCardAlert: { borderColor: '#f87171', borderWidth: 2 },
-  pinGateCard: { backgroundColor: colors.navy, borderColor: 'rgba(0,204,255,0.5)', borderWidth: 1, borderRadius: radii.lg, padding: spacing.lg, marginHorizontal: spacing.lg, marginBottom: spacing.lg, alignItems: 'center' },
+  pinGateCard: { backgroundColor: colors.navy, borderTopWidth: 2, borderBottomWidth: 2, borderColor: 'rgba(0,204,255,0.6)', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, marginBottom: spacing.lg, alignItems: 'center', width: SCREEN_WIDTH },
   pinGateTitle: { color: '#fff', fontSize: 18, ...fonts.bold, marginTop: spacing.sm },
   pinGateSub: { color: '#b9c4d4', fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: spacing.md, lineHeight: 18 },
   pinGateInput: { alignSelf: 'stretch', backgroundColor: '#0a2240', borderColor: 'rgba(0,204,255,0.4)', borderWidth: 1, borderRadius: radii.md, color: '#fff', fontSize: 20, textAlign: 'center', paddingVertical: 12, letterSpacing: 4 },
