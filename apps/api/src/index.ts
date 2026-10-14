@@ -1225,5 +1225,12 @@ export default {
         if (r.sent || r.events) console.log(`30-day email sweep: events=${r.events} sent=${r.sent} skipped=${r.skipped}`);
       }).catch((e: any) => console.error('30-day email sweep error:', e)));
     }
+    // MHR link + roster nag: 30 days out, weekly per team until complete
+    // (idempotent via week-bucketed automated_email_log rows)
+    if (new Date().getUTCHours() === 15) {
+      ctx.waitUntil(import('./lib/mhr-roster-reminder').then(m => m.runMhrRosterReminderSweep(env)).then((r: any) => {
+        if (r.events) console.log(`MHR/roster sweep: ${JSON.stringify(r.results?.map((x: any) => ({ e: x.event, sent: x.emails_sent })))}`);
+      }).catch((e: any) => console.error('MHR/roster sweep error:', e)));
+    }
   },
 };

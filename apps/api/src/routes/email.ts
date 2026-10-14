@@ -856,6 +856,18 @@ emailRoutes.post('/app-adoption/:eventId/send', authMiddleware, requireRole('adm
   return c.json({ success: true, data: r });
 });
 
+// MHR link + USA Hockey roster reminders: preview (no send) or commit
+emailRoutes.get('/mhr-roster/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { sendMhrRosterReminders } = await import('../lib/mhr-roster-reminder');
+  const r = await sendMhrRosterReminders(c.env, c.req.param('eventId'), {});
+  return c.json({ success: true, data: r });
+});
+emailRoutes.post('/mhr-roster/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { sendMhrRosterReminders } = await import('../lib/mhr-roster-reminder');
+  const r = await sendMhrRosterReminders(c.env, c.req.param('eventId'), { commit: true });
+  return c.json({ success: true, data: r });
+});
+
 emailRoutes.get('/app-invite/:eventId/status', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const { appInviteStatus } = await import('../lib/app-invite');
   const data = await appInviteStatus(c.env, c.req.param('eventId'));
