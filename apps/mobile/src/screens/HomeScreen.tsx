@@ -66,6 +66,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     && !isAdminUser && (dirClaims === null || dirClaims.length === 0);
   // Directors want tools, not the hero photo - grid goes straight to the top
   const showDirectorGrid = ['director', 'tournament_director'].includes(activeRole) && !needsDirectorPin;
+  // The whole director experience (PIN gate included) skips the hero photo
+  const hideHero = ['director', 'tournament_director'].includes(activeRole);
   const submitDirectorPin = async () => {
     const pin = dirPin.trim();
     if (!pin) { setDirPinError('Enter the event PIN from your tournament director.'); return; }
@@ -279,7 +281,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
         {/* Hero zone - the hero photo runs down behind the tiles and fades into the page.
             Directors skip the hero entirely: tools first, no scrolling. */}
         <View style={styles.heroZone}>
-          {!showDirectorGrid && (
+          {!hideHero && (
             <>
               <Image
                 source={require('../../assets/hero-kid.jpg')}
@@ -303,7 +305,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
               </View>
             </>
           )}
-          {showDirectorGrid && (
+          {hideHero && (
             <View style={styles.dirWelcomeRow}>
               <Text style={styles.dirWelcomeText} numberOfLines={1} maxFontSizeMultiplier={1.2}>
                 Welcome back, {firstName || 'Director'}
