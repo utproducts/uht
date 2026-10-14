@@ -6,7 +6,7 @@ export default function SiteFooter() {
   const pathname = usePathname();
 
   // Hide footer on dashboard and admin pages (they have their own layout)
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/scoring')) return null;
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/scoring') || pathname.startsWith('/survey')) return null;
 
   return (
     <footer className="bg-[#f5f5f7] border-t border-[#e8e8ed]">

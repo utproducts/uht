@@ -14,7 +14,7 @@ interface Message {
 export default function ChatWidget() {
   // Scorekeepers get a bare console - no chat bubble floating over the pads
   const pathname = usePathname();
-  if (pathname && pathname.startsWith('/scoring')) return null;
+  if (pathname && pathname.startsWith('/scoring') || pathname.startsWith('/survey')) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');

@@ -34,7 +34,7 @@ export default function Navigation() {
   }, []);
 
   // Hide consumer nav on dashboard and admin pages (they have their own nav)
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/scoring')) return null;
+  if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin') || pathname.startsWith('/scoring') || pathname.startsWith('/survey')) return null;
 
   return (
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e8e8ed]">

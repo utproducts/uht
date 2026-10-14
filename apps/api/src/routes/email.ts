@@ -856,6 +856,16 @@ emailRoutes.post('/app-adoption/:eventId/send', authMiddleware, requireRole('adm
   return c.json({ success: true, data: r });
 });
 
+// Glow survey blast: test send for approval (the full blast is wired after sign-off)
+emailRoutes.post('/glow-survey/test', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const to = String(body.to || '').trim();
+  if (!to.includes('@')) return c.json({ success: false, error: 'to required' }, 400);
+  const { sendGlowSurveyTest } = await import('../lib/glow-survey-email');
+  const r = await sendGlowSurveyTest(c.env, to);
+  return c.json({ success: r.ok, data: r });
+});
+
 // MHR link + USA Hockey roster reminders: preview (no send) or commit
 emailRoutes.get('/mhr-roster/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const { sendMhrRosterReminders } = await import('../lib/mhr-roster-reminder');

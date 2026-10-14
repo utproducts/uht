@@ -56,6 +56,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
       { name: 'App Users', href: '/admin/app-users' },
       { name: 'Contacts', href: '/admin/contacts' },
       { name: 'Inquiries', href: '/admin/inquiries' },
+      { name: 'Surveys', href: '/admin/surveys' },
     ],
   },
   {
