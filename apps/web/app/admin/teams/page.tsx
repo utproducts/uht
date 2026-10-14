@@ -61,6 +61,12 @@ export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Roster deep link (/admin/teams?roster=<id>): fetch THAT team by id so it
+  // always appears, even when new_only or a name mismatch would hide it.
+  const [pinnedTeamId, setPinnedTeamId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('roster');
+  });
   const [stateFilter, setStateFilter] = useState('');
   const [seasonFilter, setSeasonFilter] = useState('');
   const [viewMode, setViewMode] = useState<'org' | 'list'>('org');
@@ -104,7 +110,8 @@ export default function TeamsPage() {
       };
       const buildParams = (page: number) => {
         const p = new URLSearchParams({ new_only: 'true', per_page: '500', page: String(page) });
-        if (search) p.set('search', search);
+        if (pinnedTeamId) p.set('team_id', pinnedTeamId);
+        else if (search) p.set('search', search);
         if (stateFilter) p.set('state', stateFilter);
         if (seasonFilter) p.set('season', seasonFilter);
         return p;
@@ -138,7 +145,7 @@ export default function TeamsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, stateFilter, seasonFilter]);
+  }, [search, stateFilter, seasonFilter, pinnedTeamId]);
 
   useEffect(() => {
     fetchTeams();
@@ -193,7 +200,7 @@ export default function TeamsPage() {
     const params = new URLSearchParams(window.location.search);
     const rosterTeam = params.get('roster');
     const q = params.get('q');
-    if (q) setSearch(q);
+    if (q && !rosterTeam) setSearch(q);
     if (rosterTeam) toggleTeamExpand(rosterTeam);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -640,7 +647,7 @@ export default function TeamsPage() {
               type="text"
               placeholder="Search teams, coaches, cities..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPinnedTeamId(null); }}
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#e8e8ed] text-sm focus:border-[#003e79] focus:ring-1 focus:ring-[#003e79]/20 outline-none"
             />
           </div>

@@ -82,13 +82,21 @@ teamRoutes.get('/admin/list', authMiddleware, requireRole('admin', 'director'), 
   let whereClause = ' WHERE t.is_active = 1';
   const params: string[] = [...eventParams];
 
+  // team_id = exact deep link (participants Roster chip) - overrides the
+  // new_only and search filters so the clicked team ALWAYS comes back
+  const { team_id } = c.req.query();
+  if (team_id) {
+    whereClause += ' AND t.id = ?';
+    params.push(team_id);
+  }
+
   // new_only=true filters to only teams created through new infrastructure
   const { new_only } = c.req.query();
-  if (new_only === 'true') {
+  if (new_only === 'true' && !team_id) {
     whereClause += ' AND t.created_by IS NOT NULL';
   }
 
-  if (search) {
+  if (search && !team_id) {
     whereClause += ` AND (LOWER(t.name) LIKE ? OR LOWER(t.city) LIKE ? OR LOWER(t.head_coach_name) LIKE ? OR LOWER(t.head_coach_email) LIKE ?)`;
     const term = `%${search.toLowerCase()}%`;
     params.push(term, term, term, term);
