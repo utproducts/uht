@@ -547,17 +547,23 @@ function RosterManagement({ initialTeamId, embedded }: { initialTeamId?: string;
 
     fetch(`${API}/api/teams/my-teams`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(json => {
-        if (json.success && json.data?.length > 0) {
-          setTeams(json.data);
-          // Pre-select: explicit prop (embedded in My Teams) > ?team= query param > first team
-          const params = new URLSearchParams(window.location.search);
-          const teamParam = initialTeamId || params.get('team');
-          if (teamParam && json.data.some((t: any) => t.id === teamParam)) {
-            setSelectedTeamId(teamParam);
-          } else {
-            setSelectedTeamId(json.data[0].id);
-          }
+      .then(async json => {
+        let list = (json.success && json.data?.length > 0) ? json.data : [];
+        // Pre-select: explicit prop (embedded in My Teams) > ?team= query param > first team
+        const params = new URLSearchParams(window.location.search);
+        const teamParam = initialTeamId || params.get('team');
+        // Org owners aren't on team_coaches/managers/members, so my-teams
+        // misses their org's teams - pull the requested team directly
+        if (teamParam && !list.some((t: any) => t.id === teamParam)) {
+          try {
+            const tr = await fetch(`${API}/api/teams/${teamParam}`, { headers: { Authorization: `Bearer ${token}` } });
+            const tj = await tr.json() as any;
+            if (tj.success && tj.data?.id) list = [tj.data, ...list];
+          } catch {}
+        }
+        if (list.length > 0) {
+          setTeams(list);
+          setSelectedTeamId(teamParam && list.some((t: any) => t.id === teamParam) ? teamParam : list[0].id);
         }
       })
       .catch(() => {})
@@ -1643,7 +1649,10 @@ export default function SubPageContent() {
     switch (subPage) {
       case 'teams': return <OrgTeams />;
       case 'coaches': return <OrgCoaches />;
-      case 'rosters': return <OrgRosters />;
+      // Full roster manager (add/import players), not the read-only listing -
+      // org owners had "nowhere to add players" with OrgRosters
+      case 'rosters': return <RosterManagement />;
+      case 'rosters-overview': return <OrgRosters />;
       case 'events': return <OrgEvents />;
     }
   }

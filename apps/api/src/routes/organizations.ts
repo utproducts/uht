@@ -59,10 +59,10 @@ organizationRoutes.get('/dashboard', authMiddleware, async (c) => {
       JOIN teams t ON t.id = r.team_id WHERE t.organization_id = ? AND t.is_active = 1 AND r.status != 'cancelled'
     `).bind(orgId).first<{ c: number }>(),
     db.prepare(`
-      SELECT COALESCE(SUM(CASE WHEN r.payment_status != 'paid' THEN COALESCE(ed.price, 0) ELSE 0 END), 0) as c
+      SELECT COALESCE(SUM(CASE WHEN r.payment_status != 'paid' THEN COALESCE(ed.price_cents, 0) ELSE 0 END), 0) as c
       FROM registrations r
       JOIN teams t ON t.id = r.team_id
-      LEFT JOIN event_divisions ed ON ed.event_id = r.event_id AND ed.id = r.division_id
+      LEFT JOIN event_divisions ed ON ed.event_id = r.event_id AND ed.id = r.event_division_id
       WHERE t.organization_id = ? AND t.is_active = 1 AND r.status != 'cancelled'
     `).bind(orgId).first<{ c: number }>(),
   ]);
