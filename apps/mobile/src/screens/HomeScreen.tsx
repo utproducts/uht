@@ -300,8 +300,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             </View>
           </View>
 
-        {/* A meeting banner cancels the hero overlap so it never covers the hero text */}
-        <View style={[styles.overlapStack, myMeetings.length > 0 && styles.overlapStackClear]}>
+        {/* A meeting banner or the director PIN gate cancels the hero overlap
+            so neither ever covers the hero text */}
+        <View style={[styles.overlapStack, (myMeetings.length > 0 || needsDirectorPin) && styles.overlapStackClear]}>
         {/* Role-scoped meeting announcements */}
         {myMeetings.map(m => (
           <TouchableOpacity
