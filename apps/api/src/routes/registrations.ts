@@ -556,6 +556,11 @@ registrationRoutes.post('/game-checkins/:gameId/:teamId', authMiddleware, async 
     "INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)"
   ).bind(gameId, teamId, user.id).run();
   if ((ins.meta?.changes || 0) > 0) {
+    // First game check-in doubles as the event arrival
+    await db.prepare(`
+      UPDATE event_registrations SET checked_in_at = datetime('now'), checked_in_by = ?
+      WHERE event_id = (SELECT event_id FROM games WHERE id = ?) AND team_id = ? AND checked_in_at IS NULL
+    `).bind(user.id, gameId, teamId).run().catch(() => {});
     try {
       const { notifyLockerOnCheckin } = await import('../lib/push');
       c.executionCtx.waitUntil(notifyLockerOnCheckin(db, gameId as string, teamId as string).catch(() => {}));
@@ -663,6 +668,11 @@ registrationRoutes.put('/game-checkins/:gameId/:teamId/roster', authMiddleware, 
   const ins = await db.prepare('INSERT OR IGNORE INTO game_checkins (game_id, team_id, checked_in_by) VALUES (?, ?, ?)')
     .bind(gameId, teamId, user.id).run();
   if ((ins.meta?.changes || 0) > 0) {
+    // First game check-in doubles as the event arrival
+    await db.prepare(`
+      UPDATE event_registrations SET checked_in_at = datetime('now'), checked_in_by = ?
+      WHERE event_id = (SELECT event_id FROM games WHERE id = ?) AND team_id = ? AND checked_in_at IS NULL
+    `).bind(user.id, gameId, teamId).run().catch(() => {});
     try {
       const { notifyLockerOnCheckin } = await import('../lib/push');
       c.executionCtx.waitUntil(notifyLockerOnCheckin(db, gameId as string, teamId as string).catch(() => {}));
