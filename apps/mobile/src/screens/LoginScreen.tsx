@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
@@ -157,6 +158,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
   if (checkingBiometric || biometricLoading) {
     return (
       <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.navy} />
           <Text style={styles.loadingText}>
@@ -169,6 +171,7 @@ export default function LoginScreen({ navigation }: { navigation: any }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

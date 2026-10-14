@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
@@ -57,6 +58,7 @@ export default function CoachOnboardingScreen({ navigation }: { navigation: any 
   if (step === 'join') {
     return (
       <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -128,6 +130,7 @@ export default function CoachOnboardingScreen({ navigation }: { navigation: any 
   // Step 1: Choose path
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.content}>
         <Text style={styles.title}>Welcome, Coach!</Text>
         <Text style={styles.subtitle}>

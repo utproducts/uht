@@ -53,7 +53,7 @@ export default function App() {
         publishableKey={STRIPE_PUBLISHABLE_KEY}
         merchantIdentifier={MERCHANT_ID}
       >
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <AppNavigator />
       </StripeProvider>
     </SafeAreaProvider>
