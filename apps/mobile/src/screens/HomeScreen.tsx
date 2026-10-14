@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
-import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount, authFetch } from '../services/auth';
+import { getUser, getActiveRole, setActiveRole, refreshUser, User, addRoleToAccount, authFetch, getDirectorUnlock, setDirectorUnlock } from '../services/auth';
 import { refreshBadgeCount, getPushPermissionStatus, registerForPushNotifications } from '../services/notifications';
 import AppHeader from '../components/AppHeader';
 // WebView only exists in the 1.0.7+ binary - never crash older ones
@@ -53,22 +53,17 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     else tabNav?.setOptions({ tabBarStyle: undefined });
   }, [activeRole]);
   const lockerAlertCount = lockerAlerts.length;
-  // Event-PIN gate: non-admin directors must claim an event with its PIN
-  // before the toolkit shows; the API then scopes every tool to claimed events
+  // Event-PIN gate: non-admin directors must enter the event PIN EVERY
+  // session - the unlock lives only in memory (services/auth), so killing
+  // the app or logging out always brings the gate back
   const isAdminUser = userRoles.includes('admin');
-  const [dirClaims, setDirClaims] = useState<any[] | null>(null);
+  const [dirClaims, setDirClaims] = useState<any[] | null>(getDirectorUnlock());
   const [dirPin, setDirPin] = useState('');
   const [dirPinError, setDirPinError] = useState('');
   const [dirPinBusy, setDirPinBusy] = useState(false);
-  useEffect(() => {
-    if (!['director', 'tournament_director'].includes(activeRole) || isAdminUser) return;
-    authFetch('/api/director/claims')
-      .then(r => r.json())
-      .then((j: any) => setDirClaims(j.success ? (j.data || []) : []))
-      .catch(() => setDirClaims([]));
-  }, [activeRole, isAdminUser]);
+  useEffect(() => { setDirClaims(getDirectorUnlock()); }, [activeRole]);
   const needsDirectorPin = ['director', 'tournament_director'].includes(activeRole)
-    && !isAdminUser && dirClaims !== null && dirClaims.length === 0;
+    && !isAdminUser && (dirClaims === null || dirClaims.length === 0);
   // Directors want tools, not the hero photo - grid goes straight to the top
   const showDirectorGrid = ['director', 'tournament_director'].includes(activeRole) && !needsDirectorPin;
   const submitDirectorPin = async () => {
@@ -85,7 +80,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       const j = await r.json();
       if (j.success) {
         setDirPin('');
-        setDirClaims([{ event_id: j.data?.event_id, event_name: j.data?.event_name }]);
+        const unlocked = [{ event_id: j.data?.event_id, event_name: j.data?.event_name }];
+        setDirectorUnlock(unlocked);
+        setDirClaims(unlocked);
       } else {
         setDirPinError(j.error || 'That PIN did not match an event. Check it and try again.');
       }

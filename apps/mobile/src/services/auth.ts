@@ -69,7 +69,14 @@ export async function clearAuth(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
   await SecureStore.deleteItemAsync(USER_KEY);
   await SecureStore.deleteItemAsync(ACTIVE_ROLE_KEY);
+  setDirectorUnlock(null);
 }
+
+// Director event unlock lives in MEMORY ONLY - never persisted. Killing the
+// app or logging out always brings the PIN gate back.
+let directorUnlock: { event_id: string; event_name: string }[] | null = null;
+export function getDirectorUnlock() { return directorUnlock; }
+export function setDirectorUnlock(v: { event_id: string; event_name: string }[] | null) { directorUnlock = v; }
 
 /**
  * Refresh user data from the API (fetches /auth/me) and update SecureStore.

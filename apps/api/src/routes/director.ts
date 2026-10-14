@@ -23,6 +23,9 @@ directorRoutes.post('/claim', authMiddleware, async (c) => {
     WHERE dp.pin_code = ? AND dp.is_active = 1
   `).bind(pin).first<any>();
   if (!row) return c.json({ success: false, error: 'Invalid director PIN' }, 404);
+  // One active event per PIN entry: a new PIN replaces any older claim
+  await db.prepare('DELETE FROM event_directors WHERE user_id = ? AND event_id != ?')
+    .bind(user.id, row.event_id).run();
   await db.prepare('INSERT OR IGNORE INTO event_directors (event_id, user_id) VALUES (?, ?)')
     .bind(row.event_id, user.id).run();
   await db.prepare("INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (lower(hex(randomblob(16))), ?, 'director')")
