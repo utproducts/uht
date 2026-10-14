@@ -69,6 +69,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   }, [activeRole, isAdminUser]);
   const needsDirectorPin = ['director', 'tournament_director'].includes(activeRole)
     && !isAdminUser && dirClaims !== null && dirClaims.length === 0;
+  // Directors want tools, not the hero photo - grid goes straight to the top
+  const showDirectorGrid = ['director', 'tournament_director'].includes(activeRole) && !needsDirectorPin;
   const submitDirectorPin = async () => {
     const pin = dirPin.trim();
     if (!pin) { setDirPinError('Enter the event PIN from your tournament director.'); return; }
@@ -277,32 +279,44 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.navy]} />
         }
       >
-        {/* Hero zone - the hero photo runs down behind the tiles and fades into the page */}
+        {/* Hero zone - the hero photo runs down behind the tiles and fades into the page.
+            Directors skip the hero entirely: tools first, no scrolling. */}
         <View style={styles.heroZone}>
-          <Image
-            source={require('../../assets/hero-kid.jpg')}
-            style={styles.heroBgImg}
-            resizeMode="cover"
-          />
-          <View style={styles.heroScrim} />
-          <Image
-            source={require('../../assets/hero-fade.png')}
-            style={styles.heroFade}
-            resizeMode="stretch"
-          />
-          <View style={styles.hero}>
-            <View style={styles.heroContent}>
-              <Text style={styles.heroGreeting}>Welcome back,</Text>
-              <Text style={styles.heroName} numberOfLines={1}>{firstName || 'Coach'}</Text>
-              <Text style={styles.heroSeason}>2026-27 SEASON</Text>
-              <View style={styles.heroUnderline} />
-              <Text style={styles.heroSubtext}>What would you like to do?</Text>
+          {!showDirectorGrid && (
+            <>
+              <Image
+                source={require('../../assets/hero-kid.jpg')}
+                style={styles.heroBgImg}
+                resizeMode="cover"
+              />
+              <View style={styles.heroScrim} />
+              <Image
+                source={require('../../assets/hero-fade.png')}
+                style={styles.heroFade}
+                resizeMode="stretch"
+              />
+              <View style={styles.hero}>
+                <View style={styles.heroContent}>
+                  <Text style={styles.heroGreeting}>Welcome back,</Text>
+                  <Text style={styles.heroName} numberOfLines={1}>{firstName || 'Coach'}</Text>
+                  <Text style={styles.heroSeason}>2026-27 SEASON</Text>
+                  <View style={styles.heroUnderline} />
+                  <Text style={styles.heroSubtext}>What would you like to do?</Text>
+                </View>
+              </View>
+            </>
+          )}
+          {showDirectorGrid && (
+            <View style={styles.dirWelcomeRow}>
+              <Text style={styles.dirWelcomeText} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                Welcome back, {firstName || 'Director'}
+              </Text>
             </View>
-          </View>
+          )}
 
         {/* A meeting banner or the director PIN gate cancels the hero overlap
             so neither ever covers the hero text */}
-        <View style={[styles.overlapStack, (myMeetings.length > 0 || needsDirectorPin) && styles.overlapStackClear]}>
+        <View style={[styles.overlapStack, (myMeetings.length > 0 || needsDirectorPin || showDirectorGrid) && styles.overlapStackClear]}>
         {/* Role-scoped meeting announcements */}
         {myMeetings.map(m => (
           <TouchableOpacity
@@ -558,6 +572,8 @@ const styles = StyleSheet.create({
   // Hero
   overlapStack: { marginTop: -42 },
   overlapStackClear: { marginTop: 4 },
+  dirWelcomeRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  dirWelcomeText: { fontSize: 15, ...fonts.semibold, color: colors.navy },
   heroZone: {
     width: SCREEN_WIDTH,
   },
