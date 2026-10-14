@@ -23,6 +23,16 @@ directorRoutes.post('/claim', authMiddleware, async (c) => {
     WHERE dp.pin_code = ? AND dp.is_active = 1
   `).bind(pin).first<any>();
   if (!row) return c.json({ success: false, error: 'Invalid director PIN' }, 404);
+  // The PIN dies 3 hours after the event's last game goes final
+  const done = await db.prepare(`
+    SELECT COUNT(*) as total,
+      SUM(CASE WHEN status = 'final' THEN 1 ELSE 0 END) as finals,
+      SUM(CASE WHEN status = 'final' AND updated_at >= datetime('now', '-3 hours') THEN 1 ELSE 0 END) as recent
+    FROM games WHERE event_id = ?
+  `).bind(row.event_id).first<any>();
+  if (done && done.total > 0 && done.finals === done.total && done.recent === 0) {
+    return c.json({ success: false, error: 'This event has ended, so its director PIN is no longer active.' }, 410);
+  }
   // One active event per PIN entry: a new PIN replaces any older claim
   await db.prepare('DELETE FROM event_directors WHERE user_id = ? AND event_id != ?')
     .bind(user.id, row.event_id).run();
