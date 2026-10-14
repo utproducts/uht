@@ -370,6 +370,11 @@ export async function processSendWave(env: any, campaign: any, audience: any, ba
 
   const fromEmail = campaign.from_email || 'info@ultimatetournaments.com';
   const fromName = campaign.from_name || 'Ultimate Hockey Tournaments';
+  // Per-recipient templating: __EMAIL_B64__ in the body becomes that
+  // recipient's base64 email (URL-encoded), e.g. survey prefill links
+  const htmlFor = (r: { email: string }) => campaign.body_html.includes('__EMAIL_B64__')
+    ? campaign.body_html.split('__EMAIL_B64__').join(encodeURIComponent(btoa(r.email.toLowerCase())))
+    : campaign.body_html;
 
   let sent = 0;
   let failed = 0;
@@ -385,7 +390,7 @@ export async function processSendWave(env: any, campaign: any, audience: any, ba
           from: `${fromName} <${fromEmail}>`,
           to: [r.email],
           subject: campaign.subject,
-          html: campaign.body_html,
+          html: htmlFor(r),
           ...(campaign.body_text ? { text: campaign.body_text } : {}),
         }))),
       });
@@ -405,7 +410,7 @@ export async function processSendWave(env: any, campaign: any, audience: any, ba
                 from: `${fromName} <${fromEmail}>`,
                 to: [r.email],
                 subject: campaign.subject,
-                html: campaign.body_html,
+                html: htmlFor(r),
                 ...(campaign.body_text ? { text: campaign.body_text } : {}),
               }),
             });
@@ -857,6 +862,12 @@ emailRoutes.post('/app-adoption/:eventId/send', authMiddleware, requireRole('adm
 });
 
 // Glow survey blast: test send for approval (the full blast is wired after sign-off)
+// Campaign body for the glow survey blast (token link, engine personalizes)
+emailRoutes.get('/glow-survey/html', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { buildGlowSurveyCampaignHtml, GLOW_SUBJECT } = await import('../lib/glow-survey-email');
+  return c.json({ success: true, data: { subject: GLOW_SUBJECT, html: buildGlowSurveyCampaignHtml() } });
+});
+
 emailRoutes.post('/glow-survey/test', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const body = await c.req.json().catch(() => ({})) as any;
   const to = String(body.to || '').trim();

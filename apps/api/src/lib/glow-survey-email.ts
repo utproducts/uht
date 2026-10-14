@@ -46,6 +46,14 @@ export function buildGlowSurveyHtml(recipientEmail?: string | null): string {
 </html>`;
 }
 
+/** Campaign body: the send engine swaps __EMAIL_B64__ per recipient */
+export function buildGlowSurveyCampaignHtml(): string {
+  return buildGlowSurveyHtml(null).replace(
+    'https://ultimatetournaments.com/survey/glow',
+    'https://ultimatetournaments.com/survey/glow?e=__EMAIL_B64__'
+  );
+}
+
 /** One test email to a staff address for approval */
 export async function sendGlowSurveyTest(env: any, to: string) {
   const resp = await fetch('https://api.resend.com/emails', {
