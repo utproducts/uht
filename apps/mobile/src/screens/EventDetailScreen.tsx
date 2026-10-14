@@ -1136,7 +1136,7 @@ export default function EventDetailScreen({
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
               </View>
-              {item.rink_name || item.rink ? (
+              {item.venue_name || item.rink_name || item.rink ? (
                 <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
               ) : null}
               {item.division_name ? <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text> : null}
@@ -1608,7 +1608,7 @@ export default function EventDetailScreen({
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
               </View>
-              {item.rink_name || item.rink ? (
+              {item.venue_name || item.rink_name || item.rink ? (
                 <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
               ) : null}
               {item.division_name && selectedDivision === 'all' ? (
@@ -1723,7 +1723,7 @@ export default function EventDetailScreen({
                     <View style={styles.scoreCardTopRow}>
                       <View style={styles.scoreCardMeta}>
                         <Text style={styles.scoreCardTime}>{formatScoreTime(game.start_time)}</Text>
-                        {game.rink_name ? <Text style={styles.scoreCardRink} numberOfLines={2}>{[(game as any).venue_name, game.rink_name].filter(Boolean).join(' - ')}</Text> : null}
+                        {((game as any).venue_name || game.rink_name) ? <Text style={styles.scoreCardRink} numberOfLines={2}>{[(game as any).venue_name, game.rink_name].filter(Boolean).join(' - ')}</Text> : null}
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                         <Text style={styles.statusBadgeText}>{getStatusLabel(game.status)}</Text>
