@@ -10,6 +10,8 @@ import {
   Share,
   ActivityIndicator,
   Image,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CommonActions, useFocusEffect } from '@react-navigation/native';
@@ -63,6 +65,33 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [activeRole, setActiveRoleState] = useState<string>('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  // Event Director is only granted through a valid event PIN
+  const [showDirectorPinModal, setShowDirectorPinModal] = useState(false);
+  const [dirPinInput, setDirPinInput] = useState('');
+  const [dirPinBusy, setDirPinBusy] = useState(false);
+  const [dirPinErr, setDirPinErr] = useState('');
+  const submitDirectorPin = async () => {
+    const pin = dirPinInput.trim();
+    if (!pin) { setDirPinErr('Enter the event PIN from your tournament organizer.'); return; }
+    setDirPinBusy(true); setDirPinErr('');
+    try {
+      const r = await authFetch('/api/director/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const j = await r.json() as any;
+      if (j.success) {
+        setShowDirectorPinModal(false);
+        setDirPinInput('');
+        setUserRoles(prev => prev.includes('director') ? prev : [...prev, 'director']);
+        Alert.alert('Event Unlocked', `You are now a director for ${j.data?.event_name || 'your event'}. Switch to the Director role to open the tools.`);
+      } else {
+        setDirPinErr(typeof j.error === 'string' ? j.error : 'Invalid PIN.');
+      }
+    } catch { setDirPinErr('Could not reach the server. Try again.'); }
+    setDirPinBusy(false);
+  };
   const [unreadCount, setUnreadCount] = useState(0);
 
   const lastLoadRef = React.useRef<number>(0);
@@ -612,8 +641,9 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
       { key: 'parent', label: 'Parent / Fan' },
       { key: 'referee', label: 'Referee' },
       { key: 'scorekeeper', label: 'Scorekeeper' },
-      // Safe to self-add: an unclaimed director sees only the event PIN gate
-      { key: 'director', label: 'Event Director' },
+      // Director is PIN-gated: the option prompts for the event PIN, and
+      // /api/director/claim only grants the role on a valid PIN
+      { key: 'director', label: 'Event Director (requires event PIN)' },
     ];
     const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
     if (available.length === 0) {
@@ -627,6 +657,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
         ...available.map(r => ({
           text: r.label,
           onPress: async () => {
+            if (r.key === 'director') { setShowDirectorPinModal(true); return; }
             const result = await addRoleToAccount(r.key);
             if (result.success && result.roles) {
               setUserRoles(result.roles);
@@ -666,6 +697,37 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
           Ultimate Tournaments v{appVersion}
         </Text>
       </ScrollView>
+
+      {/* Event Director PIN prompt - the ONLY way to gain the director role */}
+      <Modal visible={showDirectorPinModal} transparent animationType="fade" onRequestClose={() => setShowDirectorPinModal(false)}>
+        <View style={styles.pinModalBackdrop}>
+          <View style={styles.pinModalCard}>
+            <Text style={styles.pinModalTitle} maxFontSizeMultiplier={1.2}>Event Director</Text>
+            <Text style={styles.pinModalSub}>Enter the event PIN from your tournament organizer. The Director role unlocks for that event only.</Text>
+            <TextInput
+              style={styles.pinModalInput}
+              value={dirPinInput}
+              onChangeText={(t) => { setDirPinInput(t); if (dirPinErr) setDirPinErr(''); }}
+              placeholder="Event PIN"
+              placeholderTextColor="#7d8aa0"
+              keyboardType="number-pad"
+              returnKeyType="done"
+              maxLength={8}
+              autoFocus
+              onSubmitEditing={submitDirectorPin}
+            />
+            {!!dirPinErr && <Text style={styles.pinModalErr}>{dirPinErr}</Text>}
+            <View style={styles.pinModalBtns}>
+              <TouchableOpacity style={styles.pinModalCancel} onPress={() => { setShowDirectorPinModal(false); setDirPinInput(''); setDirPinErr(''); }}>
+                <Text style={styles.pinModalCancelText} maxFontSizeMultiplier={1.2}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.pinModalGo, dirPinBusy && { opacity: 0.6 }]} onPress={submitDirectorPin} disabled={dirPinBusy}>
+                <Text style={styles.pinModalGoText} maxFontSizeMultiplier={1.2}>{dirPinBusy ? 'Checking…' : 'Unlock'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -673,6 +735,17 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
 const GRID_GAP = 8;
 
 const styles = StyleSheet.create({
+  pinModalBackdrop: { flex: 1, backgroundColor: 'rgba(3,12,26,0.75)', justifyContent: 'center', padding: 28 },
+  pinModalCard: { backgroundColor: colors.navy, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)', padding: 22 },
+  pinModalTitle: { color: '#fff', fontSize: 19, fontWeight: '800', textAlign: 'center' },
+  pinModalSub: { color: '#b9c4d4', fontSize: 13, textAlign: 'center', marginTop: 6, lineHeight: 18 },
+  pinModalInput: { backgroundColor: '#0a2240', borderColor: 'rgba(0,204,255,0.4)', borderWidth: 1, borderRadius: 12, color: '#fff', fontSize: 20, textAlign: 'center', paddingVertical: 12, letterSpacing: 4, marginTop: 14 },
+  pinModalErr: { color: '#f87171', fontSize: 13, marginTop: 8, textAlign: 'center' },
+  pinModalBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  pinModalCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center' },
+  pinModalCancelText: { color: '#cdd8e6', fontSize: 15, fontWeight: '600' },
+  pinModalGo: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.cyan, alignItems: 'center' },
+  pinModalGoText: { color: '#003e79', fontSize: 15, fontWeight: '800' },
   container: {
     flex: 1,
     backgroundColor: colors.bg,
