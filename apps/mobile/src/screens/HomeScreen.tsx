@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
-  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, paddingVertical: 12, paddingHorizontal: spacing.lg, borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginTop: spacing.md, width: SCREEN_WIDTH },
+  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, paddingVertical: 12, paddingHorizontal: spacing.lg, borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginTop: -1, width: SCREEN_WIDTH },
   meetingIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,204,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   meetingTitle: { fontSize: 14.5, color: '#fff', fontWeight: '800' },
   meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
