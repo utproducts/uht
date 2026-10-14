@@ -274,6 +274,10 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
     ORDER BY app_users ASC, display_name ASC
   `).bind(eventId).all()).results || [];
 
+  const startDay = (() => {
+    try { return new Date(String(event.start_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }); }
+    catch { return 'soon'; }
+  })();
   const low = (teams as any[]).filter(t => (t.app_users ?? 0) <= threshold);
   const out: any = { threshold, teams: low.map(t => ({ team: t.display_name, app_users: t.app_users, code: t.code })), sent: 0, skipped: 0 };
   if (!opts.commit && !opts.testEmail) return out;
@@ -285,11 +289,11 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
     const urgency = `
       <div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:12px;padding:14px 18px;margin:0 0 16px;">
         <div style="font-size:15px;color:#b91c1c;font-weight:800;">${n === 0 ? 'None of your families are on the app yet.' : `Only ${n} ${n === 1 ? 'person from your team has' : 'people from your team have'} the app so far.`}</div>
-        <div style="font-size:13px;color:#7f1d1d;margin-top:4px;">The tournament starts Thursday - schedules, live scores, locker rooms, and photos all live in the app. Please send the team code below to every family today.</div>
+        <div style="font-size:13px;color:#7f1d1d;margin-top:4px;">The tournament starts ${startDay} - schedules, live scores, locker rooms, and photos all live in the app. Please send the team code below to every family today.</div>
       </div>`;
     const { subject, html } = buildAppInviteHtml({
       eventName: event.name, eventDates, teamName: t.display_name, code: t.code,
-      subjectOverride: `${n === 0 ? 'Your team is missing out' : `Only ${n} of your team on the app`} - ${event.name} starts Thursday`,
+      subjectOverride: `${n === 0 ? 'Your team is missing out' : `Only ${n} of your team on the app`} - ${event.name} starts ${startDay}`,
       introHtml: urgency,
     });
     if (opts.testEmail) {

@@ -74,7 +74,10 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     })();
   }, []);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Local date, NOT toISOString (UTC flips to tomorrow every evening and
+  // made countdowns a day short and game-day banners fire early)
+  const _now = new Date();
+  const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
   const liveEvent = myEvents.find(e => e.start_date && e.end_date
     && String(e.start_date).slice(0, 10) <= todayStr && todayStr <= String(e.end_date).slice(0, 10));
   const nextEvent = myEvents
