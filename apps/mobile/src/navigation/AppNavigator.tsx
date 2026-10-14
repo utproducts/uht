@@ -296,6 +296,9 @@ export default function AppNavigator() {
   );
 }
 
+// Screens that hide the tab bar restore THIS - never `undefined`, which
+// wipes the navy styling back to the default white bar
+export let NAVY_TAB_BAR: any;
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
@@ -323,3 +326,5 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+
+NAVY_TAB_BAR = styles.tabBar;

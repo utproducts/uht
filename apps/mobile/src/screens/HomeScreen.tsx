@@ -24,6 +24,7 @@ import AppHeader from '../components/AppHeader';
 let ConsoleWebView: any = null;
 try { ConsoleWebView = require('react-native-webview').WebView; } catch { /* older binary */ }
 import RoleBar from '../components/RoleBar';
+import { NAVY_TAB_BAR } from '../navigation/AppNavigator';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -50,7 +51,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   useEffect(() => {
     const tabNav = navigation.getParent();
     if (activeRole === 'scorekeeper') tabNav?.setOptions({ tabBarStyle: { display: 'none' } });
-    else tabNav?.setOptions({ tabBarStyle: undefined });
+    else tabNav?.setOptions({ tabBarStyle: NAVY_TAB_BAR });
   }, [activeRole]);
   const lockerAlertCount = lockerAlerts.length;
   // Event-PIN gate: non-admin directors must enter the event PIN EVERY

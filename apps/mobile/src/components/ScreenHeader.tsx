@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../constants/theme';
 
@@ -15,9 +16,11 @@ interface ScreenHeaderProps {
 
 export default function ScreenHeader({ title, showBack, onBack, rightAction, hideLogo, compact }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + (compact ? 4 : 8) }, compact ? styles.containerCompact : null]}>
+      {focused && <StatusBar barStyle="light-content" />}
       {/* Diagonal cyan accent */}
       <View style={styles.accentSlash} />
 

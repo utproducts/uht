@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { NAVY_TAB_BAR } from '../navigation/AppNavigator';
 import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +22,7 @@ export default function ScoringConsoleScreen({ navigation }: any) {
   useEffect(() => {
     const tabNav = navigation.getParent();
     tabNav?.setOptions({ tabBarStyle: { display: 'none' } });
-    return () => tabNav?.setOptions({ tabBarStyle: undefined });
+    return () => tabNav?.setOptions({ tabBarStyle: NAVY_TAB_BAR });
   }, [navigation]);
 
   return (

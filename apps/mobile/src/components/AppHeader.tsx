@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../constants/theme';
 
@@ -20,9 +21,13 @@ export default function AppHeader({
   hasMultipleRoles = false,
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
+  // Navy header = white clock, but only while this screen is focused so
+  // light screens pushed on top fall back to the dark default
+  const focused = useIsFocused();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 4 }]}>
+      {focused && <StatusBar barStyle="light-content" />}
       {/* Logo left */}
       <View style={styles.logoWrap}>
         <Image
