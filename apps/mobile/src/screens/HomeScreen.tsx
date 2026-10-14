@@ -300,7 +300,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             </View>
           </View>
 
-        <View style={styles.overlapStack}>
+        {/* A meeting banner cancels the hero overlap so it never covers the hero text */}
+        <View style={[styles.overlapStack, myMeetings.length > 0 && styles.overlapStackClear]}>
         {/* Role-scoped meeting announcements */}
         {myMeetings.map(m => (
           <TouchableOpacity
@@ -555,6 +556,7 @@ const styles = StyleSheet.create({
   },
   // Hero
   overlapStack: { marginTop: -42 },
+  overlapStackClear: { marginTop: 4 },
   heroZone: {
     width: SCREEN_WIDTH,
   },
@@ -738,7 +740,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 5,
   },
   qaImage: { flex: 1, justifyContent: 'flex-end' },
-  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginBottom: 10 },
+  meetingCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)', marginBottom: 10, marginHorizontal: spacing.lg },
   meetingIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,204,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   meetingTitle: { fontSize: 14.5, color: '#fff', fontWeight: '800' },
   meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
