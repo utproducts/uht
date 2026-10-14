@@ -98,6 +98,13 @@ export function DirectorCheckinScreen({ navigation }: any) {
   const checkedCount = teams.filter(t => t.checked_in_at).length;
   const byAge: Record<string, any[]> = {};
   for (const t of teams) { const k = t.age_group || 'Other'; (byAge[k] = byAge[k] || []).push(t); }
+  const CI_AGE_ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget', 'girls'];
+  const ciAgeKey = (label: string) => {
+    const l = label.toLowerCase();
+    const i = CI_AGE_ORDER.findIndex(a => l.startsWith(a));
+    return i === -1 ? 99 : i;
+  };
+  const ageEntries = Object.entries(byAge).sort((a, b) => ciAgeKey(a[0]) - ciAgeKey(b[0]) || a[0].localeCompare(b[0]));
 
   return (
     <View style={s.screen}>
@@ -106,11 +113,11 @@ export function DirectorCheckinScreen({ navigation }: any) {
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} colors={[colors.navy]} />}>
-          {Object.entries(byAge).map(([age, list]) => (
+          {ageEntries.map(([age, list]) => (
             <View key={age} style={{ marginBottom: spacing.md }}>
               <Text style={s.sectionLabel}>{age}</Text>
               {list.map(t => (
-                <TouchableOpacity key={t.id} style={[s.rowCard, (t.missing_roster || t.balance_cents > 0) ? s.rowCardAlert : null]} activeOpacity={0.7} disabled={busy === t.id} onPress={() => toggle(t)}>
+                <TouchableOpacity key={t.id} style={[s.rowCard, t.missing_roster ? s.rowCardAlert : null]} activeOpacity={0.7} disabled={busy === t.id} onPress={() => toggle(t)}>
                   <View style={[s.checkCircle, t.checked_in_at ? s.checkCircleOn : null]}>
                     {busy === t.id
                       ? <ActivityIndicator size="small" color={t.checked_in_at ? colors.white : colors.navy} />
@@ -121,10 +128,8 @@ export function DirectorCheckinScreen({ navigation }: any) {
                     <Text style={s.rowSub} numberOfLines={1}>
                       {t.checked_in_at ? `Checked in ${String(t.checked_in_at).slice(5, 16)}` : 'Not checked in'}
                     </Text>
-                    {(t.missing_roster || t.balance_cents > 0) ? (
-                      <Text style={s.rowAlertText} numberOfLines={1}>
-                        {[t.missing_roster ? 'NO ROSTER' : null, t.balance_cents > 0 ? `OWES $${(t.balance_cents / 100).toLocaleString()}` : null].filter(Boolean).join('  ·  ')}
-                      </Text>
+                    {t.missing_roster ? (
+                      <Text style={s.rowAlertText} numberOfLines={1}>NO ROSTER</Text>
                     ) : null}
                     {(contacts[t.team_id] || []).length > 0 && (
                       <View style={s.phoneRow}>
