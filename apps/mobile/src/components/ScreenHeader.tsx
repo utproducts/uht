@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing } from '../constants/theme';
 
 interface ScreenHeaderProps {
+  compact?: boolean;
   title: string;
   showBack?: boolean;
   onBack?: () => void;
@@ -12,16 +13,16 @@ interface ScreenHeaderProps {
   hideLogo?: boolean;
 }
 
-export default function ScreenHeader({ title, showBack, onBack, rightAction, hideLogo }: ScreenHeaderProps) {
+export default function ScreenHeader({ title, showBack, onBack, rightAction, hideLogo, compact }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + (compact ? 4 : 8) }, compact && styles.containerCompact]}>
       {/* Diagonal cyan accent */}
       <View style={styles.accentSlash} />
 
       {/* UHT Letters Logo */}
-      {!hideLogo && (
+      {!hideLogo && !compact && (
         <View style={styles.logoRow}>
           <Image
             source={require('../../assets/uht-letters.png')}
@@ -38,7 +39,7 @@ export default function ScreenHeader({ title, showBack, onBack, rightAction, hid
               <Ionicons name="arrow-back" size={24} color={colors.white} />
             </TouchableOpacity>
           ) : null}
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Text style={[styles.title, compact && styles.titleCompact]} numberOfLines={1}>{title}</Text>
         </View>
         {rightAction ? <View style={styles.rightSection}>{rightAction}</View> : null}
       </View>
@@ -51,6 +52,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navy,
     paddingBottom: spacing.lg,
     overflow: 'hidden',
+  },
+  containerCompact: {
+    paddingBottom: spacing.sm,
+  },
+  titleCompact: {
+    fontSize: 17,
   },
   accentSlash: {
     position: 'absolute',

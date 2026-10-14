@@ -41,7 +41,7 @@ function useDirectorEvents() {
 function Header({ title, subtitle, navigation }: { title: string; subtitle?: string; navigation: any }) {
   return (
     <>
-      <ScreenHeader title={title} showBack onBack={() => navigation.goBack()} />
+      <ScreenHeader compact title={title} showBack onBack={() => navigation.goBack()} />
       {subtitle ? <Text style={s.headerSubLine}>{subtitle}</Text> : null}
     </>
   );
