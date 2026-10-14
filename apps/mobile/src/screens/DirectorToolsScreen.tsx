@@ -101,7 +101,7 @@ export function DirectorCheckinScreen({ navigation }: any) {
 
   return (
     <View style={s.screen}>
-      <Header title="Team Check-in" subtitle={`${checkedCount} of ${teams.length} teams checked in`} navigation={navigation} />
+      <Header title="Team Arrivals" subtitle={`${checkedCount} of ${teams.length} teams arrived - per-game check-ins are on each game card`} navigation={navigation} />
       <EventPills events={events} selected={selected} onSelect={setSelected} />
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}

@@ -382,7 +382,7 @@ onPress={() => navigation.navigate('ScoringConsole')}
         {['director', 'tournament_director'].includes(activeRole) ? (
           <View style={styles.qaGrid}>
             {([
-              { label: 'Team Check-in', sub: 'Check teams in for the event', icon: 'checkbox-outline' as const, go: () => navigation.navigate('DirectorCheckin') },
+              { label: 'Team Arrivals', sub: 'Mark teams arrived; game check-ins live on each game', icon: 'checkbox-outline' as const, go: () => navigation.navigate('DirectorCheckin') },
               { label: 'Score Management', sub: 'Fix scores and run games', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('DirectorGames') },
               { label: 'Locker Rooms', sub: 'Assign rooms by rink and day', icon: 'lock-closed-outline' as const, go: () => navigation.navigate('DirectorLockerRooms', lockerAlerts.length > 0 ? { alert: lockerAlerts[0] } : {}) },
               { label: 'Championship Photos', sub: 'Post the winners', icon: 'trophy-outline' as const, go: () => navigation.navigate('DirectorChampions') },
