@@ -1217,7 +1217,7 @@ teamRoutes.get('/my-gamesheets', authMiddleware, async (c) => {
   // rehearsal game) so they can see what a finished scoresheet looks like
   // before their own games go final. Remove after Windmill if unwanted.
   const isCoachOrManager = (user.roles || []).some((r: string) => ['coach', 'manager'].includes(r));
-  if (isCoachOrManager && !isStaff) {
+  if (isCoachOrManager || isStaff) {
     data.unshift({
       id: 'f40dad4199296b7b7c2133b0760245b8',
       game_number: 3,
