@@ -347,50 +347,15 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Real app screenshots — overlapping cascade (desktop) */}
-              <div className="hidden sm:block relative mx-auto" style={{ maxWidth: '900px', height: 'clamp(320px, 38vw, 480px)' }}>
-                {[
-                  { src: '/app-phone-home.jpg', alt: 'Home — your teams and upcoming events', label: 'Home' },
-                  { src: '/app-phone-events.jpg', alt: 'Events — browse upcoming tournaments', label: 'Events' },
-                  { src: '/app-phone-scores.jpg', alt: 'Game Center — live scores and standings', label: 'Scores' },
-                  { src: '/app-phone-teams.jpg', alt: 'My Teams — manage your teams and rosters', label: 'My Teams' },
-                  { src: '/app-phone-lodging.jpg', alt: 'Lodging — exclusive tournament hotel rates', label: 'Lodging' },
-                  { src: '/app-phone-menu.jpg', alt: 'Menu — share, manage, and shop', label: 'Menu' },
-                ].map((screen, i) => {
-                  const total = 6;
-                  const center = (total - 1) / 2;
-                  const offset = i - center;
-                  const leftPct = 8 + (i * 14.5);
-                  const rotate = offset * 4;
-                  const translateY = Math.abs(offset) * 12;
-                  const z = total - Math.abs(Math.round(offset));
-                  return (
-                    <div
-                      key={i}
-                      className="absolute bottom-0 transition-all duration-500 hover:scale-110 hover:!z-50 group cursor-pointer"
-                      style={{
-                        left: `${leftPct}%`,
-                        // Equal HEIGHT for every phone; width follows each
-                        // screenshot's own ratio so nothing gets cropped
-                        height: 'clamp(268px, 35vw, 424px)',
-                        transform: `rotate(${rotate}deg) translateY(${translateY}px)`,
-                        zIndex: z,
-                        filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.5))',
-                      }}
-                    >
-                      <img
-                        src={screen.src}
-                        alt={screen.alt}
-                        className="h-full w-auto rounded-[clamp(12px,2.2vw,24px)]"
-                      />
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-[#00ccff] text-[#001d3d] text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-lg">
-                        {screen.label}
-                      </div>
-                    </div>
-                  );
-                })}
+              {/* Real app screenshots — single pre-composed fan (desktop) */}
+              <div className="hidden sm:block relative mx-auto" style={{ maxWidth: '1000px' }}>
+                <img
+                  src="/app-phones-fan.webp"
+                  alt="The UHT app: home, events, live scores, teams, lodging, and menu screens"
+                  className="w-full h-auto"
+                />
               </div>
-              {/* Mobile horizontal scroll fallback */}
+
               <div className="sm:hidden flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 snap-x snap-mandatory mt-4" style={{ scrollbarWidth: 'none' }}>
                 {[
                   { src: '/app-phone-home.jpg', alt: 'Home' },
