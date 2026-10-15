@@ -2171,8 +2171,19 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
       isBracket: gameType !== 'pool',
     });
   }
+  // Pool assignments (Blue/Grey from the pre-set standings order) scope the
+  // seed warnings at UPLOAD time too, not just on the live re-run
+  let uploadPools: Record<string, string> | undefined;
+  try {
+    const { computeStandings } = await import('../lib/standings');
+    const { standings } = await computeStandings(db, eventId);
+    uploadPools = {};
+    for (const s of standings) {
+      if (s.pool_name && s.team_name) uploadPools[String(s.team_name).trim()] = s.pool_name;
+    }
+  } catch { /* no pools - warnings stay unscoped */ }
   const { runScheduleChecks } = await import('../lib/schedule-checks');
-  const checks = runScheduleChecks(checkGames);
+  const checks = runScheduleChecks(checkGames, uploadPools);
 
   const summary = {
     totalRows: rows.length - 1,

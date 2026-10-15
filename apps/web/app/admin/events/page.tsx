@@ -3177,6 +3177,7 @@ function ScheduleCsvUpload({ eventId, hasGames, onDone }: { eventId: string; has
         <div>
           <p className="font-semibold text-[#1d1d1f] text-sm">Upload Schedule CSV</p>
           <p className="text-xs text-[#6e6e73] mt-0.5">Pool + bracket games from your scheduler export. You&apos;ll see a preview before anything is saved.{hasGames ? ' Importing replaces the existing schedule (and its scores).' : ''}</p>
+          <p className="text-xs text-[#0077b6] mt-1.5 font-medium">Tip: set each division&apos;s team order (Blue/Grey pools) on the Standings tab BEFORE uploading - the upload checks then know every team&apos;s bracket and won&apos;t flag false conflicts.</p>
         </div>
         <label className={`px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer transition ${busy ? 'bg-[#e8e8ed] text-[#86868b]' : 'bg-[#003e79] text-white hover:bg-[#002d5a]'}`}>
           {busy ? 'Working…' : hasGames ? 'Re-upload CSV…' : 'Choose CSV…'}
@@ -4824,7 +4825,7 @@ function StandingsAdminTab({ eventId }: { eventId: string }) {
   if (rows.length === 0) {
     return <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
       <p className="font-semibold text-[#1d1d1f] text-lg">No standings yet</p>
-      <p className="text-sm text-[#6e6e73] mt-1">Upload a schedule first - teams appear here with zero records before games finish.</p>
+      <p className="text-sm text-[#6e6e73] mt-1">Standings populate from approved registrations - approve teams into their divisions and they appear here, ready to order into pools before the schedule upload.</p>
     </div>;
   }
 

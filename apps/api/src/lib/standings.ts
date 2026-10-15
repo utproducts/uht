@@ -183,6 +183,52 @@ export async function computeStandings(
     }
   }
 
+  // Divisions with approved registrations but NO pool games yet still get
+  // 0-0 standings rows, so Johnny can set Blue/Grey pools BEFORE the
+  // schedule upload and the upload checks already know every team's pool.
+  try {
+    let rq = `SELECT er.event_division_id as div_id, er.team_id FROM event_registrations er
+      WHERE er.event_id = ? AND er.status = 'approved' AND er.team_id IS NOT NULL AND er.event_division_id IS NOT NULL`;
+    const rparams: string[] = [eventId];
+    if (divisionId) { rq += ' AND er.event_division_id = ?'; rparams.push(divisionId); }
+    const regs = ((await db.prepare(rq).bind(...rparams).all<any>()).results || []) as any[];
+    const divsWithGames = new Set(games.map(g => g.event_division_id));
+    const regOnly = regs.filter(r => !divsWithGames.has(r.div_id));
+    const regTeamIds = Array.from(new Set(regOnly.map(r => r.team_id))).filter(t => !meta.has(t)) as string[];
+    for (let i = 0; i < regTeamIds.length; i += 50) {
+      const chunk = regTeamIds.slice(i, i + 50);
+      const rows = await db.prepare(
+        `SELECT t.id as team_id, ${TEAM_NAME_SQL} as team_name, t.logo_url as team_logo FROM teams t WHERE t.id IN (${chunk.map(() => '?').join(',')})`
+      ).bind(...chunk).all<TeamMeta>();
+      for (const r of (rows.results || [])) meta.set(r.team_id, r);
+    }
+    for (const r of regOnly) {
+      if (!divMeta.has(r.div_id)) {
+        const row = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?').bind(r.div_id).first<any>();
+        if (row) divMeta.set(r.div_id, row);
+      }
+      const key = poolKey(r.div_id, null);
+      if (!buckets.has(key)) { buckets.set(key, new Map()); finalsByBucket.set(key, []); poolComplete.set(key, false); }
+      const bucket = buckets.get(key)!;
+      if (!bucket.has(r.team_id)) {
+        const m = meta.get(r.team_id);
+        const dm = divMeta.get(r.div_id);
+        bucket.set(r.team_id, {
+          event_division_id: r.div_id,
+          age_group: dm?.age_group || '',
+          division_level: dm?.division_level || null,
+          pool_name: null,
+          team_id: r.team_id,
+          team_name: m?.team_name || 'Unknown Team',
+          team_logo: m?.team_logo || null,
+          games_played: 0, wins: 0, losses: 0, ties: 0,
+          goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
+          pims: 0, rank: 0, tiebreaker: null,
+        });
+      }
+    }
+  } catch {}
+
   const standings: StandingRow[] = [];
   for (const [key, bucket] of buckets) {
     const rows = Array.from(bucket.values());
