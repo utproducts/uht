@@ -710,14 +710,21 @@ authRoutes.post('/admin-pin', rateLimit(10, 60_000), zValidator('json', adminPin
 // ==================
 // SELF-ADD ROLE
 // ==================
-const addRoleSchema = z.object({
-  role: z.enum(['parent']),
-});
-
-authRoutes.post('/add-role', authMiddleware, zValidator('json', addRoleSchema), async (c) => {
+authRoutes.post('/add-role', authMiddleware, async (c) => {
   const user = (c as any).get('user');
-  const { role } = c.req.valid('json');
+  const body = await c.req.json().catch(() => ({})) as any;
+  const role = String(body.role || '');
   const db = c.env.DB;
+  if (role !== 'parent') {
+    const msg = role === 'scorekeeper' || role === 'referee'
+      ? 'Scorekeeper and Referee access is assigned by UHT staff. Reach out and we will set you up.'
+      : role === 'director'
+        ? 'Director access needs an event PIN. Update your app, then choose Event Director and enter the PIN.'
+        : role === 'coach'
+          ? 'Coach access needs your team code. Update your app, then choose Coach and enter the code.'
+          : 'This role cannot be added here.';
+    return c.json({ success: false, error: msg });
+  }
 
   try {
     // Check if user already has this role
