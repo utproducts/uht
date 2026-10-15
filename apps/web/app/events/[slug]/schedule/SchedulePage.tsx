@@ -370,6 +370,15 @@ function ageSortKey(label: string): number {
                 {div}
               </button>
             ))}
+            {divisionFilter && (
+              <a
+                href={`/print/division?event=${encodeURIComponent(slug)}&division=${encodeURIComponent(divisionFilter)}`}
+                target="_blank"
+                className="px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap bg-white border border-[#003e79] text-[#003e79] hover:bg-[#f0f7ff] transition-all"
+              >
+                Print {divisionFilter}
+              </a>
+            )}
 
           </div>
         </div>

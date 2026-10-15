@@ -3357,6 +3357,13 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
               {divisions.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           )}
+          <a
+            href={`/print/division?event=${encodeURIComponent(eventId)}${filterDivision !== 'all' ? `&division=${encodeURIComponent(filterDivision)}` : ''}`}
+            target="_blank"
+            className="text-sm font-semibold text-[#003e79] border border-[#003e79] rounded-lg px-3 py-1.5 hover:bg-[#f0f7ff] transition"
+          >
+            Print {filterDivision !== 'all' ? 'Division Sheet' : 'All'}
+          </a>
         </div>
         <a href="/admin/schedule" className="text-sm text-[#003e79] font-medium hover:underline flex items-center gap-1">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
