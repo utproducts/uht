@@ -54,22 +54,31 @@ export async function mhrRosterStatus(db: any, eventId: string): Promise<any[]> 
     SELECT er.id as reg_id, er.email1, er.email2, er.coach_email,
       t.id as team_id, t.head_coach_email,
       COALESCE(t.schedule_name, t.name, er.team_name) as team_name,
+      COALESCE(ed.age_group, t.age_group, er.age_group) as age_group,
       CASE WHEN t.id IS NULL OR t.mhr_url IS NULL OR t.mhr_url = '' THEN 1 ELSE 0 END as missing_mhr,
       CASE WHEN t.id IS NULL OR (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id AND tp.status = 'active') = 0 THEN 1 ELSE 0 END as missing_roster
     FROM event_registrations er
     LEFT JOIN teams t ON t.id = COALESCE(er.team_id,
       (SELECT t9.id FROM teams t9 WHERE LOWER(t9.name) = LOWER(er.team_name) AND t9.is_active = 1 LIMIT 1))
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
     WHERE er.event_id = ? AND er.status = 'approved'
   `).bind(eventId).all()).results || [];
+  // Mites: MyHockeyRankings does not rank them, and their roster is AAU,
+  // not USA Hockey - never nag a mite team about an MHR link
+  for (const r of rows as any[]) {
+    r.is_mite = /mite|\b8u\b/i.test(String(r.age_group || r.team_name || '')) ? 1 : 0;
+    if (r.is_mite) r.missing_mhr = 0;
+  }
   return (rows as any[]).filter(r => r.missing_mhr || r.missing_roster);
 }
 
 export function buildMhrRosterHtml(opts: {
   eventName: string; eventDates: string; teamName: string;
-  missingMhr: boolean; missingRoster: boolean; teamId: string | null;
+  missingMhr: boolean; missingRoster: boolean; teamId: string | null; isMite?: boolean;
 }): { subject: string; html: string } {
   const { eventName, eventDates, teamName, missingMhr, missingRoster, teamId } = opts;
-  const needs = [missingMhr ? 'MHR link' : null, missingRoster ? 'USA Hockey roster' : null].filter(Boolean).join(' and ');
+  const rosterLabel = opts.isMite ? 'AAU roster' : 'USA Hockey roster';
+  const needs = [missingMhr ? 'MHR link' : null, missingRoster ? rosterLabel : null].filter(Boolean).join(' and ');
   const subject = `Action needed for ${eventName}: add your ${needs}`;
   const editUrl = teamId ? `${SITE}/create-team?edit=${teamId}` : `${SITE}/dashboard`;
 
@@ -83,7 +92,7 @@ export function buildMhrRosterHtml(opts: {
   const rosterBlock = missingRoster ? `
       <div style="background:#f7fafd;border:1px solid #dbe6f1;border-radius:12px;padding:16px 18px;margin:0 0 12px;">
         <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#003e79;">${missingMhr ? '2' : '1'}. Add your roster</p>
-        <p style="margin:0;font-size:14px;color:#3d3d3d;line-height:1.5;">Open the UHT app, go to My Teams, tap ${teamName}, then Roster, and add your players. You can paste your USA Hockey roster straight in. Rosters are required for game-day check-in and scoresheets.</p>
+        <p style="margin:0;font-size:14px;color:#3d3d3d;line-height:1.5;">Open the UHT app, go to My Teams, tap ${teamName}, then Roster, and add your players. You can paste your ${rosterLabel} straight in. Rosters are required for game-day check-in and scoresheets.</p>
       </div>` : '';
 
   const html = `<!doctype html>
@@ -130,6 +139,7 @@ export async function sendMhrRosterReminders(env: any, eventId: string, opts: { 
     const { subject, html } = buildMhrRosterHtml({
       eventName: event.name, eventDates, teamName: t.team_name || 'Your Team',
       missingMhr: !!t.missing_mhr, missingRoster: !!t.missing_roster, teamId: t.team_id || null,
+      isMite: !!t.is_mite,
     });
     const recipients = [...new Set(
       [t.email1, t.email2, t.coach_email, t.head_coach_email]
@@ -177,7 +187,7 @@ export async function sendMhrRosterReminders(env: any, eventId: string, opts: { 
           )
         `).bind(t.team_id).all()).results || [];
         if (staff.length > 0) {
-          const needs = [t.missing_mhr ? 'MHR link' : null, t.missing_roster ? 'roster' : null].filter(Boolean).join(' and ');
+          const needs = [t.missing_mhr ? 'MHR link' : null, t.missing_roster ? (t.is_mite ? 'AAU roster' : 'roster') : null].filter(Boolean).join(' and ');
           const title = `${t.team_name}: ${needs} needed`;
           const body = `Please add your team's ${needs} before ${event.name}. It only takes a minute.`;
           const tokens = (staff as any[]).map(r => r.token);

@@ -53,7 +53,10 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
     eventCity: params.eventCity,
     scheduleDate: params.scheduleDate,
   };
-  const f = (key: string, fallback: string) => replaceVars(o[key] || fallback, vars);
+  // Mites have AAU rosters, not USA Hockey ones - swap the wording for them
+  const isMite = /mite|\b8u\b/i.test(String(params.ageGroup || ''));
+  const miteFix = (t: string) => isMite ? t.replace(/USA Hockey/g, 'AAU') : t;
+  const f = (key: string, fallback: string) => miteFix(replaceVars(o[key] || fallback, vars));
 
   // ── Editable copy (defaults live in template-overrides.ts; these fallbacks match) ──
   const heading = f('heading', 'Your Tournament Guide');
@@ -118,7 +121,7 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
               <p style="margin: 18px 0 0 0;">
                 <a href="https://ultimatetournaments.com/dashboard/coach/roster" style="display: inline-block; padding: 14px 32px; background-color: #ffffff; color: #b91c1c; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 15px;">Upload Your Roster Now</a>
               </p>
-              <p style="margin: 12px 0 0 0; font-size: 12px; color: #fecaca;">Takes about 5 minutes. Paste from the USA Hockey portal or upload a file.</p>
+              <p style="margin: 12px 0 0 0; font-size: 12px; color: #fecaca;">Takes about 5 minutes. Paste from the ${isMite ? 'AAU' : 'USA Hockey'} portal or upload a file.</p>
             </td>
           </tr>
         </table>
