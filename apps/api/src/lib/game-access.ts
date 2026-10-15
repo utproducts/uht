@@ -82,6 +82,12 @@ export async function verifySheetReadAccess(
 ): Promise<{ ok: boolean; canShare: boolean; status?: number; error?: string }> {
   const db = c.env.DB as D1Database;
 
+  // The pinned SAMPLE scoresheet (my-gamesheets demo row) opens for any
+  // signed-in user regardless of team
+  if (game.id === 'f40dad4199296b7b7c2133b0760245b8') {
+    return { ok: true, canShare: false };
+  }
+
   if (c.req.header('X-Dev-Bypass') === 'true' && c.env.ENVIRONMENT !== 'production') {
     return { ok: true, canShare: true };
   }
