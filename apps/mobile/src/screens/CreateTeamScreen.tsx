@@ -804,7 +804,7 @@ export default function CreateTeamScreen({
     if (!createdTeam) return;
     if (type === 'players') {
       const code = createdTeam.parentInviteCode || createdTeam.inviteCode || '';
-      const message = `Follow ${createdTeam.name} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`;
+      const message = `Follow ${createdTeam.name} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\niPhone: https://apps.apple.com/app/id6786085393\nAndroid: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`;
       try { await Share.share({ message }); } catch {}
     } else {
       const code = createdTeam.inviteCode || '';

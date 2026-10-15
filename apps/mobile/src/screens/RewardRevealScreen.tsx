@@ -188,7 +188,7 @@ export default function RewardRevealScreen({ navigation }: any) {
     if (!code) return;
     try {
       await Share.share({
-        message: `I just got $${amount} off my next UHT tournament registration! Code: ${code} - Download the UHT app: https://apps.apple.com/app/id6786085393`,
+        message: `I just got $${amount} off my next UHT tournament registration! Code: ${code} - Download the UHT app - iPhone: https://apps.apple.com/app/id6786085393 or Android: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`,
       });
     } catch {}
   };

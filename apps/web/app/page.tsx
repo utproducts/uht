@@ -217,15 +217,15 @@ export default function HomePage() {
                   <p className="text-white font-semibold text-base leading-tight">App Store</p>
                 </div>
               </a>
-              <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 opacity-60 cursor-default">
+              <a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/8 backdrop-blur-sm border border-white/10 hover:bg-white/20 transition-all">
                 <svg className="w-7 h-7 text-white flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.834 1.64a1 1 0 010 1.727l-2.834 1.64-2.535-2.534 2.535-2.474zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z" />
                 </svg>
                 <div>
-                  <p className="text-[10px] text-white/50 uppercase tracking-wider leading-none">Coming Soon on</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-wider leading-none">Get it on</p>
                   <p className="text-white font-semibold text-base leading-tight">Google Play</p>
                 </div>
-              </div>
+              </a>
             </div>
           </div>
 
@@ -335,15 +335,15 @@ export default function HomePage() {
                       <p className="text-[#1d1d1f] font-bold text-base leading-tight">App Store</p>
                     </div>
                   </a>
-                  <div className="inline-flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white/60 text-[#001d3d] cursor-default shadow-lg opacity-60">
+                  <a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white text-[#001d3d] hover:bg-white/90 transition-all shadow-lg">
                     <svg className="w-7 h-7 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.834 1.64a1 1 0 010 1.727l-2.834 1.64-2.535-2.534 2.535-2.474zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z" />
                     </svg>
                     <div>
-                      <p className="text-[9px] text-[#6e6e73] uppercase tracking-wider leading-none">Coming Soon on</p>
+                      <p className="text-[9px] text-[#6e6e73] uppercase tracking-wider leading-none">Get it on</p>
                       <p className="text-[#1d1d1f] font-bold text-base leading-tight">Google Play</p>
                     </div>
-                  </div>
+                  </a>
                 </div>
               </div>
 

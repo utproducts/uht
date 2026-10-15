@@ -1112,7 +1112,7 @@ teamRoutes.post('/invite-staff/:teamId', authMiddleware, async (c) => {
               <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
                 <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
                 <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
-                <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Get it on Google Play</a>
               </div>
             </div>
           </div>
@@ -1932,7 +1932,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                     <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
                       <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
                       <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
-                      <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                      <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Get it on Google Play</a>
                     </div>
                   </div>
                 `,
@@ -2002,7 +2002,7 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
                     <div style="margin-top: 32px; padding: 24px 30px; background-color: #f8f9fa; border-radius: 8px; text-align: center;">
                       <p style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #003e79;">Download the UHT App</p>
                       <p style="margin: 0 0 16px; font-size: 14px; color: #666;">Track schedules, scores, and standings in real-time</p>
-                      <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>
+                      <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Download on the App Store</a>&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" style="display: inline-block; padding: 12px 24px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Get it on Google Play</a>
                     </div>
                   </div>
                 `,

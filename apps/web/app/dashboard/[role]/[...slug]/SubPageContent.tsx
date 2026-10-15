@@ -358,7 +358,7 @@ function CoachTeams({ role = 'coach' }: { role?: string }) {
                   {(team.parent_invite_code || team.invite_code) && (
                     <button onClick={() => {
                       const code = team.parent_invite_code || team.invite_code;
-                      const msg = `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`;
+                      const msg = `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\niPhone: https://apps.apple.com/app/id6786085393\nAndroid: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`;
                       navigator.clipboard.writeText(msg);
                       setRosterLinkCopied(team.id);
                       setTimeout(() => setRosterLinkCopied(null), 2500);

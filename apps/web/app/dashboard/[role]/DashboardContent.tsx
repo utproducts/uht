@@ -505,7 +505,7 @@ function CoachDash() {
             const isExpanded = expandedTeam === team.id;
             const parentShareCode = team.parent_invite_code || team.invite_code || null;
             const parentShareMsg = parentShareCode
-              ? `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${parentShareCode}\n\nhttps://apps.apple.com/app/id6786085393`
+              ? `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${parentShareCode}\n\niPhone: https://apps.apple.com/app/id6786085393\nAndroid: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`
               : null;
             return (
               <div key={team.id} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_-6px_rgba(0,62,121,0.12)] transition-all">
@@ -945,10 +945,16 @@ function ParentDash() {
           <p className="text-sm text-[#6e6e73] max-w-md mx-auto">
             Download the UHT app and enter your team code to follow your child&apos;s team. You&apos;ll get live scores, schedules, and updates automatically.
           </p>
-          <a href="https://apps.apple.com/app/id6786085393" target="_blank" rel="noopener noreferrer"
-            className="inline-block mt-4 px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
-            Download the App
-          </a>
+          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+            <a href="https://apps.apple.com/app/id6786085393" target="_blank" rel="noopener noreferrer"
+              className="inline-block px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
+              App Store (iPhone)
+            </a>
+            <a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" target="_blank" rel="noopener noreferrer"
+              className="inline-block px-6 py-3 bg-[#003e79] hover:bg-[#002d5a] text-white font-semibold rounded-full text-sm transition-all active:scale-[0.98]">
+              Google Play (Android)
+            </a>
+          </div>
         </div>
       </div>
     );

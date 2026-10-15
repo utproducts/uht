@@ -246,7 +246,7 @@ export function buildEventInfoHtml(params: EventInfoEmailParams): string {
               ${para(scoresText)}
               <p style="margin: 4px 0 0 0;">
                 <a href="${params.eventUrl}" style="display: inline-block; padding: 12px 28px; background-color: #00a0cc; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px;">View Event Page</a>
-                <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 28px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-left: 8px;">Get the UHT App</a>
+                <a href="https://apps.apple.com/app/id6786085393" style="display: inline-block; padding: 12px 28px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-left: 8px;">App Store (iPhone)</a>&nbsp;<a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" style="display: inline-block; padding: 12px 28px; background-color: #003e79; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; margin-left: 8px;">Google Play (Android)</a>
               </p>
 
               ${h3('🎽 Jerseys')}

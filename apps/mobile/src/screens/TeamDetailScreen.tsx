@@ -138,7 +138,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
     if (!team?.invite_code) return;
     try {
       await Share.share({
-        message: `You're invited to coach ${team.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${team.invite_code}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the team code when prompted: ${team.invite_code}`,
+        message: `You're invited to coach ${team.name} on Ultimate Hockey Tournaments!\n\nTeam code: ${team.invite_code}\n\n1. Download the UHT app - iPhone: https://apps.apple.com/app/id6786085393 or Android: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht\n2. Create your account as Coach / Asst Coach / Manager\n3. Enter the team code when prompted: ${team.invite_code}`,
       });
     } catch {}
   }
@@ -148,7 +148,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
     if (!familyCode) return;
     try {
       await Share.share({
-        message: `Follow ${team!.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app: https://apps.apple.com/app/id6786085393\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
+        message: `Follow ${team!.name} on Ultimate Hockey Tournaments!\n\nFamily code: ${familyCode}\n\n1. Download the UHT app - iPhone: https://apps.apple.com/app/id6786085393 or Android: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht\n2. Create your account as Parent / Player / Fan\n3. Enter the family code when prompted: ${familyCode}\n\nYou'll see all upcoming events, schedules, and scores!`,
       });
     } catch {}
   }

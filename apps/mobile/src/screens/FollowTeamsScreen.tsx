@@ -362,7 +362,7 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                         activeOpacity={0.7}
                         onPress={() => {
                           Share.share({
-                            message: `Hey Coach! Our ${selectedOrg?.name || ''} team needs to be set up on the Ultimate Hockey Tournaments app so families can follow along with schedules, scores, and standings. Download the app and create our team here: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393`,
+                            message: `Hey Coach! Our ${selectedOrg?.name || ''} team needs to be set up on the Ultimate Hockey Tournaments app so families can follow along with schedules, scores, and standings. Download the app and create our team here - iPhone: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393 or Android: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`,
                           });
                         }}
                       >
@@ -625,7 +625,7 @@ export default function FollowTeamsScreen({ navigation }: { navigation: any }) {
                       activeOpacity={0.7}
                       onPress={() => {
                         Share.share({
-                          message: `Hey Coach! Our team needs to be set up on the Ultimate Hockey Tournaments app so we can follow along with schedules, scores, and standings. Download the app and create our team here: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393`,
+                          message: `Hey Coach! Our team needs to be set up on the Ultimate Hockey Tournaments app so we can follow along with schedules, scores, and standings. Download the app and create our team here - iPhone: https://apps.apple.com/app/ultimate-hockey-tournaments/id6786085393 or Android: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`,
                         });
                       }}
                     >

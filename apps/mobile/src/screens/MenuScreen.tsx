@@ -427,7 +427,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
     if (!code) return;
     try {
       await Share.share({
-        message: `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\nhttps://apps.apple.com/app/id6786085393`,
+        message: `Follow ${team.name} (${team.age_group}) on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${code}\n\niPhone: https://apps.apple.com/app/id6786085393\nAndroid: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`,
       });
     } catch {}
   }

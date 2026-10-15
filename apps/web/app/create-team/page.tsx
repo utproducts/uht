@@ -585,7 +585,7 @@ export default function CreateTeamPage() {
                       Team Code: {createdInviteCode}
                     </div>
                     <button onClick={() => {
-                      const msg = `Follow ${teamDisplayName} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${createdInviteCode}\n\nhttps://apps.apple.com/app/id6786085393`;
+                      const msg = `Follow ${teamDisplayName} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${createdInviteCode}\n\niPhone: https://apps.apple.com/app/id6786085393\nAndroid: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`;
                       navigator.clipboard.writeText(msg);
                       setRosterLinkCopied(true);
                       setTimeout(() => setRosterLinkCopied(false), 2500);
@@ -1468,7 +1468,7 @@ export default function CreateTeamPage() {
                         Team Code: {createdInviteCode}
                       </div>
                       <button onClick={() => {
-                        const msg = `Follow ${teamDisplayName} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${createdInviteCode}\n\nhttps://apps.apple.com/app/id6786085393`;
+                        const msg = `Follow ${teamDisplayName} on Ultimate Hockey Tournaments!\n\nDownload the app and use team code: ${createdInviteCode}\n\niPhone: https://apps.apple.com/app/id6786085393\nAndroid: https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht`;
                         navigator.clipboard.writeText(msg);
                         setRosterLinkCopied(true);
                         setTimeout(() => setRosterLinkCopied(false), 2500);
