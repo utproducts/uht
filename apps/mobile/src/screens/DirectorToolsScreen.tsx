@@ -363,6 +363,9 @@ export function DirectorRinksScreen({ navigation }: any) {
 export function DirectorTeamCodesScreen({ navigation }: any) {
   const { events, selected, setSelected, loading } = useDirectorEvents();
   const [rows, setRows] = useState<any[]>([]);
+  // Parent codes let families FOLLOW a team; coach codes let staff JOIN it
+  const [codeMode, setCodeMode] = useState<'parent' | 'coach'>('parent');
+  const codeFor = (r: any) => codeMode === 'parent' ? (r.parent_invite_code || null) : (r.invite_code || null);
 
   useEffect(() => {
     if (!selected) return;
@@ -373,10 +376,10 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
   }, [selected]);
 
   const copyCode = async (row: any) => {
-    const code = row.parent_invite_code || row.invite_code;
+    const code = codeFor(row);
     if (!code) return;
     await Clipboard.setStringAsync(code);
-    Alert.alert('Copied', `${row.team_name} code ${code} copied.`);
+    Alert.alert('Copied', `${row.team_name} ${codeMode} code ${code} copied.`);
   };
 
   // Division label like the standings page: real event division first,
@@ -397,8 +400,17 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
 
   return (
     <View style={s.screen}>
-      <Header title="Team Codes" subtitle="Tap a code to copy it for a parent" navigation={navigation} />
+      <Header title="Team Codes" subtitle={codeMode === 'parent' ? 'Tap a code to copy it for a parent' : 'Tap a code to copy it for a coach or manager'} navigation={navigation} />
       <EventPills events={events} selected={selected} onSelect={setSelected} />
+      <View style={s.codeModeRow}>
+        {([['parent', 'Parent Codes'], ['coach', 'Coach Codes']] as const).map(([mode, label]) => (
+          <TouchableOpacity key={mode} activeOpacity={0.8}
+            style={[s.codeModePill, codeMode === mode && s.codeModePillActive]}
+            onPress={() => setCodeMode(mode)}>
+            <Text style={[s.codeModePillText, codeMode === mode && s.codeModePillTextActive]} maxFontSizeMultiplier={1.2}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
         <ScrollView contentContainerStyle={s.body}>
           {divEntries.map(([div, list]) => (
@@ -413,11 +425,11 @@ export function DirectorTeamCodesScreen({ navigation }: any) {
                   activeOpacity={0.7} onPress={() => copyCode(r)}>
                   <Text style={[s.rowTitle, { flex: 1, marginRight: 4 }]} numberOfLines={1}>{r.team_name}</Text>
                   <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                    onPress={() => Alert.alert('Full Team Name', `${r.team_name}\n\n${div}${(r.parent_invite_code || r.invite_code) ? `\nCode: ${r.parent_invite_code || r.invite_code}` : ''}`)}>
+                    onPress={() => Alert.alert('Full Team Name', `${r.team_name}\n\n${div}${codeFor(r) ? `\n${codeMode === 'parent' ? 'Parent' : 'Coach'} code: ${codeFor(r)}` : ''}`)}>
                     <Ionicons name="information-circle-outline" size={19} color="#9aa7ba" />
                   </TouchableOpacity>
-                  {(r.parent_invite_code || r.invite_code) ? (
-                    <View style={s.codeChip}><Text style={s.codeChipText}>{r.parent_invite_code || r.invite_code}</Text></View>
+                  {codeFor(r) ? (
+                    <View style={[s.codeChip, codeMode === 'coach' && s.codeChipCoach]}><Text style={s.codeChipText}>{codeFor(r)}</Text></View>
                   ) : (
                     <Text style={s.rowSub}>no code</Text>
                   )}
@@ -861,5 +873,11 @@ const s = StyleSheet.create({
   roomChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#eef2f7', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   roomChipText: { fontSize: 12.5, color: '#101c30', ...fonts.semibold },
   codeChip: { backgroundColor: '#f0f7ff', borderWidth: 1, borderColor: '#bcd9f5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  codeChipCoach: { backgroundColor: '#fff7e6', borderColor: '#f5c26b' },
+  codeModeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
+  codeModePill: { flex: 1, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: '#d7dee8', backgroundColor: '#fff', alignItems: 'center' },
+  codeModePillActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  codeModePillText: { fontSize: 13, fontWeight: '700', color: '#51627a' },
+  codeModePillTextActive: { color: '#fff' },
   codeChipText: { color: colors.navy, fontSize: 14, letterSpacing: 2, ...fonts.bold },
 });
