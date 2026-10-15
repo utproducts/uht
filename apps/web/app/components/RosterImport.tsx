@@ -425,6 +425,11 @@ export default function RosterImport({ teamId, onPlayersAdded, compact }: Roster
             className="text-sm text-[#6e6e73] hover:text-[#1d1d1f]">Cancel</button>
         </div>
         <p className="text-sm text-[#6e6e73]">Review the parsed roster below. Edit any fields, then click Import All to add them.</p>
+        <button type="button"
+          onClick={() => setPreviewPlayers(prev => prev.map(x => ({ ...x, firstName: x.lastName, lastName: x.firstName })))}
+          className="text-xs font-semibold text-[#0077b6] border border-[#bfe6ff] bg-[#eaf6ff] rounded-lg px-3 py-1.5 hover:bg-[#d8efff]">
+          Names backwards? Swap first and last
+        </button>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden max-h-80 overflow-y-auto">
           {(() => { const hasAway = previewPlayers.some(p => p.awayJerseyNumber); return (

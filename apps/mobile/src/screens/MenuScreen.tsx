@@ -70,6 +70,34 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   const [dirPinInput, setDirPinInput] = useState('');
   const [dirPinBusy, setDirPinBusy] = useState(false);
   const [dirPinErr, setDirPinErr] = useState('');
+  // Coach role comes only from a valid team coach code
+  const [showCoachCodeModal, setShowCoachCodeModal] = useState(false);
+  const [coachCodeInput, setCoachCodeInput] = useState('');
+  const [coachCodeBusy, setCoachCodeBusy] = useState(false);
+  const [coachCodeErr, setCoachCodeErr] = useState('');
+  const submitCoachCode = async () => {
+    const code = coachCodeInput.trim();
+    if (!code) { setCoachCodeErr('Enter the coach code your team was given.'); return; }
+    setCoachCodeBusy(true); setCoachCodeErr('');
+    try {
+      const r = await authFetch('/api/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteCode: code }),
+      });
+      const j = await r.json() as any;
+      if (j.success) {
+        setShowCoachCodeModal(false);
+        setCoachCodeInput('');
+        const role = j.data?.role === 'follower' ? null : (j.data?.role || 'coach');
+        if (role) setUserRoles(prev => prev.includes(role) ? prev : [...prev, role]);
+        Alert.alert(role ? 'Joined Team' : 'Following Team', j.message || `You've joined ${j.data?.teamName || 'the team'}.`);
+      } else {
+        setCoachCodeErr(typeof j.error === 'string' ? j.error : 'Invalid code.');
+      }
+    } catch { setCoachCodeErr('Could not reach the server. Try again.'); }
+    setCoachCodeBusy(false);
+  };
   const submitDirectorPin = async () => {
     const pin = dirPinInput.trim();
     if (!pin) { setDirPinErr('Enter the event PIN from your tournament organizer.'); return; }
@@ -636,13 +664,11 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
   }
 
   function handleAddRole() {
+    // Roles are credential-gated: Coach needs a team's coach code, Director
+    // needs an event PIN. Scorekeeper and Referee are assigned by UHT staff.
     const selfAddableRoles = [
-      { key: 'coach', label: 'Coach' },
       { key: 'parent', label: 'Parent / Fan' },
-      { key: 'referee', label: 'Referee' },
-      { key: 'scorekeeper', label: 'Scorekeeper' },
-      // Director is PIN-gated: the option prompts for the event PIN, and
-      // /api/director/claim only grants the role on a valid PIN
+      { key: 'coach', label: 'Coach (requires team code)' },
       { key: 'director', label: 'Event Director (requires event PIN)' },
     ];
     const available = selfAddableRoles.filter(r => !userRoles.includes(r.key));
@@ -658,6 +684,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
           text: r.label,
           onPress: async () => {
             if (r.key === 'director') { setShowDirectorPinModal(true); return; }
+            if (r.key === 'coach') { setShowCoachCodeModal(true); return; }
             const result = await addRoleToAccount(r.key);
             if (result.success && result.roles) {
               setUserRoles(result.roles);
@@ -723,6 +750,38 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.pinModalGo, dirPinBusy && { opacity: 0.6 }]} onPress={submitDirectorPin} disabled={dirPinBusy}>
                 <Text style={styles.pinModalGoText} maxFontSizeMultiplier={1.2}>{dirPinBusy ? 'Checking…' : 'Unlock'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Coach code prompt - the ONLY way to gain the coach role here */}
+      <Modal visible={showCoachCodeModal} transparent animationType="fade" onRequestClose={() => setShowCoachCodeModal(false)}>
+        <View style={styles.pinModalBackdrop}>
+          <View style={styles.pinModalCard}>
+            <Text style={styles.pinModalTitle} maxFontSizeMultiplier={1.2}>Join as a Coach</Text>
+            <Text style={styles.pinModalSub}>Enter your team's coach code. Your head coach or manager can share it from the team page.</Text>
+            <TextInput
+              style={styles.pinModalInput}
+              value={coachCodeInput}
+              onChangeText={(t) => { setCoachCodeInput(t.toUpperCase()); if (coachCodeErr) setCoachCodeErr(''); }}
+              placeholder="Team code"
+              placeholderTextColor="#7d8aa0"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              returnKeyType="done"
+              maxLength={10}
+              autoFocus
+              onSubmitEditing={submitCoachCode}
+            />
+            {!!coachCodeErr && <Text style={styles.pinModalErr}>{coachCodeErr}</Text>}
+            <View style={styles.pinModalBtns}>
+              <TouchableOpacity style={styles.pinModalCancel} onPress={() => { setShowCoachCodeModal(false); setCoachCodeInput(''); setCoachCodeErr(''); }}>
+                <Text style={styles.pinModalCancelText} maxFontSizeMultiplier={1.2}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.pinModalGo, coachCodeBusy && { opacity: 0.6 }]} onPress={submitCoachCode} disabled={coachCodeBusy}>
+                <Text style={styles.pinModalGoText} maxFontSizeMultiplier={1.2}>{coachCodeBusy ? 'Checking…' : 'Join Team'}</Text>
               </TouchableOpacity>
             </View>
           </View>

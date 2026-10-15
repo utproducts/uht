@@ -2027,7 +2027,9 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
 teamRoutes.post('/:id/import-roster', authMiddleware, async (c) => {
   const teamId = c.req.param('id');
   const db = c.env.DB;
-  const body = await c.req.json<{ url?: string; pastedData?: string }>();
+  const body = await c.req.json<{ url?: string; pastedData?: string; nameOrder?: string }>();
+  // USA Hockey copies paste as LAST FIRST - the UI dropdown picks the order
+  const lastFirst = body.nameOrder === 'last_first';
 
   // Verify team exists and user has access
   const user = c.get('user');
@@ -2199,11 +2201,11 @@ teamRoutes.post('/:id/import-roster', authMiddleware, async (c) => {
         } else {
           const np = name.split(/\s+/);
           if (parts.length === 1 && np.length >= 2) {
-            firstName = np[0];
-            lastName = np.slice(1).join(' ');
+            if (lastFirst) { lastName = np[0]; firstName = np.slice(1).join(' '); }
+            else { firstName = np[0]; lastName = np.slice(1).join(' '); }
           } else if (parts.length >= 2) {
-            firstName = parts[0];
-            lastName = parts[1];
+            if (lastFirst) { lastName = parts[0]; firstName = parts[1]; }
+            else { firstName = parts[0]; lastName = parts[1]; }
           } else {
             firstName = np[0];
           }

@@ -927,6 +927,16 @@ export default function CreateTeamScreen({
             <Text style={styles.sectionTitle}>Found {previewPlayers.length} Players</Text>
             <Text style={styles.sectionSubtitle}>Review the roster below, then tap Import All.</Text>
 
+            {/* USA Hockey copies paste Last First - one tap fixes every row */}
+            <TouchableOpacity
+              style={rosterStyles.swapNamesBtn}
+              activeOpacity={0.8}
+              onPress={() => setPreviewPlayers(prev => prev.map(x => ({ ...x, firstName: x.lastName, lastName: x.firstName })))}
+            >
+              <Ionicons name="swap-horizontal" size={16} color={colors.cyan} />
+              <Text style={rosterStyles.swapNamesText} maxFontSizeMultiplier={1.2}>Names backwards? Swap first and last</Text>
+            </TouchableOpacity>
+
             {previewPlayers.map((p, i) => (
               <View key={i} style={rosterStyles.previewRow}>
                 <View style={rosterStyles.previewNum}>
@@ -2213,6 +2223,8 @@ const rosterStyles = StyleSheet.create({
     marginTop: spacing.xxl,
     marginBottom: spacing.xxl,
   },
+  swapNamesBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(0,204,255,0.5)', borderRadius: 10, paddingVertical: 10, marginBottom: 12 },
+  swapNamesText: { color: colors.cyan, fontSize: 13, fontWeight: '600' },
   previewRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -522,6 +522,8 @@ function RosterManagement({ initialTeamId, embedded }: { initialTeamId?: string;
   const [importUrl, setImportUrl] = useState('');
   const [pasteMode, setPasteMode] = useState(false);
   const [pastedText, setPastedText] = useState('');
+  // USA Hockey copies come through as LAST FIRST - let the user say which
+  const [pasteNameOrder, setPasteNameOrder] = useState<'first_last' | 'last_first'>('first_last');
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
 
@@ -614,7 +616,7 @@ function RosterManagement({ initialTeamId, embedded }: { initialTeamId?: string;
     try {
       const res = await fetch(`${API}/api/teams/${selectedTeamId}/import-roster`, {
         method: 'POST', headers: getAuthHeaders(),
-        body: JSON.stringify({ pastedData: pastedText }),
+        body: JSON.stringify({ pastedData: pastedText, nameOrder: pasteNameOrder }),
       });
       const data = await res.json() as any;
       if (data.success) {
