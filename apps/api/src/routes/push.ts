@@ -418,7 +418,7 @@ pushRoutes.post('/meetings/:id/email', authMiddleware, requireRole('admin', 'dir
         from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
         reply_to: 'johnny@ultimatetournaments.com',
         // One copy for Johnny (first batch only), not one per 40 recipients
-        to: [i === 0 ? 'johnny@ultimatetournaments.com' : 'registration@ultimatetournaments.com'],
+        to: i === 0 ? ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'] : ['registration@ultimatetournaments.com'],
         bcc: chunk, subject, html,
       }),
     });

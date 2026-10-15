@@ -22,7 +22,7 @@ async function sendBlastCopy(env: any, subject: string, html: string, sent: numb
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to: ['johnny@ultimatetournaments.com'], subject: `[Blast copy - ${sent} sent] ${subject}`, html }),
+      body: JSON.stringify({ from: FROM, to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'], subject: `[Blast copy - ${sent} sent] ${subject}`, html }),
     });
   } catch {}
 }

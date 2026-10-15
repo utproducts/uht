@@ -335,6 +335,21 @@ export async function processSendWave(env: any, campaign: any, audience: any, ba
 
   if (uniqueRecipients.length === 0) return { error: 'No recipients found for this audience filter' };
 
+  // One staff copy per CAMPAIGN (not per recipient) the moment it starts
+  if (campaign.status !== 'sending') {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: `${campaign.from_name || 'Ultimate Hockey Tournaments'} <${campaign.from_email || 'info@ultimatetournaments.com'}>`,
+          to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+          subject: `[Campaign copy - ${uniqueRecipients.length} recipients] ${campaign.subject}`,
+          html: campaign.body_html,
+        }),
+      });
+    } catch {}
+  }
   await db.prepare(`UPDATE email_campaigns SET status = 'sending', audience_filter = ?, updated_at = datetime('now') WHERE id = ?`)
     .bind(JSON.stringify(audience), campaign.id).run();
 
