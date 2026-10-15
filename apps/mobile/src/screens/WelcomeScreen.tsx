@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
   StatusBar,
+  ScrollView,
 } from 'react-native';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 
@@ -14,6 +15,9 @@ export default function WelcomeScreen({ navigation }: { navigation: any }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      {/* Scrolls when accessibility fonts blow the layout past the screen -
+          the Sign In button must ALWAYS be reachable */}
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
       <View style={styles.content}>
         <View style={styles.brandSection}>
           <Image
@@ -21,8 +25,8 @@ export default function WelcomeScreen({ navigation }: { navigation: any }) {
             style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.title}>Ultimate Hockey{'\n'}Tournaments</Text>
-          <Text style={styles.subtitle}>
+          <Text style={styles.title} maxFontSizeMultiplier={1.3}>Ultimate Hockey{'\n'}Tournaments</Text>
+          <Text style={styles.subtitle} maxFontSizeMultiplier={1.4}>
             Follow your teams, track schedules, and never miss a game.
           </Text>
         </View>
@@ -33,7 +37,7 @@ export default function WelcomeScreen({ navigation }: { navigation: any }) {
             onPress={() => navigation.navigate('SignUp')}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryButtonText}>Create Account</Text>
+            <Text style={styles.primaryButtonText} maxFontSizeMultiplier={1.3}>Create Account</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -41,10 +45,11 @@ export default function WelcomeScreen({ navigation }: { navigation: any }) {
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.85}
           >
-            <Text style={styles.secondaryButtonText}>Sign In</Text>
+            <Text style={styles.secondaryButtonText} maxFontSizeMultiplier={1.3}>Sign In</Text>
           </TouchableOpacity>
         </View>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
