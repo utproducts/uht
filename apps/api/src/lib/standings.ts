@@ -193,7 +193,31 @@ export async function computeStandings(
     if (divisionId) { rq += ' AND er.event_division_id = ?'; rparams.push(divisionId); }
     const regs = ((await db.prepare(rq).bind(...rparams).all<any>()).results || []) as any[];
     const divsWithGames = new Set(games.map(g => g.event_division_id));
-    const regOnly = regs.filter(r => !divsWithGames.has(r.div_id));
+    // A registration division that duplicates a games division BY LABEL
+    // (two "Squirt B/C" rows with different ids) must not seed a second
+    // standings card - the games division is the real one
+    const norm = (a: any, _l: any) => String(a || '').toLowerCase().replace(/\s+/g, '').replace(/\(.*\)/g, '');
+    const gameDivLabels = new Set<string>();
+    for (const d of divsWithGames) {
+      let dm = divMeta.get(d as string);
+      if (!dm) {
+        const row = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?').bind(d).first<any>();
+        if (row) { divMeta.set(d as string, row); dm = row; }
+      }
+      if (dm) gameDivLabels.add(norm(dm.age_group, dm.division_level));
+    }
+    const regDivOk = new Map<string, boolean>();
+    for (const r of regs) {
+      if (regDivOk.has(r.div_id)) continue;
+      if (divsWithGames.has(r.div_id)) { regDivOk.set(r.div_id, false); continue; }
+      let dm = divMeta.get(r.div_id);
+      if (!dm) {
+        const row = await db.prepare('SELECT age_group, division_level FROM event_divisions WHERE id = ?').bind(r.div_id).first<any>();
+        if (row) { divMeta.set(r.div_id, row); dm = row; }
+      }
+      regDivOk.set(r.div_id, !(dm && gameDivLabels.has(norm(dm.age_group, dm.division_level))));
+    }
+    const regOnly = regs.filter(r => regDivOk.get(r.div_id));
     const regTeamIds = Array.from(new Set(regOnly.map(r => r.team_id))).filter(t => !meta.has(t)) as string[];
     for (let i = 0; i < regTeamIds.length; i += 50) {
       const chunk = regTeamIds.slice(i, i + 50);
