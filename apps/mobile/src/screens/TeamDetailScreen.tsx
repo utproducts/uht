@@ -9,6 +9,7 @@ import {
   Share,
   Image,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -33,6 +34,8 @@ interface TeamDetail {
   head_coach_phone?: string;
   invite_code?: string;
   parent_invite_code?: string;
+  mhr_url?: string;
+  usa_hockey_roster_url?: string;
   roster_share_token?: string;
   logo_url?: string;
 }
@@ -64,6 +67,27 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   const rosterYRef = useRef<number>(0);
 
   const isCoach = ['coach', 'manager', 'admin', 'director'].includes(activeRole);
+  const canManage = isCoach || activeRole === 'organization';
+  // Team links (MHR + roster) editable right here - coaches couldn't set
+  // their MHR link anywhere in the app before
+  const [mhrUrl, setMhrUrl] = useState('');
+  const [rosterUrl, setRosterUrl] = useState('');
+  const [linksSaving, setLinksSaving] = useState(false);
+  const [linksMsg, setLinksMsg] = useState('');
+  const saveLinks = async () => {
+    setLinksSaving(true); setLinksMsg('');
+    try {
+      const r = await authFetch(`/api/teams/${teamId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mhrUrl: mhrUrl.trim(), usaHockeyRosterUrl: rosterUrl.trim() }),
+      });
+      const j = await r.json() as any;
+      setLinksMsg(j.success ? 'Saved!' : (typeof j.error === 'string' ? j.error : 'Could not save'));
+      if (j.success) setTimeout(() => setLinksMsg(''), 3000);
+    } catch { setLinksMsg('Could not reach the server'); }
+    setLinksSaving(false);
+  };
 
   const loadTeam = useCallback(async () => {
     setLoading(true);
@@ -77,6 +101,8 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
       const teamJson = await teamRes.json() as any;
       if (teamJson.success && teamJson.data) {
         setTeam(teamJson.data);
+        setMhrUrl(teamJson.data?.mhr_url || '');
+        setRosterUrl(teamJson.data?.usa_hockey_roster_url || '');
       }
 
       const rosterJson = await rosterRes.json() as any;
@@ -316,6 +342,42 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
           ) : null}
         </View>
 
+        {/* Team links: MHR + roster URL (coaches, managers, org owners) */}
+        {canManage && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Team Links</Text>
+            <Text style={styles.linksHint}>
+              Your MyHockeyRankings page powers fair scheduling{/mite|\b8u\b/i.test(team?.age_group || '') ? '' : ', and your USA Hockey roster link helps us keep your roster current'}.
+            </Text>
+            <Text style={styles.linksLabel}>MHR link{/mite|\b8u\b/i.test(team?.age_group || '') ? ' (not needed for mites)' : ''}</Text>
+            <TextInput
+              style={styles.linksInput}
+              value={mhrUrl}
+              onChangeText={setMhrUrl}
+              placeholder="https://myhockeyrankings.com/team-info?t=..."
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <Text style={styles.linksLabel}>{/mite|\b8u\b/i.test(team?.age_group || '') ? 'AAU roster link' : 'USA Hockey roster link'}</Text>
+            <TextInput
+              style={styles.linksInput}
+              value={rosterUrl}
+              onChangeText={setRosterUrl}
+              placeholder="Paste your official roster link"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            {!!linksMsg && <Text style={[styles.linksMsg, linksMsg === 'Saved!' ? { color: '#0a7a3d' } : { color: '#A32D2D' }]}>{linksMsg}</Text>}
+            <TouchableOpacity style={[styles.linksSaveBtn, linksSaving && { opacity: 0.6 }]} onPress={saveLinks} disabled={linksSaving} activeOpacity={0.8}>
+              <Text style={styles.linksSaveText} maxFontSizeMultiplier={1.2}>{linksSaving ? 'Saving…' : 'Save Links'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Leave / Unfollow */}
         <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.7} onPress={handleLeaveTeam}>
           <Ionicons name="exit-outline" size={18} color="#A32D2D" />
@@ -431,6 +493,12 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
 }
 
 const styles = StyleSheet.create({
+  linksHint: { fontSize: 12, color: colors.textMuted, marginBottom: 10, lineHeight: 17 },
+  linksLabel: { fontSize: 12, fontWeight: '700', color: colors.navy, marginBottom: 4, marginTop: 6 },
+  linksInput: { borderWidth: 1, borderColor: '#d7dee8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1d1d1f', backgroundColor: '#fff' },
+  linksMsg: { fontSize: 13, fontWeight: '600', marginTop: 8 },
+  linksSaveBtn: { backgroundColor: colors.navy, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 10 },
+  linksSaveText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: colors.bg,
