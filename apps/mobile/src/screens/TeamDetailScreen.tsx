@@ -344,7 +344,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
 
         {/* Team links: MHR + roster URL (coaches, managers, org owners) */}
         {canManage && (
-          <View style={styles.section}>
+          <View style={[styles.section, { padding: spacing.md }]}>
             <Text style={styles.sectionTitle}>Team Links</Text>
             <Text style={styles.linksHint}>
               Your MyHockeyRankings page powers fair scheduling{/mite|\b8u\b/i.test(team?.age_group || '') ? '' : ', and your USA Hockey roster link helps us keep your roster current'}.
