@@ -100,9 +100,10 @@ export async function getEventInfoContext(db: any, event: any) {
     `).bind(event.id).all()).results || [];
   }
 
-  // Schedule email date: 10 days before start
+  // Schedule email date: 9 days before start (the Wednesday the week
+  // before a Friday event - 10 was a miscalculation, per Chad 10/14)
   const start = new Date(`${event.start_date.slice(0, 10)}T12:00:00Z`);
-  const sched = new Date(start.getTime() - 10 * 86400_000);
+  const sched = new Date(start.getTime() - 9 * 86400_000);
   const scheduleDate = `${MONTHS[sched.getUTCMonth()]} ${sched.getUTCDate()}`;
 
   return {

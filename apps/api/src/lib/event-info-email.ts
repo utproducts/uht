@@ -15,7 +15,7 @@ export interface EventInfoEmailParams {
   eventCity: string;         // "Holland, Michigan"
   eventUrl: string;          // public event page
   rinks: { name: string; address?: string; city?: string; state?: string }[];
-  scheduleDate: string;      // "Oct 6" (10 days before start)
+  scheduleDate: string;      // "Oct 7" (9 days before start)
   teamName: string;
   ageGroup?: string;
   division?: string;
