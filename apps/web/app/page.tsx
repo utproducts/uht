@@ -370,10 +370,9 @@ export default function HomePage() {
                       className="absolute bottom-0 transition-all duration-500 hover:scale-110 hover:!z-50 group cursor-pointer"
                       style={{
                         left: `${leftPct}%`,
-                        width: 'clamp(120px, 16vw, 190px)',
-                        // Source screenshots have different aspect ratios -
-                        // force one phone ratio so every card is the same height
-                        aspectRatio: '1080 / 2400',
+                        // Equal HEIGHT for every phone; width follows each
+                        // screenshot's own ratio so nothing gets cropped
+                        height: 'clamp(268px, 35vw, 424px)',
                         transform: `rotate(${rotate}deg) translateY(${translateY}px)`,
                         zIndex: z,
                         filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.5))',
@@ -382,7 +381,7 @@ export default function HomePage() {
                       <img
                         src={screen.src}
                         alt={screen.alt}
-                        className="w-full h-full object-cover rounded-[clamp(12px,2.2vw,24px)]"
+                        className="h-full w-auto rounded-[clamp(12px,2.2vw,24px)]"
                       />
                       <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-[#00ccff] text-[#001d3d] text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-lg">
                         {screen.label}
