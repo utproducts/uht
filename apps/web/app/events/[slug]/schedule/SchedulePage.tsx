@@ -103,6 +103,15 @@ export default function SchedulePage({ slug: initialSlug }: { slug: string }) {
   const [view, setView] = useState<'schedule' | 'standings'>('schedule');
   const [dayFilter, setDayFilter] = useState('');
   const [collapsedDays, setCollapsedDays] = useState<Record<string, boolean>>({});
+  // Print sheet is a staff tool - only admins/directors see the button
+  const [isStaff, setIsStaff] = useState(false);
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('uht_user') || 'null');
+      const roles: string[] = u?.roles || [];
+      setIsStaff(roles.includes('admin') || roles.includes('director') || roles.includes('tournament_director'));
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -370,7 +379,7 @@ function ageSortKey(label: string): number {
                 {div}
               </button>
             ))}
-            {divisionFilter && (
+            {divisionFilter && isStaff && (
               <a
                 href={`/print/division?event=${encodeURIComponent(slug)}&division=${encodeURIComponent(divisionFilter)}`}
                 target="_blank"
