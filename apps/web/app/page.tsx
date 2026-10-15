@@ -302,75 +302,35 @@ export default function HomePage() {
       {/* ═══════════════════════ MOBILE APP ═══════════════════════ */}
       <section className="bg-[#fafafa] pt-14 pb-2">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
-          <div className="relative bg-gradient-to-br from-[#001d3d] via-[#002d5a] to-[#003e79] rounded-3xl overflow-hidden">
-            {/* Background accents */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#00ccff]/10 rounded-full -translate-y-1/3 translate-x-1/4 blur-[80px]" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#00ccff]/8 rounded-full translate-y-1/3 -translate-x-1/4 blur-[60px]" />
-
-            <div className="relative z-10 px-8 sm:px-12 lg:px-16 pt-10 sm:pt-12 pb-0">
-              {/* Header row — text left, badge right on desktop */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#00ccff]/15 border border-[#00ccff]/20 mb-3">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00ccff] animate-pulse" />
-                    <span className="text-xs text-[#00ccff] font-semibold">Available Now</span>
-                  </div>
-                  <h2 className={oswald.className + " text-2xl sm:text-3xl lg:text-4xl font-bold uppercase tracking-tight text-white leading-[0.95]"}>
-                    UHT IN YOUR{' '}
-                    <span className="bg-gradient-to-r from-[#00ccff] to-[#a0e8ff] bg-clip-text text-transparent">POCKET</span>
-                  </h2>
-                  <p className="text-white/50 text-sm sm:text-base mt-2 max-w-lg">
-                    Register, track schedules, get live scores, and manage your team — all from the UHT app.
-                  </p>
-                </div>
-
-                {/* App Store badges */}
-                <div className="flex flex-wrap gap-3 flex-shrink-0">
-                  <a href="https://apps.apple.com/app/id6786085393" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white text-[#001d3d] hover:bg-white/90 transition-all shadow-lg">
-                    <svg className="w-7 h-7 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-                    </svg>
-                    <div>
-                      <p className="text-[9px] text-[#6e6e73] uppercase tracking-wider leading-none">Download on the</p>
-                      <p className="text-[#1d1d1f] font-bold text-base leading-tight">App Store</p>
-                    </div>
-                  </a>
-                  <a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white text-[#001d3d] hover:bg-white/90 transition-all shadow-lg">
-                    <svg className="w-7 h-7 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-1.4l2.834 1.64a1 1 0 010 1.727l-2.834 1.64-2.535-2.534 2.535-2.474zM5.864 2.658L16.8 8.99l-2.302 2.302-8.634-8.634z" />
-                    </svg>
-                    <div>
-                      <p className="text-[9px] text-[#6e6e73] uppercase tracking-wider leading-none">Get it on</p>
-                      <p className="text-[#1d1d1f] font-bold text-base leading-tight">Google Play</p>
-                    </div>
-                  </a>
-                </div>
-              </div>
-
-              {/* Real app screenshots — single pre-composed fan (desktop) */}
-              <div className="hidden sm:block relative mx-auto" style={{ maxWidth: '1000px' }}>
-                <img
-                  src="/app-phones-fan.webp"
-                  alt="The UHT app: home, events, live scores, teams, lodging, and menu screens"
-                  className="w-full h-auto"
-                />
-              </div>
-
-              <div className="sm:hidden flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 snap-x snap-mandatory mt-4" style={{ scrollbarWidth: 'none' }}>
-                {[
-                  { src: '/app-phone-home.jpg', alt: 'Home' },
-                  { src: '/app-phone-events.jpg', alt: 'Events' },
-                  { src: '/app-phone-scores.jpg', alt: 'Scores' },
-                  { src: '/app-phone-teams.jpg', alt: 'My Teams' },
-                  { src: '/app-phone-lodging.jpg', alt: 'Lodging' },
-                  { src: '/app-phone-menu.jpg', alt: 'Menu' },
-                ].map((screen, i) => (
-                  <div key={i} className="flex-shrink-0 w-[180px] snap-center" style={{ filter: 'drop-shadow(0 12px 30px rgba(0,0,0,0.5))' }}>
-                    <img src={screen.src} alt={screen.alt} className="w-full h-auto rounded-[16px]" />
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* Full marketing banner - store badges in the artwork are live
+              links via invisible overlays positioned on the badge areas */}
+          <div className="relative rounded-3xl overflow-hidden shadow-xl">
+            <img
+              src="/app-promo-banner.webp"
+              alt="UHT in your pocket - schedules, scores, standings, team management and more in the UHT app"
+              className="w-full h-auto"
+            />
+            <a
+              href="https://apps.apple.com/app/id6786085393"
+              target="_blank" rel="noopener noreferrer"
+              aria-label="Download on the App Store"
+              className="absolute block"
+              style={{ left: '3.6%', top: '66.4%', width: '14%', height: '8.2%' }}
+            />
+            <a
+              href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht"
+              target="_blank" rel="noopener noreferrer"
+              aria-label="Get it on Google Play"
+              className="absolute block"
+              style={{ left: '18.2%', top: '66.4%', width: '14%', height: '8.2%' }}
+            />
+          </div>
+          {/* Small-screen fallback: tappable buttons below the banner */}
+          <div className="sm:hidden mt-4 flex items-center justify-center gap-3">
+            <a href="https://apps.apple.com/app/id6786085393" target="_blank" rel="noopener noreferrer"
+              className="px-5 py-3 rounded-xl bg-[#001d3d] text-white text-sm font-semibold">App Store</a>
+            <a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht" target="_blank" rel="noopener noreferrer"
+              className="px-5 py-3 rounded-xl bg-[#001d3d] text-white text-sm font-semibold">Google Play</a>
           </div>
         </div>
       </section>
