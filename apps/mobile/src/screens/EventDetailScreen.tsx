@@ -356,6 +356,23 @@ export default function EventDetailScreen({
       } },
     ]);
   };
+  // Blue/Grey pool per team from standings - shown on My Schedule so
+  // families don't have to open Standings to find their bracket
+  const poolByTeam: Record<string, string> = {};
+  for (const st of standings) {
+    if (st.team_id && st.pool_name) poolByTeam[st.team_id] = st.pool_name;
+  }
+  const poolChip = (teamId?: string | null) => {
+    const pool = teamId ? poolByTeam[teamId] : null;
+    if (!pool) return null;
+    const isBlue = /blue/i.test(pool);
+    return (
+      <View style={[styles.poolChip, isBlue ? styles.poolChipBlue : styles.poolChipGrey]}>
+        <Text style={[styles.poolChipText, isBlue ? styles.poolChipTextBlue : styles.poolChipTextGrey]} maxFontSizeMultiplier={1.1}>{pool.toUpperCase()}</Text>
+      </View>
+    );
+  };
+
   function renderGameCheckinRow(item: GameSlot) {
     if (!item.id || item.status === 'final') return null;
     const sides = [
@@ -423,7 +440,7 @@ export default function EventDetailScreen({
     if (activeTab === 'game_center' && !scoresLoaded) {
       loadScores();
     }
-    if (activeTab === 'game_center' && !standingsLoaded) {
+    if ((activeTab === 'game_center' || activeTab === 'my_schedule') && !standingsLoaded) {
       loadStandings();
     }
   }, [activeTab]);
@@ -1149,6 +1166,7 @@ export default function EventDetailScreen({
                   <Text style={[styles.teamName, isMyHome ? styles.myTeamHighlight : null]}>
                     {item.home_team_name || item.home_team || 'TBD'}
                   </Text>
+                  {poolChip(item.home_team_id)}
                   {(isFinal || isLive) && item.home_score != null && (
                     <Text style={[styles.inlineScore, isLive ? { color: '#e74c3c' } : null]}>{item.home_score}</Text>
                   )}
@@ -1168,6 +1186,7 @@ export default function EventDetailScreen({
                   <Text style={[styles.teamName, isMyAway ? styles.myTeamHighlight : null]}>
                     {item.away_team_name || item.away_team || 'TBD'}
                   </Text>
+                  {poolChip(item.away_team_id)}
                   {(isFinal || isLive) && item.away_score != null && (
                     <Text style={[styles.inlineScore, isLive ? { color: '#e74c3c' } : null]}>{item.away_score}</Text>
                   )}
@@ -2344,6 +2363,12 @@ function CollapsibleSection({ title, iconName, children }: { title: string; icon
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
+  poolChip: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 6, borderWidth: 1 },
+  poolChipBlue: { backgroundColor: '#e3edff', borderColor: '#93b8f5' },
+  poolChipGrey: { backgroundColor: '#eceff3', borderColor: '#c3ccd8' },
+  poolChipText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  poolChipTextBlue: { color: '#1d4ed8' },
+  poolChipTextGrey: { color: '#51627a' },
   // Possible bracket games (My Schedule footer)
   possibleHeader: { fontSize: 11, color: '#7a8699', letterSpacing: 1.2, ...fonts.bold, marginBottom: 4 },
   possibleSub: { fontSize: 11.5, color: '#8a96a8', ...fonts.semibold, lineHeight: 16, marginBottom: 10 },
