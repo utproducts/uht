@@ -4649,6 +4649,23 @@ function AppInviteCard({ eventId }: { eventId: string }) {
 
 // ── Admin Standings tab: frontend view + drag-and-drop manual ordering ──
 function AdminPhotosTab({ eventId }: { eventId: string }) {
+  // One-click "post the champions album to Facebook now" (whatever exists)
+  const [fbPosting, setFbPosting] = useState(false);
+  const [fbMsg, setFbMsg] = useState('');
+  const postChampsToFb = async () => {
+    if (!window.confirm('Post the champions album to the UHT Facebook Page now with the photos uploaded so far?')) return;
+    setFbPosting(true); setFbMsg('');
+    try {
+      const r = await fetch(`https://uht.chad-157.workers.dev/api/photos/events/${eventId}/facebook-champions`, {
+        method: 'POST',
+        headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) },
+      });
+      const j = await r.json();
+      setFbMsg(j.success ? 'Posted to Facebook!' : (j.data?.reason || j.error || 'Post failed - is Facebook connected?'));
+    } catch { setFbMsg('Post failed'); }
+    setFbPosting(false);
+  };
+
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -4683,6 +4700,14 @@ function AdminPhotosTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <button onClick={postChampsToFb} disabled={fbPosting}
+          className="px-4 py-2 rounded-xl bg-[#1877F2] text-white text-sm font-bold disabled:opacity-50">
+          {fbPosting ? 'Posting…' : 'Post Champions Album to Facebook'}
+        </button>
+        {fbMsg && <span className="text-sm font-semibold text-[#3d3d3d]">{fbMsg}</span>}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h3 className="text-lg font-bold text-[#1d1d1f]">Event Photos ({rows.length})</h3>
         <p className="text-xs text-[#6e6e73]">Families upload in the app. Hide anything inappropriate - 3 user reports auto-hide a photo.</p>
