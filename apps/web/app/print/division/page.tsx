@@ -180,7 +180,7 @@ export default function PrintDivisionPage() {
                   </td>
                   <td className="num ps-score" style={{ width: 70 }}>
                     {g.status === 'final' || g.status === 'in_progress' || g.status === 'intermission'
-                      ? `${g.home_score} - ${g.away_score}${g.status !== 'final' ? '*' : ''}`
+                      ? `${g.home_score} - ${g.away_score}${g.status !== 'final' ? '*' : g.is_shootout ? ' (SO)' : g.is_overtime ? ' (OT)' : ''}`
                       : <><span className="ps-blank" /> - <span className="ps-blank" /></>}
                   </td>
                 </tr>

@@ -743,6 +743,7 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
   const games = await db.prepare(`
     SELECT g.id, g.game_number, g.start_time, g.end_time, g.game_type, g.pool_name,
       g.home_score, g.away_score, g.period, g.status, g.delay_minutes, g.delay_note,
+      g.is_overtime, g.is_shootout,
       (SELECT group_concat(ts.star_number || '|' || COALESCE(ts.jersey_number,'') || '|' || COALESCE(ts.player_name,''), ';')
         FROM game_three_stars ts WHERE ts.game_id = g.id) as three_stars_str,
       g.delay_status, g.delay_reason, g.home_team_id, g.away_team_id,

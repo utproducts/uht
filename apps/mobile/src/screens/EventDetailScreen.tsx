@@ -98,6 +98,8 @@ interface GameSlot {
   away_locker_room?: string;
   status?: string;
   delay_minutes?: number;
+  is_overtime?: number;
+  is_shootout?: number;
   delay_note?: string;
   venue_name?: string;
   round?: string;
@@ -1140,7 +1142,7 @@ export default function EventDetailScreen({
                 <View style={styles.gameStatusRow}>
                   <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
                     {isLive && <View style={styles.gameStatusDot} />}
-                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}</Text>
+                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}{isFinal && item.is_shootout ? ' - SO' : isFinal && item.is_overtime ? ' - OT' : ''}</Text>
                   </View>
                   {isLive && item.period ? (
                     <Text style={styles.livePeriodText}>{periodLabel(item.period)}</Text>
@@ -1614,7 +1616,7 @@ export default function EventDetailScreen({
                 <View style={styles.gameStatusRow}>
                   <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
                     {isLive && <View style={styles.gameStatusDot} />}
-                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}</Text>
+                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}{isFinal && item.is_shootout ? ' - SO' : isFinal && item.is_overtime ? ' - OT' : ''}</Text>
                   </View>
                   {isLive && item.period ? (
                     <Text style={styles.livePeriodText}>{periodLabel(item.period)}</Text>

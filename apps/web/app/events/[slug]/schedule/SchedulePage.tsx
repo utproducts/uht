@@ -34,6 +34,8 @@ interface Game {
   age_group: string;
   division_level: string;
   delay_minutes?: number;
+  is_overtime?: number;
+  is_shootout?: number;
   delay_note?: string;
   cascaded_delay_minutes?: number;
   adjusted_start_time?: string;
@@ -596,6 +598,8 @@ function ageSortKey(label: string): number {
                         {dayGames.map((game, gIdx) => {
                           const sb = statusBadge(game.status);
                           const isFinal = game.status === 'final';
+                          // Close games deserve the badge of honor
+                          const otTag = isFinal && game.is_shootout ? ' · SO' : isFinal && game.is_overtime ? ' · OT' : '';
                           const isLive = game.status === 'in_progress' || game.status === 'live';
                           const totalDelay = (game.delay_minutes || 0) + (game.cascaded_delay_minutes || 0);
                           const hasStarted = isFinal || isLive || game.status === 'intermission';
@@ -664,8 +668,8 @@ function ageSortKey(label: string): number {
 
                               {/* Status badge + arrow */}
                               <div className="shrink-0 px-4 flex items-center gap-2">
-                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${sb.classes}`}>
-                                  {sb.label}
+                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${otTag ? 'bg-purple-100 text-purple-700' : sb.classes}`}>
+                                  {sb.label}{otTag}
                                 </span>
                                 {hasStarted && (
                                   <svg className="w-4 h-4 text-[#86868b]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
