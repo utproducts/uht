@@ -10,6 +10,7 @@ import {
   Image,
   Alert,
   TextInput,
+  Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,6 +73,34 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
   // their MHR link anywhere in the app before
   const [mhrUrl, setMhrUrl] = useState('');
   const [rosterUrl, setRosterUrl] = useState('');
+
+  // Jersey edit modal (coaches/managers): saves to the player AND to the
+  // check-in/scorekeeper lineup snapshots for unplayed games
+  const [jerseyEdit, setJerseyEdit] = useState<{ id: string; name: string } | null>(null);
+  const [jerseyValue, setJerseyValue] = useState('');
+  const [jerseySaving, setJerseySaving] = useState(false);
+
+  const saveJersey = async () => {
+    if (!jerseyEdit || jerseySaving) return;
+    setJerseySaving(true);
+    try {
+      const res = await authFetch(`/api/teams/${teamId}/players/${jerseyEdit.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jerseyNumber: jerseyValue.trim() }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setRoster((prev) => prev.map((pl) => pl.id === jerseyEdit.id ? { ...pl, jersey_number: jerseyValue.trim() } : pl));
+        setJerseyEdit(null);
+      } else {
+        Alert.alert('Could not save', typeof json.error === 'string' ? json.error : 'Please try again.');
+      }
+    } catch {
+      Alert.alert('Could not save', 'Check your connection and try again.');
+    }
+    setJerseySaving(false);
+  };
   const [linksSaving, setLinksSaving] = useState(false);
   const [linksMsg, setLinksMsg] = useState('');
   const saveLinks = async () => {
@@ -400,9 +429,20 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
           {roster.length > 0 ? (
             roster.map((player) => (
               <View key={player.id} style={styles.rosterRow}>
-                <Text style={styles.jerseyNumber}>
-                  {player.jersey_number || '--'}
-                </Text>
+                <TouchableOpacity
+                  disabled={!canManage}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={() => {
+                    setJerseyValue(player.jersey_number || '');
+                    setJerseyEdit({ id: player.id, name: `${player.first_name} ${player.last_name}` });
+                  }}
+                  style={canManage ? styles.jerseyChip : null}
+                >
+                  <Text style={styles.jerseyNumber} maxFontSizeMultiplier={1.2}>
+                    {player.jersey_number || '--'}
+                  </Text>
+                  {canManage ? <Ionicons name="pencil" size={9} color={colors.cyan} style={{ position: 'absolute', top: 1, right: 1 }} /> : null}
+                </TouchableOpacity>
                 <Text style={styles.playerName} numberOfLines={1}>
                   {player.first_name} {player.last_name}
                 </Text>
@@ -488,6 +528,37 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
           )}
         </View>
       </ScrollView>
+
+      {/* Jersey number editor */}
+      <Modal visible={!!jerseyEdit} transparent animationType="fade" onRequestClose={() => setJerseyEdit(null)}>
+        <View style={styles.jerseyModalBackdrop}>
+          <View style={styles.jerseyModalCard}>
+            <Text style={styles.jerseyModalTitle} maxFontSizeMultiplier={1.2}>Jersey Number</Text>
+            <Text style={styles.jerseyModalSub} maxFontSizeMultiplier={1.3}>{jerseyEdit?.name}</Text>
+            <TextInput
+              style={styles.jerseyModalInput}
+              value={jerseyValue}
+              onChangeText={setJerseyValue}
+              keyboardType="number-pad"
+              maxLength={3}
+              placeholder="--"
+              placeholderTextColor="#9fb0c3"
+              autoFocus
+            />
+            <Text style={styles.jerseyModalNote} maxFontSizeMultiplier={1.3}>
+              Updates the team roster, check-in roster, and scorekeeper roster for upcoming games.
+            </Text>
+            <View style={styles.jerseyModalBtns}>
+              <TouchableOpacity style={styles.jerseyModalCancel} onPress={() => setJerseyEdit(null)}>
+                <Text style={styles.jerseyModalCancelText} maxFontSizeMultiplier={1.2}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.jerseyModalSave} onPress={saveJersey} disabled={jerseySaving}>
+                <Text style={styles.jerseyModalSaveText} maxFontSizeMultiplier={1.2}>{jerseySaving ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -712,6 +783,28 @@ const styles = StyleSheet.create({
     ...fonts.bold,
     textAlign: 'center',
   },
+  jerseyChip: {
+    backgroundColor: '#eef7fd',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cde9f7',
+    paddingVertical: 3,
+  },
+  jerseyModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,25,50,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  jerseyModalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 360 },
+  jerseyModalTitle: { fontSize: 17, color: colors.navy, ...fonts.bold, textAlign: 'center' },
+  jerseyModalSub: { fontSize: 14, color: '#5b6b80', ...fonts.regular, textAlign: 'center', marginTop: 2 },
+  jerseyModalInput: {
+    borderWidth: 1.5, borderColor: colors.cyan, borderRadius: 10,
+    fontSize: 30, ...fonts.bold, color: colors.navy, textAlign: 'center',
+    paddingVertical: 10, marginTop: 14, marginHorizontal: 40,
+  },
+  jerseyModalNote: { fontSize: 12, color: '#7a8aa0', ...fonts.regular, textAlign: 'center', marginTop: 10 },
+  jerseyModalBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  jerseyModalCancel: { flex: 1, borderRadius: 10, borderWidth: 1, borderColor: '#cfd9e5', paddingVertical: 12, alignItems: 'center' },
+  jerseyModalCancelText: { fontSize: 15, color: '#5b6b80', ...fonts.semibold },
+  jerseyModalSave: { flex: 1, borderRadius: 10, backgroundColor: colors.navy, paddingVertical: 12, alignItems: 'center' },
+  jerseyModalSaveText: { fontSize: 15, color: '#fff', ...fonts.semibold },
   playerName: {
     flex: 1,
     fontSize: 15,

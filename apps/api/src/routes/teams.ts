@@ -2465,6 +2465,64 @@ teamRoutes.post('/:id/players', authMiddleware, zValidator('json', addPlayerSche
 });
 
 // ==================
+// Coach/manager edit of a rostered player (jersey number etc.)
+// Jersey changes propagate to game_lineups snapshots for games that have
+// not been played yet, so the check-in (sign-off) roster and the
+// scorekeeper roster both pick up the new number.
+// ==================
+teamRoutes.put('/:teamId/players/:playerId', authMiddleware, async (c) => {
+  const user = c.get('user') as any;
+  const db = c.env.DB;
+  const teamId = c.req.param('teamId');
+  const playerId = c.req.param('playerId');
+  const body = await c.req.json<{ jerseyNumber?: string; awayJerseyNumber?: string; position?: string; shoots?: string }>().catch(() => ({} as any));
+
+  // Must be staff of THIS team (or org admin / site staff)
+  const roles: string[] = user?.roles || [];
+  let allowed = roles.includes('admin') || roles.includes('director');
+  if (!allowed) {
+    const staffRow = await db.prepare(`
+      SELECT 1 as x FROM team_coaches WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM team_managers WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM organization_admins oa JOIN teams t ON t.organization_id = oa.organization_id AND t.id = ?1 WHERE oa.user_id = ?2
+    `).bind(teamId, user.id).first();
+    allowed = !!staffRow;
+  }
+  if (!allowed) return c.json({ success: false, error: 'Only this team\'s coaches and managers can edit its players' }, 403);
+
+  const onTeam = await db.prepare(
+    "SELECT 1 as x FROM team_players WHERE team_id = ? AND player_id = ? AND status IN ('active', 'rostered')"
+  ).bind(teamId, playerId).first();
+  if (!onTeam) return c.json({ success: false, error: 'Player is not on this team' }, 404);
+
+  const updates: string[] = [];
+  const values: (string | null)[] = [];
+  if (body.jerseyNumber !== undefined) { updates.push('jersey_number = ?'); values.push(String(body.jerseyNumber).trim() || null); }
+  if (body.awayJerseyNumber !== undefined) { updates.push('away_jersey_number = ?'); values.push(String(body.awayJerseyNumber).trim() || null); }
+  if (body.position !== undefined) { updates.push('position = ?'); values.push(String(body.position).trim() || null); }
+  if (body.shoots !== undefined) { updates.push('shoots = ?'); values.push(String(body.shoots).trim() || null); }
+  if (updates.length === 0) return c.json({ success: false, error: 'No fields to update' }, 400);
+  updates.push("updated_at = datetime('now')");
+  values.push(playerId);
+  await db.prepare(`UPDATE players SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+
+  // Propagate the number into lineup snapshots for unplayed games only -
+  // finished sheets keep the number the player actually wore
+  let lineupsUpdated = 0;
+  if (body.jerseyNumber !== undefined) {
+    const newNum = String(body.jerseyNumber).trim();
+    const res = await db.prepare(`
+      UPDATE game_lineups SET jersey_number = ?
+      WHERE player_id = ? AND team_id = ?
+        AND game_id IN (SELECT id FROM games WHERE status IN ('scheduled', 'warmup', 'delayed'))
+    `).bind(newNum || null, playerId, teamId).run();
+    lineupsUpdated = res?.meta?.changes || 0;
+  }
+
+  return c.json({ success: true, data: { lineupsUpdated } });
+});
+
+// ==================
 // Remove player from team
 // ==================
 teamRoutes.delete('/:teamId/players/:playerId', authMiddleware, requireRole('admin', 'organization', 'coach'), async (c) => {
