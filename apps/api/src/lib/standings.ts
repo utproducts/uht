@@ -264,7 +264,9 @@ export async function computeStandings(
     const rows = Array.from(bucket.values());
     for (const r of rows) {
       r.points = r.wins * 2 + r.ties;
-      r.goal_differential = r.goals_for - r.goals_against;
+      // Displayed +/- is the capped differential (max +/-5 per game), same
+      // number the tiebreaks use; GF/GA stay actual
+      r.goal_differential = r.capped_diff ?? (r.goals_for - r.goals_against);
     }
     const finals = finalsByBucket.get(key) || [];
     rankPool(rows, finals);
