@@ -332,6 +332,9 @@ const gameEventSchema = z.object({
   penaltyMinutes: z.number().nullable().optional(),
   details: z.string().nullable().optional(),
   goalieJersey: z.string().nullable().optional(), // goalie the goal was scored on; 'EN' = empty net
+  // Offline outbox replay id: the SAME clientEventId never records twice,
+  // so flaky-wifi retries cannot double a goal
+  clientEventId: z.string().nullable().optional(),
 });
 
 scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema), async (c) => {
@@ -355,16 +358,25 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       if (!penaltyMinutes) penaltyMinutes = p.minutes;
     }
 
+    // Idempotent replay: if this clientEventId already landed (response was
+    // lost on bad wifi), succeed WITHOUT re-applying score/status effects
+    if (data.clientEventId) {
+      const dupe = await db.prepare('SELECT id FROM game_events WHERE game_id = ? AND client_event_id = ?')
+        .bind(gameId, data.clientEventId).first<any>();
+      if (dupe) return c.json({ success: true, data: { id: dupe.id, deduped: true } }, 200);
+    }
+
     const eventId = crypto.randomUUID().replace(/-/g, '');
     await db.prepare(`
       INSERT INTO game_events (id, game_id, event_type, team_id, jersey_number, assist1_jersey, assist2_jersey,
-        period, game_time, penalty_type, penalty_minutes, details, goalie_jersey)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        period, game_time, penalty_type, penalty_minutes, details, goalie_jersey, client_event_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       eventId, gameId, data.eventType, data.teamId || null,
       data.jerseyNumber || null, data.assist1Jersey || null, data.assist2Jersey || null,
       data.period || null, data.gameTime || null,
-      penaltyType, penaltyMinutes, data.details || null, data.goalieJersey || null
+      penaltyType, penaltyMinutes, data.details || null, data.goalieJersey || null,
+      data.clientEventId || null
     ).run();
 
     // If it's a goal, update the game score

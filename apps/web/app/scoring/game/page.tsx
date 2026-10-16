@@ -242,7 +242,22 @@ function ScoringPageInner() {
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}`);
       const json = await res.json();
-      if (json.success && json.data) setGame(json.data);
+      if (json.success && json.data) {
+        let g = json.data;
+        // Re-apply the unsent outbox on top so the score never jumps back
+        try {
+          const q = JSON.parse(localStorage.getItem(`uht_outbox_${gameId}`) || '[]');
+          for (const ev of q) {
+            if (ev.eventType === 'goal' && ev.teamId === g.home_team_id) g = { ...g, home_score: (g.home_score || 0) + 1 };
+            else if (ev.eventType === 'goal' && ev.teamId === g.away_team_id) g = { ...g, away_score: (g.away_score || 0) + 1 };
+            else if (ev.eventType === 'game_start') g = { ...g, status: 'in_progress', period: Math.max(1, g.period || 0) };
+            else if (ev.eventType === 'period_start' && ev.period) g = { ...g, status: 'in_progress', period: ev.period };
+            else if (ev.eventType === 'period_end') g = { ...g, status: 'intermission' };
+            else if (ev.eventType === 'game_end') g = { ...g, status: 'final' };
+          }
+        } catch {}
+        setGame(g);
+      }
     } catch (err) { console.error('Failed to fetch game:', err); }
     finally { setLoading(false); }
   }, [gameId]);
@@ -284,20 +299,95 @@ function ScoringPageInner() {
 
   const headers = () => ({ 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin || '' });
 
-  const postEvent = async (payload: any) => {
-    if (!gameId || !pin || posting) return;
-    setPosting(true);
+  // ===== OFFLINE OUTBOX =====
+  // Rink wifi dies mid-game. Every event carries a clientEventId (server
+  // dedupes replays). A failed send is queued in localStorage, the score
+  // keeps moving locally, and the queue drains whenever signal returns.
+  const outboxKey = `uht_outbox_${gameId}`;
+  const readOutbox = (): any[] => { try { return JSON.parse(localStorage.getItem(outboxKey) || '[]'); } catch { return []; } };
+  const writeOutbox = (q: any[]) => { try { localStorage.setItem(outboxKey, JSON.stringify(q)); } catch {} setQueued(q.length); };
+  const [queued, setQueued] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  useEffect(() => { setQueued(readOutbox().length); }, [gameId]);
+
+  const sendEvent = async (payload: any, timeoutMs = 8000) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/events`, {
-        method: 'POST', headers: headers(), body: JSON.stringify(payload),
+        method: 'POST', headers: headers(), body: JSON.stringify(payload), signal: ctrl.signal,
       });
-      const json = await res.json();
+      return await res.json();
+    } finally { clearTimeout(t); }
+  };
+
+  const applyLocally = (payload: any) => {
+    // Optimistic UI so the scorekeeper SEES the goal land while offline
+    setGame((g: any) => {
+      if (!g) return g;
+      const next = { ...g };
+      if (payload.eventType === 'goal' && payload.teamId) {
+        if (payload.teamId === g.home_team_id) next.home_score = (g.home_score || 0) + 1;
+        if (payload.teamId === g.away_team_id) next.away_score = (g.away_score || 0) + 1;
+      }
+      if (payload.eventType === 'game_start') { next.status = 'in_progress'; next.period = 1; }
+      if (payload.eventType === 'period_start' && payload.period) { next.status = 'in_progress'; next.period = payload.period; }
+      if (payload.eventType === 'period_end') next.status = 'intermission';
+      if (payload.eventType === 'game_end') next.status = 'final';
+      return next;
+    });
+  };
+
+  const drainOutbox = async () => {
+    if (syncing) return;
+    let q = readOutbox();
+    if (q.length === 0) return;
+    setSyncing(true);
+    let progressed = false;
+    while (q.length > 0) {
+      try {
+        const json = await sendEvent(q[0], 10000);
+        if (json?.success) { q = q.slice(1); writeOutbox(q); progressed = true; }
+        else { break; } // server rejected (not a network issue) - stop, surface below
+      } catch { break; } // still offline - try again next tick
+    }
+    setSyncing(false);
+    if (progressed && q.length === 0) { doFlash('green'); setPostError(''); await fetchGame(); }
+  };
+  useEffect(() => {
+    const iv = setInterval(drainOutbox, 12000);
+    const onUp = () => drainOutbox();
+    window.addEventListener('online', onUp);
+    return () => { clearInterval(iv); window.removeEventListener('online', onUp); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, pin]);
+
+  const postEvent = async (payload: any) => {
+    if (!gameId || !pin || posting) return;
+    const stamped = { ...payload, clientEventId: (crypto as any).randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
+    setPosting(true);
+    try {
+      if (readOutbox().length > 0) {
+        // Keep strict order: once anything is queued, new events queue too
+        writeOutbox([...readOutbox(), stamped]);
+        applyLocally(stamped);
+        doFlash('green');
+        drainOutbox();
+        return;
+      }
+      const json = await sendEvent(stamped);
       if (json.success) { doFlash('green'); setPostError(''); await fetchGame(); }
       else {
         doFlash('red');
         setPostError(typeof json.error === 'string' ? json.error : 'That entry was not saved - please try again.');
       }
-    } catch { doFlash('red'); setPostError('Connection problem - that entry was not saved.'); }
+    } catch {
+      // Network problem: queue it, show it locally, keep scoring
+      writeOutbox([...readOutbox(), stamped]);
+      applyLocally(stamped);
+      doFlash('green');
+      setPostError('');
+    }
     finally { setPosting(false); }
   };
 
@@ -717,6 +807,13 @@ function ScoringPageInner() {
             </div>
           </div>
         )}
+      {queued > 0 && (
+        <div className="mx-1 mb-3 p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 text-sm font-semibold flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+          {queued} update{queued !== 1 ? 's' : ''} waiting for signal - keep scoring, everything is saved on this device and will sync automatically.
+          {syncing ? ' Syncing…' : ''}
+        </div>
+      )}
       {postError && (
         <div className="mx-1 mb-3 p-3 rounded-xl bg-red-50 border border-red-300 text-red-700 text-sm font-semibold">
           {postError}
