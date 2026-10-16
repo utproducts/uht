@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Share } from 'react-native';
+import { Share, Alert } from 'react-native';
 import { colors } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import { StrokeDrawing } from '../components/SignaturePad';
@@ -24,6 +24,24 @@ export default function ScoresheetScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [restricted, setRestricted] = useState(false);
+  const [emailing, setEmailing] = useState(false);
+
+  const emailSheet = async () => {
+    if (emailing) return;
+    setEmailing(true);
+    try {
+      const res = await authFetch(`/api/scoring/games/${gameId}/sheet/email`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        Alert.alert('Sent', `Scoresheet emailed to ${json.data?.sentTo || 'your email'}. You can print or forward it from your mail app.`);
+      } else {
+        Alert.alert('Could not send', typeof json.error === 'string' ? json.error : 'Please try again.');
+      }
+    } catch {
+      Alert.alert('Could not send', 'Check your connection and try again.');
+    }
+    setEmailing(false);
+  };
 
   const load = useCallback(async () => {
     if (!gameId) return;
@@ -112,6 +130,11 @@ export default function ScoresheetScreen({ route, navigation }: any) {
             {g.event_name}{g.game_number ? ` · Game #${g.game_number}` : ''}
           </Text>
         </View>
+        {data.share_url ? (
+          <TouchableOpacity onPress={emailSheet} style={{ padding: 8 }} disabled={emailing}>
+            <Ionicons name={emailing ? 'hourglass-outline' : 'mail-outline'} size={22} color="#fff" />
+          </TouchableOpacity>
+        ) : null}
         {data.share_url ? (
           <TouchableOpacity
             onPress={() => Share.share({ message: `Official scoresheet - ${g.event_name}: ${data.share_url}`, url: data.share_url })}

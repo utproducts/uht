@@ -1151,6 +1151,104 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
 });
 
 // ==========================================
+// Email the scoresheet to the signed-in coach/manager so they can
+// print or forward it from their mail app
+// ==========================================
+scoringRoutes.post('/games/:gameId/sheet/email', authMiddleware, async (c) => {
+  const gameId = c.req.param('gameId');
+  const db = c.env.DB;
+  const user = c.get('user') as any;
+  if (!user?.email) return c.json({ success: false, error: 'No email on your account' }, 400);
+
+  const game = await db.prepare(`
+    SELECT g.*,
+      COALESCE(ht.schedule_name, ht.name, g.home_placeholder, 'Home') as home_team_name,
+      COALESCE(at2.schedule_name, at2.name, g.away_placeholder, 'Away') as away_team_name,
+      vr.name as rink_name, v.name as venue_name,
+      ed.age_group, ed.division_level,
+      e.name as event_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    LEFT JOIN events e ON e.id = g.event_id
+    WHERE g.id = ?
+  `).bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  const sheetAccess = await verifySheetReadAccess(c, game);
+  if (!sheetAccess.ok) {
+    return c.json({ success: false, error: sheetAccess.error }, (sheetAccess.status || 403) as any);
+  }
+
+  let token = game.share_token as string | null;
+  if (!token) {
+    token = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare('UPDATE games SET share_token = ? WHERE id = ?').bind(token, gameId).run();
+  }
+  const sheetUrl = `https://ultimatetournaments.com/scores/game?gameId=${gameId}&share=${token}`;
+
+  const events = (await db.prepare(
+    'SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, created_at ASC'
+  ).bind(gameId).all()).results || [];
+  const goals = events.filter((e: any) => e.event_type === 'goal');
+  const penalties = events.filter((e: any) => e.event_type === 'penalty');
+  const teamName = (tid: string) => tid === game.home_team_id ? game.home_team_name : tid === game.away_team_id ? game.away_team_name : '';
+  const perLabel = (p: number) => p >= 4 ? 'OT' : `P${p}`;
+  const esc = (x: any) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const goalRows = goals.map((gl: any) =>
+    `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(gl.period)}${gl.game_time ? ' ' + esc(gl.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">#${esc(gl.jersey_number || '?')}${gl.assist1_jersey ? ` (A: #${esc(gl.assist1_jersey)}${gl.assist2_jersey ? ', #' + esc(gl.assist2_jersey) : ''})` : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(gl.team_id))}</td></tr>`
+  ).join('');
+  const penRows = penalties.map((pn: any) =>
+    `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(pn.period)}${pn.game_time ? ' ' + esc(pn.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">#${esc(pn.jersey_number || '?')} ${esc(pn.penalty_type || '')} (${pn.penalty_minutes || 2} min)</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(pn.team_id))}</td></tr>`
+  ).join('');
+
+  const statusLine = game.status === 'final'
+    ? `FINAL${game.is_shootout ? ' - SO' : game.is_overtime ? ' - OT' : ''}` : String(game.status || '').toUpperCase();
+  const division = [game.age_group, game.division_level].filter(Boolean).join(' ');
+  const where = [game.venue_name, game.rink_name].filter(Boolean).join(' - ');
+  const subject = `Scoresheet: ${game.home_team_name} ${game.home_score ?? 0} - ${game.away_score ?? 0} ${game.away_team_name}`;
+  const html = `
+<div style="font-family:Arial,Helvetica,sans-serif;color:#0a2540;max-width:640px;margin:0 auto;">
+  <div style="background:#003e79;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0;">
+    <div style="font-size:12px;letter-spacing:1px;opacity:.8;">OFFICIAL SCORESHEET - ${esc(game.event_name)}</div>
+    <div style="font-size:19px;font-weight:bold;margin-top:6px;">${esc(game.home_team_name)} ${game.home_score ?? 0} - ${game.away_score ?? 0} ${esc(game.away_team_name)}</div>
+    <div style="font-size:12px;margin-top:4px;opacity:.85;">${esc(statusLine)}${division ? ' · ' + esc(division) : ''}${where ? ' · ' + esc(where) : ''}</div>
+  </div>
+  <div style="border:1px solid #e5e9f0;border-top:0;padding:16px 20px;border-radius:0 0 10px 10px;">
+    <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin:4px 0 6px;">GOALS (${goals.length})</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">${goalRows || '<tr><td style="padding:4px 8px;color:#6b7a90;">No goals recorded</td></tr>'}</table>
+    <div style="font-size:13px;font-weight:bold;letter-spacing:1px;margin:16px 0 6px;">PENALTIES (${penalties.length})</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">${penRows || '<tr><td style="padding:4px 8px;color:#6b7a90;">No penalties recorded</td></tr>'}</table>
+    <div style="text-align:center;margin:22px 0 8px;">
+      <a href="${sheetUrl}" style="background:#003e79;color:#fff;text-decoration:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:bold;display:inline-block;">View Full Scoresheet</a>
+    </div>
+    <div style="font-size:11px;color:#6b7a90;text-align:center;">Open the full scoresheet in a browser and use your browser's Print option for the complete sheet with lineups and signatures. You can also print or forward this email directly.</div>
+  </div>
+</div>`;
+
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+        to: [user.email],
+        subject,
+        html,
+      }),
+    });
+    if (!resp.ok) return c.json({ success: false, error: 'Email send failed' }, 500);
+  } catch {
+    return c.json({ success: false, error: 'Email send failed' }, 500);
+  }
+  return c.json({ success: true, data: { sentTo: user.email } });
+});
+
+// ==========================================
 // SCOREKEEPER: Auto-load roster for a game's teams
 // ==========================================
 scoringRoutes.get('/games/:gameId/roster', async (c) => {

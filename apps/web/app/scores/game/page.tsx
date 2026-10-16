@@ -120,7 +120,16 @@ function GameSheetInner() {
   const awayCoaches = data.coaches.filter(c => c.team_id === g.away_team_id);
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] pb-12">
+    <div className="min-h-screen bg-[#f0f2f5] pb-12 sheet-print-root">
+      <style>{`
+        @media print {
+          body { background: #fff !important; }
+          .sheet-print-root { background: #fff !important; padding-bottom: 0 !important; }
+          .sheet-print-root button { display: none !important; }
+          .sheet-print-root .shadow-sm { box-shadow: none !important; }
+          @page { margin: 10mm; }
+        }
+      `}</style>
       {/* Header Bar */}
       <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff]">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -137,6 +146,10 @@ function GameSheetInner() {
                 {copied ? 'Link Copied!' : 'Share'}
               </button>
             )}
+            <button onClick={() => window.print()}
+              className="ml-2 px-3 py-1.5 rounded-full bg-white text-[#003e79] text-xs font-bold hover:bg-white/90 transition-colors">
+              Print
+            </button>
           </div>
         </div>
       </div>
