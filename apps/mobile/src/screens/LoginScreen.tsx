@@ -309,6 +309,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xxxl,
     paddingBottom: 40,
+    maxWidth: 560,
+    width: '100%',
+    alignSelf: 'center',
   },
   title: {
     fontSize: 28,

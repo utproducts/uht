@@ -2,7 +2,7 @@
   "expo": {
     "name": "UHT",
     "slug": "uht",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
       "backgroundColor": "#003e79"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.ultimatetournaments.uht",
       "appleTeamId": "4AT4Z2ABQP",
       "infoPlist": {

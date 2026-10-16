@@ -27,6 +27,11 @@ import RoleBar from '../components/RoleBar';
 import { NAVY_TAB_BAR } from '../navigation/AppNavigator';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// iPad: 3-column grids and a capped hero instead of stretched phone layouts
+const IS_TABLET = SCREEN_WIDTH >= 700;
+const GRID_COLS = IS_TABLET ? 3 : 2;
+const CARD_W = (SCREEN_WIDTH - 20 * 2 - 12 * (GRID_COLS - 1)) / GRID_COLS;
+const HERO_H = Math.min(Math.round(SCREEN_WIDTH * 1000 / 852), 560);
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
@@ -585,22 +590,22 @@ const styles = StyleSheet.create({
     left: 0,
     width: SCREEN_WIDTH,
     // hero-kid.jpg is 852x1000 - exact aspect so cover never crops the composition
-    height: Math.round(SCREEN_WIDTH * 1000 / 852),
+    height: HERO_H,
   },
   heroScrim: {
     position: 'absolute',
     top: 0,
     left: 0,
     width: SCREEN_WIDTH,
-    height: Math.round(SCREEN_WIDTH * 1000 / 852),
+    height: HERO_H,
     backgroundColor: 'rgba(0, 26, 54, 0.18)',
   },
   heroFade: {
     position: 'absolute',
-    top: Math.round(SCREEN_WIDTH * 1000 / 852 * 0.585),
+    top: Math.round(HERO_H * 0.585),
     left: 0,
     width: SCREEN_WIDTH,
-    height: Math.round(SCREEN_WIDTH * 1000 / 852 * 0.415) + 1,
+    height: Math.round(HERO_H * 0.415) + 1,
   },
   hero: {
     width: SCREEN_WIDTH,
@@ -749,8 +754,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   qaCard: {
-    width: (SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2,
-    height: ((SCREEN_WIDTH - spacing.lg * 2 - spacing.md) / 2) * 0.875,
+    width: CARD_W,
+    height: CARD_W * 0.875,
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: '#e8edf4',
@@ -765,12 +770,12 @@ const styles = StyleSheet.create({
   meetingWhen: { fontSize: 12.5, color: '#00ccff', fontWeight: '700', marginTop: 2 },
   meetingEvent: { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 2 },
   dirCardAlert: { borderColor: '#f87171', borderWidth: 2 },
-  pinGateCard: { backgroundColor: colors.navy, borderTopWidth: 2, borderBottomWidth: 2, borderColor: 'rgba(0,204,255,0.6)', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, marginBottom: spacing.lg, alignItems: 'center', width: SCREEN_WIDTH },
+  pinGateCard: { backgroundColor: colors.navy, borderTopWidth: 2, borderBottomWidth: 2, borderColor: 'rgba(0,204,255,0.6)', paddingVertical: spacing.xl, paddingHorizontal: IS_TABLET ? 120 : spacing.lg, marginBottom: spacing.lg, alignItems: 'center', width: SCREEN_WIDTH },
   pinGateTitle: { color: '#fff', fontSize: 18, ...fonts.bold, marginTop: spacing.sm },
   pinGateSub: { color: '#b9c4d4', fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: spacing.md, lineHeight: 18 },
-  pinGateInput: { alignSelf: 'stretch', backgroundColor: '#0a2240', borderColor: 'rgba(0,204,255,0.4)', borderWidth: 1, borderRadius: radii.md, color: '#fff', fontSize: 20, textAlign: 'center', paddingVertical: 12, letterSpacing: 4 },
+  pinGateInput: { alignSelf: 'stretch', maxWidth: 520, backgroundColor: '#0a2240', borderColor: 'rgba(0,204,255,0.4)', borderWidth: 1, borderRadius: radii.md, color: '#fff', fontSize: 20, textAlign: 'center', paddingVertical: 12, letterSpacing: 4 },
   pinGateError: { color: '#f87171', fontSize: 13, marginTop: 8, textAlign: 'center' },
-  pinGateBtn: { alignSelf: 'stretch', backgroundColor: colors.cyan, borderRadius: radii.md, paddingVertical: 13, alignItems: 'center', marginTop: spacing.md },
+  pinGateBtn: { alignSelf: 'stretch', maxWidth: 520, backgroundColor: colors.cyan, borderRadius: radii.md, paddingVertical: 13, alignItems: 'center', marginTop: spacing.md },
   pinGateBtnText: { color: '#003e79', fontSize: 16, ...fonts.bold },
   lockerAlertBanner: { position: 'absolute', left: -6, right: -6, bottom: 6, backgroundColor: '#dc2626', paddingVertical: 5, alignItems: 'center', transform: [{ rotate: '-3deg' }], borderRadius: 4, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   lockerAlertBannerText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },

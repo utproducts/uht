@@ -65,6 +65,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: 80,
     paddingBottom: 48,
+    maxWidth: 560,
+    width: '100%',
+    alignSelf: 'center',
   },
   brandSection: {
     alignItems: 'center',

@@ -2525,7 +2525,13 @@ const styles = StyleSheet.create({
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorBanner: { backgroundColor: colors.errorBg, padding: spacing.md, marginHorizontal: spacing.lg, marginTop: spacing.sm, borderRadius: radii.sm },
   errorBannerText: { color: colors.error, fontSize: 14, ...fonts.medium },
-  tabContent: { padding: spacing.lg, paddingBottom: 40 },
+  tabContent: {
+    padding: spacing.lg,
+    paddingBottom: 40,
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
+  },
 
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: spacing.lg },
   emptyTitle: { fontSize: 18, color: colors.text, ...fonts.bold, marginBottom: spacing.sm, marginTop: spacing.md, textAlign: 'center' },
