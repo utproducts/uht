@@ -586,26 +586,6 @@ function ScoringPageInner() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
-      {confirmBox && (
-        <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5">
-            <p className="text-sm text-[#1d1d1f] leading-relaxed">{confirmBox.text}</p>
-            <div className="mt-4 flex gap-2 justify-end">
-              <button
-                className="px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-[#3d3d3d]"
-                onClick={() => { const cb = confirmBox; setConfirmBox(null); cb.onCancel?.(); }}>
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold"
-                onClick={() => { const cb = confirmBox; setConfirmBox(null); cb.onOk(); }}>
-                {confirmBox.okLabel}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
         <div className="animate-pulse text-[#86868b] text-xl">Loading game...</div>
       </div>
     );
@@ -649,6 +629,25 @@ function ScoringPageInner() {
 
   return (
     <div className={`min-h-screen bg-[#fafafa] flex flex-col transition-colors duration-300 ${flashBg}`}>
+      {confirmBox && (
+        <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5">
+            <p className="text-sm text-[#1d1d1f] leading-relaxed">{confirmBox.text}</p>
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                className="px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-[#3d3d3d]"
+                onClick={() => { const cb = confirmBox; setConfirmBox(null); cb.onCancel?.(); }}>
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold"
+                onClick={() => { const cb = confirmBox; setConfirmBox(null); cb.onOk(); }}>
+                {confirmBox.okLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* SCOREBOARD */}
       <div className="sticky top-0 z-40 bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] text-white">
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
@@ -776,7 +775,13 @@ function ScoringPageInner() {
               {period >= 3 ? 'START OVERTIME' : `START ${period === 1 ? '2ND' : '3RD'} PERIOD`}
             </button>
             {period >= 3 && (
-              <p className="text-center text-xs text-[#6e6e73] font-semibold">Tied after 3? Start overtime. Otherwise use End Game below in More Options.</p>
+              <>
+                <button onClick={endGame} disabled={posting}
+                  className="w-full py-5 rounded-full bg-red-600 text-white text-xl font-black active:bg-red-700 disabled:opacity-50">
+                  END GAME
+                </button>
+                <p className="text-center text-xs text-[#6e6e73] font-semibold">Tied? Start overtime. Otherwise end the game to send final results.</p>
+              </>
             )}
             <button onClick={() => setModal('menu')}
               className="w-full py-3 rounded-full bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a]">
@@ -1189,6 +1194,13 @@ function ScoringPageInner() {
               <p className="text-sm font-bold text-[#1d1d1f]">View Score Sheet</p>
               <p className="text-xs text-[#86868b]">Public game sheet view</p>
             </a>
+            {game.status !== 'final' && game.status !== 'scheduled' && (
+              <button onClick={() => { setModal(null); endGame(); }} disabled={posting}
+                className="block w-full py-4 px-4 rounded-2xl bg-red-50 border border-red-200 text-left active:bg-red-100 disabled:opacity-50">
+                <p className="text-sm font-bold text-red-600">End Game</p>
+                <p className="text-xs text-red-400">Finalize the score and send results</p>
+              </button>
+            )}
           </div>
         </FullScreenModal>
       )}
