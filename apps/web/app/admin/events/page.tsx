@@ -93,10 +93,11 @@ const fmtDateFull = (d: string) => {
 };
 
 const daysUntil = (d: string) => {
+  // Anchor BOTH at local noon or the start day itself rounds up to "Tomorrow"
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
+  now.setHours(12, 0, 0, 0);
   const target = new Date(d + 'T12:00:00');
-  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 };
 
 const statusColor = (status: string) => {
