@@ -415,26 +415,34 @@ export async function notifyGameDelayPush(db: any, gameId: string) {
   not yet notified. Called from the Worker cron and from the admin button.
 */
 export async function runLockerRoomSweep(db: any): Promise<{ games_checked: number; games_notified: number[]; total_sent: number }> {
-  const now = new Date();
-  const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-  const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
-
-  const games = await db.prepare(`
-    SELECT g.id, g.game_number, g.start_time, g.event_id, g.event_division_id,
-      g.home_locker_room, g.away_locker_room, g.notes,
-      e.name as event_name,
-      r.name as rink_name
-    FROM games g
-    LEFT JOIN events e ON e.id = g.event_id
-    LEFT JOIN rinks r ON r.id = g.rink_id
-    WHERE g.start_time BETWEEN ? AND ?
-    AND (g.home_locker_room IS NOT NULL OR g.away_locker_room IS NOT NULL)
-    AND g.locker_room_notified = 0
-    AND g.status IN ('scheduled', 'warmup')
-  `).bind(
-    thirtyMinAgo.toISOString().replace('Z', ''),
-    oneHourFromNow.toISOString().replace('Z', '')
-  ).all();
+  // start_time is EVENT-LOCAL wall clock; the window must be computed per
+  // event timezone (comparing against UTC made this fire 4-5 hours early)
+  const events = (await db.prepare(
+    "SELECT id, timezone FROM events WHERE schedule_published = 1 AND date(end_date) >= date('now', '-1 day')"
+  ).all()).results || [];
+  const rows: any[] = [];
+  for (const ev of events as any[]) {
+    const windowStart = eventLocalNow(ev.timezone, -30);
+    const windowEnd = eventLocalNow(ev.timezone, 60);
+    const g = await db.prepare(`
+      SELECT g.id, g.game_number, g.start_time, g.event_id, g.event_division_id,
+        g.home_locker_room, g.away_locker_room, g.notes,
+        e.name as event_name,
+        r.name as rink_name,
+        ht.name as home_team_name, at.name as away_team_name
+      FROM games g
+      LEFT JOIN events e ON e.id = g.event_id
+      LEFT JOIN venue_rinks r ON r.id = g.rink_id
+      LEFT JOIN teams ht ON ht.id = g.home_team_id
+      LEFT JOIN teams at ON at.id = g.away_team_id
+      WHERE g.event_id = ? AND g.start_time BETWEEN ? AND ?
+      AND (g.home_locker_room IS NOT NULL OR g.away_locker_room IS NOT NULL)
+      AND g.locker_room_notified = 0
+      AND g.status IN ('scheduled', 'warmup')
+    `).bind(ev.id, windowStart, windowEnd).all();
+    rows.push(...(g.results || []));
+  }
+  const games = { results: rows };
 
   let totalSent = 0;
   const gamesNotified: number[] = [];
@@ -446,13 +454,15 @@ export async function runLockerRoomSweep(db: any): Promise<{ games_checked: numb
       continue;
     }
 
-    const gameTime = game.start_time ? new Date(game.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+    const gameTime = game.start_time ? fmt12(String(game.start_time)) : '';
     const lockerInfo: string[] = [];
-    if (game.home_locker_room) lockerInfo.push(`Home: ${game.home_locker_room}`);
-    if (game.away_locker_room) lockerInfo.push(`Away: ${game.away_locker_room}`);
+    if (game.home_locker_room) lockerInfo.push(`${game.home_team_name || 'Home'}: ${game.home_locker_room}`);
+    if (game.away_locker_room) lockerInfo.push(`${game.away_team_name || 'Away'}: ${game.away_locker_room}`);
 
-    const title = `Locker Room - Game #${game.game_number}`;
-    const body = `${game.notes || 'Game'} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
+    const matchup = game.home_team_name && game.away_team_name
+      ? `${game.home_team_name} vs ${game.away_team_name}` : (game.notes || 'Game');
+    const title = `Locker Rooms - Game #${game.game_number}`;
+    const body = `${matchup} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
     const pushData = { type: 'locker_room', game_id: game.id, event_id: game.event_id };
     const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
 
