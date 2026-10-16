@@ -145,6 +145,9 @@ function ScoringPageInner() {
   // GameSheet-style sections
   type Section = 'details' | 'visitor' | 'home' | 'scoring' | 'postgame';
   const [section, setSection] = useState<Section>('scoring');
+  // In-page confirm: native window.confirm() is unreliable (and can crash)
+  // inside the app's kiosk WebView
+  const [confirmBox, setConfirmBox] = useState<{ text: string; okLabel: string; onOk: () => void; onCancel?: () => void } | null>(null);
   const [lineupState, setLineupState] = useState<any>(null);
   const fetchLineupState = useCallback(async () => {
     if (!gameId) return;
@@ -470,21 +473,49 @@ function ScoringPageInner() {
   const startGame = () => {
     const missing = warnings.map(w => (w.fix === 'visitor' ? 'Away' : 'Home'));
     if (missing.length > 0) {
-      const ok = confirm(`${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.\n\nPress Cancel to collect sign-off first, or OK to start anyway.`);
-      if (!ok) { setSection(missing[0] === 'Away' ? 'visitor' : 'home'); return; }
+      setConfirmBox({
+        text: `${missing.join(' and ')} lineup${missing.length > 1 ? 's have' : ' has'} NOT been signed off by the coach. Sign-off is required before every game.`,
+        okLabel: 'Start Anyway',
+        onOk: () => postEvent({ eventType: 'game_start' }),
+        onCancel: () => setSection(missing[0] === 'Away' ? 'visitor' : 'home'),
+      });
+      return;
     }
     postEvent({ eventType: 'game_start' });
   };
   const endPeriod = () => postEvent({ eventType: 'period_end', period: game?.period });
   const startPeriod = () => postEvent({ eventType: 'period_start', period: (game?.period || 0) + 1 });
   const endGame = () => {
-    if (!confirm('End game and send results to coaches?')) return;
-    postEvent({ eventType: 'game_end' });
+    setConfirmBox({
+      text: 'End game and send results to coaches?',
+      okLabel: 'End Game',
+      onOk: () => postEvent({ eventType: 'game_end' }),
+    });
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fafafa] flex items-center justify-center">
+      {confirmBox && (
+        <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5">
+            <p className="text-sm text-[#1d1d1f] leading-relaxed">{confirmBox.text}</p>
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                className="px-4 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-[#3d3d3d]"
+                onClick={() => { const cb = confirmBox; setConfirmBox(null); cb.onCancel?.(); }}>
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold"
+                onClick={() => { const cb = confirmBox; setConfirmBox(null); cb.onOk(); }}>
+                {confirmBox.okLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         <div className="animate-pulse text-[#86868b] text-xl">Loading game...</div>
       </div>
     );
@@ -1668,9 +1699,12 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
     setSigning(false);
   };
 
+  const [removeArmed, setRemoveArmed] = useState(false);
   const removePlayer = async () => {
     if (editPlayer === 'new' || !editPlayer) return;
-    if (!confirm(`Remove #${editPlayer.jersey_number} ${editPlayer.first_name} ${editPlayer.last_name} from this game's lineup?`)) return;
+    // Two-tap confirm - native confirm() is unsafe in the kiosk WebView
+    if (!removeArmed) { setRemoveArmed(true); setTimeout(() => setRemoveArmed(false), 4000); return; }
+    setRemoveArmed(false);
     setSigning(true);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/${editPlayer.id}`, { method: 'DELETE', headers: hdrs });
@@ -1753,6 +1787,7 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
           onClose={() => setEditPlayer(null)}
           onSave={savePlayer}
           onRemove={editPlayer === 'new' ? undefined : removePlayer}
+          removeArmed={removeArmed}
         />
       )}
 
@@ -2014,10 +2049,11 @@ function SignOffModal({ teamName, submitting, onClose, onSubmit, defaultName }: 
 
 // Edit a lineup player (name/number/position), add a new one, or remove one
 // from this game. Name and number fixes flow through to the team roster.
-function PlayerEditModal({ player, submitting, onClose, onSave, onRemove }: {
+function PlayerEditModal({ player, submitting, onClose, onSave, onRemove, removeArmed }: {
   player: any | null; submitting: boolean; onClose: () => void;
   onSave: (fields: { jersey: string; first: string; last: string; position: string }) => void;
   onRemove?: () => void;
+  removeArmed?: boolean;
 }) {
   const [jersey, setJersey] = useState(player?.jersey_number || '');
   const [first, setFirst] = useState(player?.first_name || '');
@@ -2054,8 +2090,8 @@ function PlayerEditModal({ player, submitting, onClose, onSave, onRemove }: {
         </div>
         {onRemove && (
           <button onClick={onRemove} disabled={submitting}
-            className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-bold active:bg-red-100">
-            Remove from this game
+            className={`w-full py-2.5 rounded-xl text-sm font-bold active:bg-red-100 ${removeArmed ? 'bg-red-600 text-white border border-red-700' : 'bg-red-50 border border-red-200 text-red-600'}`}>
+            {removeArmed ? 'Tap again to confirm removal' : 'Remove from this game'}
           </button>
         )}
       </div>
