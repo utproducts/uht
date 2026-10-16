@@ -234,6 +234,13 @@ export default function AppNavigator() {
           screen: 'Home',
           params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'three_stars' } },
         });
+      } else if ((data?.type === 'game_final' || data?.type === 'game_start') && data?.game_id) {
+        // Final scores (and game starts) open the game itself - score plus
+        // the full play-by-play
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'LiveGame', params: { gameId: data.game_id } },
+        });
       } else if ((data?.type === 'game_final' || data?.type === 'game_start' || data?.type === 'game_delay' || data?.type === 'locker_room') && data?.event_id) {
         // Land on the event's Game Center so the tapped game is one tap away
         (navigationRef.current as any)?.navigate('Main', {
