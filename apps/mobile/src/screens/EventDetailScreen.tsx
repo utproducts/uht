@@ -1454,7 +1454,7 @@ export default function EventDetailScreen({
           return (
             <View style={styles.gameCard}>
               <View style={styles.gameTimeRow}>
-                <Text style={styles.gameTime}>{item.home_team_name || 'Home'} {item.home_score ?? ''} - {item.away_score ?? ''} {item.away_team_name || 'Away'}</Text>
+                <Text style={styles.gameTime}>{item.home_team_name || 'Home'} vs {item.away_team_name || 'Away'}</Text>
               </View>
               {item.division_name ? <Text style={styles.gameDivision}>{item.division_name?.trim()}</Text> : null}
               <View style={{ marginTop: 8, gap: 6 }}>
