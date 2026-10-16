@@ -58,6 +58,31 @@ photoRoutes.post('/events/:eventId/photos', authMiddleware, async (c) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `).bind(id, eventId, user?.id || null, key, kind, teamId).run();
 
+  // Champion photos auto-post to the UHT Facebook Page (never test events;
+  // fire-and-forget so a Facebook hiccup can't fail the upload)
+  if (kind === 'champion' && teamId) {
+    const post = (async () => {
+      const info = await db.prepare(`
+        SELECT COALESCE(t.schedule_name, t.name) as team_name, e.name as event_name, COALESCE(e.is_test, 0) as is_test,
+          (SELECT TRIM(COALESCE(ed.age_group,'') || ' ' || COALESCE(ed.division_level,''))
+           FROM event_registrations er LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+           WHERE er.event_id = ? AND er.team_id = ? LIMIT 1) as division
+        FROM teams t, events e WHERE t.id = ? AND e.id = ?
+      `).bind(eventId, teamId, teamId, eventId).first<any>();
+      if (!info || info.is_test) return;
+      const division = (info.division || '').trim();
+      const caption = `CHAMPIONS! Congratulations to ${info.team_name}` +
+        (division ? `, your ${division} champions` : '') +
+        ` at the ${info.event_name}! #UltimateHockeyTournaments #YouthHockey`;
+      const { postChampionPhotoToFacebook } = await import('../lib/facebook');
+      await postChampionPhotoToFacebook(c.env, {
+        photoUrl: `https://uht.chad-157.workers.dev/api/photos/file/${id}`,
+        caption,
+      });
+    })();
+    try { c.executionCtx.waitUntil(post); } catch { await post.catch(() => {}); }
+  }
+
   return c.json({ success: true, data: { id, url: `/api/photos/file/${id}` } });
 });
 
