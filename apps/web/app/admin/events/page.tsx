@@ -4234,33 +4234,6 @@ function ScorekeepersTab({ eventId }: { eventId: string }) {
         )}
       </div>
 
-      {/* Push history for this event - manual sends and the automated
-          game-start / final / delay / locker-room pushes */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Push History</h3>
-        <p className="text-sm text-[#86868b] mb-4">Every notification sent for this event - automated game pushes and manual sends.</p>
-        {pushHistory.length === 0 ? (
-          <p className="text-sm text-[#c7c7cc]">Nothing sent yet for this event.</p>
-        ) : (
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {pushHistory.map((n: any) => (
-              <div key={n.id} className="flex items-start justify-between gap-3 border border-[#e8e8ed] rounded-xl px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#1d1d1f] truncate">{n.title}</p>
-                  <p className="text-xs text-[#86868b] truncate">{n.body}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${n.sent_by === 'system' || !n.sent_by_name ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {(n.type || '').replace(/_/g, ' ')}
-                  </span>
-                  <p className="text-[11px] text-[#86868b] mt-1">{n.sent_count} sent · {String(n.created_at || '').slice(5, 16)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       <button onClick={() => setShowAccountAssign(v => !v)}
         className="text-sm font-semibold text-[#6e6e73] hover:text-[#003e79] transition ml-1">
         {showAccountAssign ? '\u25be' : '\u25b8'} Advanced: assign scorekeeper accounts (optional)
@@ -4973,6 +4946,52 @@ function ScheduleVisibilityCard({ eventId }: { eventId: string }) {
           {busy ? 'Saving…' : published ? 'Hide Schedule' : 'Publish Schedule'}
         </button>
       </div>
+    </div>
+  );
+}
+
+
+// Push history card - lives on the Overview tab (moved from Scorekeepers,
+// per Chad 10/15)
+function PushHistoryCard({ eventId }: { eventId: string }) {
+  const [pushHistory, setPushHistory] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`${API_BASE.replace('/api/events', '/api/push')}/notifications?event_id=${eventId}&limit=30`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } })
+      .then(r => r.json())
+      .then((pushJson: any) => {
+        if (pushJson?.success) setPushHistory(pushJson.data?.notifications || (Array.isArray(pushJson.data) ? pushJson.data : []));
+      })
+      .catch(() => {});
+  }, [eventId]);
+  return (
+    <div className="mb-6">
+      {/* Push history for this event - manual sends and the automated
+          game-start / final / delay / locker-room pushes */}
+      <div className="bg-white rounded-2xl shadow-lg p-6">
+        <h3 className="text-lg font-bold text-[#1d1d1f] mb-1">Push History</h3>
+        <p className="text-sm text-[#86868b] mb-4">Every notification sent for this event - automated game pushes and manual sends.</p>
+        {pushHistory.length === 0 ? (
+          <p className="text-sm text-[#c7c7cc]">Nothing sent yet for this event.</p>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {pushHistory.map((n: any) => (
+              <div key={n.id} className="flex items-start justify-between gap-3 border border-[#e8e8ed] rounded-xl px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#1d1d1f] truncate">{n.title}</p>
+                  <p className="text-xs text-[#86868b] truncate">{n.body}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${n.sent_by === 'system' || !n.sent_by_name ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {(n.type || '').replace(/_/g, ' ')}
+                  </span>
+                  <p className="text-[11px] text-[#86868b] mt-1">{n.sent_count} sent · {String(n.created_at || '').slice(5, 16)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -5786,6 +5805,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tab Content */}
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
+      {tab === 'overview' && <PushHistoryCard eventId={eventId} />}
       {tab === 'overview' && (
         <div className="space-y-6">
           {/* Tournament guide email send */}
