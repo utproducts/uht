@@ -426,6 +426,7 @@ export async function runLockerRoomSweep(db: any): Promise<{ games_checked: numb
     const windowEnd = eventLocalNow(ev.timezone, 60);
     const g = await db.prepare(`
       SELECT g.id, g.game_number, g.start_time, g.event_id, g.event_division_id,
+        g.home_team_id, g.away_team_id,
         g.home_locker_room, g.away_locker_room, g.notes,
         e.name as event_name,
         r.name as rink_name,
@@ -448,7 +449,10 @@ export async function runLockerRoomSweep(db: any): Promise<{ games_checked: numb
   const gamesNotified: number[] = [];
 
   for (const game of (games.results || []) as any[]) {
-    const { tokens, userIds } = await eventAudience(db, game.event_id, game.event_division_id);
+    // Audience = the two teams on the game. (Filtering event followers by the
+    // game's division id matched nothing: CSV-created game divisions are
+    // separate rows from registration divisions.)
+    const { tokens, userIds } = await teamAudience(db, [game.home_team_id, game.away_team_id].filter(Boolean), game.event_id);
     if (tokens.length === 0) {
       await db.prepare("UPDATE games SET locker_room_notified = 1, updated_at = datetime('now') WHERE id = ?").bind(game.id).run();
       continue;
