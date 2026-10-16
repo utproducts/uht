@@ -405,6 +405,10 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       keepAlive(c, autoAssignThreeStars(db, gameId).then(() => notifyThreeStarsPush(db, gameId)));
     } else if (data.eventType === 'period_start' && data.period) {
       await db.prepare("UPDATE games SET period = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?").bind(data.period, gameId).run();
+      // Period 4+ is overtime - flag the game so sheets and results say OT
+      if (data.period >= 4) {
+        await db.prepare('UPDATE games SET is_overtime = 1 WHERE id = ?').bind(gameId).run().catch(() => {});
+      }
     } else if (data.eventType === 'period_end') {
       await db.prepare("UPDATE games SET status = 'intermission', updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
     }

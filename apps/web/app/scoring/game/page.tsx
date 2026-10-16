@@ -772,9 +772,12 @@ function ScoringPageInner() {
         {isIntermission && (
           <div className="space-y-3">
             <button onClick={startPeriod} disabled={posting}
-              className="w-full py-5 rounded-full bg-emerald-600 text-white text-2xl font-black active:bg-emerald-700 disabled:opacity-50">
-              START {period === 1 ? '2ND' : period === 2 ? '3RD' : 'OT'} PERIOD
+              className={`w-full py-5 rounded-full text-white text-2xl font-black disabled:opacity-50 ${period >= 3 ? 'bg-purple-600 active:bg-purple-700' : 'bg-emerald-600 active:bg-emerald-700'}`}>
+              {period >= 3 ? 'START OVERTIME' : `START ${period === 1 ? '2ND' : '3RD'} PERIOD`}
             </button>
+            {period >= 3 && (
+              <p className="text-center text-xs text-[#6e6e73] font-semibold">Tied after 3? Start overtime. Otherwise use End Game below in More Options.</p>
+            )}
             <button onClick={() => setModal('menu')}
               className="w-full py-3 rounded-full bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a]">
               More Options ▾
