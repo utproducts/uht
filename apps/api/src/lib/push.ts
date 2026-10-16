@@ -465,7 +465,7 @@ export async function runLockerRoomSweep(db: any): Promise<{ games_checked: numb
 
     const matchup = game.home_team_name && game.away_team_name
       ? `${game.home_team_name} vs ${game.away_team_name}` : (game.notes || 'Game');
-    const title = `Locker Rooms - Game #${game.game_number}`;
+    const title = `Locker Rooms`;
     const body = `${matchup} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
     const pushData = { type: 'locker_room', game_id: game.id, event_id: game.event_id };
     const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
@@ -518,7 +518,28 @@ function fmt12(start: string): string {
   return `${h12}:${mm} ${hh >= 12 ? 'PM' : 'AM'}`;
 }
 
-export async function runCheckinReminderSweep(db: any) {
+async function emailCheckinFallback(db: any, env: any, teamId: string, teamName: string, subject: string, text: string) {
+  if (!env?.RESEND_API) return;
+  try {
+    const rows = (await db.prepare(`
+      SELECT DISTINCT u.email FROM users u WHERE u.id IN (
+        SELECT tc.user_id FROM team_coaches tc WHERE tc.team_id = ?1
+        UNION SELECT tm.user_id FROM team_managers tm WHERE tm.team_id = ?1
+      ) AND u.email LIKE '%@%'
+    `).bind(teamId).all()).results || [];
+    const to = rows.map((r: any) => r.email as string).slice(0, 10);
+    if (to.length === 0) return;
+    const html = `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0a2540"><p>${text}</p><p>Get game-day alerts on your phone: <a href="https://apps.apple.com/app/id6786085393">iPhone</a> | <a href="https://play.google.com/store/apps/details?id=com.ultimatetournaments.uht">Android</a></p></div>`;
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>', reply_to: 'johnny@ultimatetournaments.com', to, subject: subject.replace('\u23f0 ', ''), html }),
+    });
+    await logNotification(db, { type: 'checkin_reminder_email', title: subject, body: text, audience: 'team_staff', target_id: teamId, sent_count: to.length, sent_by: 'system', metadata: JSON.stringify({ team_id: teamId, team_name: teamName, emails: to }) });
+  } catch (e) { console.error('checkin email fallback:', e); }
+}
+
+export async function runCheckinReminderSweep(db: any, env?: any) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS checkin_alert_log (
     game_id TEXT NOT NULL, team_id TEXT NOT NULL,
     sent_at TEXT DEFAULT (datetime('now')), UNIQUE(game_id, team_id))`).run();
@@ -567,10 +588,15 @@ export async function runCheckinReminderSweep(db: any) {
           tokens: rows.map((r: any) => r.token as string),
           userIds: [...new Set(rows.map((r: any) => r.user_id as string))] as string[],
         });
-        if (tokens.length === 0) continue;
         const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
         const title = `⏰ Check-in time: ${side.name}`;
-        const body = `Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(g.start_time)} vs ${side.opp || 'TBD'}${where ? ` (${where})` : ''}. Open the app to confirm your roster, pick your starting goalie, and sign off.`;
+        const body = `Game at ${fmt12(g.start_time)} vs ${side.opp || 'TBD'}${where ? ` (${where})` : ''}. Open the app to confirm your roster, pick your starting goalie, and sign off.`;
+        if (tokens.length === 0) {
+          // No staff device has the app - fall back to email so the bench
+          // still hears about check-in
+          await emailCheckinFallback(db, env, side.teamId, side.name, title, body);
+          continue;
+        }
         const pushData = { type: 'checkin_reminder', event_id: ev.id, game_id: g.id };
         const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
         await logNotification(db, { type: 'checkin_reminder', title, body, audience: 'team_staff', target_id: ev.id, sent_count: sent, sent_by: 'system', metadata: JSON.stringify({ game_id: g.id, team_id: side.teamId }) });
@@ -604,8 +630,8 @@ export async function notifyLockerOnCheckin(db: any, gameId: string, teamId: str
   const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
   const title = `🚪 Locker Room ${locker || 'TBD'}`;
   const body = locker
-    ? `${g.team_name} is checked in. Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(String(g.start_time))}${where ? ` - ${where}` : ''}.`
-    : `${g.team_name} is checked in. Game${g.game_number ? ` #${g.game_number}` : ''} at ${fmt12(String(g.start_time))}${where ? ` - ${where}` : ''}. Locker room not posted yet - you'll get an alert when it is.`;
+    ? `${g.team_name} is checked in. Game at ${fmt12(String(g.start_time))}${where ? ` - ${where}` : ''}.`
+    : `${g.team_name} is checked in. Game at ${fmt12(String(g.start_time))}${where ? ` - ${where}` : ''}. Locker room not posted yet - you'll get an alert when it is.`;
   const pushData = { type: 'locker_room', event_id: g.event_id, game_id: g.id };
   const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
   await logNotification(db, { type: 'locker_room', title, body, audience: 'team_followers', target_id: g.event_id, sent_count: sent, sent_by: 'system', metadata: JSON.stringify({ game_id: g.id, team_id: teamId }) });

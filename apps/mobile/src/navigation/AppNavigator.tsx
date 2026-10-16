@@ -44,6 +44,7 @@ import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, Dir
 import { OrgDetailsScreen, OrgTeamsScreen, OrgEventsScreen, OrgStatsScreen } from '../screens/OrgScreens';
 import TeamStatsScreen from '../screens/TeamStatsScreen';
 import GameSheetsScreen from '../screens/GameSheetsScreen';
+import LiveGameScreen from '../screens/LiveGameScreen';
 import RewardRevealScreen from '../screens/RewardRevealScreen';
 import ScoresheetScreen from '../screens/ScoresheetScreen';
 
@@ -105,6 +106,7 @@ function HomeStackNavigator() {
       <HomeStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="LiveGame" component={LiveGameScreen} options={{ animation: 'slide_from_right' }} />
     </HomeStackNav.Navigator>
   );
 }
@@ -118,6 +120,7 @@ function MyTeamsStackNavigator() {
       <MyTeamsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
+      <MyTeamsStackNav.Screen name="LiveGame" component={LiveGameScreen} options={{ animation: 'slide_from_right' }} />
       <MyTeamsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
     </MyTeamsStackNav.Navigator>
   );
@@ -131,6 +134,7 @@ function MyEventsStackNavigator() {
       <MyEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <MyEventsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
       <MyEventsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
+      <MyEventsStackNav.Screen name="LiveGame" component={LiveGameScreen} options={{ animation: 'slide_from_right' }} />
     </MyEventsStackNav.Navigator>
   );
 }
@@ -142,6 +146,7 @@ function FindEventsStackNavigator() {
       <FindEventsStackNav.Screen name="EventDetail" component={EventDetailScreen} options={{ animation: 'slide_from_right' }} />
       <FindEventsStackNav.Screen name="RegisterEvent" component={RegisterEventScreen} options={{ animation: 'slide_from_right' }} />
       <FindEventsStackNav.Screen name="Scoresheet" component={ScoresheetScreen} options={{ animation: 'slide_from_right' }} />
+      <FindEventsStackNav.Screen name="LiveGame" component={LiveGameScreen} options={{ animation: 'slide_from_right' }} />
       <FindEventsStackNav.Screen name="NotificationsInbox" component={NotificationsInboxScreen} options={{ animation: 'slide_from_right' }} />
     </FindEventsStackNav.Navigator>
   );

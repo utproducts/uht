@@ -1213,6 +1213,16 @@ export default function EventDetailScreen({
                   <Ionicons name="chevron-forward" size={14} color={colors.navy} />
                 </TouchableOpacity>
               ) : null}
+              {isLive && item.id ? (
+                <TouchableOpacity
+                  style={styles.liveFeedBtn}
+                  onPress={() => navigation.navigate('LiveGame', { gameId: item.id })}
+                >
+                  <View style={styles.liveFeedDot} />
+                  <Text style={styles.liveFeedBtnText}>Live Play-by-Play</Text>
+                  <Ionicons name="chevron-forward" size={14} color="#e74c3c" />
+                </TouchableOpacity>
+              ) : null}
             </View>
           );
         }}
@@ -1673,6 +1683,26 @@ export default function EventDetailScreen({
               {renderAnnouncementStrip(item)}
               {renderStarsStrip(item)}
               {renderGameCheckinRow(item)}
+              {isLive && item.id ? (
+                <TouchableOpacity
+                  style={styles.liveFeedBtn}
+                  onPress={() => navigation.navigate('LiveGame', { gameId: item.id })}
+                >
+                  <View style={styles.liveFeedDot} />
+                  <Text style={styles.liveFeedBtnText}>Live Play-by-Play</Text>
+                  <Ionicons name="chevron-forward" size={14} color="#e74c3c" />
+                </TouchableOpacity>
+              ) : null}
+              {isFinal && item.id ? (
+                <TouchableOpacity
+                  style={styles.scoresheetBtn}
+                  onPress={() => navigation.navigate('Scoresheet', { gameId: item.id })}
+                >
+                  <Ionicons name="document-text-outline" size={15} color={colors.navy} />
+                  <Text style={styles.scoresheetBtnText}>View Scoresheet</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.navy} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           );
         }}
@@ -2826,6 +2856,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#eef4fb',
   },
+  liveFeedBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 10, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#fdecea', borderWidth: 1, borderColor: '#f5b7b1',
+  },
+  liveFeedDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#e74c3c' },
+  liveFeedBtnText: { fontSize: 13, color: '#c0392b', ...fonts.semibold },
   scoresheetBtnText: {
     fontSize: 13,
     fontWeight: '700',

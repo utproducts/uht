@@ -1217,7 +1217,7 @@ export default {
     ctx.waitUntil(import('./lib/push').then(m => m.runLockerRoomSweep(env.DB)).catch((e: any) => console.error('Locker sweep error:', e)));
     // 90-minutes-out check-in reminders to coaches/managers (timezone-aware,
     // idempotent via checkin_alert_log)
-    ctx.waitUntil(import('./lib/push').then(m => m.runCheckinReminderSweep(env.DB)).catch((e: any) => console.error('Check-in reminder sweep error:', e)));
+    ctx.waitUntil(import('./lib/push').then(m => m.runCheckinReminderSweep(env.DB, env)).catch((e: any) => console.error('Check-in reminder sweep error:', e)));
     // games <2h out with unassigned locker rooms alarm the directors
     ctx.waitUntil(import('./lib/push').then(m => m.runLockerMissingSweep(env.DB)).catch((e: any) => console.error('Locker missing sweep error:', e)));
     // 30-days-out event info email — 14:00 UTC window (9am CDT / 8am CST);
