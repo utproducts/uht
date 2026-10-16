@@ -11,6 +11,8 @@ export default function GameSheetsScreen({ navigation, route }: any) {
   const scope = route?.params?.scope === 'org' ? 'org' : 'mine';
   const [orgId, setOrgId] = useState<string | null>(route?.params?.orgId || null);
   const [games, setGames] = useState<any[]>([]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [divFilter, setDivFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -49,13 +51,18 @@ export default function GameSheetsScreen({ navigation, route }: any) {
       ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
+  // Division pills come from whatever sheets are in the list
+  const divisions = [...new Set(games.map(g => (g.division_name || '').trim()).filter(Boolean))];
+  const shown = divFilter === 'all' ? games : games.filter(g => (g.division_name || '').trim() === divFilter);
+
   // group by event, newest first (rows already sorted by start_time DESC)
   const groups: { event: string; isTest: boolean; items: any[] }[] = [];
-  for (const g of games) {
+  for (const g of shown) {
     const last = groups[groups.length - 1];
     if (last && last.event === g.event_name) last.items.push(g);
     else groups.push({ event: g.event_name, isTest: !!g.is_test, items: [g] });
   }
+  const toggleGroup = (ev: string) => setCollapsed(prev => ({ ...prev, [ev]: !prev[ev] }));
 
   return (
     <View style={s.screen}>
@@ -67,13 +74,25 @@ export default function GameSheetsScreen({ navigation, route }: any) {
           contentContainerStyle={s.body}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.navy} />}
         >
+          {divisions.length > 1 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pillRow}>
+              {['all', ...divisions].map(d => (
+                <TouchableOpacity key={d} style={[s.pill, divFilter === d && s.pillActive]} onPress={() => setDivFilter(d)}>
+                  <Text style={[s.pillText, divFilter === d && s.pillTextActive]} maxFontSizeMultiplier={1.2}>
+                    {d === 'all' ? 'All Divisions' : d}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
           {groups.map((grp, gi) => (
             <View key={gi} style={s.eventCard}>
-              <View style={s.eventHead}>
+              <TouchableOpacity style={s.eventHead} activeOpacity={0.8} onPress={() => toggleGroup(grp.event)}>
                 <Text style={s.eventHeadText} numberOfLines={1} maxFontSizeMultiplier={1.2}>{grp.event}</Text>
-                {grp.isTest ? <Text style={s.testBadge} maxFontSizeMultiplier={1.2}>TEST</Text> : null}
-              </View>
-              {grp.items.map((g, i) => (
+                <Text style={s.eventCount} maxFontSizeMultiplier={1.2}>{grp.items.length}</Text>
+                <Ionicons name={collapsed[grp.event] ? 'chevron-down' : 'chevron-up'} size={15} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+              {!collapsed[grp.event] && grp.items.map((g, i) => (
                 <TouchableOpacity
                   key={g.id}
                   style={[s.row, i === grp.items.length - 1 && s.rowLast]}
@@ -96,6 +115,9 @@ export default function GameSheetsScreen({ navigation, route }: any) {
               ))}
             </View>
           ))}
+          {groups.length === 0 ? (
+            <Text style={s.emptyText}>No scoresheets in this division yet.</Text>
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -114,5 +136,11 @@ const s = StyleSheet.create({
   rowLast: { borderBottomWidth: 0 },
   sheetIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#e9eef5', alignItems: 'center', justifyContent: 'center' },
   matchup: { fontSize: 13.5, color: colors.navy, ...fonts.bold },
+  eventCount: { color: 'rgba(255,255,255,0.85)', fontSize: 11, ...fonts.bold, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' },
+  pillRow: { gap: 8, paddingBottom: 4 },
+  pill: { borderRadius: 18, borderWidth: 1, borderColor: '#cfd9e5', backgroundColor: colors.white, paddingHorizontal: 13, paddingVertical: 7 },
+  pillActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  pillText: { fontSize: 12, color: '#45566c', ...fonts.semibold },
+  pillTextActive: { color: colors.white },
   meta: { fontSize: 11, color: '#7a8699', ...fonts.semibold, marginTop: 1 },
 });

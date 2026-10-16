@@ -1206,7 +1206,7 @@ teamRoutes.get('/my-gamesheets', authMiddleware, async (c) => {
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at2 ON at2.id = g.away_team_id
     WHERE g.status = 'final'
-      AND (COALESCE(e.is_test, 0) = 0 OR ?1 = 1)
+      AND COALESCE(e.is_test, 0) = 0
       AND (?1 = 1
         OR g.home_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2)
         OR g.away_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2))
