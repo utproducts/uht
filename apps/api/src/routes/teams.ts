@@ -1207,32 +1207,13 @@ teamRoutes.get('/my-gamesheets', authMiddleware, async (c) => {
     LEFT JOIN teams at2 ON at2.id = g.away_team_id
     WHERE g.status = 'final'
       AND (COALESCE(e.is_test, 0) = 0 OR ?1 = 1)
-      AND (g.home_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2)
+      AND (?1 = 1
+        OR g.home_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2)
         OR g.away_team_id IN (SELECT team_id FROM team_coaches WHERE user_id = ?2 UNION SELECT team_id FROM team_managers WHERE user_id = ?2))
     ORDER BY g.start_time DESC LIMIT 150
   `).bind(isStaff, user.id).all<any>();
 
   const data = rows.results || [];
-  // Every coach/manager gets one pinned SAMPLE sheet (a fully scored
-  // rehearsal game) so they can see what a finished scoresheet looks like
-  // before their own games go final. Remove after Windmill if unwanted.
-  const isCoachOrManager = (user.roles || []).some((r: string) => ['coach', 'manager'].includes(r));
-  if (isCoachOrManager || isStaff) {
-    data.unshift({
-      id: 'f40dad4199296b7b7c2133b0760245b8',
-      game_number: 3,
-      start_time: '2026-10-09T18:00:00',
-      home_score: 2,
-      away_score: 5,
-      status: 'final',
-      event_id: '764b382c5570480b94f62da786cdfc3e',
-      event_name: 'SAMPLE - what your scoresheets will look like',
-      is_test: 0,
-      division_name: 'Pee Wee (12U) sample game',
-      home_team_name: 'Chicago Horned Frogs',
-      away_team_name: 'Macomb Mavericks',
-    });
-  }
 
   return c.json({ success: true, data });
 });
