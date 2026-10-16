@@ -38,6 +38,9 @@ export interface StandingRow {
   goals_against: number;
   points: number;
   goal_differential: number;
+  // Tiebreak-only differential: each game contributes at most +/-5
+  // (Chad 10/15: "in the event of a tie, the goal differential is capped at 5")
+  capped_diff?: number;
   pims: number;
   rank: number;
   tiebreaker: string | null;
@@ -141,7 +144,7 @@ export async function computeStandings(
               team_name: ph,
               team_logo: null,
               games_played: 0, wins: 0, losses: 0, ties: 0,
-              goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
+              goals_for: 0, goals_against: 0, points: 0, goal_differential: 0, capped_diff: 0,
               pims: 0, rank: 0, tiebreaker: null,
             });
           }
@@ -161,7 +164,7 @@ export async function computeStandings(
           team_name: m?.team_name || 'Unknown Team',
           team_logo: m?.team_logo || null,
           games_played: 0, wins: 0, losses: 0, ties: 0,
-          goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
+          goals_for: 0, goals_against: 0, points: 0, goal_differential: 0, capped_diff: 0,
           pims: 0, rank: 0, tiebreaker: null,
         });
       }
@@ -177,6 +180,9 @@ export async function computeStandings(
       home.games_played++; away.games_played++;
       home.goals_for += g.home_score; home.goals_against += g.away_score;
       away.goals_for += g.away_score; away.goals_against += g.home_score;
+      const cappedMargin = Math.max(-5, Math.min(5, g.home_score - g.away_score));
+      home.capped_diff = (home.capped_diff || 0) + cappedMargin;
+      away.capped_diff = (away.capped_diff || 0) - cappedMargin;
       if (g.home_score > g.away_score) { home.wins++; away.losses++; }
       else if (g.home_score < g.away_score) { away.wins++; home.losses++; }
       else { home.ties++; away.ties++; }
@@ -246,7 +252,7 @@ export async function computeStandings(
           team_name: m?.team_name || 'Unknown Team',
           team_logo: m?.team_logo || null,
           games_played: 0, wins: 0, losses: 0, ties: 0,
-          goals_for: 0, goals_against: 0, points: 0, goal_differential: 0,
+          goals_for: 0, goals_against: 0, points: 0, goal_differential: 0, capped_diff: 0,
           pims: 0, rank: 0, tiebreaker: null,
         });
       }
@@ -381,9 +387,10 @@ function rankPool(rows: StandingRow[], finals: PoolGame[]) {
 }
 
 function resolveByStats(group: StandingRow[]): StandingRow[] {
+  const cd = (r: StandingRow) => r.capped_diff ?? r.goal_differential;
   const sorted = [...group].sort((a, b) =>
     b.wins - a.wins ||
-    b.goal_differential - a.goal_differential ||
+    cd(b) - cd(a) ||
     a.goals_against - b.goals_against ||
     b.goals_for - a.goals_for ||
     a.pims - b.pims ||
@@ -392,7 +399,7 @@ function resolveByStats(group: StandingRow[]): StandingRow[] {
   for (let j = 0; j < sorted.length; j++) {
     const r = sorted[j];
     const peer = sorted.find(o => o !== r &&
-      o.wins === r.wins && o.goal_differential === r.goal_differential &&
+      o.wins === r.wins && cd(o) === cd(r) &&
       o.goals_against === r.goals_against && o.goals_for === r.goals_for && o.pims === r.pims);
     r.tiebreaker = peer ? 'unresolved' : (r.tiebreaker || 'stats');
   }
