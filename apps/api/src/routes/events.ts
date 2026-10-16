@@ -13,6 +13,19 @@ import { getResolvedFields } from '../lib/template-overrides';
 
 export const eventRoutes = new Hono<{ Bindings: Env }>();
 
+// Random 4-digit scorekeeper PIN that no other current event is using
+async function freshScorekeeperPin(db: any): Promise<string> {
+  for (let i = 0; i < 25; i++) {
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const clash = await db.prepare(`
+      SELECT 1 x FROM scorekeeper_pins sp JOIN events e ON e.id = sp.event_id
+      WHERE sp.pin_code = ? AND sp.is_active = 1 AND date(e.end_date) >= date('now', '-1 day') LIMIT 1
+    `).bind(pin).first();
+    if (!clash) return pin;
+  }
+  return String(Math.floor(10000 + Math.random() * 90000));
+}
+
 // ==================
 // PUBLIC: List events (with filters)
 // ==================
@@ -756,7 +769,7 @@ eventRoutes.post('/admin/create', authMiddleware, requireRole('admin', 'director
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
   const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const pin = String(Math.floor(1000 + Math.random() * 9000));
+  const pin = await freshScorekeeperPin(db);
 
   await db.prepare(`
     INSERT INTO events (id, name, slug, city, state, start_date, end_date, tournament_id, venue_id, status,
@@ -802,7 +815,7 @@ eventRoutes.post('/admin/bulk-import', authMiddleware, requireRole('admin', 'dir
 
       const id = crypto.randomUUID().replace(/-/g, '');
       const slug = evt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const pin = String(Math.floor(1000 + Math.random() * 9000));
+      const pin = await freshScorekeeperPin(db);
       const priceCents = evt.price_cents || (evt.price_dollars ? Math.round(evt.price_dollars * 100) : null);
       const depositCents = evt.deposit_cents || (evt.deposit_dollars ? Math.round(evt.deposit_dollars * 100) : null);
 
@@ -886,7 +899,7 @@ eventRoutes.post('/admin/duplicate/:id', authMiddleware, requireRole('admin', 'd
   if (!source) return c.json({ success: false, error: 'Source event not found' }, 404);
 
   const newId = crypto.randomUUID().replace(/-/g, '');
-  const newPin = String(Math.floor(1000 + Math.random() * 9000));
+  const newPin = await freshScorekeeperPin(db);
 
   // Bump dates by 1 year
   const bumpYear = (d: string) => {
@@ -2604,7 +2617,7 @@ eventRoutes.post('/', authMiddleware, requireRole('admin', 'director'), zValidat
   const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
   // Generate 4-digit scorekeeper PIN
-  const pin = String(Math.floor(1000 + Math.random() * 9000));
+  const pin = await freshScorekeeperPin(db);
 
   try {
     // Create event
@@ -2684,7 +2697,7 @@ eventRoutes.post('/:id/duplicate', authMiddleware, requireRole('admin'), async (
 
   const newId = crypto.randomUUID().replace(/-/g, '');
   const newSlug = source.slug + '-' + nextYearStart.getFullYear();
-  const newPin = String(Math.floor(1000 + Math.random() * 9000));
+  const newPin = await freshScorekeeperPin(db);
 
   // Calculate new season
   const month = nextYearStart.getMonth();

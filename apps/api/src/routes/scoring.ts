@@ -197,6 +197,15 @@ scoringRoutes.post('/events/:eventId/pins', authMiddleware, requireRole('admin',
   const { pinCode, rinkId, label } = c.req.valid('json');
   const db = c.env.DB;
   const id = crypto.randomUUID().replace(/-/g, '');
+  // A PIN shared by two live events sends scorekeepers into the wrong one
+  const clash = await db.prepare(`
+    SELECT e.name FROM scorekeeper_pins sp JOIN events e ON e.id = sp.event_id
+    WHERE sp.pin_code = ? AND sp.event_id != ? AND sp.is_active = 1
+      AND date(e.end_date) >= date('now', '-1 day') LIMIT 1
+  `).bind(pinCode, eventId).first<any>();
+  if (clash) {
+    return c.json({ success: false, error: `PIN ${pinCode} is already in use by ${clash.name}. Pick a different PIN.` }, 409);
+  }
   try {
     await db.prepare('INSERT INTO scorekeeper_pins (id, event_id, pin_code, rink_id, label) VALUES (?, ?, ?, ?, ?)')
       .bind(id, eventId, pinCode, rinkId || null, label || null).run();
