@@ -40,6 +40,9 @@ directorRoutes.post('/claim', authMiddleware, async (c) => {
     .bind(row.event_id, user.id).run();
   await db.prepare("INSERT OR IGNORE INTO user_roles (id, user_id, role) VALUES (lower(hex(randomblob(16))), ?, 'director')")
     .bind(user.id).run().catch(() => {});
+  // Directors get scorekeeper access by default (never the reverse)
+  await db.prepare("INSERT OR IGNORE INTO user_roles (id, user_id, role) SELECT lower(hex(randomblob(16))), ?, 'scorekeeper' WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = ? AND role = 'scorekeeper')")
+    .bind(user.id, user.id).run().catch(() => {});
   return c.json({ success: true, data: { event_id: row.event_id, event_name: row.event_name } });
 });
 
