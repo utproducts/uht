@@ -185,6 +185,11 @@ function EditGameModal({
   const [homeTeamId, setHomeTeamId] = useState(game.home_team_id || '');
   const [awayTeamId, setAwayTeamId] = useState(game.away_team_id || '');
   const [rinkId, setRinkId] = useState(game.rink_id || '');
+  const [venueId, setVenueId] = useState(
+    rinks.find(r => r.id === game.rink_id)?.venue_id || (game as any).venue_id || ''
+  );
+  const venues = Array.from(new Map(rinks.map(r => [r.venue_id, r.venue_name || 'Venue'])).entries());
+  const venueRinkChoices = venueId ? rinks.filter(r => r.venue_id === venueId) : rinks;
   const [startDate, setStartDate] = useState(game.start_time ? game.start_time.split('T')[0] : '');
   const [startTime, setStartTime] = useState(game.start_time ? game.start_time.split('T')[1]?.substring(0, 5) : '');
   const [gameType, setGameType] = useState(game.game_type);
@@ -222,6 +227,7 @@ function EditGameModal({
       home_team_id: homeTeamId || null,
       away_team_id: awayTeamId || null,
       rink_id: rinkId || null,
+      venue_id: venueId || null,
       start_time: startDate && startTime ? `${startDate}T${startTime}:00` : null,
       end_time: startDate && endH && endM ? `${startDate}T${endH}:${endM}:00` : null,
       game_type: gameType,
@@ -333,17 +339,36 @@ function EditGameModal({
             </div>
           </div>
 
-          {/* Rink */}
+          {/* Venue + Rink */}
+          <div>
+            <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Venue</label>
+            <select value={venueId}
+              onChange={e => {
+                const v = e.target.value;
+                setVenueId(v);
+                if (v && rinks.find(r => r.id === rinkId)?.venue_id !== v) setRinkId('');
+              }}
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              <option value="">Any venue</option>
+              {venues.map(([vid, vname]) => <option key={vid} value={vid}>{vname}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Rink</label>
             <select
               value={rinkId}
-              onChange={e => setRinkId(e.target.value)}
+              onChange={e => {
+                setRinkId(e.target.value);
+                const vr = rinks.find(r => r.id === e.target.value);
+                if (vr) setVenueId(vr.venue_id);
+              }}
               className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
             >
               <option value="">Unassigned</option>
-              {rinks.map(r => (
-                <option key={r.id} value={r.id}>{r.name}</option>
+              {rinkOptionGroups(venueRinkChoices).map(([venue, vRinks]) => (
+                <optgroup key={venue} label={venue}>
+                  {vRinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -552,6 +577,9 @@ function AddGameModal({
   const [homeTeamId, setHomeTeamId] = useState('');
   const [awayTeamId, setAwayTeamId] = useState('');
   const [rinkId, setRinkId] = useState('');
+  const [venueId, setVenueId] = useState('');
+  const venues = Array.from(new Map(rinks.map(r => [r.venue_id, r.venue_name || 'Venue'])).entries());
+  const venueRinkChoices = venueId ? rinks.filter(r => r.venue_id === venueId) : rinks;
   const [startDate, setStartDate] = useState(event.start_date);
   const [startTime, setStartTime] = useState('12:00');
   const [gameType, setGameType] = useState('pool');
@@ -624,10 +652,29 @@ function AddGameModal({
             </div>
           </div>
           <div>
+            <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Venue</label>
+            <select value={venueId}
+              onChange={e => {
+                const v = e.target.value;
+                setVenueId(v);
+                // Rink must belong to the chosen venue
+                if (v && rinks.find(r => r.id === rinkId)?.venue_id !== v) setRinkId('');
+              }}
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              <option value="">Any venue</option>
+              {venues.map(([vid, vname]) => <option key={vid} value={vid}>{vname}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Rink</label>
-            <select value={rinkId} onChange={e => setRinkId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+            <select value={rinkId} onChange={e => {
+                setRinkId(e.target.value);
+                const vr = rinks.find(r => r.id === e.target.value);
+                if (vr) setVenueId(vr.venue_id);
+              }}
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
               <option value="">Unassigned</option>
-              {rinkOptionGroups(rinks).map(([venue, vRinks]) => (
+              {rinkOptionGroups(venueRinkChoices).map(([venue, vRinks]) => (
                 <optgroup key={venue} label={venue}>
                   {vRinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </optgroup>

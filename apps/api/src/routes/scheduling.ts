@@ -804,6 +804,7 @@ const updateGameSchema = z.object({
   home_team_id: z.string().nullable().optional(),
   away_team_id: z.string().nullable().optional(),
   rink_id: z.string().nullable().optional(),
+  venue_id: z.string().nullable().optional(),
   start_time: z.string().nullable().optional(),
   end_time: z.string().nullable().optional(),
   game_type: z.enum(['pool', 'quarterfinal', 'semifinal', 'consolation', 'championship', 'placement']).optional(),
@@ -835,7 +836,16 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
 
   if (data.home_team_id !== undefined) { updates.push('home_team_id = ?'); values.push(data.home_team_id); }
   if (data.away_team_id !== undefined) { updates.push('away_team_id = ?'); values.push(data.away_team_id); }
-  if (data.rink_id !== undefined) { updates.push('rink_id = ?'); values.push(data.rink_id); }
+  if (data.rink_id !== undefined) {
+    updates.push('rink_id = ?'); values.push(data.rink_id);
+    // Keep games.venue_id consistent with the rink's venue (several feeds
+    // display venue from games.venue_id directly)
+    if (data.rink_id && data.venue_id === undefined) {
+      const vr = await db.prepare('SELECT venue_id FROM venue_rinks WHERE id = ?').bind(data.rink_id).first<any>();
+      if (vr?.venue_id) { updates.push('venue_id = ?'); values.push(vr.venue_id); }
+    }
+  }
+  if (data.venue_id !== undefined) { updates.push('venue_id = ?'); values.push(data.venue_id); }
   if (data.start_time !== undefined) { updates.push('start_time = ?'); values.push(data.start_time); }
   if (data.end_time !== undefined) { updates.push('end_time = ?'); values.push(data.end_time); }
   if (data.game_type !== undefined) { updates.push('game_type = ?'); values.push(data.game_type); }
