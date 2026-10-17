@@ -260,7 +260,7 @@ function EditGameModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto overscroll-contain" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-gradient-to-r from-[#003e79] to-[#005599] rounded-t-2xl px-6 py-4 flex items-center justify-between">
           <div>
@@ -272,7 +272,7 @@ function EditGameModal({
           <button onClick={onClose} className="text-white/70 hover:text-white text-2xl leading-none">&times;</button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4">
           {/* Game Type */}
           <div>
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Game Type</label>
@@ -288,7 +288,7 @@ function EditGameModal({
           </div>
 
           {/* Teams */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Home Team</label>
               <select
@@ -459,7 +459,7 @@ function EditGameModal({
           {staffList && staffList.length > 0 && (
             <div className="pt-3 border-t border-[#e8e8ed]">
               <h4 className="text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-3">Staff Assignments</h4>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#86868b] font-semibold mb-1">Director</label>
                   <select value={directorId} onChange={e => setDirectorId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
@@ -526,7 +526,7 @@ function EditGameModal({
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#e8e8ed]">
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[#e8e8ed]">
             <button
               onClick={handleDelete}
               className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-full text-sm font-semibold transition"
@@ -607,7 +607,7 @@ function AddGameModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto overscroll-contain" onClick={e => e.stopPropagation()}>
         <div className="bg-gradient-to-r from-[#003e79] to-[#005599] rounded-t-2xl px-6 py-4 flex items-center justify-between">
           <h3 className="text-white font-bold text-lg">Add Game</h3>
           <button onClick={onClose} className="text-white/70 hover:text-white text-2xl leading-none">&times;</button>
@@ -625,7 +625,7 @@ function AddGameModal({
               {Object.entries(gameTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Home Team</label>
               <select value={homeTeamId} onChange={e => setHomeTeamId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
