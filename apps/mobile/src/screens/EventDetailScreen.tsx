@@ -1460,9 +1460,9 @@ export default function EventDetailScreen({
               <View style={{ marginTop: 8, gap: 6 }}>
                 {stars.map(st => (
                   <View key={st.n} style={styles.starRow}>
-                    <Text style={styles.starOrd}>{'★'.repeat(Math.max(1, 4 - st.n))}</Text>
-                    <Text style={styles.starName}>{st.name || `#${st.jersey}`}</Text>
-                    {st.jersey ? <Text style={styles.starJersey}>#{st.jersey}</Text> : null}
+                    <Text style={styles.starOrd} numberOfLines={1} maxFontSizeMultiplier={1}>{'★'.repeat(Math.max(1, 4 - st.n))}</Text>
+                    <Text style={styles.starName} numberOfLines={1} maxFontSizeMultiplier={1.3}>{st.name || `#${st.jersey}`}</Text>
+                    {st.jersey ? <Text style={styles.starJersey} maxFontSizeMultiplier={1.2}>#{st.jersey}</Text> : null}
                   </View>
                 ))}
               </View>
@@ -2841,7 +2841,7 @@ const styles = StyleSheet.create({
   starsRulesTitle: { fontSize: 13.5, color: '#6b520f', ...fonts.bold },
   starsRulesSub: { fontSize: 11.5, color: '#8a6d1a', marginTop: 2, lineHeight: 15 },
   starRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  starOrd: { width: 44, fontSize: 12, color: '#b8860b', ...fonts.bold },
+  starOrd: { minWidth: 44, flexShrink: 0, fontSize: 12, color: '#b8860b', ...fonts.bold },
   starName: { flex: 1, fontSize: 14, color: colors.text, ...fonts.semibold },
   starJersey: { fontSize: 12, color: colors.textMuted, ...fonts.bold },
   inlineScore: { fontSize: 18, color: colors.textSecondary, ...fonts.semibold, marginLeft: 'auto', paddingLeft: spacing.sm },
