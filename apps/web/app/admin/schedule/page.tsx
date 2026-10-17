@@ -992,8 +992,8 @@ function GameListView({ games, divisions, onClickGame, ageGroupRinks, venueRinks
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-x-auto">
+      <table className="w-full min-w-[760px] text-sm">
         <thead>
           <tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-2 py-3 text-center w-8"></th>
@@ -1450,8 +1450,8 @@ function ScorekeeperAssignment({ eventId, games, staffList, authFetch, onGamesRe
       {games.length === 0 ? (
         <div className="text-center py-12 text-[#86868b]">No games scheduled yet. Generate a schedule first.</div>
       ) : (
-        <div className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white border border-[#e8e8ed] rounded-xl overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-[#fafafa] border-b border-[#e8e8ed]">
               <tr>
                 <th className="px-3 py-2.5 text-left w-10">
@@ -2129,7 +2129,7 @@ function VenueScheduleView({
         const rinkGames = games.filter(g => g.rink_id === rinkId);
 
         return (
-          <div key={rinkId} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-hidden">
+          <div key={rinkId} className="bg-white rounded-2xl border border-[#e8e8ed] overflow-x-auto">
             {/* Rink Header */}
             <div className="bg-gradient-to-r from-[#003e79] to-[#005599] px-6 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -2155,7 +2155,7 @@ function VenueScheduleView({
                     <span className="text-xs font-bold text-[#003e79] uppercase tracking-widest">{header.label}</span>
                     <span className="text-[10px] text-[#86868b] ml-2">{dayGames.length} games</span>
                   </div>
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
                         <th className="w-8"></th>
@@ -2224,7 +2224,7 @@ function VenueScheduleView({
 
       {/* Unassigned games */}
       {unassigned.length > 0 && (
-        <div className="bg-white rounded-2xl border border-amber-300 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-amber-300 overflow-x-auto">
           <div className="bg-amber-50 px-6 py-3 flex items-center justify-between border-b border-amber-200">
             <h3 className="text-amber-800 font-bold text-sm">Unassigned (No Rink)</h3>
             <span className="text-amber-600 text-xs font-semibold">{unassigned.length} games</span>
@@ -3208,7 +3208,7 @@ export default function AdminSchedulePage() {
     return (
       <div className="bg-[#fafafa] min-h-full flex flex-col">
         {/* Top bar */}
-        <div className="bg-white border-b border-[#e8e8ed] px-4 py-3 flex items-center gap-4 shrink-0">
+        <div className="bg-white border-b border-[#e8e8ed] px-4 py-3 flex items-center gap-x-4 gap-y-2 flex-wrap shrink-0">
           <button onClick={() => setSelectedEvent(null)} className="flex items-center gap-1.5 text-[#6e6e73] hover:text-[#1d1d1f] transition text-sm font-semibold">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             Events
@@ -3216,7 +3216,7 @@ export default function AdminSchedulePage() {
           <div className="w-px h-6 bg-[#e8e8ed]" />
           <div className="flex-1 min-w-0">
             <h1 className="text-base font-bold text-[#1d1d1f] truncate">{selectedEvent.name}</h1>
-            <p className="text-xs text-[#86868b]">{selectedEvent.city}, {selectedEvent.state} · {fmtDateFull(selectedEvent.start_date)} — {fmtDateFull(selectedEvent.end_date)}</p>
+            <p className="text-xs text-[#86868b] truncate">{selectedEvent.city}, {selectedEvent.state} · {fmtDateFull(selectedEvent.start_date)} — {fmtDateFull(selectedEvent.end_date)}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {schedulePublished && <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />PUBLISHED</span>}
@@ -3226,8 +3226,8 @@ export default function AdminSchedulePage() {
         </div>
 
         {/* Workspace Tabs */}
-        <div className="bg-white border-b border-[#e8e8ed] px-6">
-          <div className="flex gap-1">
+        <div className="bg-white border-b border-[#e8e8ed] px-6 overflow-x-auto">
+          <div className="flex gap-1 whitespace-nowrap">
             {([
               { key: 'schedule' as const, label: 'Schedule' },
               { key: 'divisions' as const, label: 'Divisions' },
