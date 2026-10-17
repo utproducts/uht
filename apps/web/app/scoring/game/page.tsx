@@ -279,6 +279,13 @@ function ScoringPageInner() {
 
   useEffect(() => { fetchGame(); }, [fetchGame]);
   useEffect(() => { if (game) fetchRoster(); }, [game, fetchRoster]);
+  // Bad rink wifi can kill the one-shot roster fetch - keep retrying until
+  // it lands so the scorekeeper never sits on an empty roster
+  useEffect(() => {
+    if (!game || rosterLoaded) return;
+    const iv = setInterval(fetchRoster, 8000);
+    return () => clearInterval(iv);
+  }, [game, rosterLoaded, fetchRoster]);
 
   // Live refresh: score AND lineup state (sign-offs, statuses, starting
   // goalie) every 10s, so a coach signing on one device shows up on every
