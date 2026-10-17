@@ -473,7 +473,7 @@ export async function resolveBracketGames(
   const games = ((await db.prepare(`
     SELECT id, event_division_id, game_number, game_type, status,
            home_team_id, away_team_id, home_placeholder, away_placeholder,
-           home_score, away_score, notes
+           home_score, away_score, COALESCE(seed_locked, 0) as seed_locked
     FROM games WHERE event_id = ?
   `).bind(eventId).all<BracketGame>()).results || []);
 
@@ -543,11 +543,10 @@ export async function resolveBracketGames(
 
   for (const g of games) {
     if (g.game_type === 'pool') continue;
-    // Staff seeding decisions are final: 'SEED LOCK' in the notes means
-    // filled slots are never rewritten (even with force); empty slots on
-    // the same game still auto-fill as pools finish
-    const seedLocked = /seed\s*lock/i.test((g as any).notes || '');
-    const rewritable = opts.force && g.status === 'scheduled' && !seedLocked;
+    // Staff seeding decisions are final: a locked game (admin lock toggle)
+    // never has filled slots rewritten, even with force; empty slots on the
+    // same game still auto-fill as pools finish
+    const rewritable = opts.force && g.status === 'scheduled' && !(g as any).seed_locked;
     const slots: Array<['home' | 'away', string | null, string | null]> = [
       ['home', g.home_team_id, g.home_placeholder],
       ['away', g.away_team_id, g.away_placeholder],

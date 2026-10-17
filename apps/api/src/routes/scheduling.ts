@@ -820,6 +820,7 @@ const updateGameSchema = z.object({
   director_id: z.string().nullable().optional(),
   ref1_id: z.string().nullable().optional(),
   ref2_id: z.string().nullable().optional(),
+  seed_locked: z.union([z.boolean(), z.number()]).optional(),
 });
 
 schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'director'), zValidator('json', updateGameSchema), async (c) => {
@@ -838,6 +839,7 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
   if (data.home_team_id !== undefined) { updates.push('home_team_id = ?'); values.push(data.home_team_id); }
   if (data.away_team_id !== undefined) { updates.push('away_team_id = ?'); values.push(data.away_team_id); }
   if (data.event_division_id !== undefined) { updates.push('event_division_id = ?'); values.push(data.event_division_id); }
+  if (data.seed_locked !== undefined) { updates.push('seed_locked = ?'); values.push(data.seed_locked ? 1 : 0); }
   if (data.rink_id !== undefined) {
     updates.push('rink_id = ?'); values.push(data.rink_id);
     // Keep games.venue_id consistent with the rink's venue (several feeds

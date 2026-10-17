@@ -80,6 +80,7 @@ interface Game {
   delay_note?: string | null;
   age_group?: string;
   division_level?: string;
+  seed_locked?: number;
 }
 
 interface StaffMember {
@@ -2827,13 +2828,23 @@ function BracketDayView({
   venueRinks,
   dayHeaders,
   onClickGame,
+  onSaveGame,
 }: {
   games: Game[];
   divisions: Division[];
   venueRinks: VenueRink[];
   dayHeaders: { date: string; label: string }[];
   onClickGame: (game: Game) => void;
+  onSaveGame?: (gameId: string, updates: any) => Promise<void>;
 }) {
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const toggleLock = async (e: React.MouseEvent, game: Game) => {
+    e.stopPropagation();
+    if (!onSaveGame || togglingId) return;
+    setTogglingId(game.id);
+    await onSaveGame(game.id, { seed_locked: game.seed_locked ? 0 : 1 });
+    setTogglingId(null);
+  };
   const divisionMap = new Map(divisions.map(d => [d.id, d]));
   const rinkMap = new Map(venueRinks.map(r => [r.id, r]));
 
@@ -2876,23 +2887,38 @@ function BracketDayView({
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
               {divBracketGames.map(game => {
                 const rink = game.rink_id ? rinkMap.get(game.rink_id) : null;
-                // For bracket games, show seeding label from notes if teams not yet assigned
-                const homeLabel = game.home_team_name || (game.notes?.split(' vs ')[0]) || 'TBD';
-                const awayLabel = game.away_team_name || (game.notes?.split(' vs ')[1]) || 'TBD';
+                const homeLabel = game.home_team_name || (game as any).home_placeholder || 'TBD';
+                const awayLabel = game.away_team_name || (game as any).away_placeholder || 'TBD';
                 const isFinal = game.status === 'final';
+                const locked = !!game.seed_locked;
 
                 return (
                   <button
                     key={game.id}
                     onClick={() => onClickGame(game)}
-                    className="border border-[#e8e8ed] rounded-xl overflow-hidden text-left hover:border-[#003e79]/30 hover:shadow-md transition group w-full"
+                    className={`border rounded-xl overflow-hidden text-left hover:shadow-md transition group w-full ${locked ? 'border-[#003e79]/50' : 'border-[#e8e8ed] hover:border-[#003e79]/30'}`}
                   >
                     {/* Game type banner */}
-                    <div className={`px-4 py-1.5 ${gameTypeBadge[game.game_type] || 'bg-[#fafafa] text-[#6e6e73]'}`}>
+                    <div className={`px-4 py-1.5 flex items-center ${gameTypeBadge[game.game_type] || 'bg-[#fafafa] text-[#6e6e73]'}`}>
                       <span className="text-[10px] font-bold uppercase tracking-widest">
                         {gameTypeLabels[game.game_type] || game.game_type}
                       </span>
                       <span className="text-[10px] opacity-70 ml-2">Game #{game.game_number}</span>
+                      {onSaveGame ? (
+                        <span
+                          role="button"
+                          title={locked ? 'Seeding locked - auto-fill will not change this game. Tap to unlock.' : 'Tap to lock this matchup against auto-seeding.'}
+                          onClick={e => toggleLock(e, game)}
+                          className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold cursor-pointer transition ${locked ? 'bg-[#003e79] text-white' : 'bg-white/60 text-[#3d3d3d] hover:bg-white'} ${togglingId === game.id ? 'opacity-50' : ''}`}
+                        >
+                          {locked ? (
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" /></svg>
+                          )}
+                          {locked ? 'LOCKED' : 'LOCK'}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="p-4 space-y-2">
@@ -3806,7 +3832,7 @@ export default function AdminSchedulePage() {
                   )}
                   {view === 'venue' && <VenueScheduleView games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} onClickGame={setEditingGame} onSaveGame={handleSaveGame} onSwapGames={handleSwapGames} />}
                   {view === 'staff' && <StaffAssignmentsView eventId={selectedEvent.id} games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} staffList={staffList} onClickGame={setEditingGame} onRefresh={reloadGames} />}
-                  {view === 'bracket' && <BracketDayView games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} onClickGame={setEditingGame} />}
+                  {view === 'bracket' && <BracketDayView games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} onClickGame={setEditingGame} onSaveGame={handleSaveGame} />}
                 </>
               )}
             </div>
