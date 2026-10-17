@@ -750,7 +750,7 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
       g.checked_in_at, g.rink_id, g.is_overtime, g.is_shootout,
       COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder) as away_team_name,
       ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
-      vr.name as rink_name, v.name as venue_name,
+      vr.name as rink_name, COALESCE(v2.name, v.name) as venue_name,
       ed.age_group, ed.division_level,
       COALESCE(glr_home.name, g.home_locker_room) as home_locker_room,
       COALESCE(glr_away.name, g.away_locker_room) as away_locker_room
@@ -758,6 +758,7 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at2 ON at2.id = g.away_team_id
     LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v2 ON v2.id = vr.venue_id
     LEFT JOIN venues v ON v.id = g.venue_id
     LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
     LEFT JOIN game_locker_rooms glr_h ON glr_h.game_id = g.id AND glr_h.team_id = g.home_team_id

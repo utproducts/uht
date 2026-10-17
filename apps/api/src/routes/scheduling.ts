@@ -909,11 +909,11 @@ schedulingRoutes.post('/games/swap', authMiddleware, requireRole('admin', 'direc
 
   if (!game1 || !game2) return c.json({ success: false, error: 'One or both games not found' }, 404);
 
-  // Swap start_time, end_time, rink_id, and game_number
-  await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
-    .bind(game2.start_time, game2.end_time, game2.rink_id, game2.game_number, gameId1).run();
-  await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
-    .bind(game1.start_time, game1.end_time, game1.rink_id, game1.game_number, gameId2).run();
+  // Swap start_time, end_time, rink_id + venue_id, and game_number
+  await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, venue_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(game2.start_time, game2.end_time, game2.rink_id, game2.venue_id, game2.game_number, gameId1).run();
+  await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, venue_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(game1.start_time, game1.end_time, game1.rink_id, game1.venue_id, game1.game_number, gameId2).run();
 
   return c.json({ success: true, message: 'Games swapped' });
 });
