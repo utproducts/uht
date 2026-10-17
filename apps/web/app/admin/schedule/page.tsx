@@ -277,10 +277,10 @@ function EditGameModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto overscroll-contain" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-stretch sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-none sm:rounded-2xl shadow-xl max-w-full sm:max-w-lg w-full h-[100dvh] sm:h-auto sm:max-h-[92vh] overflow-y-auto overflow-x-hidden overscroll-contain" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#003e79] to-[#005599] rounded-t-2xl px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#003e79] to-[#005599] rounded-none sm:rounded-t-2xl px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-10">
           <div>
             <h3 className="text-white font-bold text-lg">Edit Game #{game.game_number}</h3>
             <p className="text-white/70 text-xs mt-0.5">
@@ -662,9 +662,9 @@ function AddGameModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto overscroll-contain" onClick={e => e.stopPropagation()}>
-        <div className="bg-gradient-to-r from-[#003e79] to-[#005599] rounded-t-2xl px-6 py-4 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-stretch sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-none sm:rounded-2xl shadow-xl max-w-full sm:max-w-lg w-full h-[100dvh] sm:h-auto sm:max-h-[92vh] overflow-y-auto overflow-x-hidden overscroll-contain" onClick={e => e.stopPropagation()}>
+        <div className="bg-gradient-to-r from-[#003e79] to-[#005599] rounded-none sm:rounded-t-2xl px-4 sm:px-6 py-4 flex items-center justify-between sticky top-0 z-10">
           <h3 className="text-white font-bold text-lg">Add Game</h3>
           <button onClick={onClose} className="text-white/70 hover:text-white text-2xl leading-none">&times;</button>
         </div>

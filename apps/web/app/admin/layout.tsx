@@ -4,6 +4,22 @@ import { useState, useEffect, useCallback } from 'react';
 import RoleSwitcher from '../components/RoleSwitcher';
 
 const ADMIN_ROLES = ['admin', 'director'];
+
+// Admin pages are operated one-handed at the rink: lock page zoom so the
+// view can't drift side to side (restored when leaving the admin section)
+function useAdminViewportLock() {
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    const prev = meta?.content || 'width=device-width, initial-scale=1';
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      document.head.appendChild(meta);
+    }
+    meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+    return () => { if (meta) meta.content = prev; };
+  }, []);
+}
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev';
 
 function readUserName(): string {
@@ -110,6 +126,7 @@ function readDataRestricted(): boolean {
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  useAdminViewportLock();
   const pathname = usePathname();
   const router = useRouter();
   const [userName, setUserName] = useState(readUserName);
