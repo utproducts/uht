@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Share, Alert } from 'react-native';
+import { Share, Alert, Modal } from 'react-native';
 import { colors } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import { StrokeDrawing } from '../components/SignaturePad';
@@ -41,6 +41,34 @@ export default function ScoresheetScreen({ route, navigation }: any) {
       Alert.alert('Could not send', 'Check your connection and try again.');
     }
     setEmailing(false);
+  };
+
+  // Correction flow: coach taps a goal/penalty line, picks the right player,
+  // change applies immediately (auto-approved) and staff get notified
+  const [fix, setFix] = useState<{ ev: any; field: 'scorer' | 'assist1' | 'assist2' | 'player' } | null>(null);
+  const [fixSaving, setFixSaving] = useState(false);
+
+  const submitFix = async (jersey: string) => {
+    if (!fix || fixSaving) return;
+    setFixSaving(true);
+    try {
+      const res = await authFetch(`/api/scoring/games/${gameId}/sheet/correct`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: fix.ev.id, field: fix.field, jerseyNumber: jersey }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setFix(null);
+        await load();
+        Alert.alert('Correction applied', 'The scoresheet has been updated.');
+      } else {
+        Alert.alert('Could not apply', typeof json.error === 'string' ? json.error : 'Please try again.');
+      }
+    } catch {
+      Alert.alert('Could not apply', 'Check your connection and try again.');
+    }
+    setFixSaving(false);
   };
 
   const load = useCallback(async () => {
@@ -187,15 +215,19 @@ export default function ScoresheetScreen({ route, navigation }: any) {
               {tGoals.length === 0 ? (
                 <Text style={styles.emptyRow}>No goals</Text>
               ) : tGoals.map((e: any) => (
-                <View key={e.id} style={styles.tableRow}>
+                <TouchableOpacity key={e.id} style={styles.tableRow} disabled={!data.share_url}
+                  onPress={() => setFix({ ev: e, field: 'scorer' })} activeOpacity={0.6}>
                   <Text style={[styles.td, { width: 40 }]}>{e.period ?? '-'}</Text>
                   <Text style={[styles.td, { width: 56 }]}>{e.game_time || '-'}</Text>
                   <Text style={[styles.td, { width: 40, fontWeight: '800' }]}>{e.jersey_number || '?'}</Text>
                   <Text style={[styles.td, { width: 40, color: colors.textMuted }]}>{e.assist1_jersey || ''}</Text>
                   <Text style={[styles.td, { width: 40, color: colors.textMuted }]}>{e.assist2_jersey || ''}</Text>
                   <Text style={[styles.td, { width: 46, fontWeight: '700' }, e.goalie_jersey === 'EN' ? { color: '#d97706' } : { color: colors.textMuted }]}>{e.goalie_jersey || ''}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
+              {data.share_url && tGoals.length > 0 ? (
+                <Text style={styles.fixHint} maxFontSizeMultiplier={1.3}>Wrong player on a goal? Tap the line to fix it.</Text>
+              ) : null}
             </View>
           );
         })}
@@ -217,13 +249,14 @@ export default function ScoresheetScreen({ route, navigation }: any) {
               {tPens.length === 0 ? (
                 <Text style={styles.emptyRow}>No penalties</Text>
               ) : tPens.map((e: any) => (
-                <View key={e.id} style={styles.tableRow}>
+                <TouchableOpacity key={e.id} style={styles.tableRow} disabled={!data.share_url}
+                  onPress={() => setFix({ ev: e, field: 'player' })} activeOpacity={0.6}>
                   <Text style={[styles.td, { width: 36 }]}>{e.period ?? '-'}</Text>
                   <Text style={[styles.td, { width: 32, fontWeight: '800' }]}>{e.jersey_number || '?'}</Text>
                   <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes ?? '-'}</Text>
                   <Text style={[styles.td, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>{e.penalty_type || 'Penalty'}</Text>
                   <Text style={[styles.td, { width: 50 }]}>{e.game_time || '-'}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           );
@@ -347,6 +380,60 @@ export default function ScoresheetScreen({ route, navigation }: any) {
           ) : null}
         </View>
       </ScrollView>
+
+      {/* Correction modal */}
+      <Modal visible={!!fix} transparent animationType="fade" onRequestClose={() => setFix(null)}>
+        <View style={styles.fixBackdrop}>
+          <View style={styles.fixCard}>
+            {fix ? (() => {
+              const isGoal = fix.ev.event_type === 'goal';
+              const roster = lineupFor(fix.ev.team_id);
+              const current = fix.field === 'assist1' ? fix.ev.assist1_jersey : fix.field === 'assist2' ? fix.ev.assist2_jersey : fix.ev.jersey_number;
+              return (
+                <>
+                  <Text style={styles.fixTitle} maxFontSizeMultiplier={1.2}>Fix This Line</Text>
+                  <Text style={styles.fixSub} maxFontSizeMultiplier={1.3}>
+                    {isGoal ? `Goal - P${fix.ev.period ?? '?'} ${fix.ev.game_time || ''}` : `${fix.ev.penalty_type || 'Penalty'} - P${fix.ev.period ?? '?'}`}
+                  </Text>
+                  {isGoal ? (
+                    <View style={styles.fixFieldRow}>
+                      {([['scorer', 'Scorer'], ['assist1', 'Assist 1'], ['assist2', 'Assist 2']] as const).map(([k, label]) => (
+                        <TouchableOpacity key={k} style={[styles.fixFieldBtn, fix.field === k && styles.fixFieldBtnActive]}
+                          onPress={() => setFix({ ...fix, field: k })}>
+                          <Text style={[styles.fixFieldText, fix.field === k && styles.fixFieldTextActive]} maxFontSizeMultiplier={1.2}>{label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                  <Text style={styles.fixPrompt} maxFontSizeMultiplier={1.3}>
+                    Who is the correct {fix.field === 'player' ? 'player' : fix.field === 'scorer' ? 'scorer' : 'assist'}? (currently {current ? `#${current}` : 'none'})
+                  </Text>
+                  <ScrollView style={{ maxHeight: 300 }}>
+                    {(fix.field === 'assist1' || fix.field === 'assist2') ? (
+                      <TouchableOpacity style={styles.fixPlayerRow} disabled={fixSaving} onPress={() => submitFix('')}>
+                        <Text style={styles.fixPlayerName} maxFontSizeMultiplier={1.3}>No assist</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {roster.map((pl: any) => (
+                      <TouchableOpacity key={pl.id || pl.jersey_number} disabled={fixSaving}
+                        style={[styles.fixPlayerRow, String(pl.jersey_number) === String(current || '') && styles.fixPlayerRowCurrent]}
+                        onPress={() => submitFix(String(pl.jersey_number || ''))}>
+                        <Text style={styles.fixPlayerNum} maxFontSizeMultiplier={1.2}>#{pl.jersey_number || '?'}</Text>
+                        <Text style={styles.fixPlayerName} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+                          {[pl.first_name, pl.last_name].filter(Boolean).join(' ') || 'Unnamed'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity style={styles.fixCancel} onPress={() => setFix(null)}>
+                    <Text style={styles.fixCancelText} maxFontSizeMultiplier={1.2}>{fixSaving ? 'Applying...' : 'Cancel'}</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })() : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -379,4 +466,21 @@ const styles = StyleSheet.create({
   emptyRow: { fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingVertical: 8 },
   signRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   signText: { fontSize: 12, fontWeight: '600', color: '#047857' },
+  fixHint: { fontSize: 11, color: '#7a8aa0', paddingHorizontal: 10, paddingVertical: 6 },
+  fixBackdrop: { flex: 1, backgroundColor: 'rgba(0,25,50,0.55)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  fixCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18, width: '100%', maxWidth: 380 },
+  fixTitle: { fontSize: 17, color: colors.navy, fontWeight: '800', textAlign: 'center' },
+  fixSub: { fontSize: 13, color: '#5b6b80', textAlign: 'center', marginTop: 2 },
+  fixFieldRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  fixFieldBtn: { flex: 1, borderRadius: 9, borderWidth: 1, borderColor: '#cfd9e5', paddingVertical: 8, alignItems: 'center' },
+  fixFieldBtnActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  fixFieldText: { fontSize: 12.5, color: '#45566c', fontWeight: '700' },
+  fixFieldTextActive: { color: '#fff' },
+  fixPrompt: { fontSize: 13, color: '#334457', marginTop: 12, marginBottom: 6, fontWeight: '600' },
+  fixPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#eef2f6' },
+  fixPlayerRowCurrent: { backgroundColor: '#eef7fd' },
+  fixPlayerNum: { width: 40, fontSize: 14, color: colors.navy, fontWeight: '800' },
+  fixPlayerName: { flex: 1, fontSize: 14, color: '#22384f' },
+  fixCancel: { marginTop: 12, borderRadius: 10, borderWidth: 1, borderColor: '#cfd9e5', paddingVertical: 11, alignItems: 'center' },
+  fixCancelText: { fontSize: 14, color: '#5b6b80', fontWeight: '700' },
 });

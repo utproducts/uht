@@ -1249,6 +1249,103 @@ scoringRoutes.post('/games/:gameId/sheet/email', authMiddleware, async (c) => {
 });
 
 // ==========================================
+// Coach correction from the scoresheet: pick a goal/penalty line and the
+// right player. Structured (one field, one jersey), auto-applied, audited,
+// and staff get an email per correction.
+// ==========================================
+scoringRoutes.post('/games/:gameId/sheet/correct', authMiddleware, zValidator('json', z.object({
+  eventId: z.string().min(1),
+  field: z.enum(['scorer', 'assist1', 'assist2', 'player']),
+  jerseyNumber: z.string().max(3).regex(/^[0-9]*$/, 'Jersey must be a number'),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { eventId, field, jerseyNumber } = c.req.valid('json');
+  const db = c.env.DB;
+  const user = c.get('user') as any;
+
+  const game = await db.prepare(`
+    SELECT g.id, g.status, g.game_number, g.event_id, g.home_team_id, g.away_team_id,
+      COALESCE(ht.schedule_name, ht.name, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, 'Away') as away_name,
+      e.name as event_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN events e ON e.id = g.event_id
+    WHERE g.id = ?
+  `).bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  const ev = await db.prepare("SELECT * FROM game_events WHERE id = ? AND game_id = ? AND event_type IN ('goal', 'penalty')")
+    .bind(eventId, gameId).first<any>();
+  if (!ev) return c.json({ success: false, error: 'That line was not found on this scoresheet' }, 404);
+  if (ev.event_type === 'penalty' && field !== 'player') {
+    return c.json({ success: false, error: 'Only the penalized player can be changed on a penalty' }, 400);
+  }
+  if (ev.event_type === 'goal' && field === 'player') {
+    return c.json({ success: false, error: 'Pick scorer or an assist for a goal' }, 400);
+  }
+  if ((field === 'scorer' || field === 'player') && !jerseyNumber) {
+    return c.json({ success: false, error: 'Pick the correct player' }, 400);
+  }
+
+  // Coach/manager of the team on that line (or site staff)
+  const roles: string[] = user?.roles || [];
+  let allowed = roles.includes('admin') || roles.includes('director');
+  if (!allowed && ev.team_id) {
+    const row = await db.prepare(`
+      SELECT 1 as x FROM team_coaches WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM team_managers WHERE team_id = ?1 AND user_id = ?2
+    `).bind(ev.team_id, user.id).first();
+    allowed = !!row;
+  }
+  if (!allowed) return c.json({ success: false, error: "Only that team's coaches and managers can correct this line" }, 403);
+
+  const col = field === 'assist1' ? 'assist1_jersey' : field === 'assist2' ? 'assist2_jersey' : 'jersey_number';
+  const oldVal = ev[col] || null;
+  const newVal = jerseyNumber || null;
+  if (oldVal === newVal) return c.json({ success: true, data: { unchanged: true } });
+
+  await db.prepare(`UPDATE game_events SET ${col} = ? WHERE id = ?`).bind(newVal, eventId).run();
+
+  // Keep Three Stars honest when the scorer/penalized player changes
+  if (col === 'jersey_number' && oldVal && newVal && ev.team_id) {
+    const named = await db.prepare(`
+      SELECT p.first_name, p.last_name FROM game_lineups gl
+      LEFT JOIN players p ON p.id = gl.player_id
+      WHERE gl.game_id = ? AND gl.team_id = ? AND gl.jersey_number = ?
+    `).bind(gameId, ev.team_id, newVal).first<any>();
+    const newName = named?.first_name ? `${named.first_name} ${named.last_name}` : `#${newVal}`;
+    await db.prepare('UPDATE game_three_stars SET jersey_number = ?, player_name = ? WHERE game_id = ? AND team_id = ? AND jersey_number = ?')
+      .bind(newVal, newName, gameId, ev.team_id, oldVal).run().catch(() => {});
+  }
+
+  await db.prepare("CREATE TABLE IF NOT EXISTS sheet_corrections (id TEXT PRIMARY KEY, game_id TEXT NOT NULL, event_id TEXT NOT NULL, field TEXT NOT NULL, old_value TEXT, new_value TEXT, requested_by TEXT, requested_email TEXT, created_at TEXT DEFAULT (datetime('now')))").run();
+  await db.prepare('INSERT INTO sheet_corrections (id, game_id, event_id, field, old_value, new_value, requested_by, requested_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID().replace(/-/g, ''), gameId, eventId, field, oldVal, newVal, user.id, user.email || null).run();
+
+  // One-line staff email so every applied correction is visible
+  const lineDesc = ev.event_type === 'goal'
+    ? `Goal P${ev.period ?? '?'} ${ev.game_time || ''}`.trim()
+    : `Penalty P${ev.period ?? '?'} ${ev.penalty_type || ''}`.trim();
+  const fieldLabel = field === 'scorer' ? 'scorer' : field === 'player' ? 'penalized player' : field === 'assist1' ? '1st assist' : '2nd assist';
+  const teamName = ev.team_id === game.home_team_id ? game.home_name : game.away_name;
+  const body = `${game.event_name} - Game #${game.game_number} (${game.home_name} vs ${game.away_name})\n${teamName}: ${lineDesc} - ${fieldLabel} changed from ${oldVal ? '#' + oldVal : 'none'} to ${newVal ? '#' + newVal : 'none'}\nRequested by ${user.email || user.id} and auto-applied.`;
+  keepAlive(c, fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+      to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+      subject: `[Scoresheet correction] Game #${game.game_number} - ${teamName}`,
+      html: `<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">${body}</pre>`,
+    }),
+  }).catch(() => {}));
+
+  return c.json({ success: true, data: { field, old: oldVal, new: newVal } });
+});
+
+// ==========================================
 // SCOREKEEPER: Auto-load roster for a game's teams
 // ==========================================
 scoringRoutes.get('/games/:gameId/roster', async (c) => {
