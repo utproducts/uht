@@ -319,7 +319,13 @@ export async function computeStandings(
         const baseComplete = poolComplete.get(poolKey(divId, null)) || false;
         // Manual order (or stats) decides WHO is Blue vs Grey...
         rows.sort((a, b) => a.rank - b.rank);
-        rows.forEach((r, i) => { r.pool_name = i < 3 ? 'Blue' : 'Grey'; });
+        rows.forEach((r, i) => {
+          r.pool_name = i < 3 ? 'Blue' : 'Grey';
+          // Split-pool bookkeeping for the bracket resolver: membership is
+          // only guaranteed stable when the admin order pinned it
+          (r as any).split_division = true;
+          (r as any).pool_pinned = !!(ord && ord.size > 0);
+        });
         // ...but once games are final, results rank teams INSIDE each pool,
         // so "1st Blue" seeds resolve from play, not from the drag order.
         for (const pool of ['Blue', 'Grey']) {
@@ -512,9 +518,20 @@ export async function resolveBracketGames(
       }
       const key = `${g.event_division_id}|${pool}`;
       if (!poolComplete.get(key)) {
-        // Pool still running: fill the slot anyway if this rank is
-        // mathematically locked regardless of the remaining games
         const poolRows = divRows.filter(r => (r.pool_name || '').trim().toLowerCase() === pool);
+        // If EVERY team in this pool has played out its schedule, the pool
+        // is decided even while the rest of the division plays on - the
+        // tiebreak ladder is computed from final games only. For 6-team
+        // split divisions this needs the admin order pinning membership.
+        const allDone = poolRows.length > 0 && poolRows.every(r => (remainingPool.get(r.team_id) || 0) === 0);
+        const membershipStable = poolRows.every(r => !(r as any).split_division || (r as any).pool_pinned);
+        if (allDone && membershipStable) {
+          const row = poolRows.find(r => r.rank === rank);
+          if (!row) return { teamId: null, note: `no rank ${rank} in pool "${pool}"` };
+          if (row.tiebreaker === 'unresolved') return { teamId: null, note: `rank ${rank} tie unresolved — needs admin decision` };
+          return { teamId: row.team_id };
+        }
+        // Otherwise fill only ranks mathematically locked on points
         const clinched = clinchedTeamForRank(poolRows, rank, remainingPool);
         if (clinched) return { teamId: clinched };
         return { teamId: null, note: `pool "${pool || '(default)'}" not finished` };
