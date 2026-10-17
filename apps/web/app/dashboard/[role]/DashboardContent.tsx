@@ -1095,21 +1095,10 @@ function ParentDash() {
 }
 
 function ScorekeeperDash() {
+  // Scorekeepers use the event-PIN keypad; the dashboard layout redirects there.
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Assigned Games" value={8} sub="This weekend" />
-        <StatCard label="Completed" value={23} sub="This season" />
-        <StatCard label="Next Game" value="Sat 8AM" sub="Rink 1" />
-        <StatCard label="Avg Duration" value="52 min" />
-      </div>
-      <SectionTitle>My Assignments</SectionTitle>
-      <Table headers={['Date', 'Time', 'Rink', 'Matchup', 'Division']} rows={[
-        ['Sat Feb 15', '8:00 AM', 'Rink 1', 'CT Wolves vs NH Bears', 'Squirt A'],
-        ['Sat Feb 15', '10:30 AM', 'Rink 1', 'NJ Devils vs NY Rangers', 'Bantam AA'],
-        ['Sat Feb 15', '1:00 PM', 'Rink 2', 'MA Eagles vs RI Storm', 'Peewee A'],
-        ['Sun Feb 16', '8:00 AM', 'Rink 1', 'Semifinal 1', 'Squirt A'],
-      ]} />
+    <div className="text-center py-12">
+      <a href="/scoring" className="inline-block px-6 py-3 rounded-xl bg-[#003e79] text-white font-semibold">Go to Scorekeeping</a>
     </div>
   );
 }

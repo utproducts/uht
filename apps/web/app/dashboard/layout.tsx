@@ -126,7 +126,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [roleKey]);
 
-  if (blocked) {
+  // The scorekeeper dashboard only had placeholder data. Scorekeepers work from
+  // the event-PIN keypad at /scoring, so send any scorekeeper dashboard visit there.
+  const isScorekeeper = roleKey === 'scorekeeper';
+  useEffect(() => {
+    if (isScorekeeper) window.location.replace('/scoring');
+  }, [isScorekeeper]);
+
+  if (blocked || isScorekeeper) {
     return <div className="min-h-screen bg-[#fafafa] flex items-center justify-center"><div className="text-[#86868b]">Redirecting...</div></div>;
   }
 
