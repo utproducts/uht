@@ -1097,8 +1097,15 @@ function ParentDash() {
 function ScorekeeperDash() {
   // Scorekeepers use the event-PIN keypad; the dashboard layout redirects there.
   return (
-    <div className="text-center py-12">
-      <a href="/scoring" className="inline-block px-6 py-3 rounded-xl bg-[#003e79] text-white font-semibold">Go to Scorekeeping</a>
+    <div className="space-y-6">
+      <a href="/scoring" className="block bg-[#003e79] rounded-2xl p-6 text-white hover:bg-[#002d5a] transition">
+        <p className="text-lg font-bold">Open the Scoring Console →</p>
+        <p className="text-sm text-white/75 mt-1">Enter your event PIN to see today's games, run the clock-free scoresheet, and submit finals. Works on any phone, tablet, or laptop.</p>
+      </a>
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5">
+        <p className="text-sm font-bold text-[#1d1d1f] mb-1">How assignments work</p>
+        <p className="text-sm text-[#6e6e73]">Your event director gives you the scorekeeper PIN for the event. One PIN covers every rink at that event - pick your game from the list after you enter it. If you don't have a PIN, ask the tournament director at the rink.</p>
+      </div>
     </div>
   );
 }
@@ -1106,23 +1113,13 @@ function ScorekeeperDash() {
 function RefereeDash() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Assigned Games" value={6} sub="This weekend" />
-        <StatCard label="Completed" value={31} sub="This season" />
-        <StatCard label="Next Game" value="Sat 8AM" sub="Rink 1" />
-        <StatCard label="Earnings YTD" value="$2,480" />
-      </div>
-      <SectionTitle>My Schedule</SectionTitle>
-      <Table headers={['Date', 'Time', 'Rink', 'Matchup', 'Role']} rows={[
-        ['Sat Feb 15', '8:00 AM', 'Rink 1', 'CT Wolves vs NH Bears', 'Center'],
-        ['Sat Feb 15', '10:30 AM', 'Rink 2', 'NJ Devils vs NY Rangers', 'Linesman'],
-        ['Sat Feb 15', '3:30 PM', 'Rink 1', 'MA Eagles vs RI Storm', 'Center'],
-        ['Sun Feb 16', '9:00 AM', 'Rink 1', 'Semifinal 2', 'Center'],
-      ]} />
-      <SectionTitle>Availability</SectionTitle>
-      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4">
-        <p className="text-sm mb-2">Spring Showdown (Mar 21-23): <span className="text-green-600 font-medium">Available</span></p>
-        <p className="text-sm">Summer Slapshot (Jun 13-15): <span className="text-yellow-600 font-medium">Pending</span></p>
+      <a href="/scoring" className="block bg-[#003e79] rounded-2xl p-6 text-white hover:bg-[#002d5a] transition">
+        <p className="text-lg font-bold">Open the Scoring Console →</p>
+        <p className="text-sm text-white/75 mt-1">Enter the event PIN to review the scoresheet and record the officials' sign-off after each game.</p>
+      </a>
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5">
+        <p className="text-sm font-bold text-[#1d1d1f] mb-1">Game schedules</p>
+        <p className="text-sm text-[#6e6e73]">Your game assignments come from the tournament director. The public schedule for every event is on the event's page under Schedule.</p>
       </div>
     </div>
   );
