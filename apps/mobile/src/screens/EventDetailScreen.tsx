@@ -26,6 +26,7 @@ import { colors, fonts, spacing, radii } from '../constants/theme';
 import SignaturePad, { serializeStrokes, Stroke } from '../components/SignaturePad';
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
 import { getUser, User, authFetch } from '../services/auth';
+import { API_URL } from '../constants/api';
 import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
 
 // ==================
@@ -1029,6 +1030,24 @@ export default function EventDetailScreen({
               <Ionicons name="chevron-forward" size={16} color={colors.cyan} />
             </TouchableOpacity>
           </View>
+        ) : null}
+
+        {/* Tournament Rules PDF */}
+        {(event as any)?.rules_pdf_key ? (
+          <TouchableOpacity
+            style={styles.infoRow}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL(`${API_URL}/api/events/${event?.id}/rules.pdf`)}
+          >
+            <View style={styles.infoIconBox}>
+              <Ionicons name="document-text-outline" size={20} color={colors.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoRowLabel} maxFontSizeMultiplier={1.3}>Tournament Rules</Text>
+              <Text style={styles.infoRowSub} maxFontSizeMultiplier={1.3}>Tap to open the official event rules (PDF)</Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color={colors.cyan} />
+          </TouchableOpacity>
         ) : null}
 
         {/* Locker Room Assignments */}

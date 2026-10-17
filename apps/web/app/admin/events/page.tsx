@@ -5024,6 +5024,80 @@ function PushHistoryCard({ eventId }: { eventId: string }) {
 
 // Director event PIN: directors enter this in the app to unlock the director
 // toolkit scoped to this event only. Admin accounts never need a PIN.
+function EventRulesCard({ eventId }: { eventId: string }) {
+  const ROOT = 'https://uht.chad-157.workers.dev/api';
+  const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
+  const [hasPdf, setHasPdf] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    fetch(`${ROOT}/events/${eventId}`).then(r => r.json())
+      .then(j => setHasPdf(!!j?.data?.rules_pdf_key))
+      .catch(() => setHasPdf(false));
+  }, [eventId]);
+
+  const upload = (file: File) => {
+    setErr('');
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { setErr('Pick a PDF file'); return; }
+    if (file.size > 15 * 1024 * 1024) { setErr('PDF too large (15 MB max)'); return; }
+    setBusy(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const b64 = String(reader.result).split(',')[1] || '';
+        const res = await fetch(`${ROOT}/events/${eventId}/rules-pdf`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ data: b64 }) });
+        const j = await res.json();
+        if (j.success) setHasPdf(true); else setErr(j.error || 'Upload failed');
+      } catch { setErr('Upload failed - check your connection'); }
+      setBusy(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const remove = async () => {
+    if (!confirm('Remove the rules PDF from this event?')) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${ROOT}/events/${eventId}/rules-pdf`, { method: 'DELETE', headers: hdrs() });
+      const j = await res.json();
+      if (j.success) setHasPdf(false); else setErr(j.error || 'Could not remove');
+    } catch { setErr('Could not remove'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="min-w-[200px]">
+          <h3 className="font-bold text-[#1d1d1f] text-sm">Event Rules (PDF)</h3>
+          <p className="text-xs text-[#6e6e73] mt-0.5">
+            {hasPdf === null ? 'Checking...' : hasPdf
+              ? 'Rules are posted - coaches and families see them under Event Info in the app.'
+              : 'Upload the tournament rules so they show in the app under Event Info.'}
+          </p>
+          {err ? <p className="text-xs text-red-600 mt-1">{err}</p> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasPdf ? (
+            <a href={`${ROOT}/events/${eventId}/rules.pdf`} target="_blank" rel="noreferrer"
+              className="px-4 py-2 rounded-full border border-[#003e79] text-[#003e79] text-sm font-semibold hover:bg-[#f0f7ff] transition">View PDF</a>
+          ) : null}
+          <label className={`px-4 py-2 rounded-full bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+            {busy ? 'Uploading...' : hasPdf ? 'Replace PDF' : 'Upload PDF'}
+            <input type="file" accept="application/pdf,.pdf" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.currentTarget.value = ''; }} />
+          </label>
+          {hasPdf ? (
+            <button onClick={remove} disabled={busy}
+              className="px-3 py-2 rounded-full text-red-600 text-sm font-semibold hover:bg-red-50 transition disabled:opacity-50">Remove</button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DirectorPinCard({ eventId }: { eventId: string }) {
   const ROOT = 'https://uht.chad-157.workers.dev/api';
   const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
@@ -5831,6 +5905,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tab Content */}
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
+      {tab === 'overview' && <EventRulesCard eventId={eventId} />}
       {tab === 'overview' && <PushHistoryCard eventId={eventId} />}
       {tab === 'overview' && (
         <div className="space-y-6">

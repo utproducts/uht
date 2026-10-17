@@ -232,6 +232,57 @@ eventRoutes.get('/super-saver-status', async (c) => {
   return c.json({ success: true, data: status });
 });
 
+// ── Event rules PDF: admin upload, public download ──
+eventRoutes.post('/:eventId/rules-pdf', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const event = await db.prepare('SELECT id FROM events WHERE id = ?').bind(eventId).first();
+  if (!event) return c.json({ success: false, error: 'Event not found' }, 404);
+  const body = await c.req.json().catch(() => ({})) as any;
+  const data = String(body.data || '');
+  if (!data) return c.json({ success: false, error: 'No file data' }, 400);
+  let bytes: Uint8Array;
+  try {
+    const bin = atob(data);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } catch { return c.json({ success: false, error: 'Bad file data' }, 400); }
+  if (bytes.length > 15 * 1024 * 1024) return c.json({ success: false, error: 'PDF too large (15 MB max)' }, 413);
+  // %PDF magic bytes - only real PDFs get stored
+  if (!(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) {
+    return c.json({ success: false, error: 'That file is not a PDF' }, 400);
+  }
+  const key = `event-rules/${eventId}.pdf`;
+  await c.env.STORAGE.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' } });
+  await db.prepare("UPDATE events SET rules_pdf_key = ?, updated_at = datetime('now') WHERE id = ?").bind(key, eventId).run();
+  return c.json({ success: true, data: { key } });
+});
+
+eventRoutes.delete('/:eventId/rules-pdf', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const ev = await db.prepare('SELECT rules_pdf_key FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!ev) return c.json({ success: false, error: 'Event not found' }, 404);
+  if (ev.rules_pdf_key) { try { await c.env.STORAGE.delete(ev.rules_pdf_key); } catch {} }
+  await db.prepare("UPDATE events SET rules_pdf_key = NULL, updated_at = datetime('now') WHERE id = ?").bind(eventId).run();
+  return c.json({ success: true });
+});
+
+eventRoutes.get('/:eventId/rules.pdf', async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const ev = await db.prepare('SELECT rules_pdf_key, name FROM events WHERE id = ? OR slug = ?')
+    .bind(eventId, eventId).first<any>();
+  if (!ev?.rules_pdf_key) return c.json({ error: 'No rules posted for this event' }, 404);
+  const obj = await c.env.STORAGE.get(ev.rules_pdf_key);
+  if (!obj) return c.json({ error: 'Not found' }, 404);
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/pdf');
+  headers.set('Content-Disposition', `inline; filename="${String(ev.name || 'event').replace(/[^A-Za-z0-9 _-]/g, '')} Rules.pdf"`);
+  headers.set('Cache-Control', 'public, max-age=300');
+  return new Response(obj.body, { headers });
+});
+
 eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
   const slugOrId = c.req.param('slugOrId');
   const db = c.env.DB;
