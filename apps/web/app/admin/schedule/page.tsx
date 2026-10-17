@@ -329,9 +329,11 @@ function EditGameModal({
               className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
             >
               <option value="">No division</option>
-              {divisions.map(d => (
-                <option key={d.id} value={d.id}>{[d.age_group, d.division_level].filter(Boolean).join(' — ')}</option>
-              ))}
+              {divisions
+                .filter(d => allGames.some(g => g.event_division_id === d.id) || d.id === divisionId || d.id === game.event_division_id)
+                .map(d => (
+                  <option key={d.id} value={d.id}>{[d.age_group, d.division_level].filter(Boolean).join(' — ')}</option>
+                ))}
             </select>
           </div>
 
