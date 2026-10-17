@@ -1009,12 +1009,13 @@ function GameListView({ games, divisions, onClickGame, ageGroupRinks, venueRinks
 
   return (
     <div className="bg-white rounded-2xl border border-[#e8e8ed] overflow-x-auto">
-      <table className="w-full min-w-[760px] text-sm">
+      <table className="w-full min-w-[860px] text-sm">
         <thead>
           <tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-2 py-3 text-center w-8"></th>
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left">Game</th>
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left">Time</th>
+            <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left">Venue</th>
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left">Rink</th>
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left">Matchup</th>
             <th className="text-[#86868b] uppercase tracking-widest text-[10px] font-semibold px-4 py-3 text-left">Division</th>
@@ -1047,6 +1048,9 @@ function GameListView({ games, divisions, onClickGame, ageGroupRinks, venueRinks
                 </td>
                 <td className="px-4 py-3 text-[#1d1d1f] font-semibold cursor-pointer" onClick={() => onClickGame(game)}>#{game.game_number}</td>
                 <td className="px-4 py-3 text-[#3d3d3d] cursor-pointer" onClick={() => onClickGame(game)}>{fmtDatetime(game.start_time)}</td>
+                <td className="px-4 py-3 text-[#6e6e73] text-xs cursor-pointer max-w-[140px]" onClick={() => onClickGame(game)}>
+                  {(venueRinks?.find(r => r.id === game.rink_id)?.venue_name) || game.venue_name || '—'}
+                </td>
                 <td className="px-4 py-3">
                   {venueRinks && onSaveGame ? (
                     <select
