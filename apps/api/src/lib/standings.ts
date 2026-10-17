@@ -430,6 +430,38 @@ const PLACE_RE = /^\s*(\d+)\s*(?:(?:st|nd|rd|th)\s*(?:place)?|place)\s*(?:pool\s
 const WINNER_RE = /^\s*winner\s*(?:of\s*)?(?:game\s*)?#?\s*(\d+)\s*$/i;
 const LOSER_RE = /^\s*loser\s*(?:of\s*)?(?:game\s*)?#?\s*(\d+)\s*$/i;
 
+/*
+  EARLY SEED CLINCH: rank R in a pool is decided before the pool finishes
+  when one team T satisfies all of:
+  - T has no remaining pool games (its point total is final)
+  - exactly R-1 teams are guaranteed to finish strictly above T (their
+    CURRENT points already exceed T's - they can't lose points)
+  - every other team is guaranteed strictly below (even winning out,
+    max points < T's points)
+  Strict inequalities mean no one can ever TIE T, so the tiebreak ladder
+  (goal diff etc, which depends on unplayed games) can never touch T's rank.
+*/
+function clinchedTeamForRank(
+  rows: StandingRow[],
+  rank: number,
+  remaining: Map<string, number>
+): string | null {
+  for (const t of rows) {
+    if ((remaining.get(t.team_id) || 0) > 0) continue;
+    let above = 0;
+    let ok = true;
+    for (const o of rows) {
+      if (o.team_id === t.team_id) continue;
+      const oMax = o.points + 2 * (remaining.get(o.team_id) || 0);
+      if (o.points > t.points) above++;
+      else if (oMax < t.points) { /* locked below */ }
+      else { ok = false; break; }
+    }
+    if (ok && above === rank - 1) return t.team_id;
+  }
+  return null;
+}
+
 export async function resolveBracketGames(
   db: D1Database,
   eventId: string,
@@ -449,6 +481,15 @@ export async function resolveBracketGames(
   for (const g of games) { if (g.game_number != null) byNumber.set(g.game_number, g); }
 
   const { standings, poolComplete } = await computeStandings(db, eventId);
+
+  // Unplayed pool games per team - fuels the early-clinch check
+  const remainingPool = new Map<string, number>();
+  for (const g of games) {
+    if (g.game_type !== 'pool' || g.status === 'final') continue;
+    for (const tid of [g.home_team_id, g.away_team_id]) {
+      if (tid) remainingPool.set(tid, (remainingPool.get(tid) || 0) + 1);
+    }
+  }
 
   const resolveSlot = (g: BracketGame, placeholder: string | null): { teamId: string | null; note?: string } => {
     if (!placeholder) return { teamId: null };
@@ -470,7 +511,14 @@ export async function resolveBracketGames(
         return { teamId: null, note: 'placeholder names no pool and division has several' };
       }
       const key = `${g.event_division_id}|${pool}`;
-      if (!poolComplete.get(key)) return { teamId: null, note: `pool "${pool || '(default)'}" not finished` };
+      if (!poolComplete.get(key)) {
+        // Pool still running: fill the slot anyway if this rank is
+        // mathematically locked regardless of the remaining games
+        const poolRows = divRows.filter(r => (r.pool_name || '').trim().toLowerCase() === pool);
+        const clinched = clinchedTeamForRank(poolRows, rank, remainingPool);
+        if (clinched) return { teamId: clinched };
+        return { teamId: null, note: `pool "${pool || '(default)'}" not finished` };
+      }
       const row = divRows.find(r => (r.pool_name || '').trim().toLowerCase() === pool && r.rank === rank);
       if (!row) return { teamId: null, note: `no rank ${rank} in pool "${pool}"` };
       if (row.tiebreaker === 'unresolved') return { teamId: null, note: `rank ${rank} tie unresolved — needs admin decision` };
