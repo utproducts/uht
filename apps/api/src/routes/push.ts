@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
-import { sendExpoPushNotifications, logNotification, createUserNotifications, eventAudience, runLockerRoomSweep , groupAudience } from '../lib/push';
+import { sendExpoPushNotifications, logNotification, createUserNotifications, eventAudience, teamAudience, runLockerRoomSweep , groupAudience } from '../lib/push';
 
 export const pushRoutes = new Hono<{ Bindings: Env }>();
 
@@ -441,10 +441,13 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   // Get game with locker room info
   const game = await db.prepare(`
     SELECT g.*, e.name as event_name,
-      r.name as rink_name
+      r.name as rink_name,
+      ht.name as home_team_name, at2.name as away_team_name
     FROM games g
     LEFT JOIN events e ON e.id = g.event_id
-    LEFT JOIN rinks r ON r.id = g.rink_id
+    LEFT JOIN venue_rinks r ON r.id = g.rink_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
     WHERE g.id = ?
   `).bind(game_id).first() as any;
 
@@ -461,32 +464,25 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   if (game.home_team_id) teamIds.push(game.home_team_id);
   if (game.away_team_id) teamIds.push(game.away_team_id);
 
-  // Find followers/coaches/managers of teams registered for the event in the game's division
-  const result = await db.prepare(`
-    SELECT DISTINCT pt.token, pt.user_id
-    FROM push_tokens pt
-    WHERE pt.user_id IN (
-      SELECT uf.user_id FROM user_follows uf JOIN event_registrations er ON er.team_id = uf.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-      UNION SELECT tc.user_id FROM team_coaches tc JOIN event_registrations er ON er.team_id = tc.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-      UNION SELECT tm.user_id FROM team_managers tm JOIN event_registrations er ON er.team_id = tm.team_id WHERE er.event_id = ? AND er.event_division_id = ?
-      UNION SELECT tmem.user_id FROM team_members tmem JOIN event_registrations er ON er.team_id = tmem.team_id WHERE er.event_id = ? AND er.event_division_id = ? AND tmem.status = 'active'
-    )
-  `).bind(game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id, game.event_id, game.event_division_id).all();
-
-  const tokens = (result.results || []).map((r: any) => r.token as string);
-  const userIds = [...new Set((result.results || []).map((r: any) => r.user_id as string))];
+  // Audience = everyone attached to the two teams on the game (the old
+  // division-filtered registration join matched nobody for CSV schedules)
+  const { tokens, userIds } = await teamAudience(db, teamIds, game.event_id);
 
   if (tokens.length === 0) {
     return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for teams in this game' });
   }
 
-  const gameTime = game.start_time ? new Date(game.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  const hh = parseInt(String(game.start_time || '').slice(11, 13) || '0', 10);
+  const mm = String(game.start_time || '').slice(14, 16) || '00';
+  const gameTime = game.start_time ? `${hh % 12 === 0 ? 12 : hh % 12}:${mm} ${hh >= 12 ? 'PM' : 'AM'}` : '';
   const lockerInfo: string[] = [];
-  if (game.home_locker_room) lockerInfo.push(`Home: ${game.home_locker_room}`);
-  if (game.away_locker_room) lockerInfo.push(`Away: ${game.away_locker_room}`);
+  if (game.home_locker_room) lockerInfo.push(`${game.home_team_name || 'Home'}: ${game.home_locker_room}`);
+  if (game.away_locker_room) lockerInfo.push(`${game.away_team_name || 'Away'}: ${game.away_locker_room}`);
 
-  const title = `Locker Room Assignment - Game #${game.game_number}`;
-  const body = `${game.notes || 'Game'} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
+  const matchup = game.home_team_name && game.away_team_name
+    ? `${game.home_team_name} vs ${game.away_team_name}` : (game.notes || 'Game');
+  const title = 'Locker Rooms';
+  const body = `${matchup} at ${gameTime}${game.rink_name ? ` (${game.rink_name})` : ''}\n${lockerInfo.join(' | ')}`;
 
   const pushData = { type: 'locker_room', game_id, event_id: game.event_id };
   const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
@@ -503,6 +499,9 @@ pushRoutes.post('/send-locker-room', authMiddleware, requireRole('admin', 'direc
   });
 
   await createUserNotifications(db, userIds, title, body, 'locker_room', pushData);
+
+  // A manual send satisfies the auto-sweep too - no double push
+  await db.prepare("UPDATE games SET locker_room_notified = 1, updated_at = datetime('now') WHERE id = ?").bind(game_id).run();
 
   return c.json({ success: true, data: { sent, game_number: game.game_number } });
 });
