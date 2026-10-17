@@ -71,6 +71,35 @@ export default function ScoresheetScreen({ route, navigation }: any) {
     setFixSaving(false);
   };
 
+  // Starting goalie correction: tap a lineup row, confirm, server handles
+  // the lineup flag, goalie stats, and Three Stars recompute
+  const fixGoalie = (teamId: string, p: any) => {
+    if (!data?.share_url) return;
+    const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || `#${p.jersey_number}`;
+    Alert.alert(
+      'Change Starting Goalie',
+      `Make #${p.jersey_number} ${name} the starting goalie? Goalie stats move with the change, and the Three Stars are recomputed if the previous goalie held one.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Set as Starting Goalie',
+          onPress: async () => {
+            try {
+              const res = await authFetch(`/api/scoring/games/${gameId}/sheet/goalie`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, jerseyNumber: String(p.jersey_number || '') }),
+              });
+              const json = await res.json() as any;
+              if (json.success) { await load(); Alert.alert('Updated', 'Starting goalie corrected.'); }
+              else Alert.alert('Could not update', typeof json.error === 'string' ? json.error : 'Please try again.');
+            } catch { Alert.alert('Could not update', 'Check your connection and try again.'); }
+          },
+        },
+      ]
+    );
+  };
+
   const load = useCallback(async () => {
     if (!gameId) return;
     try {
@@ -325,7 +354,8 @@ export default function ScoresheetScreen({ route, navigation }: any) {
               ) : lineup.map((p: any) => {
                 const st = p.status || (p.is_scratched ? 'not_playing' : 'playing');
                 return (
-                  <View key={p.id} style={styles.tableRow}>
+                  <TouchableOpacity key={p.id} style={styles.tableRow} disabled={!data.share_url}
+                    activeOpacity={0.6} onPress={() => fixGoalie(team.id, p)}>
                     <Text style={[styles.td, { width: 34, fontWeight: '800', color: colors.navy }]}>{p.jersey_number}</Text>
                     <Text style={[styles.td, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>
                       {p.first_name} {p.last_name}{p.is_starting_goalie ? '  ★G' : ''}
@@ -334,9 +364,12 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                       st === 'playing' ? { color: '#059669' } : st === 'suspended' ? { color: '#dc2626' } : st === 'out' ? { color: '#d97706' } : { color: colors.textMuted }]}>
                       {st === 'playing' ? 'Playing' : st === 'suspended' ? 'Suspended' : st === 'out' ? 'Out' : 'Not Playing'}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
+              {data.share_url && lineup.length > 0 ? (
+                <Text style={styles.fixHint} maxFontSizeMultiplier={1.3}>Wrong starting goalie? Tap the right player to fix it.</Text>
+              ) : null}
             </View>
           );
         })}

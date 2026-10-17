@@ -1347,6 +1347,107 @@ scoringRoutes.post('/games/:gameId/sheet/correct', authMiddleware, zValidator('j
 });
 
 // ==========================================
+// Coach correction: fix the starting goalie after the fact. Flips the
+// lineup flag, re-points the starter's goalie stat line, and recomputes
+// Three Stars only when the old goalie held one. Audited + staff emailed.
+// ==========================================
+scoringRoutes.post('/games/:gameId/sheet/goalie', authMiddleware, zValidator('json', z.object({
+  teamId: z.string().min(1),
+  jerseyNumber: z.string().min(1).max(3).regex(/^[0-9]+$/),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { teamId, jerseyNumber } = c.req.valid('json');
+  const db = c.env.DB;
+  const user = c.get('user') as any;
+
+  const game = await db.prepare(`
+    SELECT g.id, g.game_number, g.event_id, g.home_team_id, g.away_team_id,
+      COALESCE(ht.schedule_name, ht.name, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, 'Away') as away_name,
+      e.name as event_name
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN events e ON e.id = g.event_id
+    WHERE g.id = ?
+  `).bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+  if (teamId !== game.home_team_id && teamId !== game.away_team_id) {
+    return c.json({ success: false, error: 'That team is not on this game' }, 400);
+  }
+
+  const roles: string[] = user?.roles || [];
+  let allowed = roles.includes('admin') || roles.includes('director');
+  if (!allowed) {
+    const row = await db.prepare(`
+      SELECT 1 as x FROM team_coaches WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM team_managers WHERE team_id = ?1 AND user_id = ?2
+    `).bind(teamId, user.id).first();
+    allowed = !!row;
+  }
+  if (!allowed) return c.json({ success: false, error: "Only that team's coaches and managers can change its goalie" }, 403);
+
+  const newRow = await db.prepare(`
+    SELECT gl.id, gl.jersey_number, gl.player_id, p.first_name, p.last_name
+    FROM game_lineups gl LEFT JOIN players p ON p.id = gl.player_id
+    WHERE gl.game_id = ? AND gl.team_id = ? AND gl.jersey_number = ?
+  `).bind(gameId, teamId, jerseyNumber).first<any>();
+  if (!newRow) return c.json({ success: false, error: `#${jerseyNumber} is not on this game's lineup` }, 404);
+
+  const oldRow = await db.prepare(`
+    SELECT gl.jersey_number, gl.player_id, p.first_name, p.last_name
+    FROM game_lineups gl LEFT JOIN players p ON p.id = gl.player_id
+    WHERE gl.game_id = ? AND gl.team_id = ? AND gl.is_starting_goalie = 1
+  `).bind(gameId, teamId).first<any>();
+  if (oldRow && String(oldRow.jersey_number) === String(jerseyNumber)) {
+    return c.json({ success: true, data: { unchanged: true } });
+  }
+
+  await db.prepare('UPDATE game_lineups SET is_starting_goalie = 0 WHERE game_id = ? AND team_id = ?').bind(gameId, teamId).run();
+  await db.prepare('UPDATE game_lineups SET is_starting_goalie = 1 WHERE id = ?').bind(newRow.id).run();
+
+  const newName = newRow.first_name ? `${newRow.first_name} ${newRow.last_name}` : `#${jerseyNumber}`;
+  // Re-point the starter's goalie stat line - saves/GA belong to whoever
+  // was actually in net, which is what the coach is asserting
+  await db.prepare(`
+    UPDATE goalie_game_stats SET jersey_number = ?, player_name = ?, player_id = ?
+    WHERE game_id = ? AND team_id = ? AND is_starter = 1
+  `).bind(jerseyNumber, newName, newRow.player_id || null, gameId, teamId).run().catch(() => {});
+
+  // Three Stars: recompute only when the old goalie held a star
+  let starsRedone = false;
+  if (oldRow) {
+    const starHit = await db.prepare('SELECT 1 as x FROM game_three_stars WHERE game_id = ? AND team_id = ? AND jersey_number = ?')
+      .bind(gameId, teamId, String(oldRow.jersey_number)).first();
+    if (starHit) {
+      await db.prepare('DELETE FROM game_three_stars WHERE game_id = ?').bind(gameId).run();
+      const { autoAssignThreeStars } = await import('../lib/three-stars');
+      await autoAssignThreeStars(db, gameId).catch(() => {});
+      starsRedone = true;
+    }
+  }
+
+  await db.prepare("CREATE TABLE IF NOT EXISTS sheet_corrections (id TEXT PRIMARY KEY, game_id TEXT NOT NULL, event_id TEXT NOT NULL, field TEXT NOT NULL, old_value TEXT, new_value TEXT, requested_by TEXT, requested_email TEXT, created_at TEXT DEFAULT (datetime('now')))").run();
+  await db.prepare('INSERT INTO sheet_corrections (id, game_id, event_id, field, old_value, new_value, requested_by, requested_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID().replace(/-/g, ''), gameId, game.event_id, 'starting_goalie', String(oldRow?.jersey_number || ''), jerseyNumber, user.id, user.email || null).run().catch(() => {});
+
+  const teamName = teamId === game.home_team_id ? game.home_name : game.away_name;
+  const body = `${game.event_name} - Game #${game.game_number} (${game.home_name} vs ${game.away_name})\n${teamName}: starting goalie changed from ${oldRow ? '#' + oldRow.jersey_number : 'none'} to #${jerseyNumber} (${newName})${starsRedone ? '\nThree Stars were recomputed because the previous goalie held a star.' : ''}\nRequested by ${user.email || user.id} and auto-applied.`;
+  keepAlive(c, fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+      to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+      subject: `[Scoresheet correction] Game #${game.game_number} - ${teamName} starting goalie`,
+      html: `<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">${body}</pre>`,
+    }),
+  }).catch(() => {}));
+
+  return c.json({ success: true, data: { old: oldRow?.jersey_number || null, new: jerseyNumber, starsRedone } });
+});
+
+// ==========================================
 // SCOREKEEPER: Auto-load roster for a game's teams
 // ==========================================
 scoringRoutes.get('/games/:gameId/roster', async (c) => {
