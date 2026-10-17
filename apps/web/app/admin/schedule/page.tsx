@@ -2829,6 +2829,7 @@ function BracketDayView({
   dayHeaders,
   onClickGame,
   onSaveGame,
+  registrations,
 }: {
   games: Game[];
   divisions: Division[];
@@ -2836,7 +2837,22 @@ function BracketDayView({
   dayHeaders: { date: string; label: string }[];
   onClickGame: (game: Game) => void;
   onSaveGame?: (gameId: string, updates: any) => Promise<void>;
+  registrations?: Registration[];
 }) {
+  const normAge = (x: string | null | undefined) => String(x || '').toLowerCase().replace(/\s+/g, '');
+  const teamsForDivision = (divId: string) => {
+    const regs = registrations || [];
+    let t = regs.filter(r => r.event_division_id === divId && r.status === 'approved' && r.team_id);
+    if (t.length === 0) {
+      const d = divisions.find(x => x.id === divId);
+      if (d) t = regs.filter(r => {
+        if (r.status !== 'approved' || !r.team_id) return false;
+        const rd = divisions.find(x => x.id === r.event_division_id);
+        return !!(rd && normAge(rd.age_group) === normAge(d.age_group));
+      });
+    }
+    return t;
+  };
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const toggleLock = async (e: React.MouseEvent, game: Game) => {
     e.stopPropagation();
@@ -2922,7 +2938,27 @@ function BracketDayView({
                     </div>
 
                     <div className="p-4 space-y-2">
-                      {/* Matchup */}
+                      {/* Matchup: live selects to place teams, plain text once final */}
+                      {!isFinal && onSaveGame ? (
+                        <div className="space-y-1.5" onClick={e => e.stopPropagation()}>
+                          {([['home', game.home_team_id, (game as any).home_placeholder], ['away', game.away_team_id, (game as any).away_placeholder]] as const).map(([side, teamId, ph]) => (
+                            <select
+                              key={side}
+                              value={teamId || ''}
+                              onChange={async e => { await onSaveGame(game.id, { [`${side}_team_id`]: e.target.value || null }); }}
+                              className="w-full border border-[#e8e8ed] rounded-lg px-2 py-1.5 text-sm bg-white cursor-pointer"
+                            >
+                              <option value="">{ph || 'TBD'}</option>
+                              {teamId && !teamsForDivision(game.event_division_id).some(r => r.team_id === teamId) ? (
+                                <option value={teamId}>{side === 'home' ? game.home_team_name : game.away_team_name}</option>
+                              ) : null}
+                              {teamsForDivision(game.event_division_id).map(r => (
+                                <option key={r.team_id} value={r.team_id!}>{r.team_name}</option>
+                              ))}
+                            </select>
+                          ))}
+                        </div>
+                      ) : (
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
                           <div className={`text-sm font-semibold ${isFinal && (game.home_score ?? 0) > (game.away_score ?? 0) ? 'text-emerald-700' : 'text-[#1d1d1f]'}`}>
@@ -2936,6 +2972,7 @@ function BracketDayView({
                           </div>
                         </div>
                       </div>
+                      )}
 
                       {/* Time & Location */}
                       <div className="flex items-center gap-3 text-[11px] text-[#86868b]">
@@ -2977,6 +3014,23 @@ export default function AdminSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null); // null = show all
+
+  // Deep link: /admin/schedule?event=<id>&view=bracket opens straight into
+  // that event (linked from the event's own admin page)
+  useEffect(() => {
+    if (selectedEvent || events.length === 0) return;
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const evId = p.get('event');
+      if (!evId) return;
+      const ev = events.find(e => e.id === evId || (e as any).slug === evId);
+      if (ev) {
+        setSelectedEvent(ev);
+        if (p.get('view') === 'bracket') setView('bracket');
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, selectedEvent]);
 
   // Modals
   const [editingGame, setEditingGame] = useState<Game | null>(null);
@@ -3832,7 +3886,7 @@ export default function AdminSchedulePage() {
                   )}
                   {view === 'venue' && <VenueScheduleView games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} onClickGame={setEditingGame} onSaveGame={handleSaveGame} onSwapGames={handleSwapGames} />}
                   {view === 'staff' && <StaffAssignmentsView eventId={selectedEvent.id} games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} staffList={staffList} onClickGame={setEditingGame} onRefresh={reloadGames} />}
-                  {view === 'bracket' && <BracketDayView games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} onClickGame={setEditingGame} onSaveGame={handleSaveGame} />}
+                  {view === 'bracket' && <BracketDayView games={filteredGames} divisions={divisions} venueRinks={venueRinks} dayHeaders={dayHeaders} onClickGame={setEditingGame} onSaveGame={handleSaveGame} registrations={registrations} />}
                 </>
               )}
             </div>

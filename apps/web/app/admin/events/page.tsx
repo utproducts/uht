@@ -6477,6 +6477,14 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'schedules' && (
         <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] p-4 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <p className="text-sm font-bold text-[#1d1d1f]">Schedule Builder</p>
+              <p className="text-xs text-[#6e6e73]">Build, edit, and swap this event's games, or seed and lock the brackets.</p>
+            </div>
+            <a href={`/admin/schedule?event=${eventId}`} className="px-4 py-2 rounded-full bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition">Open Schedule Builder</a>
+            <a href={`/admin/schedule?event=${eventId}&view=bracket`} className="px-4 py-2 rounded-full border border-[#003e79] text-[#003e79] text-sm font-semibold hover:bg-[#f0f7ff] transition">Bracket Day — Seeding &amp; Locks</a>
+          </div>
           <ScheduleVisibilityCard eventId={eventId} />
           <ScheduleChecksCard eventId={eventId} />
           <ReplaceTeamCard eventId={eventId} registeredTeams={registrations
