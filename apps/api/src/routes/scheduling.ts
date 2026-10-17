@@ -803,6 +803,7 @@ schedulingRoutes.delete('/events/:eventId/games', authMiddleware, requireRole('a
 const updateGameSchema = z.object({
   home_team_id: z.string().nullable().optional(),
   away_team_id: z.string().nullable().optional(),
+  event_division_id: z.string().nullable().optional(),
   rink_id: z.string().nullable().optional(),
   venue_id: z.string().nullable().optional(),
   start_time: z.string().nullable().optional(),
@@ -836,6 +837,7 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
 
   if (data.home_team_id !== undefined) { updates.push('home_team_id = ?'); values.push(data.home_team_id); }
   if (data.away_team_id !== undefined) { updates.push('away_team_id = ?'); values.push(data.away_team_id); }
+  if (data.event_division_id !== undefined) { updates.push('event_division_id = ?'); values.push(data.event_division_id); }
   if (data.rink_id !== undefined) {
     updates.push('rink_id = ?'); values.push(data.rink_id);
     // Keep games.venue_id consistent with the rink's venue (several feeds

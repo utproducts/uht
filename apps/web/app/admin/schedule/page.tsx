@@ -211,8 +211,19 @@ function EditGameModal({
   const scorekeepers = staffList?.filter(s => s.roles.includes('scorekeeper')) || [];
   const referees = staffList?.filter(s => s.roles.includes('referee')) || [];
 
-  const div = divisions.find(d => d.id === game.event_division_id);
-  const divTeams = allTeams.filter(r => r.event_division_id === game.event_division_id && r.status === 'approved');
+  const [divisionId, setDivisionId] = useState(game.event_division_id || '');
+  const div = divisions.find(d => d.id === divisionId) || divisions.find(d => d.id === game.event_division_id);
+  // Teams for the chosen division. Registration rows don't always share ids
+  // with schedule divisions, so fall back to matching by age group.
+  const norm = (x: string | null | undefined) => String(x || '').toLowerCase().replace(/\s+/g, '');
+  let divTeams = allTeams.filter(r => r.event_division_id === divisionId && r.status === 'approved');
+  if (divTeams.length === 0 && div) {
+    divTeams = allTeams.filter(r => {
+      if (r.status !== 'approved') return false;
+      const rd = divisions.find(d => d.id === r.event_division_id);
+      return rd ? norm(rd.age_group) === norm(div.age_group) : false;
+    });
+  }
 
   // Other games in same event for swap targets
   const swapCandidates = allGames.filter(g => g.id !== game.id && g.event_id === game.event_id);
@@ -226,6 +237,7 @@ function EditGameModal({
     await onSave(game.id, {
       home_team_id: homeTeamId || null,
       away_team_id: awayTeamId || null,
+      event_division_id: divisionId || null,
       rink_id: rinkId || null,
       venue_id: venueId || null,
       start_time: startDate && startTime ? `${startDate}T${startTime}:00` : null,
@@ -283,6 +295,36 @@ function EditGameModal({
             >
               {Object.entries(gameTypeLabels).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Division */}
+          <div>
+            <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Division</label>
+            <select
+              value={divisionId}
+              onChange={e => {
+                const newDiv = e.target.value;
+                setDivisionId(newDiv);
+                // Teams must belong to the game's division - clear picks that don't
+                const d2 = divisions.find(d => d.id === newDiv);
+                const inDiv = (tid: string) => {
+                  if (!tid) return true;
+                  const reg = allTeams.find(r => r.team_id === tid);
+                  if (!reg) return false;
+                  if (reg.event_division_id === newDiv) return true;
+                  const rd = divisions.find(d => d.id === reg.event_division_id);
+                  return !!(rd && d2 && String(rd.age_group || '').toLowerCase().replace(/\s+/g, '') === String(d2.age_group || '').toLowerCase().replace(/\s+/g, ''));
+                };
+                if (!inDiv(homeTeamId)) setHomeTeamId('');
+                if (!inDiv(awayTeamId)) setAwayTeamId('');
+              }}
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+            >
+              <option value="">No division</option>
+              {divisions.map(d => (
+                <option key={d.id} value={d.id}>{[d.age_group, d.division_level].filter(Boolean).join(' — ')}</option>
               ))}
             </select>
           </div>
