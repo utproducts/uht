@@ -212,6 +212,12 @@ function EditGameModal({
   const referees = staffList?.filter(s => s.roles.includes('referee')) || [];
 
   const [divisionId, setDivisionId] = useState(game.event_division_id || '');
+  // Lock the page behind the modal (iOS let it pan side to side)
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
   const div = divisions.find(d => d.id === divisionId) || divisions.find(d => d.id === game.event_division_id);
   // Teams for the chosen division. Registration rows don't always share ids
   // with schedule divisions, so fall back to matching by age group.
@@ -291,7 +297,7 @@ function EditGameModal({
             <select
               value={gameType}
               onChange={e => setGameType(e.target.value)}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
             >
               {Object.entries(gameTypeLabels).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
@@ -320,7 +326,7 @@ function EditGameModal({
                 if (!inDiv(homeTeamId)) setHomeTeamId('');
                 if (!inDiv(awayTeamId)) setAwayTeamId('');
               }}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
             >
               <option value="">No division</option>
               {divisions.map(d => (
@@ -336,9 +342,12 @@ function EditGameModal({
               <select
                 value={homeTeamId}
                 onChange={e => setHomeTeamId(e.target.value)}
-                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
               >
                 <option value="">TBD</option>
+                {homeTeamId && !divTeams.some(t => t.team_id === homeTeamId) ? (
+                  <option value={homeTeamId}>{game.home_team_name || 'Current team'}</option>
+                ) : null}
                 {divTeams.map(t => (
                   <option key={t.team_id} value={t.team_id}>{t.team_name}</option>
                 ))}
@@ -349,9 +358,12 @@ function EditGameModal({
               <select
                 value={awayTeamId}
                 onChange={e => setAwayTeamId(e.target.value)}
-                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
               >
                 <option value="">TBD</option>
+                {awayTeamId && !divTeams.some(t => t.team_id === awayTeamId) ? (
+                  <option value={awayTeamId}>{game.away_team_name || 'Current team'}</option>
+                ) : null}
                 {divTeams.map(t => (
                   <option key={t.team_id} value={t.team_id}>{t.team_name}</option>
                 ))}
@@ -360,14 +372,14 @@ function EditGameModal({
           </div>
 
           {/* Date & Time */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
               />
             </div>
             <div>
@@ -376,7 +388,7 @@ function EditGameModal({
                 type="time"
                 value={startTime}
                 onChange={e => setStartTime(e.target.value)}
-                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
               />
             </div>
           </div>
@@ -390,7 +402,7 @@ function EditGameModal({
                 setVenueId(v);
                 if (v && rinks.find(r => r.id === rinkId)?.venue_id !== v) setRinkId('');
               }}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
               <option value="">Any venue</option>
               {venues.map(([vid, vname]) => <option key={vid} value={vid}>{vname}</option>)}
             </select>
@@ -404,7 +416,7 @@ function EditGameModal({
                 const vr = rinks.find(r => r.id === e.target.value);
                 if (vr) setVenueId(vr.venue_id);
               }}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
             >
               <option value="">Unassigned</option>
               {rinkOptionGroups(venueRinkChoices).map(([venue, vRinks]) => (
@@ -423,7 +435,7 @@ function EditGameModal({
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="e.g., 1G vs 2B — Semifinal"
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
             />
           </div>
 
@@ -438,7 +450,7 @@ function EditGameModal({
                   value={homeLockerRoom}
                   onChange={e => setHomeLockerRoom(e.target.value)}
                   placeholder="e.g., Room A"
-                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
                 />
               </div>
               <div>
@@ -448,7 +460,7 @@ function EditGameModal({
                   value={awayLockerRoom}
                   onChange={e => setAwayLockerRoom(e.target.value)}
                   placeholder="e.g., Room B"
-                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                  className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
                 />
               </div>
             </div>
@@ -460,7 +472,7 @@ function EditGameModal({
             <select
               value={gameStatus}
               onChange={e => setGameStatus(e.target.value)}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm mb-3"
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0 mb-3"
             >
               <option value="scheduled">Scheduled</option>
               <option value="warmup">Warm Up</option>
@@ -480,7 +492,7 @@ function EditGameModal({
                     value={delayMinutes}
                     onChange={e => setDelayMinutes(e.target.value)}
                     placeholder="e.g., 30"
-                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
                   />
                 </div>
                 <div>
@@ -490,7 +502,7 @@ function EditGameModal({
                     value={delayNote}
                     onChange={e => setDelayNote(e.target.value)}
                     placeholder="e.g., Ice maintenance"
-                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm"
+                    className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0"
                   />
                 </div>
               </div>
@@ -504,28 +516,28 @@ function EditGameModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#86868b] font-semibold mb-1">Director</label>
-                  <select value={directorId} onChange={e => setDirectorId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+                  <select value={directorId} onChange={e => setDirectorId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
                     <option value="">None</option>
                     {directors.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs text-[#86868b] font-semibold mb-1">Scorekeeper</label>
-                  <select value={scorekeeperId} onChange={e => setScorekeeperId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+                  <select value={scorekeeperId} onChange={e => setScorekeeperId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
                     <option value="">None</option>
                     {scorekeepers.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs text-[#86868b] font-semibold mb-1">Referee 1</label>
-                  <select value={ref1Id} onChange={e => setRef1Id(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+                  <select value={ref1Id} onChange={e => setRef1Id(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
                     <option value="">None</option>
                     {referees.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs text-[#86868b] font-semibold mb-1">Referee 2</label>
-                  <select value={ref2Id} onChange={e => setRef2Id(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+                  <select value={ref2Id} onChange={e => setRef2Id(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
                     <option value="">None</option>
                     {referees.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                   </select>
@@ -548,7 +560,7 @@ function EditGameModal({
               <select
                 value={swapTargetId}
                 onChange={e => setSwapTargetId(e.target.value)}
-                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm mb-2"
+                className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0 mb-2"
               >
                 <option value="">Select a game...</option>
                 {swapCandidates.map(g => (
@@ -568,7 +580,7 @@ function EditGameModal({
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[#e8e8ed]">
+          <div className="flex items-center justify-between flex-wrap gap-2 py-3 border-t border-[#e8e8ed] sticky bottom-0 bg-white -mb-4 sm:-mb-6">
             <button
               onClick={handleDelete}
               className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-full text-sm font-semibold transition"
@@ -657,40 +669,40 @@ function AddGameModal({
         <div className="p-6 space-y-4">
           <div>
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Division</label>
-            <select value={divisionId} onChange={e => setDivisionId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+            <select value={divisionId} onChange={e => setDivisionId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
               {divisions.map(d => <option key={d.id} value={d.id}>{d.age_group} — {d.division_level}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Game Type</label>
-            <select value={gameType} onChange={e => setGameType(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+            <select value={gameType} onChange={e => setGameType(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
               {Object.entries(gameTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Home Team</label>
-              <select value={homeTeamId} onChange={e => setHomeTeamId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              <select value={homeTeamId} onChange={e => setHomeTeamId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
                 <option value="">TBD</option>
                 {divTeams.map(t => <option key={t.team_id} value={t.team_id}>{t.team_name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Away Team</label>
-              <select value={awayTeamId} onChange={e => setAwayTeamId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              <select value={awayTeamId} onChange={e => setAwayTeamId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
                 <option value="">TBD</option>
                 {divTeams.map(t => <option key={t.team_id} value={t.team_id}>{t.team_name}</option>)}
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm" />
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0" />
             </div>
             <div>
               <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Start Time</label>
-              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm" />
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0" />
             </div>
           </div>
           <div>
@@ -702,7 +714,7 @@ function AddGameModal({
                 // Rink must belong to the chosen venue
                 if (v && rinks.find(r => r.id === rinkId)?.venue_id !== v) setRinkId('');
               }}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
               <option value="">Any venue</option>
               {venues.map(([vid, vname]) => <option key={vid} value={vid}>{vname}</option>)}
             </select>
@@ -714,7 +726,7 @@ function AddGameModal({
                 const vr = rinks.find(r => r.id === e.target.value);
                 if (vr) setVenueId(vr.venue_id);
               }}
-              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
+              className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0">
               <option value="">Unassigned</option>
               {rinkOptionGroups(venueRinkChoices).map(([venue, vRinks]) => (
                 <optgroup key={venue} label={venue}>
@@ -725,7 +737,7 @@ function AddGameModal({
           </div>
           <div>
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Notes</label>
-            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm" />
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-base sm:text-sm min-w-0" />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-[#e8e8ed]">
             <button onClick={onClose} className="px-4 py-2 border border-[#e8e8ed] text-[#3d3d3d] rounded-full text-sm font-semibold hover:bg-[#fafafa] transition">Cancel</button>
