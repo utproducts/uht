@@ -348,8 +348,8 @@ export default function ScoresheetScreen({ route, navigation }: any) {
             <View style={styles.card}>
               {stars.map((s: any) => (
                 <View key={s.star_number} style={styles.tableRow}>
-                  <Text style={[styles.td, { width: 40 }]}>{'⭐'.repeat(s.star_number)}</Text>
-                  <Text style={[styles.td, { flex: 1, textAlign: 'left' }]}>
+                  <Text style={[styles.td, { minWidth: 52, flexShrink: 0 }]} numberOfLines={1} maxFontSizeMultiplier={1}>{'★'.repeat(Math.max(1, 4 - (s.star_number || 3)))}</Text>
+                  <Text style={[styles.td, { flex: 1, textAlign: 'left' }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                     #{s.jersey_number || '?'} {s.player_name || ''}
                   </Text>
                 </View>
