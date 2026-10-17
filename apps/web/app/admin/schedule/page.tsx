@@ -97,6 +97,18 @@ interface VenueRink {
   name: string;
   surface_size: string | null;
   capacity: number | null;
+  venue_name?: string | null;
+}
+
+// Venue-first rink options: rinks grouped under their venue name
+function rinkOptionGroups(rinks: VenueRink[]) {
+  const byVenue = new Map<string, VenueRink[]>();
+  for (const r of rinks) {
+    const key = r.venue_name || 'Venue';
+    if (!byVenue.has(key)) byVenue.set(key, []);
+    byVenue.get(key)!.push(r);
+  }
+  return Array.from(byVenue.entries());
 }
 
 // Helpers
@@ -615,7 +627,11 @@ function AddGameModal({
             <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Rink</label>
             <select value={rinkId} onChange={e => setRinkId(e.target.value)} className="w-full border border-[#e8e8ed] rounded-xl p-2.5 text-[#1d1d1f] focus:ring-2 focus:ring-[#003e79]/20 outline-none text-sm">
               <option value="">Unassigned</option>
-              {rinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {rinkOptionGroups(rinks).map(([venue, vRinks]) => (
+                <optgroup key={venue} label={venue}>
+                  {vRinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div>
@@ -1043,8 +1059,10 @@ function GameListView({ games, divisions, onClickGame, ageGroupRinks, venueRinks
                       className="px-2 py-1 border border-[#e8e8ed] rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#003e79]/20 bg-white cursor-pointer min-w-[100px]"
                     >
                       <option value="">No rink</option>
-                      {venueRinks.map(r => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
+                      {rinkOptionGroups(venueRinks).map(([venue, vRinks]) => (
+                        <optgroup key={venue} label={venue}>
+                          {vRinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </optgroup>
                       ))}
                     </select>
                   ) : (
@@ -2924,7 +2942,7 @@ export default function AdminSchedulePage() {
       authFetch(`${API_BASE}/events/${selectedEvent.slug}`).then(r => r.json()),
       authFetch(`${API_BASE}/registrations/event/${selectedEvent.id}`).then(r => r.json()),
       authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/games`).then(r => r.json()),
-      selectedEvent.venue_id ? authFetch(`${API_BASE}/venues/${selectedEvent.venue_id}/rinks`).then(r => r.json()) : Promise.resolve({ data: [] }),
+      authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/rinks`).then(r => r.json()).catch(() => ({ data: [] })),
       authFetch(`${API_BASE}/scheduling/events/${selectedEvent.id}/rules`).then(r => r.json()),
       authFetch(`${API_BASE}/scheduling/staff`).then(r => r.json()).catch(() => ({ data: [] })),
     ]).then(([eventJson, regJson, gameJson, rinkJson, rulesJson, staffJson]) => {
@@ -3197,11 +3215,9 @@ export default function AdminSchedulePage() {
     );
   }
 
-  // Event picker computed
-  const seasons = Array.from(new Set(events.map(e => e.season || 'Unknown'))).sort().reverse();
-  const currentSeason = activeSeason || seasons[0] || '';
+  // Event picker computed - season pills removed (10/17): purely time-based
   const today = new Date().toISOString().split('T')[0];
-  const seasonEvents = events.filter(e => (e.season || 'Unknown') === currentSeason);
+  const seasonEvents = events;
   const upcomingEvents = seasonEvents.filter(e => e.start_date > today).sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
   const currentEvents = seasonEvents.filter(e => e.start_date <= today && e.end_date >= today).sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
   const pastEvents = seasonEvents.filter(e => e.end_date < today).sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
@@ -3706,14 +3722,6 @@ export default function AdminSchedulePage() {
       <div className="max-w-6xl mx-auto px-6 pt-8 pb-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-extrabold text-[#1d1d1f]">Schedule Builder</h1>
-          <div className="flex gap-1 bg-[#f5f5f7] rounded-xl p-1">
-            {seasons.map(s => (
-              <button key={s} onClick={() => { setActiveSeason(s); setEventTimeFilter('upcoming'); setEventPage(0); }}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${currentSeason === s ? 'bg-white text-[#1d1d1f] shadow-sm' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
-                {s}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Search + Time filter row */}
@@ -3804,7 +3812,7 @@ export default function AdminSchedulePage() {
           </>
         ) : (
           <div className="text-center py-16 text-sm text-[#86868b]">
-            {eventSearch ? `No events matching "${eventSearch}"` : `No ${eventTimeFilter} events in ${currentSeason}`}
+            {eventSearch ? `No events matching "${eventSearch}"` : `No ${eventTimeFilter} events`}
           </div>
         )}
       </div>

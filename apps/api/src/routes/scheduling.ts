@@ -592,6 +592,26 @@ schedulingRoutes.post('/events/:eventId/generate', authMiddleware, requireRole('
 // ==========================================
 // GET SCHEDULE FOR AN EVENT
 // ==========================================
+// All rinks an event can use, across every linked venue (event_venues +
+// the primary venue + any venue its games already reference), with venue
+// names so pickers can group venue-first
+schedulingRoutes.get('/events/:eventId/rinks', authMiddleware, async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const rows = (await db.prepare(`
+    SELECT r.id, r.venue_id, r.name, r.surface_size, r.capacity, v.name as venue_name
+    FROM venue_rinks r
+    JOIN venues v ON v.id = r.venue_id
+    WHERE r.venue_id IN (
+      SELECT venue_id FROM event_venues WHERE event_id = ?1
+      UNION SELECT venue_id FROM events WHERE id = ?1 AND venue_id IS NOT NULL
+      UNION SELECT r2.venue_id FROM games g JOIN venue_rinks r2 ON r2.id = g.rink_id WHERE g.event_id = ?1
+    )
+    ORDER BY v.name, r.name
+  `).bind(eventId).all()).results || [];
+  return c.json({ success: true, data: rows });
+});
+
 schedulingRoutes.get('/events/:eventId/games', authMiddleware, async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;
