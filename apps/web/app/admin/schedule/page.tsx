@@ -2893,7 +2893,16 @@ export default function AdminSchedulePage() {
       if (evJson.success && Array.isArray(evJson.data)) {
         setEvents(evJson.data);
         const seasons = Array.from(new Set(evJson.data.map((e: Event) => e.season || 'Unknown'))).sort().reverse();
-        if (seasons.length > 0 && !activeSeason) setActiveSeason(seasons[0] as string);
+        if (seasons.length > 0 && !activeSeason) {
+          // Land on the season that's actually happening: the one with an
+          // event running today, else the latest season already underway
+          const today = new Date().toISOString().slice(0, 10);
+          const live = evJson.data.find((e: Event) => e.start_date?.slice(0, 10) <= today && (e.end_date || e.start_date)?.slice(0, 10) >= today);
+          const started = [...evJson.data].filter((e: Event) => e.start_date?.slice(0, 10) <= today)
+            .sort((a: Event, b: Event) => (b.start_date || '').localeCompare(a.start_date || ''))[0];
+          setActiveSeason((live?.season || started?.season || seasons[0]) as string);
+          if (live) setEventTimeFilter('current');
+        }
       }
       if (sumJson.success && sumJson.data) setEventSummary(sumJson.data);
       setLoading(false);
