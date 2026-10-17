@@ -147,7 +147,7 @@ scoringRoutes.post('/scorekeeper/auth', zValidator('json', z.object({ pin: z.str
       LEFT JOIN venues v ON v.id = g.venue_id
       LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
       WHERE g.event_id = ?
-      AND g.status IN ('scheduled', 'warmup', 'in_progress', 'intermission')
+      AND g.status IN ('scheduled', 'warmup', 'in_progress', 'intermission', 'final')
       ORDER BY g.start_time ASC, g.game_number ASC
     `).bind(pinRecord.event_id).all();
 
