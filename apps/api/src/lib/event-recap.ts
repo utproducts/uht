@@ -22,6 +22,13 @@ const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 // Kid-safe display name: "Benjamin Brewster" -> "Benjamin B.", with
 // title-casing for ALL-CAPS imports ("ACE MADIGAN" -> "Ace M.")
+// "West Dundee Leafs Mite (8U) CUHL D2 - Frenier" -> "West Dundee Leafs"
+function shortTeamName(name: string | null | undefined): string {
+  const raw = String(name || '');
+  const cut = raw.split(/\s+(?:Mite|Squirt|Pee\s?Wee|Peewee|Bantam|Midget|Girls)\b|\s*\(\d+U\)/i)[0];
+  return (cut || raw).replace(/[\s-]+$/, '').trim() || raw;
+}
+
 function kidName(name: string | null | undefined): string {
   const raw = String(name || '').trim();
   if (!raw || raw.startsWith('#')) return raw;
@@ -167,12 +174,22 @@ export function buildRecapEmailHtml(data: RecapData): string {
     <tr>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#b8860b;font-weight:bold;white-space:nowrap;">${'&#9733;'.repeat(Math.max(1, st.first > 0 ? 3 : st.second > 0 ? 2 : 1))}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;font-weight:700;color:#1d2b3d;">${esc(st.player_name)} <span style="color:#8295ab;font-weight:600;">#${esc(st.jersey_number)}</span></td>
-      <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#5b6b80;">${esc(st.team_name)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#5b6b80;">${esc(shortTeamName(st.team_name))}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#5b6b80;white-space:nowrap;">${st.total} star${st.total > 1 ? 's' : ''}</td>
     </tr>`).join('');
-  const scorerItems = data.scorers.slice(0, 6).map(sc =>
-    `<span style="display:inline-block;background:#f0f7ff;border:1px solid #d5e5f5;border-radius:14px;padding:3px 10px;margin:3px;font-size:12px;color:#17304d;"><b>${esc(sc.player_name)}</b> (${esc(sc.team_name)})${sc.goals > 1 ? ` &times;${sc.goals}` : ''}</span>`
-  ).join('');
+  const scorerCells = data.scorers.slice(0, 6).map(sc => `
+    <td style="width:50%;padding:4px;vertical-align:top;">
+      <div style="background:#f0f7ff;border:1px solid #d5e5f5;border-radius:12px;padding:8px 12px;">
+        <span style="font-size:13px;font-weight:800;color:#17304d;">${esc(sc.player_name)}</span>
+        ${sc.goals > 1 ? `<span style="background:#003e79;color:#fff;font-size:10px;font-weight:900;border-radius:999px;padding:1px 7px;margin-left:6px;">&times;${sc.goals}</span>` : ''}
+        <div style="font-size:11px;color:#5b6b80;margin-top:2px;">${esc(shortTeamName(sc.team_name))}</div>
+      </div>
+    </td>`);
+  const scorerRowsHtml: string[] = [];
+  for (let i = 0; i < scorerCells.length; i += 2) {
+    scorerRowsHtml.push(`<tr>${scorerCells[i]}${scorerCells[i + 1] || '<td style="width:50%;"></td>'}</tr>`);
+  }
+  const scorerItems = `<table role="presentation" style="width:100%;border-collapse:collapse;">${scorerRowsHtml.join('')}</table>`;
 
   return `
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;background:#ffffff;">
@@ -206,7 +223,7 @@ export function buildRecapEmailHtml(data: RecapData): string {
   ${data.scorers.length ? `
   <div style="padding:14px 20px;">
     <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#003e79;margin-bottom:6px;">&#127954; TOP GOAL SCORERS <span style="color:#8fa6c0;font-weight:700;">&middot; ${data.scorers.length} LIT THE LAMP</span></div>
-    <div style="line-height:1.9;">${scorerItems}</div>
+    ${scorerItems}
   </div>` : ''}
   <div style="text-align:center;padding:10px 20px 24px;">
     <a href="${recapUrl}" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#fff;text-decoration:none;padding:15px 36px;border-radius:999px;font-size:16px;font-weight:900;display:inline-block;box-shadow:0 4px 14px rgba(184,134,11,0.35);">&#127942; View the Full Event Recap &rarr;</a>
