@@ -91,13 +91,15 @@ export default function RecapPage() {
         {data.stars.length > 0 && (
           <section className="mt-14">
             <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#b8860b]">★ THREE STARS OF THE WEEKEND ★</h2>
-            <div className="bg-white rounded-3xl shadow-md border border-[#e8edf3] mt-6 overflow-hidden">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-6">
               {data.stars.map((st: any, i: number) => (
-                <div key={i} className={`flex items-center gap-3 px-5 py-2.5 ${i % 2 ? 'bg-[#fbfcfe]' : 'bg-white'} ${i ? 'border-t border-[#f0f3f7]' : ''}`}>
-                  <span className="text-[#d4af37] text-sm w-12 shrink-0 tracking-tight">{'★'.repeat(st.first > 0 ? 3 : st.second > 0 ? 2 : 1)}</span>
-                  <span className="font-bold text-[#1d2b3d] text-sm">{st.player_name} <span className="text-[#8295ab] font-semibold">#{st.jersey_number}</span></span>
-                  <span className="text-xs text-[#5b6b80] flex-1 truncate text-right">{st.team_name}</span>
-                  <span className="text-[11px] font-bold text-[#b8860b] w-14 text-right shrink-0">{st.total} star{st.total > 1 ? 's' : ''}</span>
+                <div key={i} className="bg-white rounded-xl border border-[#eee5c8] px-3 py-2 shadow-sm min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[#d4af37] text-[11px] tracking-tight">{'★'.repeat(st.first > 0 ? 3 : st.second > 0 ? 2 : 1)}</span>
+                    <span className="text-[10px] font-bold text-[#b8860b] shrink-0">{st.total}★</span>
+                  </div>
+                  <div className="font-bold text-[#1d2b3d] text-[13px] leading-tight truncate">{st.player_name} <span className="text-[#8295ab] font-semibold">#{st.jersey_number}</span></div>
+                  <div className="text-[10.5px] text-[#5b6b80] truncate mt-0.5">{st.team_name}</div>
                 </div>
               ))}
             </div>
