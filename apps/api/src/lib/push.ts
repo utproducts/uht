@@ -121,7 +121,7 @@ const EVENT_TEAMS_CTE = `
   users - staff get the real push experience during dry runs, real parents
   and followers of the (real) teams attached to the test never hear a thing.
 */
-async function applyTestGate(
+export async function applyTestGate(
   db: any,
   eventId: string | null | undefined,
   aud: { tokens: string[]; userIds: string[] }

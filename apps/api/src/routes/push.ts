@@ -427,6 +427,75 @@ pushRoutes.post('/meetings/:id/email', authMiddleware, requireRole('admin', 'dir
   return c.json({ success: true, data: { sent, recipients: emails.length } });
 });
 
+// ==================
+// POST /review-ask — App Store review request push to a chosen slice of an
+// event's audience (everyone / coaches / parents / champions), so staff can
+// learn which group converts to 5 stars
+// ==================
+pushRoutes.post('/review-ask', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  event_id: z.string().min(1),
+  audience: z.enum(['everyone', 'coaches', 'parents', 'champions']),
+  body: z.string().max(220).optional(),
+})), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as { id: string };
+  const { event_id, audience, body } = c.req.valid('json');
+
+  const { eventAudience: evAud, teamAudience: tmAud, applyTestGate } = await import('../lib/push');
+
+  let tokens: string[] = [];
+  let userIds: string[] = [];
+  if (audience === 'everyone') {
+    ({ tokens, userIds } = await evAud(db, event_id));
+  } else if (audience === 'champions') {
+    const champs = (await db.prepare(`
+      SELECT CASE WHEN home_score > away_score THEN home_team_id ELSE away_team_id END as tid
+      FROM games WHERE event_id = ? AND game_type = 'championship' AND status = 'final'
+        AND home_team_id IS NOT NULL AND away_team_id IS NOT NULL AND home_score != away_score
+    `).bind(event_id).all()).results || [];
+    const ids = [...new Set((champs as any[]).map(r => r.tid as string))];
+    if (ids.length === 0) return c.json({ success: false, error: 'No championship winners yet for this event' }, 400);
+    ({ tokens, userIds } = await tmAud(db, ids, event_id));
+  } else {
+    // coaches = bench staff only; parents = everyone attached who is NOT bench staff
+    const rows = (await db.prepare(`
+      WITH evt_teams AS (
+        SELECT er.team_id AS tid FROM event_registrations er
+          WHERE er.event_id = ?1 AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment') AND er.team_id IS NOT NULL
+        UNION SELECT r.team_id FROM registrations r
+          WHERE r.event_id = ?1 AND r.status NOT IN ('rejected','withdrawn') AND r.team_id IS NOT NULL
+        UNION SELECT home_team_id FROM games WHERE event_id = ?1 AND home_team_id IS NOT NULL
+        UNION SELECT away_team_id FROM games WHERE event_id = ?1 AND away_team_id IS NOT NULL
+      ), staff AS (
+        SELECT user_id FROM team_coaches WHERE team_id IN (SELECT tid FROM evt_teams)
+        UNION SELECT user_id FROM team_managers WHERE team_id IN (SELECT tid FROM evt_teams)
+      ), fans AS (
+        SELECT user_id FROM user_follows WHERE team_id IN (SELECT tid FROM evt_teams)
+        UNION SELECT user_id FROM team_members WHERE team_id IN (SELECT tid FROM evt_teams) AND status = 'active'
+      )
+      SELECT DISTINCT pt.token, pt.user_id FROM push_tokens pt
+      WHERE (?2 = 'coaches' AND pt.user_id IN (SELECT user_id FROM staff))
+         OR (?2 = 'parents' AND pt.user_id IN (SELECT user_id FROM fans) AND pt.user_id NOT IN (SELECT user_id FROM staff))
+    `).bind(event_id, audience).all()).results || [];
+    const gated = await applyTestGate(db, event_id, {
+      tokens: (rows as any[]).map(r => r.token as string),
+      userIds: [...new Set((rows as any[]).map(r => r.user_id as string))] as string[],
+    });
+    tokens = gated.tokens; userIds = gated.userIds;
+  }
+
+  if (tokens.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No push-capable users in that group' });
+
+  const title = '⭐ Enjoying the UHT app?';
+  const msg = (body || '').trim() || 'A quick App Store review helps more youth hockey families find us - and we read every one. Tap to leave yours!';
+  const pushData = { type: 'app_review', event_id };
+  const sent = await sendExpoPushNotifications(tokens, title, msg, pushData);
+  await logNotification(db, { type: 'review_ask', title, body: msg, audience: `review:${audience}`, target_id: event_id, sent_count: sent, sent_by: user.id });
+  await createUserNotifications(db, userIds, title, msg, 'app_review', pushData);
+  return c.json({ success: true, data: { sent, audience } });
+});
+
+// ==================
 // POST /send-locker-room — Send locker room assignment push to team followers
 // ==================
 const lockerRoomPushSchema = z.object({

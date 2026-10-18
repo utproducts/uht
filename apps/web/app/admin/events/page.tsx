@@ -5024,6 +5024,64 @@ function PushHistoryCard({ eventId }: { eventId: string }) {
 
 // Director event PIN: directors enter this in the app to unlock the director
 // toolkit scoped to this event only. Admin accounts never need a PIN.
+function ReviewAskCard({ eventId }: { eventId: string }) {
+  const ROOT = 'https://uht.chad-157.workers.dev/api';
+  const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
+  const [audience, setAudience] = useState<'champions' | 'coaches' | 'parents' | 'everyone'>('champions');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState('');
+
+  const AUDIENCES: Array<{ key: typeof audience; label: string; hint: string }> = [
+    { key: 'champions', label: 'Champions', hint: 'Winning teams only - the happiest group' },
+    { key: 'coaches', label: 'Coaches & Managers', hint: 'Bench staff of every team' },
+    { key: 'parents', label: 'Parents & Fans', hint: 'Followers and team members, no bench staff' },
+    { key: 'everyone', label: 'Everyone', hint: 'The full event audience' },
+  ];
+
+  const send = async () => {
+    const aud = AUDIENCES.find(a => a.key === audience)!;
+    if (!confirm(`Send the app-review push to ${aud.label}? Tapping it opens the App Store review box.`)) return;
+    setBusy(true); setResult('');
+    try {
+      const res = await fetch(`${ROOT}/push/review-ask`, {
+        method: 'POST', headers: hdrs(),
+        body: JSON.stringify({ event_id: eventId, audience, body: msg.trim() || undefined }),
+      });
+      const j = await res.json();
+      if (j.success) setResult(`Sent to ${j.data?.sent ?? 0} device(s) (${aud.label}).`);
+      else setResult(j.error || 'Send failed');
+    } catch { setResult('Send failed - check your connection'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5">
+      <h3 className="font-bold text-[#1d1d1f] text-sm">Ask for App Reviews</h3>
+      <p className="text-xs text-[#6e6e73] mt-0.5">Push a review request to a slice of this event's audience. Tapping the push opens the App Store review box directly.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+        {AUDIENCES.map(a => (
+          <button key={a.key} onClick={() => setAudience(a.key)}
+            className={`text-left rounded-xl border px-3 py-2 transition ${audience === a.key ? 'border-[#003e79] bg-[#f0f7ff]' : 'border-[#e8e8ed] hover:border-[#c9d6e4]'}`}>
+            <div className={`text-sm font-bold ${audience === a.key ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>{a.label}</div>
+            <div className="text-[11px] text-[#6e6e73]">{a.hint}</div>
+          </button>
+        ))}
+      </div>
+      <textarea value={msg} onChange={e => setMsg(e.target.value)} maxLength={220}
+        placeholder="Optional custom message (default: 'A quick App Store review helps more youth hockey families find us - and we read every one. Tap to leave yours!')"
+        className="w-full mt-3 border border-[#e8e8ed] rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-[#003e79]/20 min-h-[64px]" />
+      <div className="flex items-center gap-3 mt-2">
+        <button onClick={send} disabled={busy}
+          className="px-5 py-2 rounded-full bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] transition disabled:opacity-50">
+          {busy ? 'Sending...' : 'Send Review Request'}
+        </button>
+        {result ? <span className="text-xs font-semibold text-[#1f8a4c]">{result}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function EventRulesCard({ eventId }: { eventId: string }) {
   const ROOT = 'https://uht.chad-157.workers.dev/api';
   const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
@@ -5906,6 +5964,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && <EventRulesCard eventId={eventId} />}
+      {tab === 'overview' && <ReviewAskCard eventId={eventId} />}
       {tab === 'overview' && <PushHistoryCard eventId={eventId} />}
       {tab === 'overview' && (
         <div className="space-y-6">
