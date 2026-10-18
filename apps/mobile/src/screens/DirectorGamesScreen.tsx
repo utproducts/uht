@@ -164,6 +164,35 @@ export default function DirectorGamesScreen({ navigation }: any) {
     setSaving(false);
   };
 
+  // Director check-in on behalf of a coach: same endpoint the coach flow
+  // uses, so the locker-room push to families still fires
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  const directorCheckin = (game: any, side: 'home' | 'away') => {
+    const teamId = side === 'home' ? game.home_team_id : game.away_team_id;
+    const teamName = (side === 'home' ? game.home_team_name : game.away_team_name) || 'this team';
+    if (!teamId) return;
+    Alert.alert(
+      'Check Team In',
+      `Check in ${teamName} for Game #${game.game_number}? Their families get the locker room push, same as a coach check-in.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Check In',
+          onPress: async () => {
+            setCheckingIn(`${game.id}:${side}`);
+            try {
+              const res = await authFetch(`/api/registrations/game-checkins/${game.id}/${teamId}`, { method: 'POST' });
+              const json = await res.json() as any;
+              if (json.success) await loadGames();
+              else Alert.alert('Could not check in', typeof json.error === 'string' ? json.error : 'Try again.');
+            } catch { Alert.alert('Could not check in', 'Check your connection and try again.'); }
+            setCheckingIn(null);
+          },
+        },
+      ]
+    );
+  };
+
   // ============================================================
   // Helpers
   // ============================================================
@@ -307,6 +336,29 @@ export default function DirectorGamesScreen({ navigation }: any) {
                   <Text style={[styles.teamName, { textAlign: 'right' }]} numberOfLines={1}>{game.away_team_name || 'TBD'}</Text>
                 </View>
               </View>
+
+              {game.status !== 'final' ? (
+                <View style={styles.checkinRow}>
+                  {(['home', 'away'] as const).map(side => {
+                    const checked = side === 'home' ? (game as any).home_checked_in : (game as any).away_checked_in;
+                    const teamId = side === 'home' ? game.home_team_id : game.away_team_id;
+                    if (!teamId) return <View key={side} style={{ flex: 1 }} />;
+                    return (
+                      <TouchableOpacity
+                        key={side}
+                        disabled={!!checked || checkingIn === `${game.id}:${side}`}
+                        style={[styles.checkinChip, checked ? styles.checkinChipOn : null]}
+                        onPress={(e: any) => { e.stopPropagation?.(); directorCheckin(game, side); }}
+                      >
+                        <Ionicons name={checked ? 'checkmark-circle' : 'log-in-outline'} size={13} color={checked ? '#1f8a4c' : colors.navy} />
+                        <Text style={[styles.checkinChipText, checked ? { color: '#1f8a4c' } : null]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                          {checkingIn === `${game.id}:${side}` ? 'Checking in...' : checked ? `${side === 'home' ? 'Home' : 'Away'} checked in` : `Check in ${side === 'home' ? 'Home' : 'Away'}`}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
 
               <View style={styles.gameFooter}>
                 <Text style={styles.gameInfo}>Game #{game.game_number}</Text>
@@ -761,4 +813,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     color: '#fff',
   },
+  checkinRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  checkinChip: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    borderRadius: 9, borderWidth: 1, borderColor: '#cfe0ef', backgroundColor: '#f2f8fd',
+    paddingVertical: 7, paddingHorizontal: 6,
+  },
+  checkinChipOn: { backgroundColor: '#edf9f1', borderColor: '#bfe6cd' },
+  checkinChipText: { fontSize: 11.5, color: colors.navy, fontFamily: fonts.semibold },
 });
