@@ -72,7 +72,7 @@ export default function RecapPage() {
 
         {/* CHAMPIONS */}
         {data.champions.length > 0 && (
-          <section className="mt-12">
+          <section id="champions" className="mt-12 scroll-mt-6">
             <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#b8860b]">🏆 YOUR CHAMPIONS 🏆</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
               {data.champions.map((ch: any) => (
@@ -95,7 +95,7 @@ export default function RecapPage() {
 
         {/* THREE STARS */}
         {data.stars.length > 0 && (
-          <section className="mt-14">
+          <section id="stars" className="mt-14 scroll-mt-6">
             <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#b8860b]">★ THREE STARS OF THE WEEKEND ★</h2>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-6">
               {data.stars.map((st: any, i: number) => (
@@ -114,7 +114,7 @@ export default function RecapPage() {
 
         {/* GOAL SCORERS */}
         {data.scorers.length > 0 && (
-          <section className="mt-14">
+          <section id="scorers" className="mt-14 scroll-mt-6">
             <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#003e79]">🥅 EVERY GOAL SCORER</h2>
             <p className="text-center text-xs text-[#6b7a90] mt-1">{data.scorers.length} players lit the lamp this weekend</p>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-6">

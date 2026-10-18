@@ -212,18 +212,19 @@ export function buildRecapEmailHtml(data: RecapData): string {
   <div style="padding:8px 14px;">
     <div style="font-size:14px;font-weight:900;letter-spacing:2px;color:#003e79;text-align:center;margin:10px 0;">&#127942; YOUR CHAMPIONS &#127942;</div>
     <table role="presentation" style="width:100%;border-collapse:collapse;">${champRowsHtml.join('')}</table>
-    ${data.champions.length > 4 ? `<div style="font-size:12px;color:#8295ab;text-align:center;margin-top:6px;">...and <b>${data.champions.length - 4} more champions</b> on the full recap</div>` : ''}
+    <div style="text-align:center;margin-top:10px;"><a href="${recapUrl}#champions" style="font-size:13px;font-weight:800;color:#b8860b;text-decoration:none;">View all ${data.champions.length} champions &rarr;</a></div>
   </div>` : ''}
   ${data.stars.length ? `
   <div style="padding:14px 20px;">
     <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#b8860b;margin-bottom:6px;">&#9733; THREE STARS <span style="color:#c9b885;font-weight:700;">&middot; ${data.stars.length} THIS WEEKEND</span></div>
     <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;">${starRows}</table>
-    ${data.stars.length > 6 ? `<div style="font-size:12px;color:#8295ab;margin-top:6px;text-align:center;">...and <b>${data.stars.length - 6} more stars</b> on the full recap</div>` : ''}
+    <div style="text-align:center;margin-top:10px;"><a href="${recapUrl}#stars" style="font-size:13px;font-weight:800;color:#b8860b;text-decoration:none;">View all ${data.stars.length} Three Stars &rarr;</a></div>
   </div>` : ''}
   ${data.scorers.length ? `
   <div style="padding:14px 20px;">
     <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#003e79;margin-bottom:6px;">&#127954; TOP GOAL SCORERS <span style="color:#8fa6c0;font-weight:700;">&middot; ${data.scorers.length} LIT THE LAMP</span></div>
     ${scorerItems}
+    <div style="text-align:center;margin-top:10px;"><a href="${recapUrl}#scorers" style="font-size:13px;font-weight:800;color:#003e79;text-decoration:none;">View all ${data.scorers.length} goal scorers &rarr;</a></div>
   </div>` : ''}
   <div style="text-align:center;padding:10px 20px 24px;">
     <a href="${recapUrl}" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#fff;text-decoration:none;padding:15px 36px;border-radius:999px;font-size:16px;font-weight:900;display:inline-block;box-shadow:0 4px 14px rgba(184,134,11,0.35);">&#127942; View the Full Event Recap &rarr;</a>
