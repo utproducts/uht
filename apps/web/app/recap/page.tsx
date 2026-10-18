@@ -10,6 +10,12 @@ import { useEffect, useState } from 'react';
 
 const API = (process.env.NEXT_PUBLIC_API_URL || 'https://uht.chad-157.workers.dev') + '/api';
 
+// "West Dundee Leafs Mite (8U) CUHL D2 - Frenier" -> "West Dundee Leafs"
+function shortTeam(name: string): string {
+  const cut = String(name || '').split(/\s+(?:Mite|Squirt|Pee\s?Wee|Peewee|Bantam|Midget|Girls)\b|\s*\(\d+U\)/i)[0];
+  return (cut || name || '').replace(/[\s-]+$/, '').trim() || String(name || '');
+}
+
 export default function RecapPage() {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
@@ -99,7 +105,7 @@ export default function RecapPage() {
                     <span className="text-[10px] font-bold text-[#b8860b] shrink-0">{st.total}★</span>
                   </div>
                   <div className="font-bold text-[#1d2b3d] text-[13px] leading-tight truncate">{st.player_name} <span className="text-[#8295ab] font-semibold">#{st.jersey_number}</span></div>
-                  <div className="text-[10.5px] text-[#5b6b80] truncate mt-0.5">{st.team_name}</div>
+                  <div className="text-[10.5px] text-[#5b6b80] truncate mt-0.5">{shortTeam(st.team_name)}</div>
                 </div>
               ))}
             </div>
@@ -111,13 +117,17 @@ export default function RecapPage() {
           <section className="mt-14">
             <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#003e79]">🥅 EVERY GOAL SCORER</h2>
             <p className="text-center text-xs text-[#6b7a90] mt-1">{data.scorers.length} players lit the lamp this weekend</p>
-            <div className="flex flex-wrap justify-center gap-2 mt-6">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-6">
               {data.scorers.map((sc: any, i: number) => (
-                <span key={i} className="inline-flex items-center gap-1.5 bg-white border border-[#d5e5f5] rounded-full px-3.5 py-1.5 text-[13px] shadow-sm">
-                  <b className="text-[#17304d]">{sc.player_name}</b>
-                  <span className="text-[#8295ab] text-[11px]">{sc.team_name}</span>
-                  {sc.goals > 1 && <span className="bg-[#003e79] text-white text-[10px] font-black rounded-full px-1.5 py-0.5">×{sc.goals}</span>}
-                </span>
+                <div key={i} className="bg-white rounded-xl border border-[#d5e5f5] px-3 py-2 shadow-sm min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-[#17304d] text-[13px] leading-tight truncate">{sc.player_name}</span>
+                    {sc.goals > 1 ? (
+                      <span className="bg-[#003e79] text-white text-[10px] font-black rounded-full px-1.5 py-0.5 shrink-0">×{sc.goals}</span>
+                    ) : null}
+                  </div>
+                  <div className="text-[10.5px] text-[#5b6b80] truncate mt-0.5">{shortTeam(sc.team_name)}</div>
+                </div>
               ))}
             </div>
           </section>
