@@ -139,7 +139,7 @@ function esc(x: any): string {
 export function buildRecapEmailHtml(data: RecapData): string {
   const ev = data.event;
   const recapUrl = `${SITE}/recap?event=${ev.slug || ev.id}`;
-  const championBlocks = data.champions.map(ch => `
+  const championBlocks = data.champions.slice(0, 4).map(ch => `
     <td align="center" style="padding:10px;vertical-align:top;width:50%;">
       ${ch.photo_url ? `<img src="${ch.photo_url}" alt="${esc(ch.team_name)}" style="width:100%;max-width:260px;border-radius:12px;border:3px solid #d4af37;display:block;margin:0 auto 8px;" />` : ''}
       <div style="font-size:11px;letter-spacing:1px;color:#b8860b;font-weight:bold;">${esc(ch.division).toUpperCase()} CHAMPIONS</div>
@@ -150,14 +150,14 @@ export function buildRecapEmailHtml(data: RecapData): string {
   for (let i = 0; i < championBlocks.length; i += 2) {
     champRowsHtml.push(`<tr>${championBlocks[i]}${championBlocks[i + 1] || '<td style="width:50%;"></td>'}</tr>`);
   }
-  const starRows = data.stars.slice(0, 40).map(st => `
+  const starRows = data.stars.slice(0, 6).map(st => `
     <tr>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#b8860b;font-weight:bold;white-space:nowrap;">${'&#9733;'.repeat(Math.max(1, st.first > 0 ? 3 : st.second > 0 ? 2 : 1))}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;font-weight:700;color:#1d2b3d;">${esc(st.player_name)} <span style="color:#8295ab;font-weight:600;">#${esc(st.jersey_number)}</span></td>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#5b6b80;">${esc(st.team_name)}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eef2f6;color:#5b6b80;white-space:nowrap;">${st.total} star${st.total > 1 ? 's' : ''}</td>
     </tr>`).join('');
-  const scorerItems = data.scorers.map(sc =>
+  const scorerItems = data.scorers.slice(0, 6).map(sc =>
     `<span style="display:inline-block;background:#f0f7ff;border:1px solid #d5e5f5;border-radius:14px;padding:3px 10px;margin:3px;font-size:12px;color:#17304d;"><b>${esc(sc.player_name)}</b> (${esc(sc.team_name)})${sc.goals > 1 ? ` &times;${sc.goals}` : ''}</span>`
   ).join('');
 
@@ -182,20 +182,22 @@ export function buildRecapEmailHtml(data: RecapData): string {
   <div style="padding:8px 14px;">
     <div style="font-size:14px;font-weight:900;letter-spacing:2px;color:#003e79;text-align:center;margin:10px 0;">&#127942; YOUR CHAMPIONS &#127942;</div>
     <table role="presentation" style="width:100%;border-collapse:collapse;">${champRowsHtml.join('')}</table>
+    ${data.champions.length > 4 ? `<div style="font-size:12px;color:#8295ab;text-align:center;margin-top:6px;">...and <b>${data.champions.length - 4} more champions</b> on the full recap</div>` : ''}
   </div>` : ''}
   ${data.stars.length ? `
   <div style="padding:14px 20px;">
-    <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#b8860b;margin-bottom:6px;">&#9733; THREE STARS OF THE WEEKEND</div>
+    <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#b8860b;margin-bottom:6px;">&#9733; THREE STARS <span style="color:#c9b885;font-weight:700;">&middot; ${data.stars.length} THIS WEEKEND</span></div>
     <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px;">${starRows}</table>
-    ${data.stars.length > 40 ? `<div style="font-size:11px;color:#8295ab;margin-top:4px;">...and ${data.stars.length - 40} more on the full recap.</div>` : ''}
+    ${data.stars.length > 6 ? `<div style="font-size:12px;color:#8295ab;margin-top:6px;text-align:center;">...and <b>${data.stars.length - 6} more stars</b> on the full recap</div>` : ''}
   </div>` : ''}
   ${data.scorers.length ? `
   <div style="padding:14px 20px;">
-    <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#003e79;margin-bottom:6px;">&#127954; EVERY GOAL SCORER</div>
+    <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#003e79;margin-bottom:6px;">&#127954; TOP GOAL SCORERS <span style="color:#8fa6c0;font-weight:700;">&middot; ${data.scorers.length} LIT THE LAMP</span></div>
     <div style="line-height:1.9;">${scorerItems}</div>
   </div>` : ''}
-  <div style="text-align:center;padding:20px;">
-    <a href="${recapUrl}" style="background:#003e79;color:#fff;text-decoration:none;padding:13px 32px;border-radius:999px;font-size:15px;font-weight:800;display:inline-block;">View the Full Recap</a>
+  <div style="text-align:center;padding:10px 20px 24px;">
+    <a href="${recapUrl}" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#fff;text-decoration:none;padding:15px 36px;border-radius:999px;font-size:16px;font-weight:900;display:inline-block;box-shadow:0 4px 14px rgba(184,134,11,0.35);">&#127942; View the Full Event Recap &rarr;</a>
+    <div style="font-size:11.5px;color:#8295ab;margin-top:8px;">Every champion, all ${data.stars.length} stars, and all ${data.scorers.length} goal scorers</div>
   </div>
   <div style="background:#f6f9fc;border-radius:14px;margin:4px 16px 24px;padding:16px 18px;text-align:center;">
     <div style="font-size:14px;font-weight:800;color:#1d2b3d;">Enjoyed the weekend?</div>
