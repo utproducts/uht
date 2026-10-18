@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -27,8 +28,10 @@ import RoleBar from '../components/RoleBar';
 import { NAVY_TAB_BAR } from '../navigation/AppNavigator';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// iPad: 3-column grids and a capped hero instead of stretched phone layouts
-const IS_TABLET = SCREEN_WIDTH >= 700;
+// iPad: 3-column grids and a capped hero instead of stretched phone layouts.
+// Gated on Platform.isPad so a misread width can NEVER give a phone the
+// tablet layout (the 1.0.8 'huge screen' incident).
+const IS_TABLET = (Platform as any).isPad === true && SCREEN_WIDTH >= 700;
 const GRID_COLS = IS_TABLET ? 3 : 2;
 const CARD_W = (SCREEN_WIDTH - 20 * 2 - 12 * (GRID_COLS - 1)) / GRID_COLS;
 const HERO_H = Math.min(Math.round(SCREEN_WIDTH * 1000 / 852), 560);
