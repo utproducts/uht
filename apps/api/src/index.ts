@@ -1227,6 +1227,12 @@ export default {
         if (r.sent || r.events) console.log(`30-day email sweep: events=${r.events} sent=${r.sent} skipped=${r.skipped}`);
       }).catch((e: any) => console.error('30-day email sweep error:', e)));
     }
+    // Event recap the morning after an event ends: the sweep checks
+    // EVENT-LOCAL time (9-11 AM) itself, so gate only to minute 0-4 to
+    // keep calls cheap; sendEventRecap claims atomically
+    if (new Date().getUTCMinutes() < 5) {
+      ctx.waitUntil(import('./lib/event-recap').then(m => m.runEventRecapSweep(env)).catch((e: any) => console.error('Event recap sweep error:', e)));
+    }
     // MHR link + roster nag: 30 days out, weekly per team until complete
     // (idempotent via week-bucketed automated_email_log rows)
     if (new Date().getUTCHours() === 15) {

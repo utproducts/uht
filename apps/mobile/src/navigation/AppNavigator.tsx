@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
+import { Linking, ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
@@ -222,7 +222,14 @@ export default function AppNavigator() {
 
     const responseSub = addResponseListener((response: any) => {
       const data = response.notification?.request?.content?.data;
-      if (data?.type === 'meeting_reward') {
+      if (data?.type === 'event_recap' && data?.event_id) {
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'info' } },
+        });
+      } else if (data?.type === 'app_review') {
+        Linking.openURL('https://apps.apple.com/app/id6786085393?action=write-review').catch(() => {});
+      } else if (data?.type === 'meeting_reward') {
         navigationRef.current?.navigate('RewardReveal' as never);
       } else if (data?.type === 'scoresheet' && data?.game_id) {
         (navigationRef.current as any)?.navigate('Main', {

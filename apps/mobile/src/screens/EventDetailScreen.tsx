@@ -27,6 +27,7 @@ import SignaturePad, { serializeStrokes, Stroke } from '../components/SignatureP
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
 import { getUser, User, authFetch } from '../services/auth';
 import { API_URL } from '../constants/api';
+import { HeicConverterHost, convertIfHeic } from '../utils/heicConvert';
 import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
 
 // ==================
@@ -801,7 +802,7 @@ export default function EventDetailScreen({
                   style={[styles.tabLabel, isActive ? styles.tabLabelActive : null]}
                   numberOfLines={1}
                 >
-                  {tab.label}
+                  {tab.key === 'info' && eventEnded ? 'Recap' : tab.label}
                 </Text>
                 {isActive ? <View style={styles.tabIndicator} /> : null}
               </TouchableOpacity>
@@ -815,12 +816,57 @@ export default function EventDetailScreen({
   // ==================
   // TAB: Event Info
   // ==================
+  const eventEnded = (() => {
+    const end = String(displayEvent?.end_date || '').slice(0, 10);
+    if (!end) return false;
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return end < todayStr;
+  })();
+  const [recap, setRecap] = useState<any>(null);
+  useEffect(() => {
+    if (!eventEnded || recap || !eventId) return;
+    authFetch(`/api/events/${eventId}/recap`).then((r: any) => r.json())
+      .then((j: any) => { if (j.success) setRecap(j.data); }).catch(() => {});
+  }, [eventEnded, eventId, recap]);
+
   function renderInfoTab() {
     return (
       <ScrollView
         contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
       >
+        {/* EVENT RECAP - replaces the top of Event Info once the event ends */}
+        {eventEnded && recap ? (
+          <View style={styles.recapWrap}>
+            <View style={styles.recapHero}>
+              <Text style={styles.recapKicker} maxFontSizeMultiplier={1.2}>EVENT RECAP</Text>
+              <View style={styles.recapStatsRow}>
+                {[[recap.totals.games, 'GAMES'], [recap.totals.goals, 'GOALS'], [recap.totals.teams, 'TEAMS']].map(([n, l]) => (
+                  <View key={String(l)} style={{ alignItems: 'center' }}>
+                    <Text style={styles.recapStatNum} maxFontSizeMultiplier={1.1}>{n}</Text>
+                    <Text style={styles.recapStatLabel} maxFontSizeMultiplier={1.1}>{l}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            <Text style={styles.recapSummary} maxFontSizeMultiplier={1.3}>{recap.summary}</Text>
+            {recap.champions.map((ch: any) => (
+              <View key={ch.team_id + ch.division} style={styles.recapChampCard}>
+                {ch.photo_url ? <Image source={{ uri: ch.photo_url }} style={styles.recapChampPhoto} resizeMode="cover" /> : null}
+                <Text style={styles.recapChampDiv} maxFontSizeMultiplier={1.2}>{String(ch.division).toUpperCase()} CHAMPIONS</Text>
+                <Text style={styles.recapChampName} maxFontSizeMultiplier={1.2}>{ch.team_name}</Text>
+                <Text style={styles.recapChampSub} maxFontSizeMultiplier={1.3}>won {ch.score} over {ch.runner_up}</Text>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.recapBtn} activeOpacity={0.8}
+              onPress={() => Linking.openURL(`https://ultimatetournaments.com/recap?event=${displayEvent?.slug || eventId}`)}>
+              <Ionicons name="trophy-outline" size={16} color="#fff" />
+              <Text style={styles.recapBtnText} maxFontSizeMultiplier={1.2}>Full Recap: Three Stars & Every Goal</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {/* Banner Image */}
         {displayEvent?.banner_url ? (
           <Image source={{ uri: displayEvent.banner_url }} style={styles.infoBanner} resizeMode="cover" />
@@ -1300,9 +1346,11 @@ export default function EventDetailScreen({
       for (const asset of result.assets) {
         if (!asset.base64) continue;
         try {
+          // iPhones hand over HEIC originals - convert to real JPEG first
+          const jpegB64 = await convertIfHeic(asset.base64);
           const res = await authFetch(`/api/photos/events/${eventId}/photos`, {
             method: 'POST',
-            body: JSON.stringify({ data: asset.base64, mimeType: 'image/jpeg', kind, teamId }),
+            body: JSON.stringify({ data: jpegB64, mimeType: 'image/jpeg', kind, teamId }),
           });
           const json = await res.json() as any;
           if (json.success) ok++;
@@ -2234,6 +2282,7 @@ export default function EventDetailScreen({
   // ==================
   return (
     <SafeAreaView style={styles.container}>
+      <HeicConverterHost />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backText}>{'‹ Back'}</Text>
@@ -3084,4 +3133,18 @@ const styles = StyleSheet.create({
   contactBtnIcon: { fontSize: 28 },
   contactBtnTitle: { fontSize: 16, color: colors.text, ...fonts.bold },
   contactBtnSub: { fontSize: 13, color: colors.textSecondary, ...fonts.regular, marginTop: 2 },
+  recapWrap: { marginBottom: spacing.lg },
+  recapHero: { backgroundColor: colors.navy, borderRadius: 14, padding: spacing.lg, alignItems: 'center' },
+  recapKicker: { color: colors.cyan, fontSize: 11, letterSpacing: 3, ...fonts.bold },
+  recapStatsRow: { flexDirection: 'row', gap: 34, marginTop: 10 },
+  recapStatNum: { color: '#fff', fontSize: 26, ...fonts.bold },
+  recapStatLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 9, letterSpacing: 2, ...fonts.bold, marginTop: 2 },
+  recapSummary: { fontSize: 13.5, lineHeight: 20, color: '#33465c', ...fonts.regular, marginTop: spacing.md, marginBottom: spacing.sm },
+  recapChampCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 2, borderColor: '#e8d9a8', overflow: 'hidden', marginTop: spacing.md, alignItems: 'center', paddingBottom: spacing.md },
+  recapChampPhoto: { width: '100%', aspectRatio: 4 / 3 },
+  recapChampDiv: { fontSize: 10, letterSpacing: 2, color: '#b8860b', ...fonts.bold, marginTop: 10 },
+  recapChampName: { fontSize: 19, color: colors.navy, ...fonts.bold, marginTop: 2, textAlign: 'center', paddingHorizontal: 12 },
+  recapChampSub: { fontSize: 12, color: '#6b7a90', ...fonts.regular, marginTop: 2 },
+  recapBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 13, marginTop: spacing.md },
+  recapBtnText: { color: '#fff', fontSize: 14, ...fonts.semibold },
 });

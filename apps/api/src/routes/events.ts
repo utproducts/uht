@@ -232,6 +232,28 @@ eventRoutes.get('/super-saver-status', async (c) => {
   return c.json({ success: true, data: status });
 });
 
+// ── Event recap: public data, admin preview + send ──
+eventRoutes.get('/:eventId/recap', async (c) => {
+  const { buildRecapData } = await import('../lib/event-recap');
+  const data = await buildRecapData(c.env.DB, c.req.param('eventId'));
+  if (!data) return c.json({ success: false, error: 'Event not found' }, 404);
+  return c.json({ success: true, data });
+});
+
+eventRoutes.get('/:eventId/recap/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { buildRecapData, buildRecapEmailHtml } = await import('../lib/event-recap');
+  const data = await buildRecapData(c.env.DB, c.req.param('eventId'));
+  if (!data) return c.json({ success: false, error: 'Event not found' }, 404);
+  return c.html(buildRecapEmailHtml(data));
+});
+
+eventRoutes.post('/:eventId/recap/send', authMiddleware, requireRole('admin'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const { sendEventRecap } = await import('../lib/event-recap');
+  const res = await sendEventRecap(c.env, c.req.param('eventId'), { force: !!body.force });
+  return c.json({ success: true, data: res });
+});
+
 // ── Event rules PDF: admin upload, public download ──
 eventRoutes.post('/:eventId/rules-pdf', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;

@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
+import { HeicConverterHost, convertIfHeic } from '../utils/heicConvert';
 import { colors, fonts, spacing } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
@@ -257,9 +258,11 @@ export function DirectorChampionsScreen({ navigation }: any) {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, base64: true });
       if (result.canceled || !result.assets?.[0]?.base64) return;
       setUploading(true);
+      // iPhones hand over HEIC originals - convert to real JPEG first
+      const jpegB64 = await convertIfHeic(result.assets[0].base64);
       const res = await authFetch(`/api/photos/events/${selected!.id}/photos`, {
         method: 'POST',
-        body: JSON.stringify({ data: result.assets[0].base64, mimeType: 'image/jpeg', kind: 'champion', teamId: team.team_id }),
+        body: JSON.stringify({ data: jpegB64, mimeType: 'image/jpeg', kind: 'champion', teamId: team.team_id }),
       });
       const json = await res.json() as any;
       setUploading(false);
@@ -272,6 +275,7 @@ export function DirectorChampionsScreen({ navigation }: any) {
 
   return (
     <View style={s.screen}>
+      <HeicConverterHost />
       <Header title="Championship Photos" subtitle="Tap the winning team, then pick their photo" navigation={navigation} />
       <EventPills events={events} selected={selected} onSelect={setSelected} />
       {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
