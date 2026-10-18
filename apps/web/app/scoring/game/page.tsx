@@ -581,7 +581,19 @@ function ScoringPageInner() {
     postEvent({ eventType: 'game_start' });
   };
   const endPeriod = () => postEvent({ eventType: 'period_end', period: game?.period });
-  const startPeriod = () => postEvent({ eventType: 'period_start', period: (game?.period || 0) + 1 });
+  const startPeriod = () => {
+    const next = (game?.period || 0) + 1;
+    // Overtime marks the game permanently - make sure it's intentional
+    if (next >= 4) {
+      setConfirmBox({
+        text: `Start OVERTIME? Only do this if the game is tied after 3 periods - the schedule will show this game as an OT game. Current score: ${game?.home_score ?? 0} - ${game?.away_score ?? 0}.`,
+        okLabel: 'Start Overtime',
+        onOk: () => postEvent({ eventType: 'period_start', period: next }),
+      });
+      return;
+    }
+    postEvent({ eventType: 'period_start', period: next });
+  };
   const endGame = () => {
     setConfirmBox({
       text: 'End game and send results to coaches?',
@@ -790,6 +802,10 @@ function ScoringPageInner() {
                 <p className="text-center text-xs text-[#6e6e73] font-semibold">Tied? Start overtime. Otherwise end the game to send final results.</p>
               </>
             )}
+            <button onClick={() => postEvent({ eventType: 'period_start', period })} disabled={posting}
+              className="w-full py-2.5 rounded-full border-2 border-[#003e79]/40 text-[#003e79] text-sm font-bold active:bg-[#f0f7ff] disabled:opacity-50">
+              UNDO - RESUME {periodLabel.toUpperCase()} PERIOD
+            </button>
             <button onClick={() => setModal('menu')}
               className="w-full py-3 rounded-full bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a]">
               More Options ▾
