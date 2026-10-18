@@ -20,6 +20,19 @@ const REVIEW_URL = 'https://apps.apple.com/app/id6786085393?action=write-review'
 const FROM = 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>';
 const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
+// Kid-safe display name: "Benjamin Brewster" -> "Benjamin B.", with
+// title-casing for ALL-CAPS imports ("ACE MADIGAN" -> "Ace M.")
+function kidName(name: string | null | undefined): string {
+  const raw = String(name || '').trim();
+  if (!raw || raw.startsWith('#')) return raw;
+  const tc = (w: string) => w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w;
+  const parts = raw.split(/\s+/);
+  if (parts.length === 1) return tc(parts[0]);
+  const first = tc(parts[0]);
+  const lastInitial = (parts[parts.length - 1][0] || '').toUpperCase();
+  return lastInitial ? `${first} ${lastInitial}.` : first;
+}
+
 export interface RecapData {
   event: any;
   champions: Array<{
@@ -86,7 +99,7 @@ export async function buildRecapData(db: any, eventId: string): Promise<RecapDat
   const starAgg = new Map<string, any>();
   for (const s of starRows as any[]) {
     const key = `${s.team_id}|${s.jersey_number}`;
-    if (!starAgg.has(key)) starAgg.set(key, { team_name: s.team_name, player_name: s.player_name || `#${s.jersey_number}`, jersey_number: s.jersey_number, first: 0, second: 0, third: 0, total: 0 });
+    if (!starAgg.has(key)) starAgg.set(key, { team_name: s.team_name, player_name: kidName(s.player_name) || `#${s.jersey_number}`, jersey_number: s.jersey_number, first: 0, second: 0, third: 0, total: 0 });
     const a = starAgg.get(key);
     if (s.star_number === 1) a.first++; else if (s.star_number === 2) a.second++; else a.third++;
     a.total++;
@@ -109,7 +122,7 @@ export async function buildRecapData(db: any, eventId: string): Promise<RecapDat
   const scorerAgg = new Map<string, any>();
   for (const gr of goalRows as any[]) {
     const key = `${gr.team_id}|${gr.jersey_number}`;
-    if (!scorerAgg.has(key)) scorerAgg.set(key, { team_name: gr.team_name, player_name: gr.player_name || `#${gr.jersey_number}`, jersey_number: gr.jersey_number, goals: 0 });
+    if (!scorerAgg.has(key)) scorerAgg.set(key, { team_name: gr.team_name, player_name: kidName(gr.player_name) || `#${gr.jersey_number}`, jersey_number: gr.jersey_number, goals: 0 });
     scorerAgg.get(key).goals++;
   }
   const scorers = [...scorerAgg.values()].sort((a, b) => b.goals - a.goals || a.team_name.localeCompare(b.team_name));
