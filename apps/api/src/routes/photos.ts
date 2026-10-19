@@ -119,7 +119,11 @@ photoRoutes.get('/file/:photoId', async (c) => {
   const row = await db.prepare("SELECT r2_key, status FROM event_photos WHERE id = ?")
     .bind(c.req.param('photoId')).first<any>();
   if (!row || row.status !== 'approved') return c.json({ error: 'Not found' }, 404);
-  const obj = await c.env.STORAGE.get(row.r2_key);
+  let obj = null;
+  if (c.req.query('thumb')) {
+    obj = await c.env.STORAGE.get(String(row.r2_key).replace(/\.[a-z]+$/i, '') + '_thumb.jpg');
+  }
+  if (!obj) obj = await c.env.STORAGE.get(row.r2_key);
   if (!obj) return c.json({ error: 'Not found' }, 404);
   const headers = new Headers();
   headers.set('Content-Type', obj.httpMetadata?.contentType || 'image/jpeg');
