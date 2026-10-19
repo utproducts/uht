@@ -16,6 +16,32 @@ function shortTeam(name: string): string {
   return (cut || name || '').replace(/[\s-]+$/, '').trim() || String(name || '');
 }
 
+function Collapse({ id, title, color, count, defaultOpen, children }: {
+  id: string; title: string; color: string; count?: string; defaultOpen?: boolean; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  // Deep links from the recap email (#stars etc.) auto-expand their section
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash === `#${id}`) {
+      setOpen(true);
+      setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }), 150);
+    }
+  }, [id]);
+  return (
+    <section id={id} className="mt-6 scroll-mt-6">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full bg-white rounded-2xl border border-[#e3eaf3] shadow-sm px-5 py-4 flex items-center justify-between hover:border-[#c9d6e4] transition">
+        <span className="text-sm font-black tracking-[0.2em]" style={{ color }}>{title}</span>
+        <span className="flex items-center gap-3">
+          {count ? <span className="text-xs font-bold text-[#8295ab]">{count}</span> : null}
+          <svg className={`w-4 h-4 text-[#8295ab] transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+        </span>
+      </button>
+      {open ? <div className="mt-2">{children}</div> : null}
+    </section>
+  );
+}
+
 export default function RecapPage() {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
@@ -72,8 +98,7 @@ export default function RecapPage() {
 
         {/* CHAMPIONS */}
         {data.champions.length > 0 && (
-          <section id="champions" className="mt-12 scroll-mt-6">
-            <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#b8860b]">🏆 YOUR CHAMPIONS 🏆</h2>
+          <Collapse id="champions" title="🏆 YOUR CHAMPIONS" color="#b8860b" count={`${data.champions.length}`} defaultOpen>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
               {data.champions.map((ch: any) => (
                 <div key={ch.team_id + ch.division} className="bg-white rounded-3xl overflow-hidden shadow-lg border-2 border-[#e8d9a8]">
@@ -90,13 +115,12 @@ export default function RecapPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </Collapse>
         )}
 
         {/* THREE STARS */}
         {data.stars.length > 0 && (
-          <section id="stars" className="mt-14 scroll-mt-6">
-            <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#b8860b]">★ THREE STARS OF THE WEEKEND ★</h2>
+          <Collapse id="stars" title="★ THREE STARS OF THE WEEKEND" color="#b8860b" count={`${data.stars.length} players`}>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-6">
               {data.stars.map((st: any, i: number) => (
                 <div key={i} className="bg-white rounded-xl border border-[#eee5c8] px-3 py-2 shadow-sm min-w-0">
@@ -109,14 +133,12 @@ export default function RecapPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </Collapse>
         )}
 
         {/* GOAL SCORERS */}
         {data.scorers.length > 0 && (
-          <section id="scorers" className="mt-14 scroll-mt-6">
-            <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#003e79]">🥅 EVERY GOAL SCORER</h2>
-            <p className="text-center text-xs text-[#6b7a90] mt-1">{data.scorers.length} players lit the lamp this weekend</p>
+          <Collapse id="scorers" title="🥅 EVERY GOAL SCORER" color="#003e79" count={`${data.scorers.length} lit the lamp`}>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mt-6">
               {data.scorers.map((sc: any, i: number) => (
                 <div key={i} className="bg-white rounded-xl border border-[#d5e5f5] px-3 py-2 shadow-sm min-w-0">
@@ -130,21 +152,19 @@ export default function RecapPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </Collapse>
         )}
 
         {/* WEEKEND GALLERY */}
         {data.photos?.length > 0 && (
-          <section id="photos" className="mt-14 scroll-mt-6">
-            <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#003e79]">📷 WEEKEND MEMORIES</h2>
-            <p className="text-center text-xs text-[#6b7a90] mt-1">{data.photos.length} photos shared by players, families, and directors</p>
+          <Collapse id="photos" title="📷 WEEKEND MEMORIES" color="#003e79" count={`${data.photos.length} photos`}>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-6">
               {data.photos.map((p: any, i: number) => (
                 <img key={i} src={p.url} alt="Weekend memory" loading="lazy"
                   className="w-full aspect-square object-cover rounded-xl border border-[#e3eaf3] shadow-sm" />
               ))}
             </div>
-          </section>
+          </Collapse>
         )}
 
         {/* CTA */}

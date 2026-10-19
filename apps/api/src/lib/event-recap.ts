@@ -151,9 +151,10 @@ export async function buildRecapData(db: any, eventId: string): Promise<RecapDat
   ).bind(evId).all()).results || [];
   const galleryPhotos = (galleryRows as any[]).map(r => ({ url: `${API_BASE}/api/photos/file/${r.id}` }));
 
-  const champLine = champions.length
-    ? ` Congratulations to our champions: ${champions.map(ch => `${ch.team_name} (${ch.division})`).join(', ')}.`
-    : '';
+  const champLine = champions.length === 0 ? ''
+    : champions.length <= 3
+      ? ` Congratulations to our champions: ${champions.map(ch => `${ch.team_name} (${ch.division})`).join(', ')}.`
+      : ` Congratulations to all ${champions.length} division champions - meet every one of them below.`;
   const summary = `What a weekend of hockey! ${totals.teams} teams across ${totals.divisions} divisions battled through ${totals.games} games in ${event.city}, ${event.state}, lighting the lamp ${totals.goals} times.${champLine} Thank you to every player, coach, family, and volunteer who made ${event.name} one to remember - we can't wait to see you at the next one!`;
 
   return { event, champions, stars, scorers, totals: totals as any, summary, photos: galleryPhotos };
