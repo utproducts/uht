@@ -162,7 +162,11 @@ function EventCard({ event, isNextUp }: { event: Event; isNextUp?: boolean }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="text-base font-bold text-[#1d1d1f] leading-snug group-hover:text-[#003e79] transition-colors line-clamp-2">{event.name}</h3>
+              <h3 className="text-base font-bold text-[#1d1d1f] leading-snug group-hover:text-[#003e79] transition-colors line-clamp-2">{event.name}
+                {event.is_hybrid === 1 && (
+                  <span title="Some games are played on outdoor ice" className="ml-2 align-middle inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide bg-purple-600 text-white">HYBRID</span>
+                )}
+              </h3>
               {(event.price_min_cents || event.price_cents) && isUpcoming && (
                 <span className="shrink-0 text-sm font-bold text-[#003e79] whitespace-nowrap">{formatPriceRange(event)}</span>
               )}
@@ -711,7 +715,11 @@ export default function EventsPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <a href={`/events/${event.slug}`} className="block">
-                          <h3 className="text-sm font-bold text-[#1d1d1f] hover:text-[#003e79] transition-colors truncate">{event.name}</h3>
+                          <h3 className="text-sm font-bold text-[#1d1d1f] hover:text-[#003e79] transition-colors truncate">{event.name}
+                            {event.is_hybrid === 1 && (
+                              <span title="Some games are played on outdoor ice" className="ml-2 align-middle inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black tracking-wide bg-purple-600 text-white">HYBRID</span>
+                            )}
+                          </h3>
                         </a>
                         <p className="text-xs text-[#6e6e73] mt-0.5">{event.city}, {event.state} · {formatDateRange(event.start_date, event.end_date)}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -779,6 +787,9 @@ export default function EventsPage() {
                     <div className="min-w-0 pr-4">
                       <div className="flex items-center gap-2">
                         <a href={`/events/${event.slug}`} className="text-sm font-bold text-[#1d1d1f] hover:text-[#003e79] transition-colors truncate">{event.name}</a>
+                        {event.is_hybrid === 1 && (
+                          <span title="Some games are played on outdoor ice" className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black tracking-wide bg-purple-600 text-white">HYBRID</span>
+                        )}
                         {isFirst && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f7ff] text-[#003e79] border border-[#003e79]/10 shrink-0">
                             <span className="w-1 h-1 bg-[#00ccff] rounded-full animate-pulse" />Next Up
