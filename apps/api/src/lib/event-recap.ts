@@ -147,7 +147,7 @@ export async function buildRecapData(db: any, eventId: string): Promise<RecapDat
 
   // Weekend gallery: every approved photo, newest first (fan + champion)
   const galleryRows = (await db.prepare(
-    "SELECT id FROM event_photos WHERE event_id = ? AND status = 'approved' ORDER BY created_at DESC LIMIT 120"
+    "SELECT id FROM event_photos WHERE event_id = ? AND status = 'approved' ORDER BY created_at DESC LIMIT 250"
   ).bind(evId).all()).results || [];
   const galleryPhotos = (galleryRows as any[]).map(r => ({ url: `${API_BASE}/api/photos/file/${r.id}` }));
 
