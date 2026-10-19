@@ -133,6 +133,20 @@ export default function RecapPage() {
           </section>
         )}
 
+        {/* WEEKEND GALLERY */}
+        {data.photos?.length > 0 && (
+          <section id="photos" className="mt-14 scroll-mt-6">
+            <h2 className="text-center text-sm font-black tracking-[0.3em] text-[#003e79]">📷 WEEKEND MEMORIES</h2>
+            <p className="text-center text-xs text-[#6b7a90] mt-1">{data.photos.length} photos shared by players, families, and directors</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-6">
+              {data.photos.map((p: any, i: number) => (
+                <img key={i} src={p.url} alt="Weekend memory" loading="lazy"
+                  className="w-full aspect-square object-cover rounded-xl border border-[#e3eaf3] shadow-sm" />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* CTA */}
         <section className="mt-16 text-center bg-gradient-to-br from-[#003e79] to-[#005599] rounded-3xl p-8 text-white">
           <div className="text-xl font-black">Enjoyed the weekend?</div>

@@ -50,6 +50,7 @@ export interface RecapData {
   scorers: Array<{ team_name: string; player_name: string; jersey_number: string; goals: number }>;
   totals: { games: number; goals: number; teams: number; divisions: number };
   summary: string;
+  photos: Array<{ url: string }>;
 }
 
 export async function buildRecapData(db: any, eventId: string): Promise<RecapData | null> {
@@ -144,12 +145,18 @@ export async function buildRecapData(db: any, eventId: string): Promise<RecapDat
       (SELECT COUNT(DISTINCT event_division_id) FROM games WHERE event_id = ?1 AND event_division_id IS NOT NULL) as divisions
   `).bind(evId).first<any>();
 
+  // Weekend gallery: every approved photo, newest first (fan + champion)
+  const galleryRows = (await db.prepare(
+    "SELECT id FROM event_photos WHERE event_id = ? AND status = 'approved' ORDER BY created_at DESC LIMIT 120"
+  ).bind(evId).all()).results || [];
+  const galleryPhotos = (galleryRows as any[]).map(r => ({ url: `${API_BASE}/api/photos/file/${r.id}` }));
+
   const champLine = champions.length
     ? ` Congratulations to our champions: ${champions.map(ch => `${ch.team_name} (${ch.division})`).join(', ')}.`
     : '';
   const summary = `What a weekend of hockey! ${totals.teams} teams across ${totals.divisions} divisions battled through ${totals.games} games in ${event.city}, ${event.state}, lighting the lamp ${totals.goals} times.${champLine} Thank you to every player, coach, family, and volunteer who made ${event.name} one to remember - we can't wait to see you at the next one!`;
 
-  return { event, champions, stars, scorers, totals: totals as any, summary };
+  return { event, champions, stars, scorers, totals: totals as any, summary, photos: galleryPhotos };
 }
 
 function esc(x: any): string {
@@ -225,6 +232,10 @@ export function buildRecapEmailHtml(data: RecapData): string {
     <div style="font-size:13px;font-weight:900;letter-spacing:2px;color:#003e79;margin-bottom:6px;">&#127954; TOP GOAL SCORERS <span style="color:#8fa6c0;font-weight:700;">&middot; ${data.scorers.length} LIT THE LAMP</span></div>
     ${scorerItems}
     <div style="text-align:center;margin-top:10px;"><a href="${recapUrl}#scorers" style="font-size:13px;font-weight:800;color:#003e79;text-decoration:none;">View all ${data.scorers.length} goal scorers &rarr;</a></div>
+  </div>` : ''}
+  ${data.photos && data.photos.length ? `
+  <div style="text-align:center;padding:4px 20px 0;">
+    <a href="${recapUrl}#photos" style="font-size:13px;font-weight:800;color:#003e79;text-decoration:none;">&#128247; View the weekend photo gallery (${data.photos.length} photos) &rarr;</a>
   </div>` : ''}
   <div style="text-align:center;padding:10px 20px 24px;">
     <a href="${recapUrl}" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#fff;text-decoration:none;padding:15px 36px;border-radius:999px;font-size:16px;font-weight:900;display:inline-block;box-shadow:0 4px 14px rgba(184,134,11,0.35);">&#127942; View the Full Event Recap &rarr;</a>
