@@ -65,6 +65,40 @@ export default function DirectorGamesScreen({ navigation }: any) {
   const [editHomeScore, setEditHomeScore] = useState('');
   const [editAwayScore, setEditAwayScore] = useState('');
   const [editStatus, setEditStatus] = useState('');
+  const [delayBusy, setDelayBusy] = useState(false);
+
+  const markDelayed = (minutes: number) => {
+    if (!editGame) return;
+    const clearing = minutes === 0;
+    Alert.alert(
+      clearing ? 'Back On Time?' : `Delay ${minutes} Minutes?`,
+      clearing
+        ? 'Families of both teams get a "back on time" push.'
+        : `Families of both teams get a delay push right away.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: clearing ? 'Mark On Time' : 'Mark Delayed',
+          onPress: async () => {
+            setDelayBusy(true);
+            try {
+              const res = await authFetch(`/api/scoring/games/${editGame.id}/delay`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(clearing
+                  ? { delayStatus: 'on_time', delayReason: null }
+                  : { delayStatus: 'delayed', delayMinutes: minutes, delayReason: null }),
+              });
+              const json = await res.json() as any;
+              if (json.success) { setEditGame(null); await loadGames(); }
+              else Alert.alert('Could not update', typeof json.error === 'string' ? json.error : 'Try again.');
+            } catch { Alert.alert('Could not update', 'Check your connection.'); }
+            setDelayBusy(false);
+          },
+        },
+      ]
+    );
+  };
   const [saving, setSaving] = useState(false);
 
   // Load events assigned to this user (scorekeeper events reuse — directors see the same events)
@@ -466,6 +500,28 @@ export default function DirectorGamesScreen({ navigation }: any) {
                   ))}
                 </View>
 
+                {/* Delay controls - pushes straight to both teams' families */}
+                <Text style={styles.statusLabel}>Delay</Text>
+                <View style={styles.statusRow}>
+                  {[15, 30, 45, 60].map(min => (
+                    <TouchableOpacity
+                      key={min}
+                      style={[styles.statusOption, delayBusy ? { opacity: 0.5 } : null]}
+                      disabled={delayBusy}
+                      onPress={() => markDelayed(min)}
+                    >
+                      <Text style={styles.statusOptionText}>+{min} min</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {editGame.status === 'delayed' || (editGame as any).delay_status === 'delayed' ? (
+                  <TouchableOpacity style={styles.clearDelayBtn} disabled={delayBusy} onPress={() => markDelayed(0)}>
+                    <Text style={styles.clearDelayText} maxFontSizeMultiplier={1.2}>{delayBusy ? 'Updating...' : 'Clear Delay - Back On Time'}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.delayHint} maxFontSizeMultiplier={1.3}>Tapping a delay instantly notifies everyone following both teams.</Text>
+                )}
+
                 {/* Save / Cancel */}
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditGame(null)}>
@@ -821,4 +877,7 @@ const styles = StyleSheet.create({
   },
   checkinChipOn: { backgroundColor: '#edf9f1', borderColor: '#bfe6cd' },
   checkinChipText: { fontSize: 11.5, color: colors.navy, fontFamily: fonts.semibold },
+  clearDelayBtn: { backgroundColor: '#eaf7ef', borderWidth: 1, borderColor: '#bfe6cd', borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 6, marginBottom: 10 },
+  clearDelayText: { fontSize: 13, color: '#1f8a4c', ...fonts.semibold },
+  delayHint: { fontSize: 11, color: '#8295ab', marginTop: 2, marginBottom: 10, ...fonts.regular },
 });

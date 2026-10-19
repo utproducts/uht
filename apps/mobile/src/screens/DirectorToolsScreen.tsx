@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
-import { HeicConverterHost, convertIfHeic } from '../utils/heicConvert';
+import { HeicConverterHost, processChampionPhoto } from '../utils/heicConvert';
 import { colors, fonts, spacing } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import ScreenHeader from '../components/ScreenHeader';
@@ -129,6 +129,10 @@ export function DirectorCheckinScreen({ navigation }: any) {
                     <Text style={s.rowSub} numberOfLines={1}>
                       {t.checked_in_at ? `Checked in ${String(t.checked_in_at).slice(5, 16)}` : 'Not checked in'}
                     </Text>
+                    <View style={s.playerCountChip}>
+                      <Ionicons name="people-outline" size={11} color={colors.navy} />
+                      <Text style={s.playerCountText} maxFontSizeMultiplier={1.2}>{t.roster_count ?? 0} players</Text>
+                    </View>
                     {t.missing_roster ? (
                       <Text style={s.rowAlertText} numberOfLines={1}>NO ROSTER</Text>
                     ) : null}
@@ -258,8 +262,8 @@ export function DirectorChampionsScreen({ navigation }: any) {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6, base64: true });
       if (result.canceled || !result.assets?.[0]?.base64) return;
       setUploading(true);
-      // iPhones hand over HEIC originals - convert to real JPEG first
-      const jpegB64 = await convertIfHeic(result.assets[0].base64);
+      // Convert + stamp the UHT logo bottom-right
+      const jpegB64 = await processChampionPhoto(result.assets[0].base64);
       const res = await authFetch(`/api/photos/events/${selected!.id}/photos`, {
         method: 'POST',
         body: JSON.stringify({ data: jpegB64, mimeType: 'image/jpeg', kind: 'champion', teamId: team.team_id }),
@@ -884,4 +888,6 @@ const s = StyleSheet.create({
   codeModePillText: { fontSize: 13, fontWeight: '700', color: '#51627a' },
   codeModePillTextActive: { color: '#fff' },
   codeChipText: { color: colors.navy, fontSize: 14, letterSpacing: 2, ...fonts.bold },
+  playerCountChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: '#eef4fa', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginTop: 3 },
+  playerCountText: { fontSize: 11, color: colors.navy, ...fonts.semibold },
 });

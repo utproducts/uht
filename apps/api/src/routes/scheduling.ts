@@ -891,6 +891,19 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
     WHERE g.id = ?
   `).bind(gameId).first();
 
+  // Published-schedule changes that families care about get pushed to both
+  // teams: cancellation, or a time/rink/venue move
+  try {
+    const changedTimeOrPlace = (data.start_time !== undefined && data.start_time !== (game as any).start_time)
+      || (data.rink_id !== undefined && data.rink_id !== (game as any).rink_id)
+      || (data.venue_id !== undefined && data.venue_id !== (game as any).venue_id);
+    const cancelled = data.status === 'cancelled' && (game as any).status !== 'cancelled';
+    if (cancelled || changedTimeOrPlace) {
+      c.executionCtx.waitUntil(import('../lib/push').then(pm =>
+        pm.notifyGameChangedPush(db, gameId, cancelled ? 'cancelled' : 'update')).catch(() => {}));
+    }
+  } catch {}
+
   return c.json({ success: true, data: updated });
 });
 
@@ -916,6 +929,11 @@ schedulingRoutes.post('/games/swap', authMiddleware, requireRole('admin', 'direc
     .bind(game2.start_time, game2.end_time, game2.rink_id, game2.venue_id, game2.game_number, gameId1).run();
   await db.prepare(`UPDATE games SET start_time = ?, end_time = ?, rink_id = ?, venue_id = ?, game_number = ?, updated_at = datetime('now') WHERE id = ?`)
     .bind(game1.start_time, game1.end_time, game1.rink_id, game1.venue_id, game1.game_number, gameId2).run();
+
+  c.executionCtx.waitUntil(import('../lib/push').then(pm => Promise.all([
+    pm.notifyGameChangedPush(db, gameId1, 'update'),
+    pm.notifyGameChangedPush(db, gameId2, 'update'),
+  ])).catch(() => {}));
 
   return c.json({ success: true, message: 'Games swapped' });
 });

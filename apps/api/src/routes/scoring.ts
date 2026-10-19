@@ -870,6 +870,12 @@ scoringRoutes.put('/games/:gameId/delay', authMiddleware, requireRole('admin', '
     await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
 
     keepAlive(c, notifyGameDelayPush(db, gameId));
+        // Everyone following either team hears about it
+    keepAlive(c, import('../lib/push').then(pm => pm.notifyGameChangedPush(
+      db, gameId, delayStatus === 'delayed' ? 'delayed' : 'on_time',
+      { minutes: delayMinutes ?? null, reason: delayReason ?? null }
+    )).catch(() => {}));
+
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err?.message || 'Failed to update delay' }, 500);

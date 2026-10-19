@@ -160,13 +160,12 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
         allEvents.push(event);
       }
 
-      // Sort by start_date
+      // Upcoming first (soonest to latest), then completed events newest-first
       const today = new Date().toISOString().split('T')[0];
-      const sorted = allEvents
-        .filter(e => e.end_date >= today)
-        .sort((a, b) => a.start_date.localeCompare(b.start_date));
-
-      setEvents(sorted);
+      const upcoming = allEvents.filter(e => e.end_date >= today).sort((a, b) => a.start_date.localeCompare(b.start_date));
+      const past = allEvents.filter(e => e.end_date < today).sort((a, b) => b.start_date.localeCompare(a.start_date));
+      for (const e of past) (e as any).isPast = true;
+      setEvents([...upcoming, ...past]);
     } catch {}
     setLoading(false);
     setRefreshing(false);
@@ -270,8 +269,12 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
 
   function renderEvent({ item }: { item: MyEvent }) {
     const showPayLink = isPaymentRole && item.regIds.length > 0 && (item.paymentStatus === 'due' || item.paymentStatus === 'deposit');
+    const prev = events[events.indexOf(item) - 1];
+    const firstPast = (item as any).isPast && (!prev || !(prev as any).isPast);
     return (
-      <View style={styles.eventCard}>
+      <View>
+      {firstPast ? <Text style={styles.pastHeader} maxFontSizeMultiplier={1.2}>PAST EVENTS</Text> : null}
+      <View style={[styles.eventCard, (item as any).isPast ? { opacity: 0.75 } : null]}>
         <TouchableOpacity
           style={styles.eventRow}
           onPress={() => navigation.navigate('EventDetail', { eventId: item.id, slug: item.slug })}
@@ -318,6 +321,7 @@ export default function MyEventsScreen({ navigation }: { navigation: any }) {
             </TouchableOpacity>
           </View>
         )}
+      </View>
       </View>
     );
   }
@@ -519,4 +523,5 @@ const styles = StyleSheet.create({
   payShareBtn: {
     padding: 6,
   },
+  pastHeader: { fontSize: 11, letterSpacing: 2, color: '#8295ab', ...fonts.bold, marginTop: 14, marginBottom: 6, marginLeft: 4 },
 });

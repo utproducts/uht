@@ -425,9 +425,14 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
               {renderEventLogo(item)}
 
               <View style={styles.eventInfo}>
-                <Text style={styles.eventName} numberOfLines={2}>
-                  {item.name}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={[styles.eventName, { flexShrink: 1 }]} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  {(item as any).is_hybrid === 1 ? (
+                    <View style={styles.hybridPill}><Text style={styles.hybridPillText} maxFontSizeMultiplier={1.1}>HYBRID</Text></View>
+                  ) : null}
+                </View>
                 <Text style={styles.eventDates}>
                   {item.start_date && item.end_date
                     ? formatDateRange(item.start_date, item.end_date)
@@ -701,4 +706,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  hybridPill: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  hybridPillText: { color: '#fff', fontSize: 9, letterSpacing: 1, ...fonts.bold },
 });

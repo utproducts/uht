@@ -607,6 +607,64 @@ export async function runCheckinReminderSweep(db: any, env?: any) {
 }
 
 /*
+  GAME CHANGE PUSH: any schedule-affecting change to a game (delay, back
+  on time, time/rink move, cancellation) notifies everyone attached to the
+  two teams. Only fires for published, non-test, still-upcoming games.
+*/
+export async function notifyGameChangedPush(
+  db: any,
+  gameId: string,
+  kind: 'delayed' | 'on_time' | 'update' | 'cancelled',
+  extra?: { minutes?: number | null; reason?: string | null }
+) {
+  const g = await db.prepare(`
+    SELECT g.id, g.event_id, g.game_number, g.start_time, g.status,
+      g.home_team_id, g.away_team_id,
+      COALESCE(ht.schedule_name, ht.name, g.home_placeholder, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, g.away_placeholder, 'Away') as away_name,
+      vr.name as rink_name, v.name as venue_name,
+      e.schedule_published, COALESCE(e.is_test, 0) as is_test, e.end_date
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
+    LEFT JOIN events e ON e.id = g.event_id
+    WHERE g.id = ?
+  `).bind(gameId).first();
+  if (!g || !g.schedule_published) return;
+  if (String(g.end_date || '').slice(0, 10) < new Date().toISOString().slice(0, 10)) return;
+  if (kind !== 'cancelled' && ['final', 'cancelled', 'forfeit'].includes(g.status)) return;
+  const teamIds = [g.home_team_id, g.away_team_id].filter(Boolean) as string[];
+  if (teamIds.length === 0) return;
+  const { tokens, userIds } = await teamAudience(db, teamIds, g.event_id);
+  if (tokens.length === 0) return;
+
+  const matchup = `${g.home_name} vs ${g.away_name}`;
+  const when = g.start_time ? fmt12(String(g.start_time)) : '';
+  const where = [g.venue_name, g.rink_name].filter(Boolean).join(' - ');
+  let title = '';
+  let body = '';
+  if (kind === 'delayed') {
+    title = '⏱ Game Delayed';
+    body = `${matchup}${extra?.minutes ? ` is running about ${extra.minutes} minutes behind` : ' is delayed'}${extra?.reason ? ` - ${extra.reason}` : ''}. Check the schedule for the latest.`;
+  } else if (kind === 'on_time') {
+    title = '✅ Game Back On Time';
+    body = `${matchup} is back on schedule${when ? ` for ${when}` : ''}${where ? ` at ${where}` : ''}.`;
+  } else if (kind === 'cancelled') {
+    title = '❌ Game Cancelled';
+    body = `${matchup}${when ? ` (${when})` : ''} has been cancelled. Check the schedule for updates.`;
+  } else {
+    title = '📅 Game Updated';
+    body = `${matchup} is now${when ? ` ${when}` : ''}${where ? ` at ${where}` : ''}. Check the schedule for details.`;
+  }
+  const pushData = { type: kind === 'delayed' || kind === 'on_time' ? 'game_delay' : 'game_update', event_id: g.event_id, game_id: g.id };
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, { type: 'game_change', title, body, audience: 'team_followers', target_id: g.event_id, sent_count: sent, sent_by: 'system', metadata: JSON.stringify({ game_id: g.id, kind }) });
+  await createUserNotifications(db, userIds, title, body, 'game_change', pushData);
+}
+
+/*
   LOCKER ROOM ON CHECK-IN: the moment a team checks in for a game, everyone
   on that team (followers, family, staff) gets their locker room assignment,
   if one is set on the game.

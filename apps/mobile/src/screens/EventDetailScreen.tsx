@@ -27,7 +27,7 @@ import SignaturePad, { serializeStrokes, Stroke } from '../components/SignatureP
 import { getEventDetail, getEventSchedule, getEventScores, getEventStandings, getMyTeamIds } from '../services/api';
 import { getUser, User, authFetch } from '../services/auth';
 import { API_URL } from '../constants/api';
-import { HeicConverterHost, convertIfHeic } from '../utils/heicConvert';
+import { HeicConverterHost, convertIfHeic, processChampionPhoto } from '../utils/heicConvert';
 import { sortByAgeGroup, getOrderedAgeGroups, ageGroupSortKey } from '../utils/ageGroups';
 
 // ==================
@@ -1012,6 +1012,20 @@ export default function EventDetailScreen({
                     ))}
                   </View>
                 ) : null}
+                <TouchableOpacity
+                  style={[styles.directionsBtn, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    const dest = encodeURIComponent([venue.venue_name, venue.address, venue.city, venue.state].filter(Boolean).join(', '));
+                    const url = Platform.OS === 'ios'
+                      ? `https://maps.apple.com/?daddr=${dest}`
+                      : `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+                    Linking.openURL(url).catch(() => {});
+                  }}
+                >
+                  <Ionicons name="navigate-outline" size={15} color="#fff" />
+                  <Text style={styles.directionsBtnText} maxFontSizeMultiplier={1.2}>Get Directions</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </View>
@@ -1346,8 +1360,9 @@ export default function EventDetailScreen({
       for (const asset of result.assets) {
         if (!asset.base64) continue;
         try {
-          // iPhones hand over HEIC originals - convert to real JPEG first
-          const jpegB64 = await convertIfHeic(asset.base64);
+          // iPhones hand over HEIC originals - convert to real JPEG; the
+          // champions shot also gets the UHT logo stamped bottom-right
+          const jpegB64 = kind === 'champion' ? await processChampionPhoto(asset.base64) : await convertIfHeic(asset.base64);
           const res = await authFetch(`/api/photos/events/${eventId}/photos`, {
             method: 'POST',
             body: JSON.stringify({ data: jpegB64, mimeType: 'image/jpeg', kind, teamId }),
