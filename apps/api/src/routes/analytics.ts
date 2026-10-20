@@ -188,6 +188,7 @@ analyticsRoutes.get('/reports/summary', authMiddleware, requireRole('admin', 'di
     `).first<any>(),
     db.prepare(`
       SELECT COUNT(*) as pending FROM registrations WHERE status = 'pending'
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     `).first<any>(),
   ]);
 
@@ -223,6 +224,7 @@ analyticsRoutes.get('/reports/pending-registrations', authMiddleware, requireRol
     JOIN events e ON e.id = r.event_id
     LEFT JOIN users u ON u.id = r.registered_by
     WHERE r.status = 'pending'
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     ORDER BY r.created_at ASC
   `).all();
 
@@ -263,6 +265,7 @@ analyticsRoutes.get('/reports/division-totals', authMiddleware, requireRole('adm
       LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
       LEFT JOIN teams t ON t.id = r.team_id
       WHERE ${eventFilter} AND r.status NOT IN ('denied','rejected','withdrawn')
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     `).all(),
     db.prepare(`
       SELECT ed.age_group as ag, ed.event_id, ed.max_teams
@@ -338,6 +341,7 @@ analyticsRoutes.get('/reports/registration-trends', authMiddleware, requireRole(
       LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
       WHERE r.created_at >= date('now', '-12 months')
         AND r.status NOT IN ('rejected', 'withdrawn')
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     `).all(),
   ]);
 
@@ -451,18 +455,21 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
       FROM registrations
       WHERE created_at >= ? AND status NOT IN ('rejected', 'withdrawn')
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
       GROUP BY month
     `).bind(seasonStart).all(),
     db.prepare(`
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
       FROM event_registrations
       WHERE created_at >= ? AND status = 'approved'
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
       GROUP BY month
     `).bind(seasonStart).all(),
     db.prepare(`
       SELECT CAST(strftime('%m', created_at) AS INTEGER) as month, COUNT(*) as n
       FROM registrations
       WHERE created_at >= ? AND status = 'approved'
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
       GROUP BY month
     `).bind(seasonStart).all(),
   ]);
@@ -527,6 +534,7 @@ analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRol
       JOIN event_divisions ed ON ed.id = r.event_division_id
       JOIN teams t ON t.id = r.team_id
       WHERE r.registered_by = ?
+        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
       ORDER BY r.created_at DESC
     `).bind(userId).all(),
   ]);

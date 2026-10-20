@@ -1004,7 +1004,6 @@ export default function CreateTeamScreen({
             <View style={rosterStyles.tabRow}>
               {([
                 { key: 'paste' as const, label: 'Paste', icon: 'clipboard-outline' as const },
-                { key: 'url' as const, label: 'URL', icon: 'link-outline' as const },
                 { key: 'manual' as const, label: 'Manual', icon: 'person-add-outline' as const },
               ]).map(tab => (
                 <TouchableOpacity
@@ -1018,36 +1017,6 @@ export default function CreateTeamScreen({
                 </TouchableOpacity>
               ))}
             </View>
-
-            {/* URL Import Tab */}
-            {rosterTab === 'url' && (
-              <View style={rosterStyles.tabContent}>
-                <Text style={rosterStyles.tabDesc}>Import players from a public roster web page. Note: USA Hockey links no longer work — USA Hockey added a verification step to roster pages. Open your roster, complete the verification, then copy the table and use the Paste tab instead.</Text>
-                <TextInput
-                  style={styles.input}
-                  value={importUrl}
-                  onChangeText={setImportUrl}
-                  placeholder="https://..."
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  autoCorrect={false}
-                />
-                <TouchableOpacity
-                  style={[rosterStyles.actionBtn, (!importUrl.trim() || importing) && rosterStyles.actionBtnDisabled]}
-                  onPress={handleUrlImport}
-                  disabled={!importUrl.trim() || importing}
-                  activeOpacity={0.8}
-                >
-                  {importing ? <ActivityIndicator color={colors.white} size="small" /> : (
-                    <>
-                      <Ionicons name="cloud-download-outline" size={18} color={colors.white} />
-                      <Text style={rosterStyles.actionBtnText}>Import from URL</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
 
             {/* Paste Tab */}
             {rosterTab === 'paste' && (
