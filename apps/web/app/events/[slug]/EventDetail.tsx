@@ -33,6 +33,7 @@ interface EventData {
   registration_open_date: string | null;
   registration_deadline: string | null;
   rules_url: string | null;
+  rules_pdf_key?: string | null;
   season: string | null;
   timezone: string | null;
   venue_id: string | null;
@@ -838,9 +839,9 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                 <div className="px-8 py-8">
                   <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Tournament Rules</h2>
                   <p className="text-sm text-[#86868b] mb-6">Official rules and regulations for all participants</p>
-                  {event.rules_url ? (
+                  {event.rules_pdf_key || event.rules_url ? (
                     <a
-                      href={event.rules_url}
+                      href={event.rules_pdf_key ? `/rules/${event.slug || event.id}` : event.rules_url!}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#003e79] text-white font-semibold text-sm hover:bg-[#002d5a] transition-colors"
