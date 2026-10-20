@@ -11,6 +11,7 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 routes = [
   { pattern = "ultimatetournaments.com/api/*", zone_name = "ultimatetournaments.com" },
+  { pattern = "ultimatetournaments.com/rules/*", zone_name = "ultimatetournaments.com" },
   { pattern = "api.ultimatetournaments.com/*", zone_name = "ultimatetournaments.com" },
 ]
 

@@ -103,6 +103,21 @@ app.route('/api/referees', refereeRoutes);
 app.route('/api/stripe', stripeRoutes);
 app.route('/api/follows', followRoutes);
 app.route('/api/photos', photoRoutes);
+
+// Clean rules URL on the main domain: ultimatetournaments.com/rules/<event>
+app.get('/rules/:slugOrId', async (c) => {
+  const key = c.req.param('slugOrId');
+  const ev = await c.env.DB.prepare('SELECT rules_pdf_key, name FROM events WHERE id = ? OR slug = ?')
+    .bind(key, key).first<any>();
+  if (!ev?.rules_pdf_key) return c.text('No rules posted for this event', 404);
+  const obj = await c.env.STORAGE.get(ev.rules_pdf_key);
+  if (!obj) return c.text('Not found', 404);
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/pdf');
+  headers.set('Content-Disposition', `inline; filename="${String(ev.name || 'UHT').replace(/[^A-Za-z0-9 _-]/g, '')} Rules.pdf"`);
+  headers.set('Cache-Control', 'public, max-age=300');
+  return new Response(obj.body, { headers });
+});
 app.route('/api/push', pushRoutes);
 app.route('/api/faqs', faqRoutes);
 app.route('/api/shop', shopRoutes);

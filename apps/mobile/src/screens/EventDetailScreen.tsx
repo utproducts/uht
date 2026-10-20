@@ -1097,7 +1097,7 @@ export default function EventDetailScreen({
           <TouchableOpacity
             style={styles.infoRow}
             activeOpacity={0.7}
-            onPress={() => Linking.openURL(`${API_URL}/api/events/${event?.id}/rules.pdf`)}
+            onPress={() => Linking.openURL(`https://ultimatetournaments.com/rules/${(event as any)?.slug || event?.id}`)}
           >
             <View style={styles.infoIconBox}>
               <Ionicons name="document-text-outline" size={20} color={colors.navy} />
