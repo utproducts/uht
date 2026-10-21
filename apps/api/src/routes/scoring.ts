@@ -2404,7 +2404,7 @@ scoringRoutes.get('/director-events', authMiddleware, requireRole('admin', 'dire
     SELECT e.id, e.name, e.start_date, e.end_date, e.city, e.state, e.logo_url
     FROM events e
     WHERE (COALESCE(e.is_test, 0) = 0 OR date(e.end_date) >= date('now', '-3 days'))
-      AND date(e.end_date) >= date('now', '-10 days')
+      AND date(e.end_date) >= date('now', '-1 day')
       AND (e.status IN ('published', 'registration_open', 'active') OR COALESCE(e.is_test, 0) = 1)${claimFilter}
     ORDER BY e.start_date ASC
     LIMIT 30
