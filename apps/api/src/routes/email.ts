@@ -893,6 +893,28 @@ emailRoutes.post('/glow-survey/test', authMiddleware, requireRole('admin', 'dire
 });
 
 // MHR link + USA Hockey roster reminders: preview (no send) or commit
+// Pre-event welcome email (Johnny's Important Events Email)
+emailRoutes.get('/event-welcome/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { buildWelcomeHtml } = await import('../lib/event-welcome');
+  const ev = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('eventId')).first<any>();
+  if (!ev) return c.json({ success: false, error: 'Event not found' }, 404);
+  return c.html(buildWelcomeHtml(ev, 'Sample Team 12U A', 'ABC123'));
+});
+
+emailRoutes.post('/event-welcome/:eventId/note', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  await c.env.DB.prepare("UPDATE events SET welcome_note = ? WHERE id = ?")
+    .bind(String(body.note || '').slice(0, 2000) || null, c.req.param('eventId')).run();
+  return c.json({ success: true });
+});
+
+emailRoutes.post('/event-welcome/:eventId/send', authMiddleware, requireRole('admin'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const { sendEventWelcome } = await import('../lib/event-welcome');
+  const res = await sendEventWelcome(c.env, c.req.param('eventId'), { force: !!body.force });
+  return c.json({ success: true, data: res });
+});
+
 emailRoutes.get('/mhr-roster/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const { sendMhrRosterReminders } = await import('../lib/mhr-roster-reminder');
   const r = await sendMhrRosterReminders(c.env, c.req.param('eventId'), {});

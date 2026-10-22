@@ -5082,6 +5082,63 @@ function ReviewAskCard({ eventId }: { eventId: string }) {
   );
 }
 
+function WelcomeEmailCard({ eventId }: { eventId: string }) {
+  const ROOT = 'https://uht.chad-157.workers.dev/api';
+  const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
+  const [note, setNote] = useState('');
+  const [sentAt, setSentAt] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch(`${ROOT}/events/${eventId}`).then(r => r.json()).then(j => {
+      if (j?.data) { setNote(j.data.welcome_note || ''); setSentAt(j.data.welcome_sent_at || null); }
+    }).catch(() => {});
+  }, [eventId]);
+
+  const saveNote = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const r = await fetch(`${ROOT}/email/event-welcome/${eventId}/note`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ note }) });
+      const j = await r.json();
+      setMsg(j.success ? 'Note saved - it will appear in the email.' : (j.error || 'Save failed'));
+    } catch { setMsg('Save failed'); }
+    setBusy(false);
+  };
+
+  const sendNow = async () => {
+    if (!confirm(sentAt ? 'This welcome already went out. Send it AGAIN to every team?' : 'Send the welcome email to every approved team now?')) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await fetch(`${ROOT}/email/event-welcome/${eventId}/send`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ force: !!sentAt }) });
+      const j = await r.json();
+      if (j.success) { setMsg(`Sent to ${j.data?.sent ?? 0} teams.`); setSentAt(new Date().toISOString()); }
+      else setMsg(j.error || 'Send failed');
+    } catch { setMsg('Send failed'); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5">
+      <h3 className="font-bold text-[#1d1d1f] text-sm">Pre-Event Welcome Email</h3>
+      <p className="text-xs text-[#6e6e73] mt-0.5">
+        Goes to every approved team's coaches and managers automatically 1-3 days before the event (with their Parent/Fan code).
+        {sentAt ? <span className="text-emerald-700 font-semibold"> Sent {String(sentAt).slice(0, 16).replace('T', ' ')} UTC.</span> : ' Not sent yet.'}
+      </p>
+      <textarea value={note} onChange={e => setNote(e.target.value)} maxLength={2000}
+        placeholder="Optional note for this specific weekend (parking, weather, schedule quirks...) - appears in a highlighted box in the email"
+        className="w-full mt-3 border border-[#e8e8ed] rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-[#003e79]/20 min-h-[70px]" />
+      <div className="flex items-center flex-wrap gap-2 mt-2">
+        <button onClick={saveNote} disabled={busy} className="px-4 py-2 rounded-full bg-[#003e79] text-white text-sm font-semibold hover:bg-[#002d5a] disabled:opacity-50">Save Note</button>
+        <a href={`${ROOT}/email/event-welcome/${eventId}/preview`} target="_blank" rel="noreferrer"
+          className="px-4 py-2 rounded-full border border-[#003e79] text-[#003e79] text-sm font-semibold hover:bg-[#f0f7ff]">Preview</a>
+        <button onClick={sendNow} disabled={busy} className="px-4 py-2 rounded-full border border-[#e8e8ed] text-[#3d3d3d] text-sm font-semibold hover:bg-[#fafafa] disabled:opacity-50">{sentAt ? 'Resend Now' : 'Send Now'}</button>
+        {msg ? <span className="text-xs font-semibold text-[#1f8a4c]">{msg}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function EventRulesCard({ eventId }: { eventId: string }) {
   const ROOT = 'https://uht.chad-157.workers.dev/api';
   const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
@@ -5965,6 +6022,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && <EventRulesCard eventId={eventId} />}
       {tab === 'overview' && <ReviewAskCard eventId={eventId} />}
+      {tab === 'overview' && <WelcomeEmailCard eventId={eventId} />}
       {tab === 'overview' && <PushHistoryCard eventId={eventId} />}
       {tab === 'overview' && (
         <div className="space-y-6">

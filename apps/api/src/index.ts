@@ -1247,6 +1247,7 @@ export default {
     // keep calls cheap; sendEventRecap claims atomically
     if (new Date().getUTCMinutes() < 5) {
       ctx.waitUntil(import('./lib/event-recap').then(m => m.runEventRecapSweep(env)).catch((e: any) => console.error('Event recap sweep error:', e)));
+      ctx.waitUntil(import('./lib/event-welcome').then(m => m.runEventWelcomeSweep(env)).catch((e: any) => console.error('Event welcome sweep error:', e)));
     }
     // MHR link + roster nag: 30 days out, weekly per team until complete
     // (idempotent via week-bucketed automated_email_log rows)
