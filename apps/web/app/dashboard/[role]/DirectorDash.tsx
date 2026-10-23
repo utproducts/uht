@@ -87,7 +87,7 @@ const formatDateRange = (startStr: string, endStr: string) => {
 const formatStatusDisplay = (status: string) =>
   status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
-export default function DirectorDash() {
+function ScoreManagementDash() {
   const [view, setView] = useState<'list' | 'event'>('list');
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -612,4 +612,13 @@ export default function DirectorDash() {
   }
 
   return <div />;
+}
+
+
+import DirectorPortal from './DirectorTools';
+
+// The director dashboard is the same card grid as the app's director home;
+// Score Management opens the original event/games console above.
+export default function DirectorDash() {
+  return <DirectorPortal ScoreManagement={ScoreManagementDash} />;
 }
