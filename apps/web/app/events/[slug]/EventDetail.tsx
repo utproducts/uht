@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { EventRecapContent } from '../../components/EventRecap';
 
 const API = 'https://uht.chad-157.workers.dev/api';
 
@@ -383,6 +384,8 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
   const divisions = parseJsonArray(event.divisions);
   const soldOut = (event as any).is_sold_out === 1;
   const isUpcoming = event.status === 'registration_open' || event.status === 'published' || event.status === 'active';
+  // Past event: the recap takes over the Event Info slot
+  const isPast = String(event.end_date || '').slice(0, 10) < new Date().toISOString().slice(0, 10);
   const displayStatus = soldOut && isUpcoming ? 'sold_out' : event.status;
   const ss = statusStyle(displayStatus);
 
@@ -449,7 +452,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
               <h1 className="text-3xl lg:text-5xl font-bold text-white leading-tight tracking-tight">{event.name}</h1>
 
               {/* Event over: the recap is the headline */}
-              {String(event.end_date || '').slice(0, 10) < new Date().toISOString().slice(0, 10) && (
+              {isPast && (
                 <a href={`/recap?event=${event.slug || event.id}`}
                   className="inline-flex items-center gap-2 mt-4 bg-gradient-to-r from-[#d4af37] to-[#b8860b] text-white font-black text-sm rounded-full px-6 py-2.5 shadow-lg hover:brightness-110 transition">
                   🏆 View the Event Recap — Champions, Three Stars &amp; Every Goal
@@ -526,7 +529,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                     : "border-transparent text-[#86868b] hover:text-[#1d1d1f]")
                 }
               >
-                {tab}
+                {tab === 'Event Info' && isPast ? 'Recap' : tab}
               </button>
             ))}
           </div>
@@ -540,8 +543,9 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
           {/* ─── LEFT COLUMN ─── */}
           <div className="lg:col-span-2 space-y-8">
 
-            {/* EVENT INFO */}
+            {/* EVENT INFO - becomes the recap once the event is over */}
             <section ref={sectionRefs['Event Info']}>
+              {isPast ? <EventRecapContent slug={event.slug || event.id} embedded /> : (
               <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] overflow-hidden">
                 <div className="px-8 pt-8 pb-2">
                   <h2 className="text-xl font-bold text-[#1d1d1f] mb-1">Event Information</h2>
@@ -617,6 +621,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
                   </div>
                 </div>
               </div>
+              )}
             </section>
 
             {/* ARENAS */}
