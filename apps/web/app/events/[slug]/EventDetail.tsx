@@ -383,10 +383,10 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
   const ageGroups = parseJsonArray(event.age_groups);
   const divisions = parseJsonArray(event.divisions);
   const soldOut = (event as any).is_sold_out === 1;
-  const isUpcoming = event.status === 'registration_open' || event.status === 'published' || event.status === 'active';
-  // Past event: the recap takes over the Event Info slot
+  // Past event: the recap takes over the Event Info slot and registration CTAs disappear
   const isPast = String(event.end_date || '').slice(0, 10) < new Date().toISOString().slice(0, 10);
-  const displayStatus = soldOut && isUpcoming ? 'sold_out' : event.status;
+  const isUpcoming = !isPast && (event.status === 'registration_open' || event.status === 'published' || event.status === 'active');
+  const displayStatus = isPast ? 'completed' : (soldOut && isUpcoming ? 'sold_out' : event.status);
   const ss = statusStyle(displayStatus);
 
   return (
@@ -490,7 +490,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
 
             {/* CTA */}
             <div className="shrink-0 flex flex-col items-end gap-3">
-              {getStartingPrice(event) && (
+              {!isPast && getStartingPrice(event) && (
                 <div className="text-right">
                   <p className="text-white/50 text-xs font-medium uppercase tracking-wider">Starting at</p>
                   <p className="text-white text-3xl font-bold">{formatPrice(getStartingPrice(event))}</p>
@@ -933,7 +933,7 @@ export default function EventDetail({ slug: initialSlug }: { slug: string }) {
               </div>
 
               {/* Pricing */}
-              {getStartingPrice(event) && (
+              {!isPast && getStartingPrice(event) && (
                 <div className="px-6 pb-5 pt-1">
                   <div className="p-4 rounded-xl bg-[#f5f5f7] border border-[#e8e8ed]">
                     <div className="flex items-center justify-between mb-2">
