@@ -1981,7 +1981,8 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
   const [signNumber, setSignNumber] = useState('');
   const [busy, setBusy] = useState(false);
   const officials = lineupState?.officials || [];
-  const signoff = lineupState?.officialsSignoff;
+  const signoffs: any[] = lineupState?.officialsSignoffs
+    || (lineupState?.officialsSignoff ? [{ id: 'legacy', ...lineupState.officialsSignoff, signed_at: lineupState.officialsSignoff.at }] : []);
   const hdrs = { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin };
 
   const addOfficial = async () => {
@@ -2006,7 +2007,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
         method: 'POST', headers: hdrs, body: JSON.stringify({ name: signName.trim(), usaHockeyNumber: signNumber.trim() || null }),
       });
       const j = await res.json();
-      if (j.success) { setSignName(''); onChanged(); onFlash('green'); } else onFlash('red');
+      if (j.success) { setSignName(''); setSignNumber(''); onChanged(); onFlash('green'); } else onFlash('red');
     } catch { onFlash('red'); }
     setBusy(false);
   };
@@ -2054,29 +2055,34 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
         <button onClick={() => setModal('notes')} className="py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-xs font-bold active:bg-[#d2d2d7]">Add Note</button>
       </div>
 
-      {/* Officials sign-off */}
-      {signoff ? (
-        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex items-center gap-3">
-          <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
-          <div>
-            <p className="text-sm font-bold text-emerald-800">Game signed off by {signoff.name}{signoff.usa_hockey_number ? ` (USA Hockey #${signoff.usa_hockey_number})` : ''}</p>
-            <p className="text-xs text-emerald-700">{signoff.at ? new Date(signoff.at + 'Z').toLocaleString() : ''}</p>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white border-2 border-[#e8e8ed] rounded-2xl p-4 space-y-3">
-          <p className="text-sm font-bold text-[#1d1d1f]">Official's post-game sign-off</p>
-          <p className="text-xs text-[#6e6e73]">After the game, the referee reviews the scoresheet and signs off that the score, goals, and penalties are correct.</p>
-          <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Official's full name"
-            className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
-          <input value={signNumber} onChange={e => setSignNumber(e.target.value)} placeholder="USA Hockey number" inputMode="numeric"
-            className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
-          <button onClick={signOff} disabled={busy || signName.trim().length < 2}
-            className="w-full py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
-            SIGN OFF ON GAME
-          </button>
+      {/* Officials sign-off — every ref on the game can sign */}
+      {signoffs.length > 0 && (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 space-y-2">
+          {signoffs.map((s: any) => (
+            <div key={s.id} className="flex items-center gap-3">
+              <span className="w-9 h-9 rounded-full bg-emerald-500 text-white text-lg font-black flex items-center justify-center shrink-0">✓</span>
+              <div>
+                <p className="text-sm font-bold text-emerald-800">Signed off by {s.name}{s.usa_hockey_number ? ` (USA Hockey #${s.usa_hockey_number})` : ''}</p>
+                <p className="text-xs text-emerald-700">{s.signed_at ? new Date(s.signed_at + 'Z').toLocaleString() : ''}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
+      <div className="bg-white border-2 border-[#e8e8ed] rounded-2xl p-4 space-y-3">
+        <p className="text-sm font-bold text-[#1d1d1f]">{signoffs.length > 0 ? "Add another official's sign-off" : "Official's post-game sign-off"}</p>
+        <p className="text-xs text-[#6e6e73]">{signoffs.length > 0
+          ? 'Each official working the game can add their own sign-off.'
+          : 'After the game, the referee reviews the scoresheet and signs off that the score, goals, and penalties are correct.'}</p>
+        <input value={signName} onChange={e => setSignName(e.target.value)} placeholder="Official's full name"
+          className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+        <input value={signNumber} onChange={e => setSignNumber(e.target.value)} placeholder="USA Hockey number" inputMode="numeric"
+          className="w-full px-4 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+        <button onClick={signOff} disabled={busy || signName.trim().length < 2}
+          className="w-full py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
+          {signoffs.length > 0 ? 'ADD SIGN-OFF' : 'SIGN OFF ON GAME'}
+        </button>
+      </div>
 
       <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
         className="block text-center py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">

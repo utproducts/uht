@@ -1110,7 +1110,7 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
   }
 
   // Fetch all related data in parallel
-  const [events, shots, lineups, threeStars, goalieStats, shootout, periodScores, notes, coaches, officials] = await Promise.all([
+  const [events, shots, lineups, threeStars, goalieStats, shootout, periodScores, notes, coaches, officials, officialSignoffs] = await Promise.all([
     db.prepare(`SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, game_time DESC, created_at ASC`).bind(gameId).all(),
     db.prepare(`SELECT * FROM game_shots WHERE game_id = ? ORDER BY period ASC`).bind(gameId).all(),
     db.prepare(`
@@ -1127,6 +1127,7 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
     db.prepare(`SELECT * FROM game_notes WHERE game_id = ? ORDER BY period ASC, created_at ASC`).bind(gameId).all(),
     db.prepare(`SELECT * FROM game_coaches WHERE game_id = ? ORDER BY team_id, role ASC`).bind(gameId).all(),
     db.prepare(`SELECT * FROM game_officials WHERE game_id = ? ORDER BY role ASC`).bind(gameId).all(),
+    db.prepare(`SELECT id, name, usa_hockey_number, signed_at FROM game_official_signoffs WHERE game_id = ? ORDER BY signed_at ASC, name ASC`).bind(gameId).all(),
   ]);
 
   // Separate events by type
@@ -1155,6 +1156,7 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
       notes: notes.results,
       coaches: coaches.results,
       officials: officials.results,
+      officialSignoffs: officialSignoffs.results,
     },
   });
 });
@@ -1627,7 +1629,7 @@ scoringRoutes.get('/games/:gameId/lineup-state', async (c) => {
   ).bind(gameId).first<any>();
   if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
 
-  const [lineups, coaches, signoffs, officials] = await Promise.all([
+  const [lineups, coaches, signoffs, officials, refSignoffs] = await Promise.all([
     db.prepare(`
       SELECT gl.id, gl.team_id, gl.player_id, gl.jersey_number, gl.position,
         gl.status, gl.is_starting_goalie, gl.is_scratched,
@@ -1648,6 +1650,7 @@ scoringRoutes.get('/games/:gameId/lineup-state', async (c) => {
       WHERE game_id = ? AND role = 'roster_signoff'
     `).bind(gameId).all(),
     db.prepare('SELECT id, official_name, role, jersey_number FROM game_officials WHERE game_id = ? ORDER BY role ASC').bind(gameId).all(),
+    db.prepare('SELECT id, name, usa_hockey_number, signed_at FROM game_official_signoffs WHERE game_id = ? ORDER BY signed_at ASC, name ASC').bind(gameId).all(),
   ]);
 
   const side = (teamId: string | null) => ({
@@ -1666,6 +1669,9 @@ scoringRoutes.get('/games/:gameId/lineup-state', async (c) => {
       officialsSignoff: game.officials_signed_by
         ? { name: game.officials_signed_by, at: game.officials_signed_at, usa_hockey_number: game.officials_signed_number }
         : null,
+      officialsSignoffs: (refSignoffs.results || []).length > 0
+        ? refSignoffs.results
+        : (game.officials_signed_by ? [{ id: 'legacy', name: game.officials_signed_by, usa_hockey_number: game.officials_signed_number, signed_at: game.officials_signed_at }] : []),
       gameStatus: game.status,
     },
   });
@@ -1757,9 +1763,36 @@ scoringRoutes.post('/games/:gameId/officials-signoff', scorekeeperOrStaff, zVali
   const { name, usaHockeyNumber } = c.req.valid('json');
   const db = c.env.DB;
 
+  // Games signed before multi-ref support have only the legacy columns:
+  // carry that signer into the table before adding this one
+  const existing = await db.prepare('SELECT COUNT(*) as n FROM game_official_signoffs WHERE game_id = ?').bind(gameId).first<any>();
+  if ((existing?.n || 0) === 0) {
+    const g = await db.prepare('SELECT officials_signed_by, officials_signed_number, officials_signed_at FROM games WHERE id = ?').bind(gameId).first<any>();
+    if (g?.officials_signed_by && !String(g.officials_signed_by).includes(',')) {
+      await db.prepare(
+        'INSERT OR IGNORE INTO game_official_signoffs (id, game_id, name, usa_hockey_number, signed_at) VALUES (?, ?, ?, ?, ?)'
+      ).bind(crypto.randomUUID().replace(/-/g, ''), gameId, String(g.officials_signed_by).trim(), g.officials_signed_number || null, g.officials_signed_at || new Date().toISOString().slice(0, 19).replace('T', ' ')).run();
+    }
+  }
+
+  await db.prepare(`
+    INSERT INTO game_official_signoffs (id, game_id, name, usa_hockey_number, signed_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT (game_id, name) DO UPDATE SET
+      usa_hockey_number = excluded.usa_hockey_number,
+      signed_at = excluded.signed_at
+  `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, name.trim(), (usaHockeyNumber || '').trim() || null).run();
+
+  // Legacy columns stay as a joined display string so older app builds
+  // (which print games.officials_signed_by verbatim) show every signer
+  const all = (await db.prepare(
+    'SELECT name, usa_hockey_number FROM game_official_signoffs WHERE game_id = ? ORDER BY signed_at ASC, name ASC'
+  ).bind(gameId).all()).results || [];
+  const joinedNames = (all as any[]).map(r => r.name).join(', ');
+  const joinedNumbers = (all as any[]).map(r => r.usa_hockey_number).filter(Boolean).join(', ') || null;
   await db.prepare(
-    "UPDATE games SET officials_signed_by = ?, officials_signed_number = ?, officials_signed_at = datetime('now') WHERE id = ?"
-  ).bind(name.trim(), (usaHockeyNumber || '').trim() || null, gameId).run();
+    "UPDATE games SET officials_signed_by = ?, officials_signed_number = ?, officials_signed_at = COALESCE(officials_signed_at, datetime('now')) WHERE id = ?"
+  ).bind(joinedNames, joinedNumbers, gameId).run();
 
   // Referee sign-off is the moment the sheet is official: push it to both
   // teams' coaches and managers (idempotent via scoresheet_push_sent)
