@@ -100,7 +100,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const roleKey = pathname.split('/')[2] || 'admin';
   const nav = ROLE_NAV[roleKey] || ROLE_NAV.admin;
-  const [userName, setUserName] = useState(readUserName);
+  // Start empty to match the prerendered HTML - reading localStorage during
+  // the first render caused a hydration mismatch (React #329) that froze
+  // the page on its spinner. The effect below fills the name right after.
+  const [userName, setUserName] = useState('');
   const [blocked, setBlocked] = useState(false);
 
   const refreshName = useCallback(() => setUserName(readUserName()), []);
