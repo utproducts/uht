@@ -254,6 +254,12 @@ export default function AppNavigator() {
           screen: 'Home',
           params: { screen: 'EventDetail', params: { eventId: data.event_id } },
         });
+      } else if (data?.type === 'event_photos' && data?.event_id) {
+        // Photo reminders drop families straight on the upload tab
+        (navigationRef.current as any)?.navigate('Main', {
+          screen: 'Home',
+          params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'photos' } },
+        });
       } else if (data?.type === 'checkin_reminder' && data?.event_id) {
         // Straight to My Schedule, where the check-in chips live
         (navigationRef.current as any)?.navigate('Main', {
