@@ -5024,6 +5024,97 @@ function PushHistoryCard({ eventId }: { eventId: string }) {
 
 // Director event PIN: directors enter this in the app to unlock the director
 // toolkit scoped to this event only. Admin accounts never need a PIN.
+// Coach-requested penalty changes: nothing applies until approved here
+function PenaltyRequestsCard({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [showDecided, setShowDecided] = useState(false);
+
+  const load = async () => {
+    try {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/events/${eventId}/penalty-requests`, { headers: adminHeaders() });
+      const j = await res.json();
+      if (j.success) setRows(j.data || []);
+    } catch {}
+  };
+  useEffect(() => { load(); }, [eventId]);
+
+  const decide = async (id: string, action: 'approve' | 'reject') => {
+    setBusy(id);
+    try {
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/scoring/penalty-requests/${id}/decide`, {
+        method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action }),
+      });
+      const j = await res.json();
+      if (!j.success) alert(j.error || 'Could not save the decision');
+      await load();
+    } catch { alert('Could not save the decision'); }
+    setBusy(null);
+  };
+
+  const pending = rows.filter(r => r.status === 'pending');
+  const decided = rows.filter(r => r.status !== 'pending');
+  if (rows.length === 0) return null;
+
+  const changeText = (r: any) => r.change_type === 'remove' ? 'Remove this penalty'
+    : r.change_type === 'player' ? `Penalized player: #${r.old_value || '?'} → #${r.new_value}`
+    : r.change_type === 'penalty_type' ? `Penalty: ${r.old_value || '?'} → ${r.new_value}`
+    : `Minutes: ${r.old_value || '?'} → ${r.new_value}`;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-lg font-bold text-[#1d1d1f]">Penalty Change Requests</h3>
+        {pending.length > 0 && (
+          <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold">{pending.length} pending</span>
+        )}
+      </div>
+      <p className="text-sm text-[#6e6e73] mb-4">Coaches can request penalty fixes from their scoresheet. Nothing changes until it is approved here.</p>
+      {pending.length === 0 && <p className="text-sm text-[#86868b]">No pending requests.</p>}
+      <div className="space-y-3">
+        {pending.map(r => (
+          <div key={r.id} className="border-2 border-amber-200 bg-amber-50 rounded-xl p-4">
+            <p className="text-sm font-bold text-[#1d1d1f]">Game #{r.game_number} - {r.home_name} vs {r.away_name}</p>
+            <p className="text-sm text-[#3d3d3d] mt-1">
+              {r.team_name || 'Team'}: P{r.period ?? '?'} {r.game_time || ''} {r.penalty_type || 'Penalty'} ({r.penalty_minutes ?? '?'} min) on #{r.jersey_number || '?'}
+            </p>
+            <p className="text-sm font-semibold text-[#b45309] mt-1">{changeText(r)}</p>
+            {r.note && <p className="text-sm text-[#6e6e73] mt-1 italic">&ldquo;{r.note}&rdquo;</p>}
+            <p className="text-xs text-[#86868b] mt-1">Requested by {r.requested_email || r.requested_by} &middot; {r.created_at ? new Date(r.created_at + 'Z').toLocaleString() : ''}</p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => decide(r.id, 'approve')} disabled={busy === r.id}
+                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50">
+                Approve &amp; Apply
+              </button>
+              <button onClick={() => decide(r.id, 'reject')} disabled={busy === r.id}
+                className="px-4 py-2 rounded-lg bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold hover:bg-[#d2d2d7] disabled:opacity-50">
+                Reject
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {decided.length > 0 && (
+        <div className="mt-4">
+          <button onClick={() => setShowDecided(v => !v)} className="text-sm font-semibold text-[#0a7cc9]">
+            {showDecided ? 'Hide' : 'Show'} decided ({decided.length})
+          </button>
+          {showDecided && (
+            <div className="mt-2 space-y-2">
+              {decided.map(r => (
+                <div key={r.id} className="border border-[#e8e8ed] rounded-xl p-3 text-sm">
+                  <span className={`font-bold ${r.status === 'approved' ? 'text-emerald-700' : 'text-red-600'}`}>{r.status === 'approved' ? 'Approved' : 'Rejected'}</span>
+                  <span className="text-[#3d3d3d]"> &middot; Game #{r.game_number} {r.team_name ? `- ${r.team_name}` : ''} &middot; {changeText(r)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReviewAskCard({ eventId }: { eventId: string }) {
   const ROOT = 'https://uht.chad-157.workers.dev/api';
   const hdrs = (): any => ({ 'Content-Type': 'application/json', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) });
@@ -6018,6 +6109,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       </div>
 
       {/* Tab Content */}
+      {tab === 'overview' && <PenaltyRequestsCard eventId={eventId} />}
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && <EventRulesCard eventId={eventId} />}
@@ -6732,6 +6824,14 @@ export default function AdminEventsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventItem | null | 'create'>(null);
+  // Deep link from approval emails: /admin/events?event=<id> opens that
+  // event's Overview (window.location, not useSearchParams - static export)
+  useEffect(() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get('event');
+      if (id) setSelectedEventId(id);
+    } catch {}
+  }, []);
   const [tournaments, setTournaments] = useState<{ id: string; name: string }[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<EventItem | null>(null);

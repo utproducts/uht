@@ -1312,6 +1312,33 @@ scoringRoutes.post('/games/:gameId/sheet/correct', authMiddleware, zValidator('j
   }
   if (!allowed) return c.json({ success: false, error: "Only that team's coaches and managers can correct this line" }, 403);
 
+  // Penalty edits from coaches are never auto-applied (Johnny approves
+  // them on the event's admin page) - older app builds land here too
+  if (ev.event_type === 'penalty' && !(roles.includes('admin') || roles.includes('director'))) {
+    const dup = await db.prepare(
+      "SELECT id FROM penalty_change_requests WHERE game_event_id = ? AND change_type = 'player' AND status = 'pending'"
+    ).bind(eventId).first();
+    if (!dup) {
+      await db.prepare(`
+        INSERT INTO penalty_change_requests (id, game_id, game_event_id, event_id, team_id, change_type, old_value, new_value, requested_by, requested_email, status)
+        VALUES (?, ?, ?, ?, ?, 'player', ?, ?, ?, ?, 'pending')
+      `).bind(crypto.randomUUID().replace(/-/g, ''), gameId, eventId, game.event_id, ev.team_id || null,
+        ev.jersey_number || null, jerseyNumber || null, user.id, user.email || null).run();
+      const tn = ev.team_id === game.home_team_id ? game.home_name : game.away_name;
+      keepAlive(c, fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+          to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+          subject: `[APPROVAL NEEDED] Penalty change - Game #${game.game_number} ${tn}`,
+          html: `<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">${game.event_name} - Game #${game.game_number} (${game.home_name} vs ${game.away_name})\n${tn}: P${ev.period ?? '?'} ${ev.penalty_type || 'Penalty'} - penalized player change from #${ev.jersey_number || '?'} to #${jerseyNumber}\nRequested by ${user.email || user.id}\n\nNOT applied yet. Approve or reject it on the event's admin page:\nhttps://ultimatetournaments.com/admin/events?event=${game.event_id}</pre>`,
+        }),
+      }).catch(() => {}));
+    }
+    return c.json({ success: true, data: { pending: true } });
+  }
+
   const col = field === 'assist1' ? 'assist1_jersey' : field === 'assist2' ? 'assist2_jersey' : 'jersey_number';
   const oldVal = ev[col] || null;
   const newVal = jerseyNumber || null;
@@ -1354,6 +1381,202 @@ scoringRoutes.post('/games/:gameId/sheet/correct', authMiddleware, zValidator('j
   }).catch(() => {}));
 
   return c.json({ success: true, data: { field, old: oldVal, new: newVal } });
+});
+
+// ==========================================
+// Penalty change requests: coaches can ask for any penalty fix (player,
+// penalty type, minutes, or removal) but NOTHING applies until staff
+// approves it on the event's admin Overview. Admin/director requests
+// apply immediately. Johnny is emailed on every new request.
+// ==========================================
+
+async function applyPenaltyChange(db: any, req: any): Promise<string> {
+  const ev = await db.prepare("SELECT * FROM game_events WHERE id = ? AND event_type = 'penalty'").bind(req.game_event_id).first<any>();
+  if (!ev) return 'That penalty line no longer exists';
+  if (req.change_type === 'remove') {
+    await db.prepare('DELETE FROM game_events WHERE id = ?').bind(req.game_event_id).run();
+  } else if (req.change_type === 'player') {
+    await db.prepare('UPDATE game_events SET jersey_number = ? WHERE id = ?').bind(req.new_value || null, req.game_event_id).run();
+  } else if (req.change_type === 'penalty_type') {
+    await db.prepare('UPDATE game_events SET penalty_type = ? WHERE id = ?').bind(req.new_value || null, req.game_event_id).run();
+  } else if (req.change_type === 'minutes') {
+    await db.prepare('UPDATE game_events SET penalty_minutes = ? WHERE id = ?').bind(parseFloat(req.new_value) || null, req.game_event_id).run();
+  }
+  // Audit trail alongside the auto-applied goal corrections
+  await db.prepare('INSERT INTO sheet_corrections (id, game_id, event_id, field, old_value, new_value, requested_by, requested_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID().replace(/-/g, ''), req.game_id, req.game_event_id, `penalty_${req.change_type}`, req.old_value, req.new_value, req.requested_by, req.requested_email).run().catch(() => {});
+  return '';
+}
+
+function penaltyLineDesc(ev: any): string {
+  return `P${ev.period ?? '?'} ${ev.game_time || ''} - ${ev.penalty_type || 'Penalty'} (${ev.penalty_minutes ?? '?'} min) on #${ev.jersey_number || '?'}`.trim();
+}
+
+scoringRoutes.post('/games/:gameId/sheet/penalty-request', authMiddleware, zValidator('json', z.object({
+  gameEventId: z.string().min(1),
+  changeType: z.enum(['player', 'penalty_type', 'minutes', 'remove']),
+  newValue: z.string().max(80).optional(),
+  note: z.string().max(400).optional(),
+})), async (c) => {
+  const gameId = c.req.param('gameId');
+  const { gameEventId, changeType, newValue, note } = c.req.valid('json');
+  const db = c.env.DB;
+  const user = c.get('user') as any;
+
+  const game = await db.prepare(`
+    SELECT g.id, g.game_number, g.event_id, g.home_team_id, g.away_team_id,
+      COALESCE(ht.schedule_name, ht.name, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, 'Away') as away_name,
+      e.name as event_name, e.slug as event_slug
+    FROM games g
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN events e ON e.id = g.event_id
+    WHERE g.id = ?
+  `).bind(gameId).first<any>();
+  if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
+
+  const ev = await db.prepare("SELECT * FROM game_events WHERE id = ? AND game_id = ? AND event_type = 'penalty'")
+    .bind(gameEventId, gameId).first<any>();
+  if (!ev) return c.json({ success: false, error: 'That penalty was not found on this scoresheet' }, 404);
+  if (changeType !== 'remove' && !(newValue || '').trim()) {
+    return c.json({ success: false, error: 'Pick the correct value for the change' }, 400);
+  }
+
+  const roles: string[] = user?.roles || [];
+  const isStaff = roles.includes('admin') || roles.includes('director');
+  if (!isStaff && ev.team_id) {
+    const row = await db.prepare(`
+      SELECT 1 as x FROM team_coaches WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM team_managers WHERE team_id = ?1 AND user_id = ?2
+    `).bind(ev.team_id, user.id).first();
+    if (!row) return c.json({ success: false, error: "Only that team's coaches and managers can request this change" }, 403);
+  }
+
+  const oldValue = changeType === 'player' ? (ev.jersey_number || null)
+    : changeType === 'penalty_type' ? (ev.penalty_type || null)
+    : changeType === 'minutes' ? (ev.penalty_minutes != null ? String(ev.penalty_minutes) : null)
+    : penaltyLineDesc(ev);
+  const newVal = changeType === 'remove' ? null : (newValue || '').trim();
+  if (changeType !== 'remove' && String(oldValue || '') === String(newVal || '')) {
+    return c.json({ success: true, data: { unchanged: true } });
+  }
+
+  // Don't stack identical pending requests
+  const dup = await db.prepare(
+    "SELECT id FROM penalty_change_requests WHERE game_event_id = ? AND change_type = ? AND status = 'pending'"
+  ).bind(gameEventId, changeType).first();
+  if (dup) return c.json({ success: true, data: { pending: true, duplicate: true } });
+
+  const reqRow = {
+    id: crypto.randomUUID().replace(/-/g, ''),
+    game_id: gameId, game_event_id: gameEventId, event_id: game.event_id, team_id: ev.team_id || null,
+    change_type: changeType, old_value: oldValue, new_value: newVal, note: (note || '').trim() || null,
+    requested_by: user.id, requested_email: user.email || null,
+  };
+  await db.prepare(`
+    INSERT INTO penalty_change_requests (id, game_id, game_event_id, event_id, team_id, change_type, old_value, new_value, note, requested_by, requested_email, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(reqRow.id, reqRow.game_id, reqRow.game_event_id, reqRow.event_id, reqRow.team_id, reqRow.change_type,
+    reqRow.old_value, reqRow.new_value, reqRow.note, reqRow.requested_by, reqRow.requested_email,
+    isStaff ? 'approved' : 'pending').run();
+
+  const teamName = ev.team_id === game.home_team_id ? game.home_name : game.away_name;
+  const changeLabel = changeType === 'player' ? `penalized player: #${oldValue || '?'} to #${newVal}`
+    : changeType === 'penalty_type' ? `penalty: ${oldValue || '?'} to ${newVal}`
+    : changeType === 'minutes' ? `minutes: ${oldValue || '?'} to ${newVal}`
+    : 'REMOVE this penalty entirely';
+
+  if (isStaff) {
+    // Staff changes apply on the spot, same as before
+    await db.prepare("UPDATE penalty_change_requests SET decided_by = ?, decided_at = datetime('now') WHERE id = ?").bind(user.id, reqRow.id).run();
+    const err = await applyPenaltyChange(db, reqRow);
+    if (err) return c.json({ success: false, error: err }, 400);
+    return c.json({ success: true, data: { applied: true } });
+  }
+
+  const body = `${game.event_name} - Game #${game.game_number} (${game.home_name} vs ${game.away_name})
+${teamName}: ${penaltyLineDesc(ev)}
+Requested change - ${changeLabel}${reqRow.note ? `\nCoach's note: ${reqRow.note}` : ''}
+Requested by ${user.email || user.id}
+
+NOT applied yet. Approve or reject it on the event's admin page:
+https://ultimatetournaments.com/admin/events?event=${game.event_id}`;
+  keepAlive(c, fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+      to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+      subject: `[APPROVAL NEEDED] Penalty change - Game #${game.game_number} ${teamName}`,
+      html: `<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">${body}</pre>`,
+    }),
+  }).catch(() => {}));
+
+  return c.json({ success: true, data: { pending: true } });
+});
+
+// Staff: list an event's penalty change requests (pending first)
+scoringRoutes.get('/events/:eventId/penalty-requests', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const rows = (await db.prepare(`
+    SELECT r.*, g.game_number,
+      COALESCE(ht.schedule_name, ht.name, 'Home') as home_name,
+      COALESCE(at2.schedule_name, at2.name, 'Away') as away_name,
+      COALESCE(t.schedule_name, t.name) as team_name,
+      ge.period, ge.game_time, ge.penalty_type, ge.penalty_minutes, ge.jersey_number
+    FROM penalty_change_requests r
+    JOIN games g ON g.id = r.game_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at2 ON at2.id = g.away_team_id
+    LEFT JOIN teams t ON t.id = r.team_id
+    LEFT JOIN game_events ge ON ge.id = r.game_event_id
+    WHERE r.event_id = ?
+    ORDER BY CASE r.status WHEN 'pending' THEN 0 ELSE 1 END, r.created_at DESC
+    LIMIT 100
+  `).bind(c.req.param('eventId')).all()).results || [];
+  return c.json({ success: true, data: rows });
+});
+
+// Staff: approve or reject a request. Approval applies the change.
+scoringRoutes.post('/penalty-requests/:id/decide', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  action: z.enum(['approve', 'reject']),
+})), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user') as any;
+  const { action } = c.req.valid('json');
+  const req = await db.prepare("SELECT * FROM penalty_change_requests WHERE id = ? AND status = 'pending'").bind(c.req.param('id')).first<any>();
+  if (!req) return c.json({ success: false, error: 'Request not found or already decided' }, 404);
+
+  if (action === 'approve') {
+    const err = await applyPenaltyChange(db, req);
+    if (err) {
+      await db.prepare("UPDATE penalty_change_requests SET status = 'rejected', decided_by = ?, decided_at = datetime('now') WHERE id = ?").bind(user.id, req.id).run();
+      return c.json({ success: false, error: err }, 400);
+    }
+  }
+  await db.prepare("UPDATE penalty_change_requests SET status = ?, decided_by = ?, decided_at = datetime('now') WHERE id = ?")
+    .bind(action === 'approve' ? 'approved' : 'rejected', user.id, req.id).run();
+
+  // Tell the requesting coach what happened
+  if (req.requested_email) {
+    const game = await db.prepare('SELECT game_number FROM games WHERE id = ?').bind(req.game_id).first<any>();
+    const what = req.change_type === 'remove' ? 'remove the penalty'
+      : `change the ${req.change_type === 'player' ? 'penalized player' : req.change_type === 'penalty_type' ? 'penalty' : 'penalty minutes'} to ${req.new_value}`;
+    keepAlive(c, fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+        to: [req.requested_email],
+        subject: `Penalty change ${action === 'approve' ? 'approved' : 'not approved'} - Game #${game?.game_number || ''}`,
+        html: `<p style="font-family:Arial,sans-serif;font-size:14px;">Your request to ${what} on Game #${game?.game_number || ''} was <b>${action === 'approve' ? 'approved and the scoresheet has been updated' : 'not approved'}</b>. Questions? Just reply to this email.</p>`,
+        reply_to: 'johnny@ultimatetournaments.com',
+      }),
+    }).catch(() => {}));
+  }
+
+  return c.json({ success: true, data: { status: action === 'approve' ? 'approved' : 'rejected' } });
 });
 
 // ==========================================

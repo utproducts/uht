@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Share, Alert, Modal } from 'react-native';
+import { Share, Alert, Modal, TextInput } from 'react-native';
 import { colors } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import { StrokeDrawing } from '../components/SignaturePad';
@@ -69,6 +69,40 @@ export default function ScoresheetScreen({ route, navigation }: any) {
       Alert.alert('Could not apply', 'Check your connection and try again.');
     }
     setFixSaving(false);
+  };
+
+  // Penalty change requests: unlike goal fixes these are NOT auto-applied.
+  // The request goes to the tournament director for approval.
+  const [penReq, setPenReq] = useState<{ ev: any; type: null | 'player' | 'penalty_type' | 'minutes' | 'remove'; value: string; note: string } | null>(null);
+  const [penSaving, setPenSaving] = useState(false);
+
+  const submitPenReq = async (value?: string) => {
+    if (!penReq || !penReq.type || penSaving) return;
+    setPenSaving(true);
+    try {
+      const res = await authFetch(`/api/scoring/games/${gameId}/sheet/penalty-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameEventId: penReq.ev.id,
+          changeType: penReq.type,
+          newValue: value ?? penReq.value,
+          note: penReq.note || undefined,
+        }),
+      });
+      const json = await res.json() as any;
+      if (json.success) {
+        setPenReq(null);
+        if (json.data?.applied) { await load(); Alert.alert('Change applied', 'The scoresheet has been updated.'); }
+        else if (json.data?.unchanged) Alert.alert('No change', 'That matches what is already on the sheet.');
+        else Alert.alert('Request sent', 'A tournament director will review this penalty change. You will get an email once it is decided.');
+      } else {
+        Alert.alert('Could not send', typeof json.error === 'string' ? json.error : 'Please try again.');
+      }
+    } catch {
+      Alert.alert('Could not send', 'Check your connection and try again.');
+    }
+    setPenSaving(false);
   };
 
   // Starting goalie correction: tap a lineup row, confirm, server handles
@@ -279,7 +313,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                 <Text style={styles.emptyRow}>No penalties</Text>
               ) : tPens.map((e: any) => (
                 <TouchableOpacity key={e.id} style={styles.tableRow} disabled={!data.share_url}
-                  onPress={() => setFix({ ev: e, field: 'player' })} activeOpacity={0.6}>
+                  onPress={() => setPenReq({ ev: e, type: null, value: '', note: '' })} activeOpacity={0.6}>
                   <Text style={[styles.td, { width: 36 }]}>{e.period ?? '-'}</Text>
                   <Text style={[styles.td, { width: 32, fontWeight: '800' }]}>{e.jersey_number || '?'}</Text>
                   <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes ?? '-'}</Text>
@@ -287,6 +321,9 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                   <Text style={[styles.td, { width: 50 }]}>{e.game_time || '-'}</Text>
                 </TouchableOpacity>
               ))}
+              {data.share_url && tPens.length > 0 ? (
+                <Text style={styles.fixHint} maxFontSizeMultiplier={1.3}>Penalty wrong? Tap the line to request a fix (a director approves it).</Text>
+              ) : null}
             </View>
           );
         })}
@@ -467,6 +504,96 @@ export default function ScoresheetScreen({ route, navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      {/* Penalty change request modal - goes to the director for approval */}
+      <Modal visible={!!penReq} transparent animationType="fade" onRequestClose={() => setPenReq(null)}>
+        <View style={styles.fixBackdrop}>
+          <View style={styles.fixCard}>
+            {penReq ? (() => {
+              const ev = penReq.ev;
+              const roster = lineupFor(ev.team_id);
+              const TYPES: Array<[typeof penReq.type, string]> = [
+                ['player', 'Wrong player'],
+                ['penalty_type', 'Wrong penalty'],
+                ['minutes', 'Wrong minutes'],
+                ['remove', 'Should be removed'],
+              ];
+              const PENALTY_NAMES = ['Tripping', 'Hooking', 'Slashing', 'High-Sticking', 'Cross-Checking', 'Interference', 'Holding', 'Roughing', 'Boarding', 'Charging', 'Body Checking', 'Delay of Game', 'Too Many Players', 'Unsportsmanlike Conduct', 'Head Contact'];
+              const MINUTES: Array<[string, string]> = [['1:30', '1.5'], ['2:00', '2'], ['4:00', '4'], ['5:00', '5'], ['6:00', '6'], ['10:00', '10']];
+              return (
+                <>
+                  <Text style={styles.fixTitle} maxFontSizeMultiplier={1.2}>Request Penalty Change</Text>
+                  <Text style={styles.fixSub} maxFontSizeMultiplier={1.3}>
+                    {`P${ev.period ?? '?'} ${ev.game_time || ''} - ${ev.penalty_type || 'Penalty'} (${ev.penalty_minutes ?? '?'} min) on #${ev.jersey_number || '?'}`}
+                  </Text>
+                  <Text style={styles.fixPrompt} maxFontSizeMultiplier={1.3}>
+                    Penalty changes are reviewed and approved by the tournament director before they appear on the sheet.
+                  </Text>
+                  <View style={styles.fixFieldRow}>
+                    {TYPES.map(([k, label]) => (
+                      <TouchableOpacity key={k} style={[styles.fixFieldBtn, penReq.type === k && styles.fixFieldBtnActive]}
+                        onPress={() => setPenReq({ ...penReq, type: k, value: '' })}>
+                        <Text style={[styles.fixFieldText, penReq.type === k && styles.fixFieldTextActive]} maxFontSizeMultiplier={1.2}>{label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {penReq.type ? (
+                    <TextInput
+                      style={styles.penNote}
+                      placeholder="Note for the director (optional)"
+                      placeholderTextColor="#9aa7b8"
+                      value={penReq.note}
+                      onChangeText={t => setPenReq({ ...penReq, note: t })}
+                      maxLength={400}
+                    />
+                  ) : null}
+                  {penReq.type === 'player' ? (
+                    <ScrollView style={{ maxHeight: 240 }}>
+                      {roster.map((pl: any) => (
+                        <TouchableOpacity key={pl.id || pl.jersey_number} disabled={penSaving}
+                          style={[styles.fixPlayerRow, String(pl.jersey_number) === String(ev.jersey_number || '') && styles.fixPlayerRowCurrent]}
+                          onPress={() => submitPenReq(String(pl.jersey_number || ''))}>
+                          <Text style={styles.fixPlayerNum} maxFontSizeMultiplier={1.2}>#{pl.jersey_number || '?'}</Text>
+                          <Text style={styles.fixPlayerName} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+                            {[pl.first_name, pl.last_name].filter(Boolean).join(' ') || 'Unnamed'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  ) : penReq.type === 'penalty_type' ? (
+                    <ScrollView style={{ maxHeight: 240 }}>
+                      {PENALTY_NAMES.map(name => (
+                        <TouchableOpacity key={name} disabled={penSaving}
+                          style={[styles.fixPlayerRow, name === (ev.penalty_type || '') && styles.fixPlayerRowCurrent]}
+                          onPress={() => submitPenReq(name)}>
+                          <Text style={styles.fixPlayerName} maxFontSizeMultiplier={1.3}>{name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  ) : penReq.type === 'minutes' ? (
+                    <View style={styles.fixFieldRow}>
+                      {MINUTES.map(([label, val]) => (
+                        <TouchableOpacity key={val} disabled={penSaving}
+                          style={[styles.fixFieldBtn, String(ev.penalty_minutes ?? '') === val && styles.fixFieldBtnActive]}
+                          onPress={() => submitPenReq(val)}>
+                          <Text style={styles.fixFieldText} maxFontSizeMultiplier={1.2}>{label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : penReq.type === 'remove' ? (
+                    <TouchableOpacity style={styles.penRemoveBtn} disabled={penSaving} onPress={() => submitPenReq('')}>
+                      <Text style={styles.penRemoveText} maxFontSizeMultiplier={1.2}>{penSaving ? 'Sending...' : 'Request Removal'}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity style={styles.fixCancel} onPress={() => setPenReq(null)}>
+                    <Text style={styles.fixCancelText} maxFontSizeMultiplier={1.2}>{penSaving ? 'Sending...' : 'Cancel'}</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })() : null}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -500,6 +627,9 @@ const styles = StyleSheet.create({
   signRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   signText: { fontSize: 12, fontWeight: '600', color: '#047857' },
   fixHint: { fontSize: 11, color: '#7a8aa0', paddingHorizontal: 10, paddingVertical: 6 },
+  penNote: { borderWidth: 1, borderColor: '#dbe3ec', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13, color: '#1d2a3d', marginBottom: 10 },
+  penRemoveBtn: { backgroundColor: '#b91c1c', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  penRemoveText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   fixBackdrop: { flex: 1, backgroundColor: 'rgba(0,25,50,0.55)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   fixCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18, width: '100%', maxWidth: 380 },
   fixTitle: { fontSize: 17, color: colors.navy, fontWeight: '800', textAlign: 'center' },
