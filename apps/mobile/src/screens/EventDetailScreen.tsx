@@ -384,6 +384,10 @@ export default function EventDetailScreen({
       { teamId: item.away_team_id, name: item.away_team_name || 'Away team' },
     ].filter(s0 => s0.teamId && (isStaffUser || coachTeamIds.includes(s0.teamId as string)));
     if (sides.length === 0) return null;
+    // Game underway and everyone's checked in: get out of the way of the
+    // live score and play-by-play
+    const started = !['scheduled', 'delayed'].includes(String(item.status || 'scheduled'));
+    if (started && sides.every(s0 => !!gameCheckins[`${item.id}|${s0.teamId}`])) return null;
     return (
       <View style={styles.gcRow}>
         {sides.map(s0 => {
