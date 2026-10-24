@@ -114,7 +114,10 @@ export async function autoAssignThreeStars(db: any, gameId: string): Promise<boo
 
   // Goalies: credit saves against the opposing team's shot total
   for (const [teamId, oppId] of [[game.home_team_id, game.away_team_id], [game.away_team_id, game.home_team_id]] as [string, string][]) {
-    const teamGoalies = lineups.filter((l: any) => l.team_id === teamId && String(l.position || '').toUpperCase().startsWith('G'));
+    // Position data is unreliable at younger ages - the starting-goalie
+    // flag counts even when the position says F
+    const teamGoalies = lineups.filter((l: any) => l.team_id === teamId
+      && (String(l.position || '').toUpperCase().startsWith('G') || l.is_starting_goalie));
     if (teamGoalies.length === 0) continue;
     // GA charged per goalie via goalie_jersey when recorded; unattributed goals fall to the starter
     const oppGoals = goals.filter((e: any) => e.team_id === oppId && e.goalie_jersey !== 'EN');
@@ -145,7 +148,17 @@ export async function autoAssignThreeStars(db: any, gameId: string): Promise<boo
   const teams = new Set(picks.map(p => p.teamId));
   if (teams.size === 1 && picks.length === 3) {
     const otherTeam = picks[0].teamId === game.home_team_id ? game.away_team_id : game.home_team_id;
-    const bestOther = ranked.find(c => c.teamId === otherTeam);
+    let bestOther = ranked.find(c => c.teamId === otherTeam);
+    if (!bestOther) {
+      // Other team never generated a stat candidate (no goals, no penalties,
+      // no goalie credit): fall back to their lineup so the guarantee holds -
+      // starting goalie first, they faced the barrage
+      const otherLineup = lineups.filter((l: any) => l.team_id === otherTeam);
+      const pick = otherLineup.find((l: any) => l.is_starting_goalie)
+        || otherLineup.find((l: any) => String(l.position || '').toUpperCase().startsWith('G'))
+        || otherLineup[0];
+      if (pick) bestOther = ensure(otherTeam, String(pick.jersey_number));
+    }
     if (bestOther) picks[2] = bestOther;
   }
 
