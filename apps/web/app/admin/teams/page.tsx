@@ -57,6 +57,85 @@ interface OrgGroup {
 
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
 
+
+// App access: who can run this team in the app (team_coaches/team_managers).
+// Fixes the "listed as manager but can't edit the roster" calls without a
+// database query - add by account email, remove with one click.
+function TeamStaffPanel({ teamId }: { teamId: string }) {
+  const [staff, setStaff] = useState<any[]>([]);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'coach' | 'manager'>('manager');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const hdrs = (): Record<string, string> => ({
+    'X-Dev-Bypass': 'true', 'Content-Type': 'application/json',
+    ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}),
+  });
+  const load = async () => {
+    try {
+      const res = await fetch(`${API}/api/teams/admin/${teamId}/staff`, { headers: hdrs() });
+      const j = await res.json();
+      if (j.success) setStaff(j.data || []);
+    } catch {}
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [teamId]);
+
+  const add = async () => {
+    if (!email.trim()) return;
+    setBusy(true); setMsg('');
+    try {
+      const res = await fetch(`${API}/api/teams/admin/${teamId}/staff`, {
+        method: 'POST', headers: hdrs(), body: JSON.stringify({ email: email.trim(), role }),
+      });
+      const j = await res.json();
+      if (j.success) { setEmail(''); setMsg('Added. They may need to force-close and reopen the app.'); await load(); }
+      else setMsg(j.error || 'Could not add');
+    } catch { setMsg('Could not add - check your connection'); }
+    setBusy(false);
+  };
+
+  const remove = async (row: any) => {
+    if (!window.confirm(`Remove ${row.email} as ${row.staff_role} of this team?`)) return;
+    try {
+      await fetch(`${API}/api/teams/admin/${teamId}/staff/${row.user_id}?role=${row.staff_role}`, { method: 'DELETE', headers: hdrs() });
+      await load();
+    } catch {}
+  };
+
+  return (
+    <div className="px-6 py-4 border-b border-[#e8e8ed]">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-[#86868b] mb-1">App Access (Coaches &amp; Managers)</h4>
+      <p className="text-xs text-[#86868b] mb-3">These accounts can edit this team's roster, check in, and see scoresheets in the app and on the site.</p>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {staff.map(r => (
+          <span key={`${r.user_id}-${r.staff_role}`} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${r.staff_role === 'manager' ? 'bg-purple-50 border-purple-200 text-purple-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+            {[r.first_name, r.last_name].filter(Boolean).join(' ') || r.email}
+            <span className="opacity-60">{r.email}</span>
+            <span className="uppercase text-[9px] tracking-wider opacity-70">{r.staff_role}</span>
+            <button onClick={() => remove(r)} className="text-[#86868b] hover:text-red-600 font-bold">&times;</button>
+          </span>
+        ))}
+        {staff.length === 0 && <span className="text-sm text-[#86868b]">No app accounts attached - add one below.</span>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()}
+          placeholder="account email" type="email"
+          className="px-3 py-2 rounded-lg border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79] w-60" />
+        <select value={role} onChange={e => setRole(e.target.value as any)}
+          className="px-2 py-2 rounded-lg border border-[#e8e8ed] text-sm bg-white">
+          <option value="manager">Manager</option>
+          <option value="coach">Coach</option>
+        </select>
+        <button onClick={add} disabled={busy || !email.trim()}
+          className="px-4 py-2 rounded-lg bg-[#003e79] text-white text-xs font-bold disabled:opacity-50">
+          {busy ? 'Adding…' : 'Add'}
+        </button>
+        {msg && <span className="text-xs text-[#6e6e73]">{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -484,6 +563,9 @@ export default function TeamsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Who can run this team in the app */}
+                <TeamStaffPanel teamId={team.id} />
 
                 {/* Player roster */}
                 <div className="px-6 py-4">

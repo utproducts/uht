@@ -355,6 +355,69 @@ teamRoutes.get('/admin/org-teams/:orgKey', async (c) => {
 // ==================
 // ADMIN: Get team roster (players + guardians) for expand view
 // ==================
+// ==================
+// ADMIN: team staff (coaches + managers) - view, add by email, remove.
+// This is the self-serve fix for "she's the manager but can't edit the
+// roster": attach the right person to the right team without a DB query.
+// ==================
+teamRoutes.get('/admin/:teamId/staff', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param('teamId');
+  const rows = (await db.prepare(`
+    SELECT u.id as user_id, u.email, u.first_name, u.last_name, 'coach' as staff_role
+    FROM team_coaches tc JOIN users u ON u.id = tc.user_id WHERE tc.team_id = ?1
+    UNION ALL
+    SELECT u.id, u.email, u.first_name, u.last_name, 'manager'
+    FROM team_managers tm JOIN users u ON u.id = tm.user_id WHERE tm.team_id = ?1
+    ORDER BY staff_role, last_name
+  `).bind(teamId).all()).results || [];
+  return c.json({ success: true, data: rows });
+});
+
+teamRoutes.post('/admin/:teamId/staff', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  email: z.string().email(),
+  role: z.enum(['coach', 'manager']),
+})), async (c) => {
+  const db = c.env.DB;
+  const teamId = c.req.param('teamId');
+  const { email, role } = c.req.valid('json');
+
+  const target = await db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').bind(email.trim()).first<any>();
+  if (!target) return c.json({ success: false, error: 'No account with that email. Have them create a free account in the app or on the site first.' }, 404);
+  const team = await db.prepare('SELECT id FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) return c.json({ success: false, error: 'Team not found' }, 404);
+
+  const table = role === 'manager' ? 'team_managers' : 'team_coaches';
+  await db.prepare(`INSERT OR IGNORE INTO ${table} (id, team_id, user_id) VALUES (lower(hex(randomblob(16))), ?, ?)`).bind(teamId, target.id).run();
+  await db.prepare(`
+    INSERT INTO team_members (id, team_id, user_id, role, status, joined_via)
+    SELECT lower(hex(randomblob(16))), ?1, ?2, ?3, 'active', 'admin'
+    WHERE NOT EXISTS (SELECT 1 FROM team_members WHERE team_id = ?1 AND user_id = ?2)
+  `).bind(teamId, target.id, role).run();
+  // The app shows staff tools per active role - make sure they hold it
+  await db.prepare(`
+    INSERT INTO user_roles (user_id, role) SELECT ?1, ?2
+    WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = ?1 AND role = ?2)
+  `).bind(target.id, role).run();
+
+  return c.json({ success: true });
+});
+
+teamRoutes.delete('/admin/:teamId/staff/:userId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const { teamId, userId } = c.req.param();
+  const role = c.req.query('role');
+  if (role === 'coach' || !role) await db.prepare('DELETE FROM team_coaches WHERE team_id = ? AND user_id = ?').bind(teamId, userId).run();
+  if (role === 'manager' || !role) await db.prepare('DELETE FROM team_managers WHERE team_id = ? AND user_id = ?').bind(teamId, userId).run();
+  // Drop the membership row only when they hold no staff seat at all
+  const still = await db.prepare(`
+    SELECT 1 as x FROM team_coaches WHERE team_id = ?1 AND user_id = ?2
+    UNION SELECT 1 FROM team_managers WHERE team_id = ?1 AND user_id = ?2
+  `).bind(teamId, userId).first();
+  if (!still) await db.prepare("DELETE FROM team_members WHERE team_id = ? AND user_id = ? AND role IN ('coach','manager')").bind(teamId, userId).run();
+  return c.json({ success: true });
+});
+
 teamRoutes.get('/admin/team-roster/:teamId', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   const teamId = c.req.param('teamId');
@@ -2506,9 +2569,24 @@ teamRoutes.put('/:teamId/players/:playerId', authMiddleware, async (c) => {
 // ==================
 // Remove player from team
 // ==================
-teamRoutes.delete('/:teamId/players/:playerId', authMiddleware, requireRole('admin', 'organization', 'coach'), async (c) => {
+teamRoutes.delete('/:teamId/players/:playerId', authMiddleware, async (c) => {
   const { teamId, playerId } = c.req.param();
   const db = c.env.DB;
+  const user = c.get('user') as any;
+
+  // THIS team's coaches/managers, its org admins, or site staff - the
+  // old requireRole('coach'...) locked out manager-role users entirely
+  const roles: string[] = user?.roles || [];
+  let allowed = roles.includes('admin') || roles.includes('director');
+  if (!allowed) {
+    const staffRow = await db.prepare(`
+      SELECT 1 as x FROM team_coaches WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM team_managers WHERE team_id = ?1 AND user_id = ?2
+      UNION SELECT 1 FROM organization_admins oa JOIN teams t ON t.organization_id = oa.organization_id AND t.id = ?1 WHERE oa.user_id = ?2
+    `).bind(teamId, user.id).first();
+    allowed = !!staffRow;
+  }
+  if (!allowed) return c.json({ success: false, error: "Only this team's coaches and managers can remove players" }, 403);
 
   await db.prepare(`
     UPDATE team_players SET status = 'inactive' WHERE team_id = ? AND player_id = ?
