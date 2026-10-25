@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Linking, ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
 import { getToken } from '../services/auth';
 import { registerForPushNotifications, refreshBadgeCount, addNotificationListener, addResponseListener } from '../services/notifications';
@@ -153,6 +154,10 @@ function FindEventsStackNavigator() {
 }
 
 function MainTabs() {
+  // Android phones with 3-button navigation (lots of Samsungs) report the
+  // system bar as a bottom inset; a fixed-height tab bar sat underneath it
+  const insets = useSafeAreaInsets();
+  const androidBottom = Platform.OS === 'android' ? insets.bottom : 0;
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -171,7 +176,7 @@ function MainTabs() {
         tabBarActiveTintColor: colors.cyan,
         tabBarInactiveTintColor: 'rgba(0, 204, 255, 0.5)',
         tabBarLabelStyle: styles.tabLabel,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, androidBottom > 0 ? { height: 64 + androidBottom, paddingBottom: androidBottom } : null],
         tabBarItemStyle: styles.tabItem,
       })}
     >
