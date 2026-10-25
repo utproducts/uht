@@ -1251,7 +1251,7 @@ function ReplaceTeamModal({
       uniqueReplacements.set(t.id, {
         id: t.id,
         name: t.name,
-        divLabel: div ? `${div.age_group} ${div.division_level}` : '',
+        divLabel: div ? [div.age_group, div.division_level].filter(Boolean).join(' ') : '',
       });
     }
   });
@@ -2321,7 +2321,7 @@ function VenueScheduleView({
                             <td className="px-4 py-2.5 text-[#1d1d1f] font-semibold text-xs">#{game.game_number}</td>
                             <td className="px-4 py-2.5 text-[#3d3d3d] text-xs">{fmtTime(game.start_time)}</td>
                             <td className="px-4 py-2.5 text-xs">
-                              <span className="text-[#6e6e73]">{div ? `${div.age_group} ${div.division_level}` : '—'}</span>
+                              <span className="text-[#6e6e73]">{div ? [div.age_group, div.division_level].filter(Boolean).join(' ') : '—'}</span>
                               {isBracket && (
                                 <span className={`ml-1.5 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${gameTypeBadge[game.game_type] || 'bg-[#fafafa] text-[#6e6e73]'}`}>
                                   {game.game_type === 'championship' ? 'CHAMP' : game.game_type === 'semifinal' ? 'SEMI' : game.game_type === 'consolation' ? 'CONS' : game.game_type.toUpperCase()}
@@ -2371,7 +2371,7 @@ function VenueScheduleView({
                   <tr key={game.id} onClick={() => onClickGame(game)} className="hover:bg-[#fafafa] cursor-pointer transition">
                     <td className="px-4 py-2.5 font-semibold text-xs">#{game.game_number}</td>
                     <td className="px-4 py-2.5 text-xs">{fmtDatetime(game.start_time)}</td>
-                    <td className="px-4 py-2.5 text-xs text-[#6e6e73]">{div ? `${div.age_group} ${div.division_level}` : '—'}</td>
+                    <td className="px-4 py-2.5 text-xs text-[#6e6e73]">{div ? [div.age_group, div.division_level].filter(Boolean).join(' ') : '—'}</td>
                     <td className="px-4 py-2.5 text-xs">{game.home_team_name && game.away_team_name ? `${game.home_team_name} vs ${game.away_team_name}` : game.notes || 'TBD vs TBD'}</td>
                   </tr>
                 );
@@ -2586,7 +2586,7 @@ function StaffAssignmentsView({
                 <button key={game.id} onClick={() => onClickGame(game)} className="w-full text-left px-6 py-2.5 hover:bg-[#fafafa] transition flex items-center gap-3">
                   <span className="text-xs font-semibold text-[#1d1d1f] w-12">#{game.game_number}</span>
                   <span className="text-xs text-[#86868b] w-24">{fmtDatetime(game.start_time)}</span>
-                  <span className="text-xs text-[#6e6e73] w-20 truncate">{div ? `${div.age_group} ${div.division_level}` : '—'}</span>
+                  <span className="text-xs text-[#6e6e73] w-20 truncate">{div ? [div.age_group, div.division_level].filter(Boolean).join(' ') : '—'}</span>
                   <span className="text-xs text-[#1d1d1f] flex-1 truncate">{game.home_team_name || 'TBD'} vs {game.away_team_name || 'TBD'}</span>
                   <span className="text-[10px] text-amber-600 font-semibold">No rink</span>
                 </button>
@@ -2799,7 +2799,7 @@ function StaffAssignmentsView({
                           return (
                             <button key={game.id} onClick={() => onClickGame(game)} className="w-full text-left px-6 py-1.5 hover:bg-[#fafafa] transition flex items-center gap-3">
                               <span className="text-[10px] text-[#86868b] font-mono w-14 shrink-0">{fmtTime(game.start_time)}</span>
-                              <span className="text-[10px] text-[#6e6e73] w-20 shrink-0 truncate">{div ? `${div.age_group} ${div.division_level}` : '—'}</span>
+                              <span className="text-[10px] text-[#6e6e73] w-20 shrink-0 truncate">{div ? [div.age_group, div.division_level].filter(Boolean).join(' ') : '—'}</span>
                               <span className="text-[11px] text-[#1d1d1f] truncate flex-1">{game.home_team_name || 'TBD'} vs {game.away_team_name || 'TBD'}</span>
                               <span className="text-[10px] w-24 shrink-0 truncate text-right">{game.scorekeeper_name ? <span className="text-emerald-700 font-semibold">{game.scorekeeper_name}</span> : <span className="text-[#d8d8dd]">No SK</span>}</span>
                             </button>
@@ -3795,7 +3795,7 @@ export default function AdminSchedulePage() {
                       if (selectedDivision) {
                         const divGames = games.filter(g => g.event_division_id === selectedDivision);
                         const div = divisions.find(d => d.id === selectedDivision);
-                        const label = div ? `${div.age_group} ${div.division_level}` : 'Division';
+                        const label = div ? [div.age_group, div.division_level].filter(Boolean).join(' ') : 'Division';
                         return divGames.length > 0 ? `Regen ${label}` : `Generate ${label}`;
                       }
                       return games.length > 0 ? 'Regenerate All' : 'Generate All';

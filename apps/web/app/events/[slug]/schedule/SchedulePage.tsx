@@ -224,7 +224,7 @@ function ageSortKey(label: string): number {
 }
   // Build unique divisions: "Age Group Level" combos
   const divisions = Array.from(
-    new Set(games.map(g => `${g.age_group} ${g.division_level}`.trim()).filter(Boolean))
+    new Set(games.map(g => [g.age_group, g.division_level].filter(Boolean).join(' ')).filter(Boolean))
   ).sort((a, b) => ageSortKey(a) - ageSortKey(b) || a.localeCompare(b));
   const days = Array.from(new Set(games.map(g => formatDay(g.start_time))));
 
@@ -232,7 +232,7 @@ function ageSortKey(label: string): number {
   const isLiveGame = (g: Game) => ['in_progress', 'live', 'intermission', 'warmup'].includes(g.status);
   const isFinalGame = (g: Game) => g.status === 'final';
   let filtered = games;
-  if (divisionFilter) filtered = filtered.filter(g => `${g.age_group} ${g.division_level}`.trim() === divisionFilter);
+  if (divisionFilter) filtered = filtered.filter(g => [g.age_group, g.division_level].filter(Boolean).join(' ') === divisionFilter);
   if (dayFilter) filtered = filtered.filter(g => formatDay(g.start_time) === dayFilter);
   // All Divisions with games in progress: show ONLY what's live right now,
   // clearly labeled - pick a division for its full schedule
@@ -258,7 +258,7 @@ function ageSortKey(label: string): number {
 
   // Filter standings by division too
   const filteredStandings = divisionFilter
-    ? standings.filter(s => `${s.age_group} ${s.division_level}`.trim() === divisionFilter)
+    ? standings.filter(s => [s.age_group, s.division_level].filter(Boolean).join(' ') === divisionFilter)
     : standings;
   // Division -> pools. Divisions of up to 5 teams are one table; bigger
   // divisions split into pools from the schedule (UHT convention: Gray/Blue)
@@ -523,7 +523,7 @@ function ageSortKey(label: string): number {
               </h2>
             )}
             {divisionFilter && (() => {
-              const divGames = games.filter(g => `${g.age_group} ${g.division_level}`.trim() === divisionFilter);
+              const divGames = games.filter(g => [g.age_group, g.division_level].filter(Boolean).join(' ') === divisionFilter);
               const counts = {
                 all: divGames.length,
                 live: divGames.filter(isLiveGame).length,

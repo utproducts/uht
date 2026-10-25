@@ -554,7 +554,7 @@ export default function ScoresPage() {
   // Group standings by age_group, division_level, then pool_name
   const groupedStandings: Record<string, Record<string, StandingsRow[]>> = {};
   standings.forEach((row) => {
-    const groupKey = `${row.age_group} ${row.division_level}`;
+    const groupKey = [row.age_group, row.division_level].filter(Boolean).join(' ');
     if (!groupedStandings[groupKey]) {
       groupedStandings[groupKey] = {};
     }
