@@ -1219,7 +1219,15 @@ export default function EventDetailScreen({
           const isFinal = gameStatus === 'final';
 
           return (
-            <View style={[styles.gameCard, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+            <View style={[styles.gameCard, item.game_type === 'championship' ? styles.gameCardChampionship : null, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+              {item.game_type === 'championship' ? (
+                <View style={styles.champGameRow}>
+                  <View style={styles.champGameChip}>
+                    <Ionicons name="trophy" size={11} color="#fff" />
+                    <Text style={styles.champGameChipText} maxFontSizeMultiplier={1.2}>CHAMPIONSHIP GAME</Text>
+                  </View>
+                </View>
+              ) : null}
               {/* Status badge */}
               {gameStatus !== 'scheduled' && (
                 <View style={styles.gameStatusRow}>
@@ -1707,7 +1715,15 @@ export default function EventDetailScreen({
           const isMyAway = myTeamIds.includes(item.away_team_id || '');
 
           return (
-            <View style={[styles.gameCard, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+            <View style={[styles.gameCard, item.game_type === 'championship' ? styles.gameCardChampionship : null, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+              {item.game_type === 'championship' ? (
+                <View style={styles.champGameRow}>
+                  <View style={styles.champGameChip}>
+                    <Ionicons name="trophy" size={11} color="#fff" />
+                    <Text style={styles.champGameChipText} maxFontSizeMultiplier={1.2}>CHAMPIONSHIP GAME</Text>
+                  </View>
+                </View>
+              ) : null}
               {gameStatus !== 'scheduled' && (
                 <View style={styles.gameStatusRow}>
                   <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
@@ -2897,6 +2913,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
+  gameCardChampionship: { borderWidth: 2, borderColor: '#d4af37', backgroundColor: '#fffdf4' },
+  champGameRow: { flexDirection: 'row', marginBottom: 8 },
+  champGameChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#b8860b', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  champGameChipText: { color: '#fff', fontSize: 10, letterSpacing: 1.5, ...fonts.bold },
   gameTimeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   gameTime: { fontSize: 13, color: colors.textMuted, ...fonts.semibold, textTransform: 'uppercase', letterSpacing: 0.3 },
   gameRink: { fontSize: 13, color: colors.info, ...fonts.medium, marginBottom: spacing.sm },
