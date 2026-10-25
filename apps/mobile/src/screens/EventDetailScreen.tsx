@@ -418,6 +418,8 @@ export default function EventDetailScreen({
   // Event photo gallery
   const [photos, setPhotos] = useState<any[]>([]);
   const [photosTotal, setPhotosTotal] = useState(0);
+  const [photosPage, setPhotosPage] = useState(1);
+  const [photosLoadingMore, setPhotosLoadingMore] = useState(false);
   const [photosLoaded, setPhotosLoaded] = useState(false);
   const [photosUploading, setPhotosUploading] = useState(false);
   const [viewerPhoto, setViewerPhoto] = useState<any | null>(null);
@@ -1350,12 +1352,14 @@ export default function EventDetailScreen({
   // ==================
   // TAB: 3 Stars (per-game MVPs from every final, with the selection rules)
   // ==================
-  async function loadPhotos() {
+  async function loadPhotos(page: number = 1) {
     try {
-      const res = await fetch(`https://uht.chad-157.workers.dev/api/photos/events/${eventId}/photos`);
+      const res = await fetch(`https://uht.chad-157.workers.dev/api/photos/events/${eventId}/photos?page=${page}&per_page=60`);
       const json = await res.json();
       if (json.success) {
-        setPhotos(json.data.photos || []);
+        const batch = json.data.photos || [];
+        setPhotos(prev => page === 1 ? batch : [...prev, ...batch.filter((b: any) => !prev.some((x: any) => x.id === b.id))]);
+        setPhotosPage(page);
         setPhotosTotal(json.data.total || 0);
       }
     } catch {}
@@ -1503,10 +1507,18 @@ export default function EventDetailScreen({
           <View style={styles.photoGrid}>
             {fans.map(p => (
               <TouchableOpacity key={p.id} activeOpacity={0.8} onPress={() => setViewerPhoto(p)}>
-                <Image source={{ uri: p.url }} style={{ width: thumb, height: thumb, borderRadius: 10, backgroundColor: '#e8ecf1' }} />
+                <Image source={{ uri: `${p.url}${String(p.url).includes('?') ? '&' : '?'}thumb=1` }} style={{ width: thumb, height: thumb, borderRadius: 10, backgroundColor: '#e8ecf1' }} />
               </TouchableOpacity>
             ))}
           </View>
+        )}
+        {photos.length < photosTotal && (
+          <TouchableOpacity style={styles.photoLoadMoreBtn} activeOpacity={0.85} disabled={photosLoadingMore}
+            onPress={async () => { setPhotosLoadingMore(true); await loadPhotos(photosPage + 1); setPhotosLoadingMore(false); }}>
+            {photosLoadingMore
+              ? <ActivityIndicator size="small" color={colors.navy} />
+              : <Text style={styles.photoLoadMoreText} maxFontSizeMultiplier={1.2}>Load {Math.min(60, photosTotal - photos.length)} more photos</Text>}
+          </TouchableOpacity>
         )}
 
         {/* Full-screen viewer */}
@@ -3094,6 +3106,11 @@ const styles = StyleSheet.create({
   pushCardUploadText: { color: colors.white, fontSize: 13, ...fonts.bold },
   pushCardLaterBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#e3ecf5' },
   pushCardLaterText: { color: '#44576e', fontSize: 13, ...fonts.semibold },
+  photoLoadMoreBtn: {
+    marginTop: 12, alignSelf: 'center', backgroundColor: '#e8f1fa', borderRadius: 999,
+    paddingHorizontal: 20, paddingVertical: 11, borderWidth: 1, borderColor: '#bcd8ee',
+  },
+  photoLoadMoreText: { color: colors.navy, fontSize: 13, ...fonts.bold },
   photoUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 13, marginBottom: spacing.sm },
   photoUploadBtnText: { color: colors.white, fontSize: 15, ...fonts.bold },
   champUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#fff4d6', borderWidth: 1, borderColor: '#f0d58a', borderRadius: 12, paddingVertical: 11, marginBottom: spacing.sm },
