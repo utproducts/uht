@@ -233,8 +233,13 @@ export default function EventDetailScreen({
   route: any;
   navigation: any;
 }) {
-  const { eventId, eventName, event: navEvent, initialTab } = route.params || {};
+  const { eventId, eventName, event: navEvent, initialTab, pushTitle, pushBody } = route.params || {};
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab || 'info');
+  // Full text of the push that brought the user here, shown as a card so
+  // the message survives the tap (Chad: "the second it opens... it goes away")
+  const [pushCard, setPushCard] = useState<{ title: string; body: string } | null>(
+    pushTitle || pushBody ? { title: pushTitle || 'Notification', body: pushBody || '' } : null
+  );
   const [event, setEvent] = useState<EventInfo | null>(
     navEvent
       ? {
@@ -1438,6 +1443,22 @@ export default function EventDetailScreen({
             <Text style={styles.photoCtaSub}>Upload photos all weekend - after the event every photo becomes part of the official event mosaic.</Text>
           </View>
         </View>
+        {pushCard ? (
+          <View style={styles.pushCard}>
+            <Text style={styles.pushCardTitle} maxFontSizeMultiplier={1.2}>{pushCard.title}</Text>
+            <Text style={styles.pushCardBody} maxFontSizeMultiplier={1.3}>{pushCard.body}</Text>
+            <View style={styles.pushCardBtnRow}>
+              <TouchableOpacity style={styles.pushCardUploadBtn} activeOpacity={0.85}
+                onPress={() => { setPushCard(null); uploadEventPhotos('fan'); }}>
+                <Ionicons name="cloud-upload-outline" size={16} color={colors.white} />
+                <Text style={styles.pushCardUploadText} maxFontSizeMultiplier={1.2}>Upload Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pushCardLaterBtn} activeOpacity={0.8} onPress={() => setPushCard(null)}>
+                <Text style={styles.pushCardLaterText} maxFontSizeMultiplier={1.2}>Later</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
         <TouchableOpacity style={styles.photoUploadBtn} activeOpacity={0.85} disabled={photosUploading}
           onPress={() => uploadEventPhotos('fan')}>
           {photosUploading ? <ActivityIndicator color={colors.white} size="small" /> : <Ionicons name="cloud-upload-outline" size={19} color={colors.white} />}
@@ -3059,6 +3080,20 @@ const styles = StyleSheet.create({
   photoCta: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.navy, borderRadius: 14, padding: 14, marginBottom: spacing.sm },
   photoCtaTitle: { color: colors.white, fontSize: 15, ...fonts.bold },
   photoCtaSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2, lineHeight: 16 },
+  pushCard: {
+    backgroundColor: '#f0f7ff', borderWidth: 1.5, borderColor: '#9fd4f5', borderRadius: 14,
+    padding: 14, marginBottom: 12,
+  },
+  pushCardTitle: { fontSize: 15, color: colors.navy, ...fonts.bold, marginBottom: 4 },
+  pushCardBody: { fontSize: 13.5, color: '#2a3c52', lineHeight: 19 },
+  pushCardBtnRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  pushCardUploadBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.navy,
+    borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10,
+  },
+  pushCardUploadText: { color: colors.white, fontSize: 13, ...fonts.bold },
+  pushCardLaterBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#e3ecf5' },
+  pushCardLaterText: { color: '#44576e', fontSize: 13, ...fonts.semibold },
   photoUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.navy, borderRadius: 12, paddingVertical: 13, marginBottom: spacing.sm },
   photoUploadBtnText: { color: colors.white, fontSize: 15, ...fonts.bold },
   champUploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#fff4d6', borderWidth: 1, borderColor: '#f0d58a', borderRadius: 12, paddingVertical: 11, marginBottom: spacing.sm },

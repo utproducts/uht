@@ -255,10 +255,15 @@ export default function AppNavigator() {
           params: { screen: 'EventDetail', params: { eventId: data.event_id } },
         });
       } else if (data?.type === 'event_photos' && data?.event_id) {
-        // Photo reminders drop families straight on the upload tab
+        // Photo reminders open the upload tab WITH the full message shown -
+        // a bare tab switch made the notification vanish before it was read
+        const content = response.notification?.request?.content;
         (navigationRef.current as any)?.navigate('Main', {
           screen: 'Home',
-          params: { screen: 'EventDetail', params: { eventId: data.event_id, initialTab: 'photos' } },
+          params: { screen: 'EventDetail', params: {
+            eventId: data.event_id, initialTab: 'photos',
+            pushTitle: content?.title || null, pushBody: content?.body || null,
+          } },
         });
       } else if (data?.type === 'checkin_reminder' && data?.event_id) {
         // Straight to My Schedule, where the check-in chips live
