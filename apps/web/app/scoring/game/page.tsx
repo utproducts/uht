@@ -510,7 +510,8 @@ function ScoringPageInner() {
     finally { setPosting(false); setModal(null); }
   };
 
-  // Shootout
+  // Shootout - local tally so the crew can see who leads and end the game
+  const [soGoals, setSoGoals] = useState<Record<string, number>>({});
   const submitShootout = async (result: 'goal' | 'save' | 'miss') => {
     if (!gameId || !soTeamId || !soJersey) return;
     setPosting(true);
@@ -522,6 +523,7 @@ function ScoringPageInner() {
           roundNumber: soRound, result, sequenceOrder: soSequence,
         }),
       });
+      if (result === 'goal') setSoGoals(prev => ({ ...prev, [soTeamId]: (prev[soTeamId] || 0) + 1 }));
       setSoSequence(prev => prev + 1);
       setSoJersey('');
       setSoGoalieJersey('');
@@ -1327,12 +1329,33 @@ function ScoringPageInner() {
               </button>
             </div>
 
-            <div className="flex gap-3">
-              <button onClick={() => setSoRound(r => r + 1)}
-                className="flex-1 py-3 rounded-full bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold">Next Round</button>
-              <button onClick={() => setModal(null)}
-                className="flex-1 py-3 rounded-full bg-[#003e79] text-white text-sm font-bold">Done</button>
-            </div>
+            {(() => {
+              const h = soGoals[game.home_team_id] || 0;
+              const a = soGoals[game.away_team_id] || 0;
+              const leader = h > a ? game.home_team_name : a > h ? game.away_team_name : null;
+              return (
+                <>
+                  <div className="text-center bg-[#f5f5f7] rounded-xl py-2.5">
+                    <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest">Shootout Goals</p>
+                    <p className="text-lg font-black text-[#1d1d1f]">{game.home_team_name} {h} - {a} {game.away_team_name}</p>
+                  </div>
+                  {leader ? (
+                    <button onClick={() => { setModal(null); postEvent({ eventType: 'game_end' }); }}
+                      className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#b8860b] text-white text-base font-black active:brightness-110">
+                      END GAME - {leader.toUpperCase()} WIN THE SHOOTOUT
+                    </button>
+                  ) : (
+                    <p className="text-center text-xs text-[#86868b]">Keep shooting until one team leads - the winning goal is added to the final score automatically.</p>
+                  )}
+                  <div className="flex gap-3">
+                    <button onClick={() => setSoRound(r => r + 1)}
+                      className="flex-1 py-3 rounded-full bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold">Next Round</button>
+                    <button onClick={() => setModal(null)}
+                      className="flex-1 py-3 rounded-full bg-white border border-[#e8e8ed] text-[#3d3d3d] text-sm font-bold">Close</button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </FullScreenModal>
       )}

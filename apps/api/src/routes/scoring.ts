@@ -395,6 +395,26 @@ scoringRoutes.post('/games/:gameId/events', zValidator('json', gameEventSchema),
       // "Starting now" push to both teams' followers (idempotent)
       keepAlive(c, notifyGameStartPush(db, gameId));
     } else if (data.eventType === 'game_end') {
+      // Tied game: a recorded shootout settles it (+1 to the winner, like
+      // the NHL). A tied bracket game with no decisive shootout cannot end -
+      // game 66 at Monster Mash went final 4-4 because nothing enforced this.
+      const endG = await db.prepare('SELECT home_team_id, away_team_id, home_score, away_score, game_type FROM games WHERE id = ?').bind(gameId).first<any>();
+      if (endG && (endG.home_score || 0) === (endG.away_score || 0)) {
+        const rounds = (await db.prepare("SELECT team_id, result FROM shootout_rounds WHERE game_id = ?").bind(gameId).all()).results || [];
+        const soHome = (rounds as any[]).filter(r => r.team_id === endG.home_team_id && r.result === 'goal').length;
+        const soAway = (rounds as any[]).filter(r => r.team_id === endG.away_team_id && r.result === 'goal').length;
+        if (rounds.length > 0 && soHome !== soAway) {
+          await db.prepare("UPDATE games SET home_score = home_score + ?, away_score = away_score + ?, is_shootout = 1, updated_at = datetime('now') WHERE id = ?")
+            .bind(soHome > soAway ? 1 : 0, soAway > soHome ? 1 : 0, gameId).run();
+        } else if (['quarterfinal', 'semifinal', 'championship'].includes(String(endG.game_type || ''))) {
+          return c.json({
+            success: false,
+            error: rounds.length > 0
+              ? 'The shootout is tied - keep recording attempts until one team leads, then end the game.'
+              : 'A bracket game cannot end tied. Record the shootout first (Menu > Shootout), then end the game - the winning goal is added automatically.',
+          }, 400);
+        }
+      }
       await db.prepare("UPDATE games SET status = 'final', updated_at = datetime('now') WHERE id = ?").bind(gameId).run();
       // Coach texts + bracket auto-advance, kept alive past the response
       keepAlive(c, notifyCoachesOnFinal(db, c.env, gameId));
