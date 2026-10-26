@@ -932,6 +932,64 @@ emailRoutes.get('/app-invite/:eventId/status', authMiddleware, requireRole('admi
   return c.json({ success: true, data });
 });
 
+// ==================
+// Champion merch campaign: preview scrapes the shop link, send emails all
+// champion-team contacts and pushes champion-team followers
+// ==================
+emailRoutes.post('/champion-merch/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  let url = String(body.url || '').trim();
+  if (!url) {
+    const ev = await c.env.DB.prepare('SELECT slug FROM events WHERE id = ?').bind(c.req.param('eventId')).first<any>();
+    url = ev?.slug || '';
+  }
+  if (!url) return c.json({ success: false, error: 'This event has no slug - paste the shop link instead' }, 400);
+  try {
+    const { fetchMerchProducts, championTeamIds, championRecipients } = await import('../lib/champion-merch');
+    const { products, shopUrl } = await fetchMerchProducts(url);
+    const teamIds = await championTeamIds(c.env.DB, c.req.param('eventId'));
+    const recipients = await championRecipients(c.env.DB, c.req.param('eventId'), teamIds);
+    return c.json({ success: true, data: { products, shop_url: shopUrl, champion_teams: teamIds.length, recipients: recipients.length } });
+  } catch (e: any) {
+    return c.json({ success: false, error: e?.message || 'Could not read that shop page' }, 400);
+  }
+});
+
+emailRoutes.post('/champion-merch/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  let url = String(body.url || '').trim();
+  if (!url) {
+    const ev0 = await c.env.DB.prepare('SELECT slug FROM events WHERE id = ?').bind(c.req.param('eventId')).first<any>();
+    url = ev0?.slug || '';
+  }
+  if (!url) return c.json({ success: false, error: 'This event has no slug - paste the shop link instead' }, 400);
+  const testEmail = typeof body.testEmail === 'string' && body.testEmail.includes('@') ? body.testEmail.trim() : undefined;
+  const { sendChampionMerch, championTeamIds } = await import('../lib/champion-merch');
+  const result = await sendChampionMerch(c.env, c.req.param('eventId'), url, { testEmail });
+  if ((result as any).error) return c.json({ success: false, error: (result as any).error }, 400);
+
+  // Push to champion team followers (skipped on test sends)
+  let pushSent = 0;
+  if (!testEmail) {
+    try {
+      const db = c.env.DB;
+      const ev = await db.prepare('SELECT name FROM events WHERE id = ?').bind(c.req.param('eventId')).first<any>();
+      const { teamAudience } = await import('../lib/push');
+      const teamIds = await championTeamIds(db, c.req.param('eventId'));
+      const { tokens, userIds } = await teamAudience(db, teamIds, c.req.param('eventId'));
+      if (tokens.length > 0) {
+        const { sendExpoPushNotifications, createUserNotifications } = await import('../lib/push');
+        const title = 'Champions only: your title gear is here';
+        const pBody = `You won the ${ev?.name || 'tournament'} - now wear it. The exclusive Champions collection is live for your team only. Tap to shop.`;
+        const data = { type: 'open_url', url, event_id: c.req.param('eventId') };
+        pushSent = await sendExpoPushNotifications(tokens, title, pBody, data);
+        await createUserNotifications(db, userIds, title, pBody, 'event_update', data);
+      }
+    } catch {}
+  }
+  return c.json({ success: true, data: { ...(result as any), push_sent: pushSent } });
+});
+
 emailRoutes.post('/app-invite/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const body = await c.req.json().catch(() => ({})) as any;
   const testEmail = typeof body.testEmail === 'string' && body.testEmail.includes('@') ? body.testEmail.trim() : undefined;

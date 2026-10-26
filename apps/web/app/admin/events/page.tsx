@@ -5024,6 +5024,89 @@ function PushHistoryCard({ eventId }: { eventId: string }) {
 
 // Director event PIN: directors enter this in the app to unlock the director
 // toolkit scoped to this event only. Admin accounts never need a PIN.
+
+// Champion merch blast: paste the tournamentgear shop link, preview the
+// scraped products, then send the exclusive email + push to champions only
+function ChampionMerchCard({ eventId }: { eventId: string }) {
+  const [url, setUrl] = useState('');
+  const [preview, setPreview] = useState<any>(null);
+  const [busy, setBusy] = useState<'preview' | 'test' | 'send' | null>(null);
+  const [result, setResult] = useState('');
+  const call = async (path: string, body: any) => {
+    const res = await fetch(`https://uht.chad-157.workers.dev/api/email/champion-merch/${eventId}/${path}`, {
+      method: 'POST', headers: adminHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body),
+    });
+    return res.json();
+  };
+  const doPreview = async () => {
+    setBusy('preview'); setResult(''); setPreview(null);
+    try {
+      const j = await call('preview', { url: url.trim() });
+      if (j.success) setPreview(j.data);
+      else setResult(j.error || 'Preview failed');
+    } catch { setResult('Preview failed - check the link'); }
+    setBusy(null);
+  };
+  const doTest = async () => {
+    const me = window.prompt('Send the test email to:', 'utproducts1@gmail.com');
+    if (!me) return;
+    setBusy('test'); setResult('');
+    try {
+      const j = await call('send', { url: url.trim(), testEmail: me.trim() });
+      setResult(j.success ? `Test sent to ${me.trim()}.` : (j.error || 'Test failed'));
+    } catch { setResult('Test failed'); }
+    setBusy(null);
+  };
+  const doSend = async () => {
+    if (!preview) { setResult('Preview first so you can see what goes out.'); return; }
+    if (!confirm(`Send the champion merch email to ~${preview.recipients} champion contacts (${preview.champion_teams} teams) plus a push to their followers?`)) return;
+    setBusy('send'); setResult('');
+    try {
+      const j = await call('send', { url: url.trim() });
+      setResult(j.success ? `Sent: ${j.data.sent} emails across ${j.data.teams} champion teams, push to ${j.data.push_sent} devices.` : (j.error || 'Send failed'));
+    } catch { setResult('Send failed'); }
+    setBusy(null);
+  };
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <h3 className="text-lg font-bold text-[#1d1d1f]">Champion Merch Email</h3>
+      <p className="text-sm text-[#6e6e73] mt-1 mb-3">Paste the champions shop link. Every product becomes a clickable card in an exclusive champions-only email, with a push to champion team followers.</p>
+      <div className="flex flex-wrap gap-2">
+        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="Auto: uses this event's slug (or paste a shop link)"
+          className="flex-1 min-w-[260px] px-3 py-2.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79]" />
+        <button onClick={doPreview} disabled={busy !== null}
+          className="px-4 py-2.5 rounded-xl bg-[#003e79] text-white text-sm font-bold disabled:opacity-50">
+          {busy === 'preview' ? 'Reading…' : 'Preview'}
+        </button>
+      </div>
+      {preview && (
+        <div className="mt-4">
+          <p className="text-sm text-[#3d3d3d] mb-2"><b>{preview.products.length} products</b> found · goes to <b>{preview.recipients}</b> contacts across <b>{preview.champion_teams}</b> champion teams</p>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {preview.products.map((p: any, i: number) => (
+              <a key={i} href={p.link} target="_blank" rel="noreferrer" className="shrink-0 w-28 text-center">
+                <img src={p.img} alt={p.name} className="w-28 h-28 object-contain bg-[#f5f5f7] rounded-lg border border-[#e8e8ed]" />
+                <p className="text-[10px] text-[#6e6e73] mt-1 leading-tight line-clamp-2">{p.name}</p>
+              </a>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={doTest} disabled={busy !== null}
+              className="px-4 py-2.5 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold disabled:opacity-50">
+              {busy === 'test' ? 'Sending…' : 'Send Test to Me'}
+            </button>
+            <button onClick={doSend} disabled={busy !== null}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] to-[#b8860b] text-white text-sm font-black disabled:opacity-50">
+              {busy === 'send' ? 'Sending…' : 'Send to Champions'}
+            </button>
+          </div>
+        </div>
+      )}
+      {result && <p className="text-sm text-[#3d3d3d] mt-3 font-semibold">{result}</p>}
+    </div>
+  );
+}
+
 // Coach-requested penalty changes: nothing applies until approved here
 function PenaltyRequestsCard({ eventId }: { eventId: string }) {
   const [rows, setRows] = useState<any[]>([]);
@@ -6110,6 +6193,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tab Content */}
       {tab === 'overview' && <PenaltyRequestsCard eventId={eventId} />}
+      {tab === 'overview' && <ChampionMerchCard eventId={eventId} />}
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && <EventRulesCard eventId={eventId} />}

@@ -259,6 +259,9 @@ export default function AppNavigator() {
           screen: 'Home',
           params: { screen: 'EventDetail', params: { eventId: data.event_id } },
         });
+      } else if (data?.type === 'open_url' && data?.url && /^https:\/\//.test(String(data.url))) {
+        // Campaign pushes (champion merch etc.) open their link directly
+        Linking.openURL(String(data.url)).catch(() => {});
       } else if (data?.type === 'event_photos' && data?.event_id) {
         // Photo reminders open the upload tab WITH the full message shown -
         // a bare tab switch made the notification vanish before it was read
