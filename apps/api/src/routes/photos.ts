@@ -120,7 +120,12 @@ photoRoutes.get('/file/:photoId', async (c) => {
     .bind(c.req.param('photoId')).first<any>();
   if (!row || row.status !== 'approved') return c.json({ error: 'Not found' }, 404);
   let obj = null;
-  if (c.req.query('thumb')) {
+  if (c.req.query('card')) {
+    // Square email-card crop; falls back to the thumb, then the original
+    const base = String(row.r2_key).replace(/\.[a-z]+$/i, '');
+    obj = (await c.env.STORAGE.get(base + '_card.jpg')) || (await c.env.STORAGE.get(base + '_thumb.jpg'));
+  }
+  if (!obj && c.req.query('thumb')) {
     obj = await c.env.STORAGE.get(String(row.r2_key).replace(/\.[a-z]+$/i, '') + '_thumb.jpg');
   }
   if (!obj) obj = await c.env.STORAGE.get(row.r2_key);
