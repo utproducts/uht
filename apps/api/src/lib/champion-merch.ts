@@ -221,7 +221,10 @@ export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUr
         <p style="font-size:11.5px;color:#8a94a3;margin:12px 0 0;">Free shipping on orders over $99.99 - the collection closes soon.</p>
       </div>
     </div>
-    <p style="text-align:center;font-size:11px;color:#8a94a3;margin:14px 0 0;">Ultimate Hockey Tournaments - ${esc(ev.city)}, ${esc(ev.state)}<br>Questions? Just reply to this email.</p>
+    <div style="text-align:center;margin:16px 0 0;">
+      <img src="https://ultimatetournaments.com/uht-logo.png" alt="Ultimate Hockey Tournaments" width="46" height="46" style="display:inline-block;" />
+      <p style="font-size:11px;color:#8a94a3;margin:8px 0 0;">Ultimate Hockey Tournaments - ${esc(ev.city)}, ${esc(ev.state)}<br>Questions? Just reply to this email.</p>
+    </div>
   </div>
 </body></html>`;
 
