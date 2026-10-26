@@ -10,12 +10,14 @@ const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
 const emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
+export interface MerchColor { name: string; swatch: string; image: string; url: string }
 export interface MerchProduct {
   name: string;
   img: string;
   link: string;
   price?: string | null;
   tier: 'champion' | 'other';
+  colors?: MerchColor[];
 }
 
 function esc(x: any): string {
@@ -25,7 +27,7 @@ function unescapeHtml(x: string): string {
   return x.replace(/&amp;/g, '&').replace(/&#0?39;/g, "'").replace(/&quot;/g, '"');
 }
 
-export async function fetchMerchProducts(slugOrUrl: string): Promise<{ products: MerchProduct[]; shopUrl: string }> {
+export async function fetchMerchProducts(slugOrUrl: string): Promise<{ products: MerchProduct[]; shopUrl: string; eventLogo?: string | null }> {
   // Accept a bare event slug or any champions.ultimatetournaments.com link
   let slug = slugOrUrl.trim();
   const m = slug.match(/\/event\/([^/?#]+)/);
@@ -48,10 +50,13 @@ export async function fetchMerchProducts(slugOrUrl: string): Promise<{ products:
             name: String(pr.name), img: String(pr.image), link: String(pr.url),
             price: pr.price ? `$${pr.price}` : null,
             tier: String(t.slug) === 'champion' ? 'champion' : 'other',
+            colors: Array.isArray(pr.colors) ? pr.colors
+              .filter((c0: any) => c0?.image && c0?.url)
+              .map((c0: any) => ({ name: String(c0.name || ''), swatch: String(c0.swatch || '#ccc'), image: String(c0.image), url: String(c0.url) })) : [],
           });
         }
       }
-      if (products.length > 0) return { products, shopUrl: d.event?.shop_url || shopUrl };
+      if (products.length > 0) return { products, shopUrl: d.event?.shop_url || shopUrl, eventLogo: d.event?.logo?.url || null };
     }
   } catch {}
 
@@ -70,7 +75,7 @@ export async function fetchMerchProducts(slugOrUrl: string): Promise<{ products:
     out.push({ name, img: img[1], link: unescapeHtml(link[1]), price: null, tier: /champion/i.test(name) ? 'champion' : 'other' });
   }
   if (out.length === 0) throw new Error('No products found for that event slug');
-  return { products: out, shopUrl };
+  return { products: out, shopUrl, eventLogo: null };
 }
 
 export async function championTeamIds(db: any, eventId: string): Promise<string[]> {
@@ -112,55 +117,60 @@ export async function championRecipients(db: any, eventId: string, teamIds: stri
   return [...emails];
 }
 
-export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUrl: string): { subject: string; html: string } {
+export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUrl: string, eventLogo?: string | null): { subject: string; html: string } {
   const subject = `Champions only: your ${ev.name} title gear is live`;
   const champs = products.filter(p => p.tier === 'champion');
-  const others = products.filter(p => p.tier !== 'champion');
+  const featured = champs.slice(0, 4);
 
-  const card = (p: MerchProduct) => `
-    <td width="50%" style="padding:7px;vertical-align:top;">
-      <a href="${esc(p.link)}" style="text-decoration:none;display:block;background:#ffffff;border:1px solid #e8e0c8;border-radius:14px;overflow:hidden;">
-        <img src="${esc(p.img)}" alt="${esc(p.name)}" width="100%" style="display:block;background:#f7f7f9;" />
+  // Each featured card wears a DIFFERENT color so the variety shows
+  const card = (p: MerchProduct, idx: number) => {
+    const colors = p.colors || [];
+    const variant = colors.length > 0 ? colors[idx % colors.length] : null;
+    const img = variant?.image || p.img;
+    const link = variant?.url || p.link;
+    const dots = colors.slice(0, 6).map(c0 =>
+      `<td width="14" style="padding:0 3px;"><div style="width:12px;height:12px;border-radius:50%;background:${esc(c0.swatch)};border:1px solid #d8dce3;font-size:0;line-height:0;">&nbsp;</div></td>`
+    ).join('');
+    return `
+    <td width="50%" style="padding:8px;vertical-align:top;">
+      <a href="${esc(link)}" style="text-decoration:none;display:block;background:#ffffff;border:1.5px solid #e4d9b4;border-radius:14px;overflow:hidden;">
+        <img src="${esc(img)}" alt="${esc(p.name)}" width="100%" style="display:block;background:#f8f9fb;" />
         <div style="padding:10px 12px 12px;">
           <div style="font-family:Arial,sans-serif;font-size:13px;font-weight:bold;color:#1d2a3d;line-height:1.35;">${esc(p.name)}</div>
-          <div style="font-family:Arial,sans-serif;font-size:11px;font-weight:bold;color:#b8860b;margin-top:5px;letter-spacing:1px;">${p.price ? esc(p.price) + ' · ' : ''}SHOP NOW &gt;</div>
+          ${colors.length > 1 ? `<table role="presentation" style="border-collapse:collapse;margin-top:7px;"><tr>${dots}<td style="font-family:Arial,sans-serif;font-size:10px;color:#8a94a3;padding-left:4px;">${colors.length} colors</td></tr></table>` : ''}
+          <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:#b8860b;margin-top:7px;letter-spacing:1px;">${p.price ? esc(p.price) + '  ·  ' : ''}SHOP NOW &gt;</div>
         </div>
       </a>
     </td>`;
-
-  const grid = (list: MerchProduct[]) => {
-    let rows = '';
-    for (let i = 0; i < list.length; i += 2) {
-      rows += `<tr>${card(list[i])}${list[i + 1] ? card(list[i + 1]) : '<td width="50%"></td>'}</tr>`;
-    }
-    return `<table role="presentation" width="100%" style="border-collapse:collapse;">${rows}</table>`;
   };
 
+  let rows = '';
+  for (let i = 0; i < featured.length; i += 2) {
+    rows += `<tr>${card(featured[i], i)}${featured[i + 1] ? card(featured[i + 1], i + 1) : '<td width="50%"></td>'}</tr>`;
+  }
+
   const html = `<!doctype html>
-<html><body style="margin:0;padding:0;background:#0d1320;font-family:Arial,Helvetica,sans-serif;">
-  <div style="max-width:620px;margin:0 auto;padding:20px 12px;">
-    <div style="background:linear-gradient(135deg,#1a1205,#2b1d08 55%,#3d2a0a);border:1px solid #b8860b;border-radius:18px 18px 0 0;padding:30px 24px 26px;text-align:center;">
-      <div style="font-size:11px;letter-spacing:4px;color:#d4af37;font-weight:bold;">CHAMPIONS ONLY</div>
-      <div style="font-size:28px;font-weight:900;color:#ffffff;margin-top:10px;line-height:1.2;">You earned this.</div>
-      <div style="font-size:15px;color:#e8d9a8;margin-top:8px;line-height:1.5;">Official ${esc(ev.name)} CHAMPIONS gear - available only to the teams that won it all.</div>
-    </div>
-    <div style="background:#faf8f2;padding:22px 16px 10px;">
-      <p style="font-family:Arial,sans-serif;font-size:14px;color:#2a3c52;line-height:1.6;margin:0 14px 14px;">
-        Congratulations, champion! Not everyone gets to wear this - the Champions collection below is reserved for
-        the ${esc(ev.name)} title winners. Every piece is custom-built for this event, printed on demand, and shipped
-        straight to your door. Tap any item to claim yours before the collection closes.
-      </p>
-      ${grid(champs)}
-      ${others.length > 0 ? `
-      <p style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;letter-spacing:2px;color:#8a7a4a;margin:18px 14px 8px;">MORE ${esc(String(ev.name).toUpperCase())} GEAR</p>
-      ${grid(others)}` : ''}
-      <div style="text-align:center;padding:18px 0 20px;">
-        <a href="${esc(shopUrl)}" style="display:inline-block;background:linear-gradient(90deg,#d4af37,#b8860b);color:#ffffff;font-weight:900;font-size:14px;letter-spacing:1px;border-radius:999px;padding:14px 34px;text-decoration:none;">SHOP THE CHAMPIONS COLLECTION</a>
+<html><body style="margin:0;padding:0;background:#f2f4f8;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:620px;margin:0 auto;padding:24px 14px;">
+    <div style="background:#ffffff;border:2px solid #d4af37;border-radius:18px;overflow:hidden;">
+      <div style="text-align:center;padding:26px 24px 6px;">
+        ${eventLogo ? `<img src="${esc(eventLogo)}" alt="${esc(ev.name)}" width="150" style="display:block;margin:0 auto 14px;" />` : ''}
+        <div style="display:inline-block;background:linear-gradient(90deg,#d4af37,#b8860b);color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:3px;border-radius:999px;padding:7px 18px;">CHAMPIONS ONLY</div>
+        <div style="font-size:26px;font-weight:900;color:#003e79;margin-top:14px;line-height:1.25;">You earned this.</div>
+        <div style="font-size:14px;color:#5b6b80;margin-top:8px;line-height:1.55;max-width:440px;margin-left:auto;margin-right:auto;">
+          Official <strong style="color:#1d2a3d;">${esc(ev.name)}</strong> CHAMPIONS gear - reserved for the teams that won it all.
+          Custom name and number available on every piece.
+        </div>
+      </div>
+      <div style="padding:10px 14px 4px;">
+        <table role="presentation" width="100%" style="border-collapse:collapse;">${rows}</table>
+      </div>
+      <div style="text-align:center;padding:14px 20px 26px;">
+        <a href="${esc(shopUrl)}" style="display:inline-block;background:linear-gradient(90deg,#d4af37,#b8860b);color:#ffffff;font-weight:900;font-size:14px;letter-spacing:1px;border-radius:999px;padding:14px 32px;text-decoration:none;">VIEW ALL CHAMPION PRODUCTS</a>
+        <p style="font-size:11.5px;color:#8a94a3;margin:12px 0 0;">Free shipping on orders over $99.99 - the collection closes soon.</p>
       </div>
     </div>
-    <div style="background:#0d1320;border-radius:0 0 18px 18px;padding:16px 24px;text-align:center;">
-      <p style="font-size:11px;color:#6b7a90;margin:0;">Ultimate Hockey Tournaments - ${esc(ev.city)}, ${esc(ev.state)}<br>Questions? Just reply to this email.</p>
-    </div>
+    <p style="text-align:center;font-size:11px;color:#8a94a3;margin:14px 0 0;">Ultimate Hockey Tournaments - ${esc(ev.city)}, ${esc(ev.state)}<br>Questions? Just reply to this email.</p>
   </div>
 </body></html>`;
 
@@ -172,9 +182,9 @@ export async function sendChampionMerch(env: any, eventId: string, shopUrl: stri
   const ev = await db.prepare('SELECT id, name, city, state, COALESCE(is_test,0) as is_test FROM events WHERE id = ?').bind(eventId).first<any>();
   if (!ev) return { error: 'Event not found' };
 
-  const { products, shopUrl: resolvedShop } = await fetchMerchProducts(shopUrl);
+  const { products, shopUrl: resolvedShop, eventLogo } = await fetchMerchProducts(shopUrl);
   if (products.length === 0) return { error: 'No products found at that link - check the URL' };
-  const { subject, html } = buildChampionMerchHtml(ev, products, resolvedShop);
+  const { subject, html } = buildChampionMerchHtml(ev, products, resolvedShop, eventLogo);
 
   if (opts.testEmail) {
     const resp = await fetch('https://api.resend.com/emails', {
