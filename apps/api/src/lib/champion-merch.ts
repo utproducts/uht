@@ -146,21 +146,18 @@ export async function eventChampions(db: any, eventId: string): Promise<Champion
 }
 
 function championsGallery(champions: ChampionInfo[]): string {
-  const cell = (ch: ChampionInfo) => `
-    <td width="25%" style="padding:5px;vertical-align:top;">
-      ${ch.photo
-        ? `<img src="${esc(ch.photo)}" alt="${esc(ch.team_name)}" width="100%" style="display:block;border-radius:10px;border:1.5px solid #e4d9b4;aspect-ratio:1;object-fit:cover;" />`
-        : `<div style="width:100%;padding-top:72%;background:linear-gradient(135deg,#003e79,#0077b0);border-radius:10px;"></div>`}
-      <div style="font-family:Arial,sans-serif;font-size:10.5px;font-weight:bold;color:#1d2a3d;line-height:1.3;margin-top:5px;text-align:center;">${esc(ch.team_name)}</div>
-      <div style="font-family:Arial,sans-serif;font-size:9.5px;color:#b8860b;font-weight:bold;text-align:center;">${esc(ch.division)}</div>
-    </td>`;
-  let rows = '';
-  const list = champions.slice(0, 12);
-  for (let i = 0; i < list.length; i += 4) {
-    const chunk = list.slice(i, i + 4);
-    rows += `<tr>${chunk.map(cell).join('')}${'<td width="25%"></td>'.repeat(4 - chunk.length)}</tr>`;
-  }
-  return `<table role="presentation" width="100%" style="border-collapse:collapse;margin-top:10px;">${rows}</table>`;
+  // Honor roll: names only - photos render inconsistently across email
+  // clients, a clean list never breaks
+  const row = (ch: ChampionInfo, last: boolean) => `
+    <tr>
+      <td style="padding:7px 4px;${last ? '' : 'border-bottom:1px solid #f0e9d2;'}text-align:left;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;color:#1d2a3d;">${esc(ch.team_name)}</td>
+      <td style="padding:7px 4px;${last ? '' : 'border-bottom:1px solid #f0e9d2;'}text-align:right;font-family:Arial,sans-serif;font-size:11px;font-weight:bold;color:#b8860b;letter-spacing:1px;white-space:nowrap;">${esc(String(ch.division).toUpperCase())}</td>
+    </tr>`;
+  const list = champions.slice(0, 16);
+  return `
+  <table role="presentation" width="100%" style="border-collapse:collapse;max-width:430px;margin:10px auto 0;">
+    ${list.map((ch, i) => row(ch, i === list.length - 1)).join('')}
+  </table>`;
 }
 
 export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUrl: string, eventLogo?: string | null, champions: ChampionInfo[] = []): { subject: string; html: string } {
