@@ -117,7 +117,53 @@ export async function championRecipients(db: any, eventId: string, teamIds: stri
   return [...emails];
 }
 
-export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUrl: string, eventLogo?: string | null): { subject: string; html: string } {
+export interface ChampionInfo { team_name: string; division: string; score: string; photo: string | null }
+
+export async function eventChampions(db: any, eventId: string): Promise<ChampionInfo[]> {
+  const rows = (await db.prepare(`
+    SELECT CASE WHEN g.home_score > g.away_score THEN g.home_team_id ELSE g.away_team_id END as tid,
+      COALESCE(wt.schedule_name, wt.name) as team_name,
+      COALESCE(ed.age_group || CASE WHEN ed.division_level IS NOT NULL THEN ' ' || ed.division_level ELSE '' END, 'Champions') as division,
+      MAX(g.home_score, g.away_score) || '-' || MIN(g.home_score, g.away_score) as score
+    FROM games g
+    JOIN teams wt ON wt.id = CASE WHEN g.home_score > g.away_score THEN g.home_team_id ELSE g.away_team_id END
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    WHERE g.event_id = ? AND g.game_type = 'championship' AND g.status = 'final'
+      AND g.home_team_id IS NOT NULL AND g.away_team_id IS NOT NULL AND g.home_score != g.away_score
+    ORDER BY division
+  `).bind(eventId).all()).results || [];
+  const out: ChampionInfo[] = [];
+  for (const r of rows as any[]) {
+    const photo = await db.prepare(
+      "SELECT id FROM event_photos WHERE event_id = ?1 AND kind = 'champion' AND team_id = ?2 ORDER BY created_at DESC LIMIT 1"
+    ).bind(eventId, r.tid).first<any>();
+    out.push({
+      team_name: r.team_name, division: r.division, score: r.score,
+      photo: photo ? `https://uht.chad-157.workers.dev/api/photos/file/${photo.id}?thumb=1` : null,
+    });
+  }
+  return out;
+}
+
+function championsGallery(champions: ChampionInfo[]): string {
+  const cell = (ch: ChampionInfo) => `
+    <td width="25%" style="padding:5px;vertical-align:top;">
+      ${ch.photo
+        ? `<img src="${esc(ch.photo)}" alt="${esc(ch.team_name)}" width="100%" style="display:block;border-radius:10px;border:1.5px solid #e4d9b4;aspect-ratio:1;object-fit:cover;" />`
+        : `<div style="width:100%;padding-top:72%;background:linear-gradient(135deg,#003e79,#0077b0);border-radius:10px;"></div>`}
+      <div style="font-family:Arial,sans-serif;font-size:10.5px;font-weight:bold;color:#1d2a3d;line-height:1.3;margin-top:5px;text-align:center;">${esc(ch.team_name)}</div>
+      <div style="font-family:Arial,sans-serif;font-size:9.5px;color:#b8860b;font-weight:bold;text-align:center;">${esc(ch.division)}</div>
+    </td>`;
+  let rows = '';
+  const list = champions.slice(0, 12);
+  for (let i = 0; i < list.length; i += 4) {
+    const chunk = list.slice(i, i + 4);
+    rows += `<tr>${chunk.map(cell).join('')}${'<td width="25%"></td>'.repeat(4 - chunk.length)}</tr>`;
+  }
+  return `<table role="presentation" width="100%" style="border-collapse:collapse;margin-top:10px;">${rows}</table>`;
+}
+
+export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUrl: string, eventLogo?: string | null, champions: ChampionInfo[] = []): { subject: string; html: string } {
   const subject = `Champions only: your ${ev.name} title gear is live`;
   const champs = products.filter(p => p.tier === 'champion');
   const featured = champs.slice(0, 4);
@@ -161,6 +207,9 @@ export function buildChampionMerchHtml(ev: any, products: MerchProduct[], shopUr
           Official <strong style="color:#1d2a3d;">${esc(ev.name)}</strong> CHAMPIONS gear - reserved for the teams that won it all.
           Custom name and number available on every piece.
         </div>
+        ${champions.length > 0 ? `
+        <div style="font-size:12px;font-weight:bold;letter-spacing:2.5px;color:#b8860b;margin-top:20px;">${champions.length} CHAMPIONSHIP GAME${champions.length !== 1 ? 'S' : ''} - ${champions.length} CHAMPION${champions.length !== 1 ? 'S' : ''} CROWNED</div>
+        ${championsGallery(champions)}` : ''}
       </div>
       <div style="padding:10px 14px 4px;">
         <table role="presentation" width="100%" style="border-collapse:collapse;">${rows}</table>
@@ -184,7 +233,8 @@ export async function sendChampionMerch(env: any, eventId: string, shopUrl: stri
 
   const { products, shopUrl: resolvedShop, eventLogo } = await fetchMerchProducts(shopUrl);
   if (products.length === 0) return { error: 'No products found at that link - check the URL' };
-  const { subject, html } = buildChampionMerchHtml(ev, products, resolvedShop, eventLogo);
+  const champions = await eventChampions(db, eventId);
+  const { subject, html } = buildChampionMerchHtml(ev, products, resolvedShop, eventLogo, champions);
 
   if (opts.testEmail) {
     const resp = await fetch('https://api.resend.com/emails', {
