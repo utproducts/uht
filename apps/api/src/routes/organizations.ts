@@ -267,6 +267,45 @@ organizationRoutes.get('/admin/list', authMiddleware, requireRole('admin'), asyn
 // ==================
 // Admin: Assign/reassign the owner of an organization by user email
 // ==================
+// ==================
+// Admin: full owner list (legacy owner_id + organization_admins), add and
+// remove - the self-serve fix for "he owns the org but can't see payments"
+// ==================
+organizationRoutes.get('/admin/:id/owners', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const orgId = c.req.param('id');
+  const rows = (await db.prepare(`
+    SELECT u.id as user_id, u.email, u.first_name, u.last_name,
+      EXISTS (SELECT 1 FROM organizations o WHERE o.id = ?1 AND o.owner_id = u.id) as is_legacy_owner
+    FROM users u WHERE u.id IN (
+      SELECT user_id FROM organization_admins WHERE organization_id = ?1
+      UNION SELECT owner_id FROM organizations WHERE id = ?1 AND owner_id NOT IN ('chad-owner-001', 'system_migration_user')
+    )
+    ORDER BY u.last_name
+  `).bind(orgId).all()).results || [];
+  return c.json({ success: true, data: rows });
+});
+
+organizationRoutes.post('/admin/:id/owners', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const orgId = c.req.param('id');
+  const body = await c.req.json<{ email: string }>().catch(() => ({ email: '' }));
+  const target = await db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').bind(String(body.email || '').trim()).first<any>();
+  if (!target) return c.json({ success: false, error: 'No account with that email. Have them create a free account first.' }, 404);
+  await db.prepare("INSERT OR IGNORE INTO organization_admins (organization_id, user_id, created_at) VALUES (?, ?, datetime('now'))").bind(orgId, target.id).run();
+  await db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role, created_at) VALUES (?, 'organization', datetime('now'))").bind(target.id).run();
+  return c.json({ success: true });
+});
+
+organizationRoutes.delete('/admin/:id/owners/:userId', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const { id: orgId, userId } = c.req.param();
+  await db.prepare('DELETE FROM organization_admins WHERE organization_id = ? AND user_id = ?').bind(orgId, userId).run();
+  // Clear the legacy pointer too when it was this person
+  await db.prepare('UPDATE organizations SET owner_id = NULL WHERE id = ? AND owner_id = ?').bind(orgId, userId).run();
+  return c.json({ success: true });
+});
+
 organizationRoutes.put('/admin/:id/owner', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const orgId = c.req.param('id');

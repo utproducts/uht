@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, Fragment } from 'react';
 
 const API = 'https://uht.chad-157.workers.dev/api';
 
@@ -84,6 +84,66 @@ const US_STATES = [
   // Canadian provinces/territories
   'AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT',
 ];
+
+
+// Full owner list for one org: everyone in organization_admins plus the
+// legacy owner pointer - add by email, remove with one click
+function OrgOwnersPanel({ orgId }: { orgId: string }) {
+  const [owners, setOwners] = useState<any[]>([]);
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const hdrs = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` });
+  const load = async () => {
+    try {
+      const res = await fetch(`${API}/organizations/admin/${orgId}/owners`, { headers: hdrs() });
+      const j = await res.json();
+      if (j.success) setOwners(j.data || []);
+    } catch {}
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [orgId]);
+  const add = async () => {
+    if (!email.trim()) return;
+    setBusy(true); setMsg('');
+    try {
+      const res = await fetch(`${API}/organizations/admin/${orgId}/owners`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ email: email.trim() }) });
+      const j = await res.json();
+      if (j.success) { setEmail(''); setMsg('Added. They may need to sign out and back in.'); await load(); }
+      else setMsg(j.error || 'Could not add');
+    } catch { setMsg('Could not add'); }
+    setBusy(false);
+  };
+  const remove = async (o: any) => {
+    if (!window.confirm(`Remove ${o.email} as an owner of this organization?`)) return;
+    try {
+      await fetch(`${API}/organizations/admin/${orgId}/owners/${o.user_id}`, { method: 'DELETE', headers: hdrs() });
+      await load();
+    } catch {}
+  };
+  return (
+    <div className="px-5 py-3 bg-[#f8fafc]">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#86868b] mb-2">Organization Owners - can see every team, registration, and payment for this org</p>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {owners.map(o => (
+          <span key={o.user_id} className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-800">
+            {[o.first_name, o.last_name].filter(Boolean).join(' ') || o.email}
+            <span className="opacity-60">{o.email}</span>
+            <button onClick={() => remove(o)} className="text-[#86868b] hover:text-red-600 font-bold">&times;</button>
+          </span>
+        ))}
+        {owners.length === 0 && <span className="text-xs text-[#86868b]">No owners attached - this org is invisible to everyone. Add one below.</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()}
+          placeholder="account email" type="email"
+          className="px-3 py-1.5 rounded-lg border border-[#d2d2d7] text-xs w-56 outline-none focus:border-[#003e79]" />
+        <button onClick={add} disabled={busy || !email.trim()}
+          className="px-3 py-1.5 rounded-lg bg-[#003e79] text-white text-xs font-bold disabled:opacity-50">{busy ? '...' : 'Add Owner'}</button>
+        {msg && <span className="text-xs text-[#6e6e73]">{msg}</span>}
+      </div>
+    </div>
+  );
+}
 
 export default function OrganizationsPage() {
   const [orgs, setOrgs] = useState<Org[]>([]);
@@ -182,6 +242,7 @@ export default function OrganizationsPage() {
 
   // Owner assignment
   const [ownerEditId, setOwnerEditId] = useState<number | null>(null);
+  const [ownersOpenId, setOwnersOpenId] = useState<string | null>(null);
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerSaving, setOwnerSaving] = useState(false);
   const [ownerError, setOwnerError] = useState('');
@@ -857,7 +918,8 @@ export default function OrganizationsPage() {
                       </thead>
                       <tbody>
                         {stateOrgs.map((org) => (
-                          <tr key={org.id} className="border-t border-[#e8e8ed] hover:bg-[#fafafa]">
+                          <Fragment key={org.id}>
+                          <tr className="border-t border-[#e8e8ed] hover:bg-[#fafafa]">
                             <td className="px-5 py-2.5 text-[#1d1d1f]">{org.name}</td>
                             <td className="px-5 py-2.5 text-[#6e6e73]">
                               {org.team_count != null ? org.team_count : '—'}
@@ -896,6 +958,11 @@ export default function OrganizationsPage() {
                             </td>
                             <td className="px-5 py-2.5 text-right whitespace-nowrap">
                               <button
+                                onClick={() => setOwnersOpenId(ownersOpenId === String(org.id) ? null : String(org.id))}
+                                className="text-xs text-[#7c3aed] hover:text-[#5b21b6] font-medium transition-colors mr-3"
+                              >
+                                Owners
+                              </button>                              <button
                                 onClick={() => openEdit(org)}
                                 className="text-xs text-[#003e79] hover:text-[#002d5a] font-medium transition-colors mr-3"
                               >
@@ -910,6 +977,12 @@ export default function OrganizationsPage() {
                               </button>
                             </td>
                           </tr>
+                          {ownersOpenId === String(org.id) && (
+                            <tr className="border-t border-[#e8e8ed]">
+                              <td colSpan={4} className="p-0"><OrgOwnersPanel orgId={String(org.id)} /></td>
+                            </tr>
+                          )}
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>
