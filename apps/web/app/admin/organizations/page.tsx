@@ -925,36 +925,18 @@ export default function OrganizationsPage() {
                               {org.team_count != null ? org.team_count : '—'}
                             </td>
                             <td className="px-5 py-2.5 text-[#6e6e73]">
-                              {ownerEditId === org.id ? (
-                                <span className="flex items-center gap-1.5">
-                                  <input
-                                    autoFocus
-                                    value={ownerEmail}
-                                    onChange={(e) => { setOwnerEmail(e.target.value); setOwnerError(''); }}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSetOwner(org); if (e.key === 'Escape') { setOwnerEditId(null); setOwnerEmail(''); setOwnerError(''); } }}
-                                    placeholder="owner@email.com"
-                                    className="border border-[#d2d2d7] rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:border-[#003e79]"
-                                  />
-                                  <button onClick={() => handleSetOwner(org)} disabled={ownerSaving}
-                                    className="text-xs text-white bg-[#003e79] hover:bg-[#002d5a] rounded-lg px-2 py-1 font-medium disabled:opacity-50">
-                                    {ownerSaving ? '...' : 'Save'}
-                                  </button>
-                                  <button onClick={() => { setOwnerEditId(null); setOwnerEmail(''); setOwnerError(''); }}
-                                    className="text-xs text-[#6e6e73] hover:text-[#1d1d1f] px-1">✕</button>
-                                  {ownerError && <span className="text-xs text-red-500">{ownerError}</span>}
-                                </span>
-                              ) : org.owner_email ? (
-                                <button onClick={() => { setOwnerEditId(org.id); setOwnerEmail(org.owner_email || ''); setOwnerError(''); }}
-                                  className="text-left hover:text-[#003e79] transition-colors" title="Click to change owner">
-                                  {org.owner_name || org.owner_email}
-                                  <span className="block text-[11px] text-[#a1a1a6]">{org.owner_email}</span>
-                                </button>
-                              ) : (
-                                <button onClick={() => { setOwnerEditId(org.id); setOwnerEmail(''); setOwnerError(''); }}
-                                  className="text-xs text-[#003e79] hover:text-[#002d5a] font-medium">
-                                  + Set Owner
-                                </button>
-                              )}
+                              <button onClick={() => setOwnersOpenId(ownersOpenId === String(org.id) ? null : String(org.id))}
+                                className="text-left hover:text-[#003e79] transition-colors" title="Click to manage owners">
+                                {org.owner_email ? (
+                                  <>
+                                    {org.owner_name || org.owner_email}
+                                    {(org as any).owner_count > 1 && <span className="ml-1 text-[11px] font-semibold text-[#7c3aed]">+{(org as any).owner_count - 1} more</span>}
+                                    <span className="block text-[11px] text-[#a1a1a6]">{org.owner_email}</span>
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-[#7c3aed] font-medium">+ Add Owner</span>
+                                )}
+                              </button>
                             </td>
                             <td className="px-5 py-2.5 text-right whitespace-nowrap">
                               <button

@@ -250,13 +250,24 @@ organizationRoutes.post('/quick-create', authMiddleware, async (c) => {
 organizationRoutes.get('/admin/list', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
 
+  // Owner display reflects REAL ownership (organization_admins union the
+  // legacy owner pointer) so the list can never disagree with the panel
   const result = await db.prepare(`
     SELECT o.*,
       (SELECT COUNT(*) FROM teams t WHERE t.organization_id = o.id AND t.is_active = 1) as team_count,
-      u.email as owner_email,
-      TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) as owner_name
+      (SELECT u.email FROM users u WHERE u.id IN (
+        SELECT oa.user_id FROM organization_admins oa WHERE oa.organization_id = o.id
+        UNION SELECT o.owner_id WHERE o.owner_id NOT IN ('chad-owner-001', 'system_migration_user')
+      ) ORDER BY u.last_name LIMIT 1) as owner_email,
+      (SELECT TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) FROM users u WHERE u.id IN (
+        SELECT oa.user_id FROM organization_admins oa WHERE oa.organization_id = o.id
+        UNION SELECT o.owner_id WHERE o.owner_id NOT IN ('chad-owner-001', 'system_migration_user')
+      ) ORDER BY u.last_name LIMIT 1) as owner_name,
+      (SELECT COUNT(*) FROM (
+        SELECT oa.user_id FROM organization_admins oa WHERE oa.organization_id = o.id
+        UNION SELECT o.owner_id WHERE o.owner_id NOT IN ('chad-owner-001', 'system_migration_user')
+      )) as owner_count
     FROM organizations o
-    LEFT JOIN users u ON u.id = o.owner_id AND o.owner_id NOT IN ('chad-owner-001', 'system_migration_user')
     WHERE o.is_active = 1
     ORDER BY o.state ASC, o.name ASC
   `).all();
