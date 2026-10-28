@@ -173,7 +173,7 @@ export default function PrintDivisionPage() {
                 <tr key={g.id}>
                   <td className="num">{g.game_number ? `#${g.game_number}` : ''}</td>
                   <td style={{ width: 70, whiteSpace: 'nowrap' }}>{fmtTime(g.adjusted_start_time || g.start_time)}</td>
-                  <td style={{ width: 150 }}>{g.rink_name || ''}</td>
+                  <td style={{ width: 150 }}>{[g.venue_name, g.rink_name].filter(Boolean).join(' - ') || ''}</td>
                   <td>
                     {teamLabel(g.home_team_name, g.home_placeholder)} <span style={{ color: '#666' }}>vs</span> {teamLabel(g.away_team_name, g.away_placeholder)}
                     {typeChip(g) ? <span className="ps-chip">{typeChip(g)}</span> : null}

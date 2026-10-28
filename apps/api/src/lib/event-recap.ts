@@ -164,9 +164,23 @@ function esc(x: any): string {
   return String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function buildRecapEmailHtml(data: RecapData): string {
+export function buildRecapEmailHtml(data: RecapData, hasMosaic: boolean = false): string {
   const ev = data.event;
   const recapUrl = `${SITE}/recap?event=${ev.slug || ev.id}`;
+  const mosaicUrl = `${SITE}/mosaic?event=${ev.slug || ev.id}`;
+  const mosaicPreview = `https://uht.chad-157.workers.dev/api/assets/mosaic/${ev.slug || ev.id}/preview.jpg`;
+  const mosaicBlock = hasMosaic ? `
+  <div style="margin:18px 0;">
+    <a href="${mosaicUrl}" style="display:block;text-decoration:none;background:linear-gradient(135deg,#1a1205,#2b1d08 55%,#3d2a0a);border:2px solid #d4af37;border-radius:16px;overflow:hidden;">
+      <div style="text-align:center;padding:16px 16px 4px;">
+        <div style="font-size:10px;letter-spacing:3px;color:#d4af37;font-weight:bold;">THE OFFICIAL EVENT MOSAIC</div>
+        <div style="font-size:19px;font-weight:900;color:#ffffff;margin-top:5px;">One picture. Every family's photos.</div>
+        <div style="font-size:12px;color:#e8d9a8;margin-top:3px;">Zoom in and find yours - free to download in print quality.</div>
+      </div>
+      <div style="padding:12px;"><img src="${mosaicPreview}" alt="Event photo mosaic" width="100%" style="display:block;border-radius:10px;" /></div>
+      <div style="text-align:center;padding:0 16px 16px;"><span style="display:inline-block;background:linear-gradient(90deg,#d4af37,#b8860b);color:#ffffff;font-weight:900;font-size:13px;letter-spacing:1px;border-radius:999px;padding:11px 26px;">FIND YOUR PHOTO</span></div>
+    </a>
+  </div>` : '';
   const championBlocks = data.champions.slice(0, 4).map(ch => `
     <td align="center" style="padding:10px;vertical-align:top;width:50%;">
       ${ch.photo_url ? `<img src="${ch.photo_url}" alt="${esc(ch.team_name)}" style="width:100%;max-width:260px;border-radius:12px;border:3px solid #d4af37;display:block;margin:0 auto 8px;" />` : ''}
@@ -215,6 +229,7 @@ export function buildRecapEmailHtml(data: RecapData): string {
   </div>
   <div style="padding:22px 20px 6px;">
     <p style="font-size:14px;line-height:1.65;color:#2a3c52;">${esc(data.summary)}</p>
+    ${mosaicBlock}
   </div>
   ${data.champions.length ? `
   <div style="padding:8px 14px;">
@@ -287,7 +302,9 @@ export async function sendEventRecap(env: any, eventId: string, opts: { force?: 
 
   const data = await buildRecapData(db, eventId);
   if (!data) return { error: 'No recap data' };
-  const html = buildRecapEmailHtml(data);
+  // Mosaic ready? (the Monday build runs before the recap sweep window)
+  const hasMosaic = !!(await env.STORAGE.get(`mosaic/${ev.slug || ev.id}/meta.json`).catch(() => null));
+  const html = buildRecapEmailHtml(data, hasMosaic);
   const subject = `${data.event.name} Recap: Champions, Three Stars & Every Goal`;
   const recipients = await recapRecipients(db, eventId);
 

@@ -1,5 +1,7 @@
 'use client';
 
+import React from 'react';
+
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 
@@ -732,12 +734,16 @@ function ScoringPageInner() {
               warnings={warnings} onFix={(sec) => setSection(sec)} onDismiss={dismissWarning} />
           )}
           {section === 'visitor' && (
-            <LineupSection label="AWAY" teamName={game.away_team_name} side={lineupState?.away}
-              gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
+            <SectionBoundary label="away lineup">
+              <LineupSection label="AWAY" teamName={game.away_team_name} side={lineupState?.away}
+                gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
+            </SectionBoundary>
           )}
           {section === 'home' && (
-            <LineupSection label="HOME" teamName={game.home_team_name} side={lineupState?.home}
-              gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
+            <SectionBoundary label="home lineup">
+              <LineupSection label="HOME" teamName={game.home_team_name} side={lineupState?.home}
+                gameId={gameId!} pin={pin || ''} onChanged={fetchLineupState} onFlash={doFlash} />
+            </SectionBoundary>
           )}
           {section === 'postgame' && (
             <PostGameSection gameId={gameId!} pin={pin || ''} lineupState={lineupState}
@@ -1491,6 +1497,24 @@ function ScoringPageInner() {
 }
 
 // ===================== SHARED COMPONENTS =====================
+
+// One bad record (e.g. a malformed signature) crashed the ENTIRE console
+// to the site error page. Contain section crashes to a card instead.
+class SectionBoundary extends React.Component<{ label: string; children: React.ReactNode }, { failed: boolean }> {
+  constructor(props: any) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="p-6 bg-amber-50 border-2 border-amber-300 rounded-2xl m-4">
+          <p className="text-sm font-bold text-amber-800">This {this.props.label} view could not be displayed.</p>
+          <p className="text-xs text-amber-700 mt-1">You can keep scoring - the rest of the console still works. Refresh the page to try again, and tell UHT which game this is so we can fix the data.</p>
+        </div>
+      );
+    }
+    return this.props.children as any;
+  }
+}
 
 function FullScreenModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
