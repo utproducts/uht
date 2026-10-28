@@ -29,6 +29,7 @@ export interface StandingRow {
   pool_name: string | null;
   team_id: string;
   team_name: string;
+  team_state?: string | null;
   team_logo: string | null;
   games_played: number;
   wins: number;
@@ -58,7 +59,7 @@ interface PoolGame {
   game_number: number | null;
 }
 
-interface TeamMeta { team_id: string; team_name: string; team_logo: string | null }
+interface TeamMeta { team_id: string; team_name: string; team_logo: string | null; team_state: string | null }
 
 function poolKey(divId: string, pool: string | null): string {
   return `${divId}|${(pool || '').trim().toLowerCase()}`;
@@ -84,7 +85,7 @@ export async function computeStandings(
   for (let i = 0; i < teamIds.length; i += 50) {
     const chunk = teamIds.slice(i, i + 50);
     const rows = await db.prepare(
-      `SELECT t.id as team_id, ${TEAM_NAME_SQL} as team_name, t.logo_url as team_logo FROM teams t WHERE t.id IN (${chunk.map(() => '?').join(',')})`
+      `SELECT t.id as team_id, ${TEAM_NAME_SQL} as team_name, t.logo_url as team_logo, t.state as team_state FROM teams t WHERE t.id IN (${chunk.map(() => '?').join(',')})`
     ).bind(...chunk).all<TeamMeta>();
     for (const r of (rows.results || [])) meta.set(r.team_id, r);
   }
@@ -162,6 +163,7 @@ export async function computeStandings(
           pool_name: g.pool_name,
           team_id: tid,
           team_name: m?.team_name || 'Unknown Team',
+          team_state: m?.team_state || null,
           team_logo: m?.team_logo || null,
           games_played: 0, wins: 0, losses: 0, ties: 0,
           goals_for: 0, goals_against: 0, points: 0, goal_differential: 0, capped_diff: 0,
@@ -228,7 +230,7 @@ export async function computeStandings(
     for (let i = 0; i < regTeamIds.length; i += 50) {
       const chunk = regTeamIds.slice(i, i + 50);
       const rows = await db.prepare(
-        `SELECT t.id as team_id, ${TEAM_NAME_SQL} as team_name, t.logo_url as team_logo FROM teams t WHERE t.id IN (${chunk.map(() => '?').join(',')})`
+        `SELECT t.id as team_id, ${TEAM_NAME_SQL} as team_name, t.logo_url as team_logo, t.state as team_state FROM teams t WHERE t.id IN (${chunk.map(() => '?').join(',')})`
       ).bind(...chunk).all<TeamMeta>();
       for (const r of (rows.results || [])) meta.set(r.team_id, r);
     }
@@ -250,6 +252,7 @@ export async function computeStandings(
           pool_name: null,
           team_id: r.team_id,
           team_name: m?.team_name || 'Unknown Team',
+          team_state: m?.team_state || null,
           team_logo: m?.team_logo || null,
           games_played: 0, wins: 0, losses: 0, ties: 0,
           goals_for: 0, goals_against: 0, points: 0, goal_differential: 0, capped_diff: 0,

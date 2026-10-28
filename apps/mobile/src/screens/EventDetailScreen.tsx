@@ -1226,12 +1226,19 @@ export default function EventDetailScreen({
           const isFinal = gameStatus === 'final';
 
           return (
-            <View style={[styles.gameCard, item.game_type === 'championship' ? styles.gameCardChampionship : null, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+            <View style={[styles.gameCard, item.game_type === 'championship' ? styles.gameCardChampionship : null, (item.game_type === 'consolation' || item.game_type === 'placement') ? styles.gameCardConsolation : null, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
               {item.game_type === 'championship' ? (
                 <View style={styles.champGameRow}>
                   <View style={styles.champGameChip}>
                     <Ionicons name="trophy" size={11} color="#fff" />
                     <Text style={styles.champGameChipText} maxFontSizeMultiplier={1.2}>CHAMPIONSHIP GAME</Text>
+                  </View>
+                </View>
+              ) : (item.game_type === 'consolation' || item.game_type === 'placement') ? (
+                <View style={styles.champGameRow}>
+                  <View style={[styles.champGameChip, { backgroundColor: '#9c6b3c' }]}>
+                    <Ionicons name="medal" size={11} color="#fff" />
+                    <Text style={styles.champGameChipText} maxFontSizeMultiplier={1.2}>{item.game_type === 'consolation' ? 'CONSOLATION GAME' : 'PLACEMENT GAME'}</Text>
                   </View>
                 </View>
               ) : null}
@@ -1748,12 +1755,19 @@ export default function EventDetailScreen({
           const isMyAway = myTeamIds.includes(item.away_team_id || '');
 
           return (
-            <View style={[styles.gameCard, item.game_type === 'championship' ? styles.gameCardChampionship : null, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
+            <View style={[styles.gameCard, item.game_type === 'championship' ? styles.gameCardChampionship : null, (item.game_type === 'consolation' || item.game_type === 'placement') ? styles.gameCardConsolation : null, isLive ? styles.gameCardLive : null, isDelayed ? styles.gameCardDelayed : null]}>
               {item.game_type === 'championship' ? (
                 <View style={styles.champGameRow}>
                   <View style={styles.champGameChip}>
                     <Ionicons name="trophy" size={11} color="#fff" />
                     <Text style={styles.champGameChipText} maxFontSizeMultiplier={1.2}>CHAMPIONSHIP GAME</Text>
+                  </View>
+                </View>
+              ) : (item.game_type === 'consolation' || item.game_type === 'placement') ? (
+                <View style={styles.champGameRow}>
+                  <View style={[styles.champGameChip, { backgroundColor: '#9c6b3c' }]}>
+                    <Ionicons name="medal" size={11} color="#fff" />
+                    <Text style={styles.champGameChipText} maxFontSizeMultiplier={1.2}>{item.game_type === 'consolation' ? 'CONSOLATION GAME' : 'PLACEMENT GAME'}</Text>
                   </View>
                 </View>
               ) : null}
@@ -2044,7 +2058,7 @@ export default function EventDetailScreen({
                   {poolGroup.entries.map((entry: any, idx: number) => (
                     <View key={entry.team_id} style={[styles.standingsRow, idx === poolGroup.entries.length - 1 && pi === card.pools.length - 1 ? styles.standingsRowLast : null]}>
                       <Text style={[styles.standingsCell, styles.standingsRankCol, styles.standingsRankText, card.pools.length > 1 ? { color: accent } : null]}>{idx + 1}</Text>
-                      <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}</Text>
+                      <Text style={[styles.standingsCell, styles.standingsTeamCol, styles.standingsTeamText]} numberOfLines={1}>{entry.team_name}{(entry as any).team_state ? <Text style={{ color: '#8a94a3', fontSize: 11 }}> {(entry as any).team_state}</Text> : null}</Text>
                       <Text style={[styles.standingsCell, styles.standingsRecCol]}>{entry.wins}-{entry.losses}-{entry.ties}</Text>
                       <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsPointsText]}>{entry.points}</Text>
                       <Text style={[styles.standingsCell, styles.standingsStatColWide, styles.standingsDiffText]}>
@@ -2947,6 +2961,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
   gameCardChampionship: { borderWidth: 2, borderColor: '#d4af37', backgroundColor: '#fffdf4' },
+  gameCardConsolation: { borderWidth: 2, borderColor: '#b08968', backgroundColor: '#fffaf5' },
   champGameRow: { flexDirection: 'row', marginBottom: 8 },
   champGameChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

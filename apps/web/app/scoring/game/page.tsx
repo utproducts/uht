@@ -1117,14 +1117,20 @@ function ScoringPageInner() {
               onSkip={() => { setGoalTime(''); setGoalStep('goalie'); }} />
           )}
           {goalStep === 'goalie' && (() => {
+            // The game LINEUP knows who is actually in net (starting-goalie
+            // flag) - roster positions are unreliable at younger ages
+            const oppSide = goalTeamId === game.home_team_id ? lineupState?.away : lineupState?.home;
+            const lineupGoalies = (oppSide?.players || []).filter((p: any) =>
+              p.is_starting_goalie || String(p.position || '').toUpperCase().startsWith('G'));
             const oppPlayers = goalTeamId === game.home_team_id ? awayPlayers : homePlayers;
-            const goalies = oppPlayers.filter(p => (p.position || '').toUpperCase().startsWith('G'));
+            const rosterGoalies = oppPlayers.filter(p => (p.position || '').toUpperCase().startsWith('G'));
+            const goalies: any[] = lineupGoalies.length > 0 ? lineupGoalies : rosterGoalies;
             return (
               <div className="w-full">
                 <p className="text-center text-lg font-bold text-[#1d1d1f] mb-1">Scored on which goalie?</p>
                 <p className="text-center text-xs text-[#86868b] mb-4">This feeds goalie stats. Pick Empty Net if the net was empty.</p>
                 <div className="space-y-2">
-                  {goalies.map(p => (
+                  {goalies.map((p: any) => (
                     <button key={p.id} onClick={() => submitGoal(goalTime || undefined, p.jersey_number)}
                       className="w-full py-4 rounded-2xl bg-[#003e79] text-white text-lg font-bold active:bg-[#002d5a]">
                       #{p.jersey_number} {p.first_name} {p.last_name}
@@ -1646,6 +1652,26 @@ function OfficialsModal({ gameId, pin, onClose, onFlash }: { gameId: string; pin
   const [lines1, setLines1] = useState('');
   const [lines2, setLines2] = useState('');
   const [posting, setPosting] = useState(false);
+
+  // Saving REPLACES the officials list, so the form must open showing what
+  // is already recorded - a blank reopen used to wipe referee 1 when the
+  // crew came back to add referee 2
+  useEffect(() => {
+    fetch(`${API_BASE}/scoring/games/${gameId}/lineup-state`)
+      .then(r => r.json())
+      .then(j => {
+        if (!j.success) return;
+        const offs = (j.data?.officials || []) as any[];
+        const refs = offs.filter(o => o.role === 'referee');
+        const lines = offs.filter(o => o.role === 'linesman');
+        if (refs[0]) setRef1(refs[0].official_name || '');
+        if (refs[1]) setRef2(refs[1].official_name || '');
+        if (lines[0]) setLines1(lines[0].official_name || '');
+        if (lines[1]) setLines2(lines[1].official_name || '');
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
 
   const submit = async () => {
     const officials = [

@@ -466,7 +466,7 @@ function ageSortKey(label: string): number {
                                 <td className="px-3 py-2.5">
                                   <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${multiPool ? accent.circle : 'bg-[#f0f0f2] text-[#6e6e73]'}`}>{idx + 1}</span>
                                 </td>
-                                <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}</td>
+                                <td className="px-3 py-2.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{row.team_name}{(row as any).team_state ? <span className="ml-1.5 text-[11px] font-medium text-[#8a94a3]">{(row as any).team_state}</span> : null}</td>
                                 <td className="px-2 py-2.5 text-center text-[#6e6e73] tabular-nums">{row.wins}-{row.losses}-{row.ties}</td>
                                 <td className="px-2 py-2.5 text-center font-bold text-[#003e79] text-[15px] bg-[#f0f7ff] tabular-nums">{row.points}</td>
                                 <td className={`px-2 py-2.5 text-center font-semibold tabular-nums ${row.goal_differential > 0 ? 'text-emerald-600' : row.goal_differential < 0 ? 'text-red-500' : 'text-[#6e6e73]'}`}>

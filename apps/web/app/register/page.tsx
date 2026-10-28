@@ -89,6 +89,9 @@ export default function RegisterPage() {
   const [event, setEvent] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Johnny: game-day alerts need a live number - required before submit
+  const [contactPhone, setContactPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   // Redirect to create-team if no event param
   const [redirectToCreateTeam, setRedirectToCreateTeam] = useState(false);
@@ -662,6 +665,13 @@ export default function RegisterPage() {
 
   // Submit registration
   const submitRegistration = async () => {
+    const phoneDigits = contactPhone.replace(/[^0-9]/g, '');
+    if (phoneDigits.length < 10) {
+      setPhoneError('Please enter a 10-digit cell phone number so we can reach you on game day.');
+      try { document.getElementById('reg-contact-phone')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+      return;
+    }
+    setPhoneError('');
     if (!event || !paymentChoice || !auth) return;
     const teamsToRegister = multiTeamMode && selectedTeams.length > 0 ? selectedTeams : (selectedTeam ? [selectedTeam] : []);
     if (teamsToRegister.length === 0) return;
@@ -678,6 +688,7 @@ export default function RegisterPage() {
           ageGroup: team.age_group || 'Unknown',
           division: team.division_level || undefined,
           email: auth.user?.email || 'unknown@email.com',
+          phone: contactPhone.trim(),
           managerFirstName: auth.user?.name?.split(' ')[0] || undefined,
           managerLastName: auth.user?.name?.split(' ').slice(1).join(' ') || undefined,
           headCoachName: team.head_coach_name || undefined,
@@ -1052,6 +1063,24 @@ export default function RegisterPage() {
               {(() => { const role = typeof window !== 'undefined' ? localStorage.getItem('uht_role') : null; return role ? <span className="px-2 py-0.5 rounded-full bg-[#f0f7ff] text-[#003e79] text-xs font-semibold capitalize">{role}</span> : null; })()}
             </div>
             <a href="/login" className="text-xs text-[#00ccff] hover:text-[#0099bf] font-medium">Switch Account</a>
+          </div>
+        )}
+
+        {/* Required contact phone - coach/manager cell for game-day alerts */}
+        {auth && step !== 'confirmed' && step !== 'submitting' && (
+          <div id="reg-contact-phone" className="bg-white/80 backdrop-blur-sm rounded-xl px-4 py-3 mb-4 border border-[#e8e8ed]">
+            <label className="block text-xs font-semibold text-[#6e6e73] mb-1.5">Coach / Manager cell phone <span className="text-red-500">*</span></label>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={contactPhone}
+              onChange={(e) => { setContactPhone(e.target.value); if (phoneError) setPhoneError(''); }}
+              placeholder="(555) 555-5555"
+              className="w-full sm:w-72 px-3 py-2.5 rounded-lg border border-[#d2d2d7] text-base sm:text-sm outline-none focus:border-[#003e79]"
+            />
+            <p className="text-[11px] text-[#86868b] mt-1">Required - we use this for schedule changes and game-day alerts.</p>
+            {phoneError && <p className="text-xs text-red-600 mt-1 font-semibold">{phoneError}</p>}
           </div>
         )}
 

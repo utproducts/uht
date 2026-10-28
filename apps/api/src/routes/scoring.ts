@@ -735,7 +735,7 @@ scoringRoutes.get('/events/:eventId/live', async (c) => {
     const goals = await db.prepare(`
       SELECT * FROM game_events
       WHERE game_id = ? AND event_type = 'goal'
-      ORDER BY period ASC, game_time DESC
+      ORDER BY period ASC, (CAST(substr(COALESCE(game_time,'0:0'), 1, instr(COALESCE(game_time,'0:0'), ':') - 1) AS INTEGER) * 60 + CAST(substr(COALESCE(game_time,'0:0'), instr(COALESCE(game_time,'0:0'), ':') + 1) AS INTEGER)) DESC
     `).bind(gid).all();
     recentGoals[gid] = goals.results || [];
 
@@ -1131,7 +1131,7 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
 
   // Fetch all related data in parallel
   const [events, shots, lineups, threeStars, goalieStats, shootout, periodScores, notes, coaches, officials, officialSignoffs] = await Promise.all([
-    db.prepare(`SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, game_time DESC, created_at ASC`).bind(gameId).all(),
+    db.prepare(`SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, (CAST(substr(COALESCE(game_time,'0:0'), 1, instr(COALESCE(game_time,'0:0'), ':') - 1) AS INTEGER) * 60 + CAST(substr(COALESCE(game_time,'0:0'), instr(COALESCE(game_time,'0:0'), ':') + 1) AS INTEGER)) DESC, created_at ASC`).bind(gameId).all(),
     db.prepare(`SELECT * FROM game_shots WHERE game_id = ? ORDER BY period ASC`).bind(gameId).all(),
     db.prepare(`
       SELECT gl.*, p.first_name, p.last_name, p.position as player_position
