@@ -136,7 +136,15 @@ def main():
             ranked = sorted(range(len(tiles)), key=lambda i: dist(tiles[i][1], tc))
             pool = [i for i in ranked[:12] if i != prev and i != last_row[gx]] or ranked[:3]
             pick = random.choice(pool[:8])
-            blended = Image.blend(tiles[pick][0], Image.new('RGB', (TILE, TILE), tc), BLEND)
+            # Adaptive tint: near-white (and near-black) regions wash
+            # photos out at full strength - ease off so faces stay visible
+            lum = 0.299 * tc[0] + 0.587 * tc[1] + 0.114 * tc[2]
+            blend = BLEND
+            if lum > 200:
+                blend = 0.30
+            elif lum < 40:
+                blend = 0.38
+            blended = Image.blend(tiles[pick][0], Image.new('RGB', (TILE, TILE), tc), blend)
             blended = ImageEnhance.Contrast(blended).enhance(1.06)
             mosaic.paste(blended, (gx * TILE, gy * TILE))
             prev = pick

@@ -359,6 +359,7 @@ export async function runEventRecapSweep(env: any): Promise<void> {
   const events = (await db.prepare(`
     SELECT id, name, timezone, end_date FROM events
     WHERE schedule_published = 1 AND COALESCE(is_test, 0) = 0 AND recap_sent_at IS NULL
+      AND status NOT IN ('draft', 'cancelled')
       AND date(end_date) >= date('now', '-3 day') AND date(end_date) <= date('now')
   `).all()).results || [];
   for (const ev of events as any[]) {
