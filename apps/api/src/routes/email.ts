@@ -936,6 +936,89 @@ emailRoutes.get('/app-invite/:eventId/status', authMiddleware, requireRole('admi
 // Champion merch campaign: preview scrapes the shop link, send emails all
 // champion-team contacts and pushes champion-team followers
 // ==================
+// ==================
+// Mosaic announcement: thank-you + zoomable mosaic to the whole event
+// ==================
+emailRoutes.post('/mosaic/:eventId/send', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const body = await c.req.json().catch(() => ({})) as any;
+  const testEmail = typeof body.testEmail === 'string' && body.testEmail.includes('@') ? body.testEmail.trim() : undefined;
+
+  const ev = await db.prepare('SELECT id, name, slug, city, state FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!ev?.slug) return c.json({ success: false, error: 'Event not found or missing slug' }, 404);
+  const photoCount = await db.prepare('SELECT COUNT(*) as n FROM event_photos WHERE event_id = ?').bind(eventId).first<any>();
+  const n = photoCount?.n || 0;
+  const viewerUrl = `https://ultimatetournaments.com/mosaic?event=${ev.slug}`;
+  const previewImg = `https://uht.chad-157.workers.dev/api/assets/mosaic/${ev.slug}/preview.jpg`;
+  const subject = `One picture. Every ${ev.name} family. Come find yours`;
+  const html = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f2f4f8;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:620px;margin:0 auto;padding:24px 14px;">
+    <div style="background:#ffffff;border:2px solid #d4af37;border-radius:18px;overflow:hidden;">
+      <div style="text-align:center;padding:28px 24px 8px;">
+        <div style="display:inline-block;background:linear-gradient(90deg,#d4af37,#b8860b);color:#ffffff;font-size:11px;font-weight:bold;letter-spacing:3px;border-radius:999px;padding:7px 18px;">THE OFFICIAL EVENT MOSAIC</div>
+        <div style="font-size:26px;font-weight:900;color:#003e79;margin-top:14px;line-height:1.25;">You are in this picture.</div>
+        <div style="font-size:14px;color:#5b6b80;margin-top:8px;line-height:1.6;max-width:460px;margin-left:auto;margin-right:auto;">
+          All weekend, ${ev.name} families shared their memories - warmups, locker rooms, team dinners, and championship celebrations.
+          We took every single one of those <strong style="color:#1d2a3d;">${n} photos</strong> and built the official event mosaic.
+          Zoom in anywhere and you will find real moments from your weekend - including yours.
+        </div>
+      </div>
+      <a href="${viewerUrl}" style="display:block;text-decoration:none;padding:18px 18px 6px;">
+        <img src="${previewImg}" alt="${ev.name} photo mosaic" width="100%" style="display:block;border-radius:14px;border:1.5px solid #e4d9b4;" />
+      </a>
+      <div style="text-align:center;padding:16px 20px 8px;">
+        <a href="${viewerUrl}" style="display:inline-block;background:linear-gradient(90deg,#d4af37,#b8860b);color:#ffffff;font-weight:900;font-size:14px;letter-spacing:1px;border-radius:999px;padding:14px 32px;text-decoration:none;">ZOOM IN AND FIND YOUR PHOTO</a>
+        <p style="font-size:12px;color:#8a94a3;margin:10px 0 0;">Free to explore, free to download in full print quality - our thank-you to every family who shared a photo.</p>
+      </div>
+      <div style="padding:10px 26px 24px;">
+        <p style="font-size:13.5px;color:#2a3c52;line-height:1.65;text-align:center;">
+          To everyone who uploaded: thank you. This only exists because you shared your weekend with us.
+          See you at the next one!
+        </p>
+      </div>
+    </div>
+    <div style="text-align:center;margin:16px 0 0;">
+      <img src="https://ultimatetournaments.com/uht-logo.png" alt="Ultimate Hockey Tournaments" width="46" height="46" style="display:inline-block;" />
+      <p style="font-size:11px;color:#8a94a3;margin:8px 0 0;">Ultimate Hockey Tournaments - ${ev.city}, ${ev.state}<br>Questions? Just reply to this email.</p>
+    </div>
+  </div>
+</body></html>`;
+
+  const send = async (to: string[], bcc?: string[]) => fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
+      reply_to: 'johnny@ultimatetournaments.com', to, ...(bcc ? { bcc } : {}), subject, html,
+    }),
+  });
+
+  if (testEmail) {
+    const r = await send([testEmail]);
+    return c.json({ success: true, data: { test: true, ok: r.ok } });
+  }
+
+  const { recapRecipients } = await import('../lib/event-recap');
+  const all = await recapRecipients(db, eventId);
+  if (all.length === 0) return c.json({ success: false, error: 'No recipients found' }, 400);
+  // skip = resume offset after a rate-limited run (recipients are ordered)
+  const skip = Math.max(0, parseInt(String(body.skip ?? '0'), 10) || 0);
+  const recipients = all.slice(skip);
+  let sent = 0;
+  for (let i = 0; i < recipients.length; i += 40) {
+    try {
+      const r = await send(['johnny@ultimatetournaments.com'], recipients.slice(i, i + 40));
+      if (r.ok) sent += Math.min(40, recipients.length - i);
+    } catch {}
+    // Resend allows 2 req/s - pace the waves
+    await new Promise(res => setTimeout(res, 600));
+  }
+  try { await send(['john@ultimatetournaments.com', 'utproducts1@gmail.com']); } catch {}
+  return c.json({ success: true, data: { recipients: all.length, skipped: skip, sent } });
+});
+
 emailRoutes.post('/champion-merch/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const body = await c.req.json().catch(() => ({})) as any;
   let url = String(body.url || '').trim();

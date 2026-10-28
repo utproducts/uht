@@ -250,7 +250,7 @@ export function buildRecapEmailHtml(data: RecapData): string {
 </div>`;
 }
 
-async function recapRecipients(db: any, eventId: string): Promise<string[]> {
+export async function recapRecipients(db: any, eventId: string): Promise<string[]> {
   const rows = (await db.prepare(`
     WITH evt_teams AS (
       SELECT er.team_id AS tid FROM event_registrations er

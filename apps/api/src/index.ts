@@ -1081,6 +1081,18 @@ app.get('/api/upload/images/:filename', async (c) => {
 });
 
 // Serve static brand assets from R2
+// Mosaic viewer tiles + masters (flat files per event: z_x_y.jpg, meta.json, full.jpg, preview.jpg)
+app.get('/api/assets/mosaic/:eventKey/:filename', async (c) => {
+  const { eventKey, filename } = c.req.param();
+  const object = await c.env.STORAGE.get(`mosaic/${eventKey}/${filename}`);
+  if (!object) return c.json({ error: 'Not found' }, 404);
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || (filename.endsWith('.json') ? 'application/json' : 'image/jpeg'));
+  headers.set('Cache-Control', 'public, max-age=31536000');
+  headers.set('Access-Control-Allow-Origin', '*');
+  return new Response(object.body, { headers });
+});
+
 app.get('/api/assets/brand/:filename', async (c) => {
   const filename = c.req.param('filename');
   const object = await c.env.STORAGE.get(filename);

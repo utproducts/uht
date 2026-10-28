@@ -46,6 +46,12 @@ export function EventRecapContent({ slug, embedded }: { slug: string; embedded?:
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
+  const [hasMosaic, setHasMosaic] = useState(false);
+  useEffect(() => {
+    if (!slug) return;
+    fetch(`https://uht.chad-157.workers.dev/api/assets/mosaic/${encodeURIComponent(slug)}/meta.json`)
+      .then(r => setHasMosaic(r.ok)).catch(() => {});
+  }, [slug]);
 
   useEffect(() => {
     if (!slug) { setErr('Missing event'); setLoading(false); return; }
@@ -107,6 +113,16 @@ export function EventRecapContent({ slug, embedded }: { slug: string; embedded?:
       <div className="max-w-5xl mx-auto px-5 pb-16">
         {/* SUMMARY */}
         <p className="text-center text-[15px] leading-relaxed text-[#2a3c52] max-w-3xl mx-auto -mt-1 pt-6">{data.summary}</p>
+
+        {hasMosaic && (
+          <a href={`/mosaic?event=${encodeURIComponent(slug)}`}
+            className="block mt-6 rounded-3xl bg-gradient-to-r from-[#1a1205] via-[#2b1d08] to-[#3d2a0a] border-2 border-[#d4af37] p-6 text-center hover:brightness-110 transition">
+            <div className="text-[11px] font-black tracking-[0.3em] text-[#d4af37]">THE OFFICIAL EVENT MOSAIC IS HERE</div>
+            <div className="text-white text-2xl font-black mt-2">One picture. Every family's photos.</div>
+            <div className="text-[#e8d9a8] text-sm mt-1.5">Zoom in and find yours - then download it in full print quality.</div>
+            <div className="inline-block mt-4 bg-gradient-to-r from-[#d4af37] to-[#b8860b] text-white font-black text-sm rounded-full px-7 py-2.5">EXPLORE THE MOSAIC</div>
+          </a>
+        )}
 
         {/* CHAMPIONS */}
         {data.champions.length > 0 && (
