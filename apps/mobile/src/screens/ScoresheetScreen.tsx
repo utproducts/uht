@@ -317,7 +317,10 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                   <Text style={[styles.td, { width: 36 }]}>{e.period ?? '-'}</Text>
                   <Text style={[styles.td, { width: 32, fontWeight: '800' }]}>{e.jersey_number || '?'}</Text>
                   <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes ?? '-'}</Text>
-                  <Text style={[styles.td, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>{e.penalty_type || 'Penalty'}</Text>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[styles.td, { textAlign: 'left', flexShrink: 1 }]} numberOfLines={1}>{e.penalty_type || 'Penalty'}</Text>
+                    {e.is_misconduct ? <View style={styles.miscBadge}><Text style={styles.miscBadgeText} maxFontSizeMultiplier={1.1}>MISC</Text></View> : null}
+                  </View>
                   <Text style={[styles.td, { width: 50 }]}>{e.game_time || '-'}</Text>
                 </TouchableOpacity>
               ))}
@@ -626,6 +629,8 @@ const styles = StyleSheet.create({
   emptyRow: { fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingVertical: 8 },
   signRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   signText: { fontSize: 12, fontWeight: '600', color: '#047857' },
+  miscBadge: { backgroundColor: '#6d28d9', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1.5 },
+  miscBadgeText: { color: '#fff', fontSize: 8.5, letterSpacing: 0.8, fontWeight: '800' },
   fixHint: { fontSize: 11, color: '#7a8aa0', paddingHorizontal: 10, paddingVertical: 6 },
   penNote: { borderWidth: 1, borderColor: '#dbe3ec', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13, color: '#1d2a3d', marginBottom: 10 },
   penRemoveBtn: { backgroundColor: '#b91c1c', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },

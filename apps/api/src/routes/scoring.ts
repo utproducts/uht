@@ -553,8 +553,32 @@ scoringRoutes.post('/games/:gameId/shots', scorekeeperOrStaff, zValidator('json'
 // ==========================================
 // PUBLIC: Get penalty codes list
 // ==========================================
-scoringRoutes.get('/penalty-codes', (c) => {
+scoringRoutes.get('/penalty-codes', async (c) => {
+  // DB-backed catalog (admin-editable misconduct flags); constant fallback
+  try {
+    const rows = (await c.env.DB.prepare('SELECT code, name, minutes, category, is_misconduct FROM penalty_catalog ORDER BY sort').all()).results || [];
+    if (rows.length > 0) {
+      const out: Record<string, any> = {};
+      for (const r of rows as any[]) out[r.code] = { name: r.name, minutes: r.minutes, category: r.category, is_misconduct: !!r.is_misconduct };
+      return c.json({ success: true, data: out });
+    }
+  } catch {}
   return c.json({ success: true, data: USA_HOCKEY_PENALTIES });
+});
+
+// Admin: the penalty catalog with per-penalty misconduct checkboxes
+scoringRoutes.get('/penalty-catalog', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const rows = (await c.env.DB.prepare('SELECT code, name, minutes, category, is_misconduct FROM penalty_catalog ORDER BY sort').all()).results || [];
+  return c.json({ success: true, data: rows });
+});
+
+scoringRoutes.put('/penalty-catalog/:code', authMiddleware, requireRole('admin'), zValidator('json', z.object({
+  isMisconduct: z.boolean(),
+})), async (c) => {
+  const { isMisconduct } = c.req.valid('json');
+  await c.env.DB.prepare('UPDATE penalty_catalog SET is_misconduct = ? WHERE code = ?')
+    .bind(isMisconduct ? 1 : 0, c.req.param('code')).run();
+  return c.json({ success: true });
 });
 
 // ==========================================
@@ -1153,6 +1177,14 @@ scoringRoutes.get('/games/:gameId/sheet', async (c) => {
   // Separate events by type
   const goals = (events.results || []).filter((e: any) => e.event_type === 'goal');
   const penalties = (events.results || []).filter((e: any) => e.event_type === 'penalty');
+  // Misconduct notation: admin-flagged penalty types get marked on the sheet
+  try {
+    const misRows = (await db.prepare('SELECT name FROM penalty_catalog WHERE is_misconduct = 1').all()).results || [];
+    const misNames = new Set((misRows as any[]).map(r => String(r.name).toLowerCase()));
+    for (const pe of penalties) {
+      pe.is_misconduct = misNames.has(String(pe.penalty_type || '').toLowerCase()) || (pe.penalty_minutes || 0) >= 10 ? 1 : 0;
+    }
+  } catch {}
 
   // Split lineups by team
   const homeLineup = (lineups.results || []).filter((l: any) => l.team_id === (game as any).home_team_id);
