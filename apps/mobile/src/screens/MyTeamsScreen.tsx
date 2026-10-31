@@ -303,7 +303,7 @@ export default function MyTeamsScreen({ navigation }: { navigation: any }) {
               ) : null}
               {isCoach && (
                 <Text style={styles.rosterCount}>
-                  {(item.player_count || 0) > 0 ? `${item.player_count} players` : 'No roster'}
+                  {(item.player_count || 0) > 0 ? `${item.player_count} players` : 'No player list'}
                 </Text>
               )}
             </View>

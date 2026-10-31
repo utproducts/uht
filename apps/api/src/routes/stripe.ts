@@ -364,12 +364,18 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       if (reward.redeemed === 1) {
         return c.json({ success: false, error: 'This code has already been used' }, 409);
       }
-      discountCents = (reward.amount || 0) * 100; // amount is in dollars, convert to cents
-      discountCode = reward.code;
-      // Mark as redeemed immediately to prevent double-use
-      await db.prepare(
-        "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
-      ).bind(data.email, reward.id).run();
+      if (data.paymentChoice === 'pay_deposit') {
+        // Codes never shrink a deposit - the team still owes full price.
+        // Keep the code unburned; it comes off the final payment instead.
+        codeDeferredToFinal = reward.code;
+      } else {
+        discountCents = (reward.amount || 0) * 100; // amount is in dollars, convert to cents
+        discountCode = reward.code;
+        // Mark as redeemed immediately to prevent double-use
+        await db.prepare(
+          "UPDATE meeting_rewards SET redeemed = 1, redeemed_at = datetime('now'), redeemed_event_id = ? WHERE id = ?"
+        ).bind(data.email, reward.id).run();
+      }
     } else {
       // 2) Check discount_codes (UHT-XXXXXX next-event reward codes earned at registration)
       const dc = await db.prepare(
@@ -432,6 +438,11 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
         }
       }
 
+      if (data.paymentChoice === 'pay_deposit') {
+        // Coupons apply to the FULL price, never the deposit - defer it
+        // unburned so the team uses it when settling the balance.
+        codeDeferredToFinal = coupon.code;
+      } else {
       // Calculate discount
       if (coupon.discount_type === 'percent') {
         discountCents = Math.round(totalCents * (coupon.discount_amount / 100));
@@ -445,6 +456,7 @@ stripeRoutes.post('/create-payment-intent', zValidator('json', paymentIntentSche
       await db.prepare(
         'UPDATE coupon_codes SET current_uses = current_uses + 1 WHERE id = ?'
       ).bind(coupon.id).run();
+      }
       }
     }
   }

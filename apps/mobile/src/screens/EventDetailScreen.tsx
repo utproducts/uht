@@ -2439,7 +2439,7 @@ export default function EventDetailScreen({
             ) : ciLoading ? (
               <ActivityIndicator style={{ marginVertical: 30 }} color={colors.navy} />
             ) : ciRoster.length === 0 ? (
-              <Text style={styles.ciEmpty}>No roster on file for this team yet. Add players on the team page, then check in.</Text>
+              <Text style={styles.ciEmpty}>No player list on file for this team yet. Add players on the team page, then check in.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 420 }}>
                 {ciRoster.map((pl, i) => (

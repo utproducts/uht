@@ -494,7 +494,7 @@ export default function MenuScreen({ navigation }: { navigation: any }) {
                         </View>
                       ) : null}
                       <Text style={styles.shareRosterText}>
-                        {(team.player_count || 0) > 0 ? `${team.player_count} players` : 'No roster'}
+                        {(team.player_count || 0) > 0 ? `${team.player_count} players` : 'No player list'}
                       </Text>
                     </View>
                   </View>

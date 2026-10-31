@@ -5025,6 +5025,72 @@ function PushHistoryCard({ eventId }: { eventId: string }) {
 // Director event PIN: directors enter this in the app to unlock the director
 // toolkit scoped to this event only. Admin accounts never need a PIN.
 
+
+// Drag-and-drop hotel priority: the order here is the order families see
+// when picking their hotel choices at registration
+function HotelOrderCard({ eventId }: { eventId: string }) {
+  const [hotels, setHotels] = useState<any[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [saved, setSaved] = useState('');
+  const load = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/event-hotels/${eventId}`, { headers: adminHeaders() });
+      const j = await res.json();
+      if (j.success) setHotels(j.data || []);
+    } catch {}
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [eventId]);
+
+  const dropOn = async (target: any) => {
+    if (!dragId || dragId === target.id) { setDragId(null); return; }
+    const arr = [...hotels];
+    const from = arr.findIndex(h => h.id === dragId);
+    const to = arr.findIndex(h => h.id === target.id);
+    if (from < 0 || to < 0) { setDragId(null); return; }
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    setHotels(arr);
+    setDragId(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/event-hotels/${eventId}/order`, {
+        method: 'PUT', headers: adminHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ ids: arr.map(h => h.id) }),
+      });
+      const j = await res.json();
+      setSaved(j.success ? 'Order saved' : 'Save failed');
+      setTimeout(() => setSaved(''), 2500);
+    } catch { setSaved('Save failed'); }
+  };
+
+  if (hotels.length < 2) return null;
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-lg font-bold text-[#1d1d1f]">Hotel Order</h3>
+        {saved && <span className="text-xs font-semibold text-emerald-600">{saved}</span>}
+      </div>
+      <p className="text-sm text-[#6e6e73] mb-4">Drag to reorder. This is the order families see when picking hotel choices at registration.</p>
+      <div className="space-y-1.5">
+        {hotels.map((h, i) => (
+          <div key={h.id}
+            draggable
+            onDragStart={() => setDragId(h.id)}
+            onDragOver={(e) => { if (dragId) e.preventDefault(); }}
+            onDrop={() => dropOn(h)}
+            onDragEnd={() => setDragId(null)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-grab active:cursor-grabbing ${dragId === h.id ? 'opacity-40 border-[#00ccff]' : 'border-[#e8e8ed] bg-[#fafafa] hover:border-[#003e79]/30'}`}>
+            <span className="text-[#c7c7cc] select-none" aria-hidden>⋮⋮</span>
+            <span className="w-6 h-6 rounded-full bg-[#003e79] text-white text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+            <span className="text-sm font-semibold text-[#1d1d1f] flex-1 truncate">{h.hotel_name}</span>
+            <span className="text-xs text-[#86868b] truncate">{[h.city, h.state].filter(Boolean).join(', ')}</span>
+            {!!h.sold_out && <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">SOLD OUT</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Champion merch blast: paste the tournamentgear shop link, preview the
 // scraped products, then send the exclusive email + push to champions only
 function ChampionMerchCard({ eventId }: { eventId: string }) {
@@ -6071,7 +6137,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     r.card_paid_cents || 0,
     ['paid', 'partial'].includes(r.payment_status) ? (r.payment_amount_cents || 0) : 0,
   );
-  const totalRevenue = registrations.reduce((sum: number, r: any) => sum + paidCentsFor(r), 0);
+  // Match the events-list SQL exactly so the two Revenue numbers agree:
+  // withdrawn/denied/rejected/awaiting-payment rows never count
+  const revenueRegs = registrations.filter((r: any) => !['withdrawn', 'denied', 'rejected', 'awaiting_payment'].includes(r.status));
+  const totalRevenue = revenueRegs.reduce((sum: number, r: any) => sum + paidCentsFor(r), 0);
 
   // Group registrations by age_group, stable sort by team_name within each group
   const grouped: Record<string, any[]> = {};
@@ -6194,6 +6263,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tab Content */}
       {tab === 'overview' && <PenaltyRequestsCard eventId={eventId} />}
       {tab === 'overview' && <ChampionMerchCard eventId={eventId} />}
+      {tab === 'overview' && <HotelOrderCard eventId={eventId} />}
       {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && <EventRulesCard eventId={eventId} />}

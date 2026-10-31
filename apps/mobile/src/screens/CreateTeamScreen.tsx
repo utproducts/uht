@@ -975,7 +975,7 @@ export default function CreateTeamScreen({
     // Main roster import step
     return (
       <View style={styles.container}>
-        <ScreenHeader title={editRosterTeamId ? `Add Roster — ${editRosterTeamName || 'Team'}` : "Add Roster"} showBack={!!editRosterTeamId} onBack={editRosterTeamId ? () => navigation.goBack() : undefined} />
+        <ScreenHeader title={editRosterTeamId ? `Player List — ${editRosterTeamName || 'Team'}` : "Add Player List"} showBack={!!editRosterTeamId} onBack={editRosterTeamId ? () => navigation.goBack() : undefined} />
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
@@ -1134,7 +1134,7 @@ export default function CreateTeamScreen({
             {/* Players list */}
             {addedPlayers.length > 0 && (
               <View style={rosterStyles.playersList}>
-                <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 8 }]}>Roster ({addedPlayers.length})</Text>
+                <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 8 }]}>Player List ({addedPlayers.length})</Text>
                 {addedPlayers.map((p, i) => (
                   <View key={p.id || i} style={rosterStyles.playerRow}>
                     <View style={rosterStyles.jerseyBadge}>

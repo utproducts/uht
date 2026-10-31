@@ -416,7 +416,7 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
         {/* Roster */}
         <View style={styles.section} onLayout={(e) => { rosterYRef.current = e.nativeEvent.layout.y; }}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Roster ({roster.length})</Text>
+            <Text style={styles.sectionTitle}>Player List ({roster.length})</Text>
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => navigation.navigate('CreateTeam', { editRosterTeamId: teamId, editRosterTeamName: team?.name || teamName })}

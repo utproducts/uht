@@ -2578,6 +2578,20 @@ const addHotelSchema = z.object({
   sort_order: z.number().optional(),
 });
 
+// Admin: drag-and-drop hotel order - index in the list becomes sort_order,
+// which drives the order families see when picking hotel choices
+eventRoutes.put('/admin/event-hotels/:eventId/order', authMiddleware, requireRole('admin', 'director'), zValidator('json', z.object({
+  ids: z.array(z.string()).min(1),
+})), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const { ids } = c.req.valid('json');
+  for (let i = 0; i < ids.length; i++) {
+    await db.prepare('UPDATE event_hotels SET sort_order = ? WHERE id = ? AND event_id = ?').bind(i, ids[i], eventId).run();
+  }
+  return c.json({ success: true });
+});
+
 eventRoutes.post('/admin/event-hotels', authMiddleware, requireRole('admin', 'director'), zValidator('json', addHotelSchema), async (c) => {
   const data = c.req.valid('json');
   const db = c.env.DB;
