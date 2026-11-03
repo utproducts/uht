@@ -8,7 +8,7 @@
  */
 
 import { buildEventInfoHtml } from './event-info-email';
-import { getResolvedFields, replaceVars } from './template-overrides';
+import { getEventResolvedFields, replaceVars } from './template-overrides';
 
 const TEMPLATE_ID = 'event_info_30day';
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
@@ -153,7 +153,7 @@ export async function buildGuideForRegistration(env: any, registrationId: string
   const event = await db.prepare('SELECT * FROM events WHERE id = ?').bind(reg.event_id).first();
   if (!event) return null;
 
-  const fields = await getResolvedFields(db, TEMPLATE_ID);
+  const fields = await getEventResolvedFields(db, TEMPLATE_ID, event.id);
   const ctx = await getEventInfoContext(db, event);
   const rosterCount = await rosterCountFor(db, reg);
   const vars = {
@@ -223,7 +223,7 @@ export async function sendEventInfoOnApproval(env: any, registrationId: string):
 async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{ teams: number; sent: number; skipped: number; no_email: number }> {
   const db = env.DB;
   const out = { teams: 0, sent: 0, skipped: 0, no_email: 0 };
-  const fields = await getResolvedFields(db, TEMPLATE_ID);
+  const fields = await getEventResolvedFields(db, TEMPLATE_ID, event.id);
   const ctx = await getEventInfoContext(db, event);
   const campaignId = await guideCampaignFor(db, event, fields.subject);
 

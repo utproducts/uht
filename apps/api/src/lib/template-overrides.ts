@@ -32,6 +32,28 @@ export interface TemplateDefinition {
 
 export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
   {
+    id: 'app_invite',
+    name: 'Schedules Are Live - Download the App',
+    description: "Emails every approved team's coaches their team code with download-and-follow steps for families",
+    trigger: 'Manual send from the event Communication tab',
+    from: 'johnny@ultimatetournaments.com',
+    editableFields: [
+      { key: 'subject', label: 'Subject Line', type: 'text', defaultValue: 'Schedules are LIVE: get your {teamName} families on the UHT app', variables: ['teamName', 'eventName'] },
+      { key: 'intro', label: 'Intro Paragraph (optional, appears above the steps)', type: 'textarea', defaultValue: '', variables: ['teamName', 'eventName'] },
+    ],
+  },
+  {
+    id: 'low_adoption',
+    name: 'Low App Adoption Reminder',
+    description: 'Emails coaches whose teams have few app followers - urgency box plus team code',
+    trigger: 'Manual send from the event Communication tab',
+    from: 'johnny@ultimatetournaments.com',
+    editableFields: [
+      { key: 'subject', label: 'Subject Line (blank = automatic per-team subject)', type: 'text', defaultValue: '', variables: ['teamName', 'eventName'] },
+      { key: 'intro', label: 'Extra Note (optional, appears above the urgency box)', type: 'textarea', defaultValue: '', variables: ['teamName', 'eventName'] },
+    ],
+  },
+  {
     id: 'registration_confirmation',
     name: 'Registration Confirmation',
     description: 'Sent immediately when a team registers for an event (before admin approval)',
@@ -413,4 +435,29 @@ export async function setTemplateEnabled(db: any, templateId: string, enabled: b
     VALUES (?, ?, '{}', ?)
     ON CONFLICT (template_id) DO UPDATE SET enabled = excluded.enabled, updated_at = datetime('now')
   `).bind(id, templateId, enabled ? 1 : 0).run();
+}
+
+// ─── PER-EVENT OVERRIDES ──────────────────────────────────────────────
+// A second layer on top of the global overrides: defaults <- global <- event.
+// Lets admins reword a template for one event without touching the others.
+
+export async function getEventOverridesFromDB(db: any, eventId: string, templateId: string): Promise<Record<string, string> | null> {
+  try {
+    const row = await db.prepare('SELECT fields FROM event_email_overrides WHERE event_id = ? AND template_id = ?')
+      .bind(eventId, templateId).first();
+    if (!row?.fields) return null;
+    return JSON.parse(row.fields);
+  } catch { return null; }
+}
+
+export async function getEventResolvedFields(db: any, templateId: string, eventId: string | null | undefined): Promise<Record<string, string>> {
+  const globalResolved = await getResolvedFields(db, templateId);
+  if (!eventId) return globalResolved;
+  const ev = await getEventOverridesFromDB(db, eventId, templateId);
+  if (!ev) return globalResolved;
+  const out = { ...globalResolved };
+  for (const [k, v] of Object.entries(ev)) {
+    if (typeof v === 'string' && v.trim() !== '') out[k] = v;
+  }
+  return out;
 }

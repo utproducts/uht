@@ -187,6 +187,10 @@ export async function appInviteStatus(env: any, eventId: string) {
  * address only, with a [TEST] subject, and logs nothing.
  */
 export async function sendAppInviteForEvent(env: any, eventId: string, testEmail?: string) {
+  const { getEventOverridesFromDB } = await import('./template-overrides');
+  const ov = (await getEventOverridesFromDB(env.DB, eventId, 'app_invite')) || {};
+  const applyVars = (tpl: string, teamName: string, eventName: string) =>
+    tpl.replace(/\{teamName\}/g, teamName).replace(/\{eventName\}/g, eventName);
   const db = env.DB;
   const event = await db.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first();
   if (!event) return { error: 'Event not found' };
@@ -204,7 +208,11 @@ export async function sendAppInviteForEvent(env: any, eventId: string, testEmail
     if (!code) { out.no_code++; continue; }
 
     const teamName = team?.name || reg.team_name || 'Your Team';
-    const { subject, html } = buildAppInviteHtml({ eventName: event.name, eventDates, teamName, code });
+    const { subject, html } = buildAppInviteHtml({
+      eventName: event.name, eventDates, teamName, code,
+      subjectOverride: ov.subject ? applyVars(ov.subject, teamName, event.name) : undefined,
+      introHtml: ov.intro ? `<p style="font-size:15px;color:#1d2b3d;margin:0 0 16px;">${applyVars(ov.intro, teamName, event.name)}</p>` : undefined,
+    });
     lastSample = { subject, html };
 
     if (testEmail) {
@@ -299,6 +307,9 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
   if (!opts.commit && !opts.testEmail) return out;
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const { getEventOverridesFromDB } = await import('./template-overrides');
+  const lov = (await getEventOverridesFromDB(db, eventId, 'low_adoption')) || {};
+  const lowVars = (tpl: string, teamName: string) => tpl.replace(/\{teamName\}/g, teamName).replace(/\{eventName\}/g, event.name);
   let lastLow: { subject: string; html: string } | null = null;
   for (const t of low as any[]) {
     if (!t.code) { out.skipped++; continue; }
@@ -310,8 +321,8 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
       </div>`;
     const { subject, html } = buildAppInviteHtml({
       eventName: event.name, eventDates, teamName: t.display_name, code: t.code,
-      subjectOverride: `${n === 0 ? 'Your team is missing out' : `Only ${n} of your team on the app`} - ${event.name} starts ${startDay}`,
-      introHtml: urgency,
+      subjectOverride: lov.subject ? lowVars(lov.subject, t.display_name) : `${n === 0 ? 'Your team is missing out' : `Only ${n} of your team on the app`} - ${event.name} starts ${startDay}`,
+      introHtml: (lov.intro ? `<p style="font-size:15px;color:#1d2b3d;margin:0 0 16px;">${lowVars(lov.intro, t.display_name)}</p>` : '') + urgency,
     });
     if (opts.testEmail) {
       const resp = await fetch('https://api.resend.com/emails', {

@@ -4845,6 +4845,127 @@ function AdminPhotosTab({ eventId }: { eventId: string }) {
   );
 }
 
+
+// ── Communication tab plumbing: grouped sections, automated/manual badges,
+// and per-event template editing (event_email_overrides) ──
+function EditTemplateModal({ eventId, templateId, onClose }: { eventId: string; templateId: string; onClose: () => void }) {
+  const [data, setData] = useState<any>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [initial, setInitial] = useState<Record<string, string>>({});
+  const [overridden, setOverridden] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const hdrs = (extra?: Record<string, string>): Record<string, string> => ({
+    'X-Dev-Bypass': 'true',
+    ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}),
+    ...extra,
+  });
+
+  useEffect(() => {
+    fetch(`https://uht.chad-157.workers.dev/api/email/event-overrides/${eventId}/${templateId}`, { headers: hdrs() })
+      .then(r => r.json())
+      .then((j: any) => {
+        if (!j.success) { setMsg(j.error || 'Could not load template'); return; }
+        setData(j.data);
+        const v: Record<string, string> = {}; const o: Record<string, boolean> = {};
+        for (const f of j.data.fields) { v[f.key] = f.value || ''; o[f.key] = !!f.eventOverridden; }
+        setValues(v); setInitial({ ...v }); setOverridden(o);
+      })
+      .catch(() => setMsg('Could not load template'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, templateId]);
+
+  const save = async () => {
+    setBusy(true); setMsg('');
+    const fields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (overridden[k] || v !== initial[k]) fields[k] = v;
+    }
+    try {
+      if (Object.keys(fields).length === 0) {
+        await fetch(`https://uht.chad-157.workers.dev/api/email/event-overrides/${eventId}/${templateId}`, { method: 'DELETE', headers: hdrs() });
+      } else {
+        await fetch(`https://uht.chad-157.workers.dev/api/email/event-overrides/${eventId}/${templateId}`, {
+          method: 'PUT', headers: hdrs({ 'Content-Type': 'application/json' }), body: JSON.stringify({ fields }),
+        });
+      }
+      onClose();
+    } catch { setMsg('Save failed'); setBusy(false); }
+  };
+
+  const reset = async () => {
+    setBusy(true);
+    try {
+      await fetch(`https://uht.chad-157.workers.dev/api/email/event-overrides/${eventId}/${templateId}`, { method: 'DELETE', headers: hdrs() });
+      onClose();
+    } catch { setMsg('Reset failed'); setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[2500] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[88vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        {!data ? (
+          <p className="text-sm text-[#6e6e73] py-6 text-center">{msg || 'Loading template…'}</p>
+        ) : (
+          <>
+            <h3 className="text-lg font-bold text-[#1d1d1f]">{data.name}</h3>
+            <p className="text-xs text-[#6e6e73] mt-1 mb-5">Changes apply to THIS EVENT ONLY. Blank a field to fall back to the standard template. Variables like {'{teamName}'} fill in automatically.</p>
+            <div className="space-y-4">
+              {data.fields.map((f: any) => (
+                <div key={f.key}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <label className="text-xs font-semibold text-[#3d3d3d]">{f.label}</label>
+                    {overridden[f.key] && <span className="text-[10px] font-bold text-[#003e79] bg-[#e8f2fc] rounded-full px-2 py-0.5">CUSTOMIZED FOR THIS EVENT</span>}
+                  </div>
+                  {f.type === 'textarea' ? (
+                    <textarea value={values[f.key] || ''} onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      rows={3} className="w-full px-3 py-2 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:border-[#003e79]" />
+                  ) : (
+                    <input value={values[f.key] || ''} onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-[#e8e8ed] text-sm focus:outline-none focus:border-[#003e79]" />
+                  )}
+                  {f.variables?.length > 0 && <p className="text-[10px] text-[#86868b] mt-1">Variables: {f.variables.map((v: string) => `{${v}}`).join(' ')}</p>}
+                </div>
+              ))}
+            </div>
+            {msg && <p className="text-xs font-semibold text-red-600 mt-3">{msg}</p>}
+            <div className="flex items-center justify-between mt-6">
+              <button onClick={reset} disabled={busy} className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50">Reset to standard template</button>
+              <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-sm font-semibold text-[#6e6e73]">Cancel</button>
+                <button onClick={save} disabled={busy} className="px-5 py-2 rounded-xl bg-[#003e79] text-white text-sm font-bold disabled:opacity-50">{busy ? 'Saving…' : 'Save for This Event'}</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommItem({ eventId, channel, mode, note, editTemplate, children }: {
+  eventId: string; channel: string; mode: 'AUTOMATED' | 'MANUAL' | 'AUTOMATED + MANUAL';
+  note?: string; editTemplate?: string; children: React.ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5 px-1 flex-wrap">
+        <span className="text-[10px] font-bold tracking-wider text-[#6e6e73] bg-[#eef0f3] rounded-full px-2 py-0.5">{channel}</span>
+        <span className={`text-[10px] font-bold tracking-wider rounded-full px-2 py-0.5 ${mode.startsWith('AUTOMATED') ? 'text-green-700 bg-green-50 border border-green-200' : 'text-[#003e79] bg-[#e8f2fc] border border-[#cfe3f7]'}`}>{mode}</span>
+        {note && <span className="text-[11px] text-[#86868b]">{note}</span>}
+        {editTemplate && (
+          <button onClick={() => setEditing(true)} className="ml-auto text-[11px] font-bold text-[#003e79] hover:underline">
+            Edit Template for This Event
+          </button>
+        )}
+      </div>
+      {children}
+      {editing && editTemplate && <EditTemplateModal eventId={eventId} templateId={editTemplate} onClose={() => setEditing(false)} />}
+    </div>
+  );
+}
+
 function ThreeStarsTab({ eventId }: { eventId: string }) {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -6465,16 +6586,38 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
         <div className="space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] px-6 py-4">
             <h3 className="text-lg font-bold text-[#1d1d1f]">Event Communication</h3>
-            <p className="text-sm text-[#6e6e73] mt-0.5">Every email, push reminder, and meeting for this event - in the order families experience them.</p>
+            <p className="text-sm text-[#6e6e73] mt-0.5">Grouped by channel. Green = fires automatically, blue = you click send. "Edit Template" rewrites the copy for this event only.</p>
           </div>
-          <WelcomeEmailCard eventId={eventId} />
-          <MeetingsCard eventId={eventId} />
-          <TournamentGuideCard eventId={eventId} />
-          <AppInviteCard eventId={eventId} />
-          <LowAdoptionCard eventId={eventId} />
-          <PushHistoryCard eventId={eventId} />
-          <ReviewAskCard eventId={eventId} />
-          <ChampionMerchCard eventId={eventId} />
+
+          <h4 className="text-sm font-bold uppercase tracking-wider text-[#6e6e73] pt-1">Emails</h4>
+          <CommItem eventId={eventId} channel="EMAIL" mode="AUTOMATED" note="fires 1-3 days before the event (note below is this event's edit)">
+            <WelcomeEmailCard eventId={eventId} />
+          </CommItem>
+          <CommItem eventId={eventId} channel="EMAIL" mode="AUTOMATED" note="30-day sweep + instantly on approval" editTemplate="event_info_30day">
+            <TournamentGuideCard eventId={eventId} />
+          </CommItem>
+          <CommItem eventId={eventId} channel="EMAIL" mode="MANUAL" editTemplate="app_invite">
+            <AppInviteCard eventId={eventId} />
+          </CommItem>
+          <CommItem eventId={eventId} channel="EMAIL" mode="MANUAL" editTemplate="low_adoption">
+            <LowAdoptionCard eventId={eventId} />
+          </CommItem>
+          <CommItem eventId={eventId} channel="EMAIL + PUSH" mode="AUTOMATED" note="morning-after recap asks champions for a review">
+            <ReviewAskCard eventId={eventId} />
+          </CommItem>
+          <CommItem eventId={eventId} channel="EMAIL + PUSH" mode="MANUAL">
+            <ChampionMerchCard eventId={eventId} />
+          </CommItem>
+
+          <h4 className="text-sm font-bold uppercase tracking-wider text-[#6e6e73] pt-2">Push Notifications</h4>
+          <CommItem eventId={eventId} channel="PUSH" mode="AUTOMATED + MANUAL" note="game-day sweeps are automatic; reminders here are manual sends">
+            <PushHistoryCard eventId={eventId} />
+          </CommItem>
+
+          <h4 className="text-sm font-bold uppercase tracking-wider text-[#6e6e73] pt-2">Meetings</h4>
+          <CommItem eventId={eventId} channel="EMAIL + PUSH" mode="MANUAL">
+            <MeetingsCard eventId={eventId} />
+          </CommItem>
         </div>
       )}
       {tab === 'overview' && (

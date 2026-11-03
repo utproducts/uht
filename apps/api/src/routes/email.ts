@@ -5,7 +5,7 @@ import type { Env } from '../types';
 import { authMiddleware, requireRole, blockDataRestricted, isDataRestricted } from '../middleware/auth';
 import { sendRegistrationConfirmationEmail } from '../lib/registration-email';
 import { sendApprovalEmail } from '../lib/approval-email';
-import { TEMPLATE_DEFINITIONS, getDefaults, getOverridesFromDB, getResolvedFields, replaceVars, isTemplateEnabled, setTemplateEnabled } from '../lib/template-overrides';
+import { TEMPLATE_DEFINITIONS, getDefaults, getOverridesFromDB, getResolvedFields, getEventOverridesFromDB, getEventResolvedFields, replaceVars, isTemplateEnabled, setTemplateEnabled } from '../lib/template-overrides';
 
 export const emailRoutes = new Hono<{ Bindings: Env }>();
 
@@ -2283,3 +2283,42 @@ function generateCustomEmail(message: string): string {
     </div>
   `);
 }
+
+// ─── Per-event template overrides (edited from the event Communication tab) ───
+const EVENT_EDITABLE_TEMPLATES = ['event_info_30day', 'app_invite', 'low_adoption'];
+
+emailRoutes.get('/event-overrides/:eventId/:templateId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { eventId, templateId } = c.req.param();
+  if (!EVENT_EDITABLE_TEMPLATES.includes(templateId)) return c.json({ success: false, error: 'Template not event-editable' }, 400);
+  const def = TEMPLATE_DEFINITIONS.find(d => d.id === templateId);
+  const resolved = await getEventResolvedFields(c.env.DB, templateId, eventId);
+  const eventOnly = (await getEventOverridesFromDB(c.env.DB, eventId, templateId)) || {};
+  return c.json({ success: true, data: {
+    templateId,
+    name: def?.name || templateId,
+    fields: (def?.editableFields || []).map(f => ({
+      key: f.key, label: f.label, type: f.type, helpText: f.helpText, variables: f.variables,
+      value: resolved[f.key] ?? f.defaultValue,
+      eventOverridden: eventOnly[f.key] !== undefined && String(eventOnly[f.key]).trim() !== '',
+    })),
+  }});
+});
+
+emailRoutes.put('/event-overrides/:eventId/:templateId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { eventId, templateId } = c.req.param();
+  if (!EVENT_EDITABLE_TEMPLATES.includes(templateId)) return c.json({ success: false, error: 'Template not event-editable' }, 400);
+  const body = await c.req.json().catch(() => ({})) as any;
+  const fields = body?.fields && typeof body.fields === 'object' ? body.fields : {};
+  await c.env.DB.prepare(`
+    INSERT INTO event_email_overrides (event_id, template_id, fields, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(event_id, template_id) DO UPDATE SET fields = excluded.fields, updated_at = datetime('now')
+  `).bind(eventId, templateId, JSON.stringify(fields)).run();
+  return c.json({ success: true });
+});
+
+emailRoutes.delete('/event-overrides/:eventId/:templateId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const { eventId, templateId } = c.req.param();
+  await c.env.DB.prepare('DELETE FROM event_email_overrides WHERE event_id = ? AND template_id = ?').bind(eventId, templateId).run();
+  return c.json({ success: true });
+});
