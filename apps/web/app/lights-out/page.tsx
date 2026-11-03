@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 const API = 'https://uht.chad-157.workers.dev/api/lights-out';
 
 const SWAG: { name: string; desc: string; icon: string; img?: string }[] = [
-  { name: 'Two Custom Jerseys', desc: 'Home and away glow-edition jerseys, made for this event only. Keep both.', icon: 'M16 3l2 3h3v6l-2 1v8H5v-8l-2-1V6h3l2-3h8z' },
+  { name: 'Two Custom Jerseys', desc: 'Home and away glow-edition jerseys, made for this event only. Keep both.', icon: 'M16 3l2 3h3v6l-2 1v8H5v-8l-2-1V6h3l2-3h8z', img: '/lights-out-jerseys.jpg' },
   { name: 'Glow Stick Tape', desc: 'Glow-in-the-dark tape. Your blade becomes a light streak on every shot.', icon: 'M4 17l6-6 4 4 6-6M4 7h4v4' },
   { name: 'Custom Glow UHT Puck', desc: 'A collector glow-in-the-dark UHT puck. Nobody else can get one.', icon: 'M12 12m-8 0a8 3.5 0 1 0 16 0a8 3.5 0 1 0 -16 0', img: '/lights-out-puck.jpg' },
   { name: 'Glow T-Shirt', desc: 'A custom glow tee for every player. Lights off, logo on.', icon: 'M8 4l4 2 4-2 4 4-3 3v9H7v-9L4 8l4-4z', img: '/lights-out-tee.jpg' },
