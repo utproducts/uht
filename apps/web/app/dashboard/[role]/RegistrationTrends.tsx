@@ -35,26 +35,42 @@ const MUTED = '#86868b';
 export default function RegistrationTrends() {
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authFailed, setAuthFailed] = useState(false);
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
     fetch(`${API}/api/analytics/reports/season-comparison`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-      .then(r => r.json())
+      .then(r => {
+        if (r.status === 401 || r.status === 403) setAuthFailed(true);
+        return r.json();
+      })
       .then(json => {
         if (json.success) {
           setSeasons(json.data.seasons || []);
         }
       })
-      .catch(() => {})
+      .catch(() => setAuthFailed(true))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
     return <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>;
   }
-  if (seasons.length === 0) return null;
+  // A stale login used to make this card vanish silently - say why instead
+  if (seasons.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 text-center">
+        <p className="text-sm font-semibold text-[#1d1d1f]">Teams Registered by Month</p>
+        <p className="text-xs text-[#86868b] mt-1.5">
+          {authFailed
+            ? 'Your session has expired, so the season comparison could not load. Sign out and back in to bring it back.'
+            : 'The season comparison could not load. Pull to refresh, or sign out and back in.'}
+        </p>
+      </div>
+    );
+  }
 
   // Color a cell against the previous season's same month:
   // green = higher or equal (with data), red = lower, neutral = nothing to compare.
