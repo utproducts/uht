@@ -91,82 +91,65 @@ export default function RegistrationTrends() {
     return i > 0 ? seasons[i - 1] : null;
   };
 
+  const current = visibleSeasons.find(x => x.current) || visibleSeasons[visibleSeasons.length - 1];
+  const last = prevOf(current);
+  const pendingTotal = current && current.total !== null ? current.total - (current.approvedTotal || 0) : 0;
+  const totalStyle = cellStyle(current?.total ?? null, last?.total ?? null);
+
   return (
     <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
         <h3 className="text-sm font-semibold text-[#1d1d1f]">Teams Registered by Month</h3>
         <span className="text-xs" style={{ color: MUTED }}>Season runs June – May</span>
       </div>
       <p className="text-xs mb-4" style={{ color: MUTED }}>
-        Green = ahead of the previous season&apos;s same month · Red = behind · counts are teams registered
+        Big number = this season ({current?.season}) · small = last season ({last?.season || '—'}) · green = ahead, red = behind
       </p>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          <thead>
-            <tr className="border-b border-[#e8e8ed]">
-              <th className="text-left font-medium py-2 pr-2 text-xs uppercase tracking-wider" style={{ color: MUTED }}>Month</th>
-              {visibleSeasons.map(s => (
-                <th key={s.season} className={`text-right font-semibold py-2 px-1.5 whitespace-nowrap ${s.current ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>
-                  {s.season}
-                  {s.current && <span className="hidden sm:inline ml-1.5 text-[10px] font-bold uppercase bg-[#003e79] text-white rounded-full px-1.5 py-0.5 align-middle">Current</span>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#f0f0f2]">
-            {/* Total row */}
-            <tr className="bg-[#fafafa]">
-              <td className="py-2.5 pr-2 font-bold text-[#1d1d1f] whitespace-nowrap">Total Teams</td>
-              {visibleSeasons.map((s) => {
-                const prev = prevOf(s)?.total ?? null;
-                const st = cellStyle(s.total, prev);
-                const approvedT = s.current ? (s.approvedTotal || 0) : null;
-                const pendingT = s.current && s.total !== null ? s.total - (approvedT || 0) : null;
-                return (
-                  <td key={s.season} className="py-1.5 px-1 text-right align-top">
-                    <span className="inline-block min-w-[60px] rounded-lg px-2.5 py-1 text-base font-bold" style={{ background: st.bg, color: st.text }}>
-                      {s.total === null ? '—' : s.total.toLocaleString()}
-                    </span>
-                    {s.current && (pendingT || 0) > 0 && (
-                      <div className="text-[10px] font-semibold mt-1 pr-1 whitespace-nowrap text-amber-600">{pendingT} pending</div>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-            {/* Month rows */}
-            {SEASON_MONTHS.map(m => {
-              const isFutureThisSeason = SEASON_MONTHS.indexOf(m) > SEASON_MONTHS.indexOf(currentMonthNum);
-              return (
-                <tr key={m}>
-                  <td className="py-1.5 pr-2 font-medium whitespace-nowrap" style={{ color: NEUTRAL_TEXT }}>
-                    {MONTH_NAMES[m]}
-                    {m === currentMonthNum && <span className="hidden sm:inline ml-1.5 text-[10px] font-semibold" style={{ color: MUTED }}>(in progress)</span>}
-                  </td>
-                  {visibleSeasons.map((s) => {
-                    const value = s.current && isFutureThisSeason ? null : (s.months[m] ?? (s.current ? 0 : null));
-                    const prevSeason = prevOf(s);
-                    const prevValue = prevSeason ? (prevSeason.months[m] ?? null) : null;
-                    const st = cellStyle(value, prevValue);
-                    const approvedM = s.current ? (s.approvedMonths?.[m] || 0) : 0;
-                    const pendingM = s.current && value ? value - approvedM : 0;
-                    return (
-                      <td key={s.season} className="py-1 px-1 text-right align-top">
-                        <span className="inline-block min-w-[60px] rounded-lg px-2.5 py-1 font-semibold" style={{ background: st.bg, color: st.text }}>
-                          {value === null || value === undefined ? '—' : value.toLocaleString()}
-                        </span>
-                        {s.current && value !== null && value > 0 && pendingM > 0 && (
-                          <div className="text-[10px] font-semibold mt-1 pr-1 whitespace-nowrap text-amber-600">{pendingM} pending</div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* Season totals strip */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="rounded-xl border border-[#e8e8ed] bg-[#fafafa] px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: MUTED }}>{last?.season || 'Last season'} total</p>
+          <p className="text-2xl font-bold text-[#1d1d1f]" style={{ fontVariantNumeric: 'tabular-nums' }}>{last?.total === null || last?.total === undefined ? '—' : last.total.toLocaleString()}</p>
+        </div>
+        <div className="rounded-xl px-4 py-3 border" style={{ background: totalStyle.bg === 'transparent' ? '#fafafa' : totalStyle.bg, borderColor: '#e8e8ed' }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#003e79]">{current?.season} to date</p>
+          <p className="text-2xl font-bold" style={{ color: totalStyle.text === MUTED ? NEUTRAL_TEXT : totalStyle.text, fontVariantNumeric: 'tabular-nums' }}>
+            {current?.total === null || current?.total === undefined ? '—' : current.total.toLocaleString()}
+          </p>
+          {pendingTotal > 0 && <p className="text-[11px] font-semibold text-amber-600">{pendingTotal} pending approval</p>}
+        </div>
+      </div>
+
+      {/* Month grid, June -> May */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {SEASON_MONTHS.map(m => {
+          const isFuture = SEASON_MONTHS.indexOf(m) > SEASON_MONTHS.indexOf(currentMonthNum);
+          const value = current ? (isFuture ? null : (current.months[m] ?? 0)) : null;
+          const lastValue = last ? (last.months[m] ?? null) : null;
+          const st = cellStyle(value, lastValue);
+          const approvedM = current?.approvedMonths?.[m] || 0;
+          const pendingM = value ? value - approvedM : 0;
+          const isNow = m === currentMonthNum;
+          return (
+            <div key={m} className="rounded-xl border px-3 py-2.5"
+              style={{ background: st.bg === 'transparent' ? '#fff' : st.bg, borderColor: isNow ? '#003e79' : '#ededf0' }}>
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide truncate" style={{ color: isNow ? '#003e79' : MUTED }}>
+                  {MONTH_NAMES[m].slice(0, 3)}
+                </p>
+                {isNow && <span className="w-1.5 h-1.5 rounded-full bg-[#003e79] shrink-0" title="In progress" />}
+              </div>
+              <p className="text-xl font-bold leading-tight" style={{ color: st.text === MUTED ? '#c7c7cc' : st.text }}>
+                {value === null ? '—' : value.toLocaleString()}
+              </p>
+              <p className="text-[11px] font-medium" style={{ color: MUTED }}>
+                {lastValue === null ? 'last yr —' : `last yr ${lastValue.toLocaleString()}`}
+              </p>
+              {pendingM > 0 && <p className="text-[10px] font-semibold text-amber-600">{pendingM} pending</p>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
