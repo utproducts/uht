@@ -331,7 +331,7 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
                 <span className="text-[#86868b]">{revenue.paid_teams} paid / {revenue.unpaid_teams} unpaid of {revenue.team_count} teams</span>
               </div>
             )}
-            {revenueByDivision.map((d: any) => (
+            {revenueByDivision.filter((d: any) => (d.team_count || 0) > 0).map((d: any) => (
               <div key={d.age_group + d.division_level} className="flex items-center justify-between text-sm">
                 <div>
                   <span className="font-semibold text-[#1d1d1f]">{d.age_group}</span>
