@@ -864,7 +864,8 @@ emailRoutes.post('/event-info/:eventId/send', authMiddleware, requireRole('admin
 // Low app-adoption resend: preview, test, or commit
 emailRoutes.get('/app-adoption/:eventId/preview', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const { sendLowAdoptionInvites } = await import('../lib/app-invite');
-  const r = await sendLowAdoptionInvites(c.env, c.req.param('eventId'), {});
+  const threshold = parseInt(c.req.query('threshold') || '', 10);
+  const r = await sendLowAdoptionInvites(c.env, c.req.param('eventId'), Number.isFinite(threshold) ? { threshold } : {});
   return c.json({ success: true, data: r });
 });
 emailRoutes.post('/app-adoption/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {

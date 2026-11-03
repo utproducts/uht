@@ -4549,6 +4549,104 @@ function TournamentGuideCard({ eventId }: { eventId: string }) {
   );
 }
 
+// Low app-adoption nudge: emails coaches of approved teams whose follower
+// count is under the threshold - "only N people from your team have the app,
+// schedules live in the app" with their team code. Engine: sendLowAdoptionInvites.
+function LowAdoptionCard({ eventId }: { eventId: string }) {
+  const [preview, setPreview] = useState<any>(null);
+  const [threshold, setThreshold] = useState(5);
+  const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const load = () => {
+    fetch(`https://uht.chad-157.workers.dev/api/email/app-adoption/${eventId}/preview?threshold=${threshold - 1}`, { headers: adminHeaders() })
+      .then(r => r.json())
+      .then((j: any) => { if (j.success) setPreview(j.data); })
+      .catch(() => {});
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [eventId, threshold]);
+
+  const lowTeams = (preview?.teams || []).filter((t: any) => (t.app_users ?? 0) < threshold);
+
+  const send = async (testEmail?: string) => {
+    setSending(true);
+    setResult('');
+    try {
+      const r = await fetch(`https://uht.chad-157.workers.dev/api/email/app-adoption/${eventId}/send`, {
+        method: 'POST', headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(testEmail ? { testEmail, threshold: threshold - 1 } : { commit: true, threshold: threshold - 1 }),
+      }).then(res => res.json()) as any;
+      if (r.success) {
+        const d = r.data;
+        if (d.test) setResult(d.ok ? `Test sent (sample team: ${d.teamName}).` : 'Test send failed.');
+        else setResult(d.sent === 0 && d.skipped > 0
+          ? 'Nothing new to send - every low-adoption coach already got this reminder.'
+          : `Sent ${d.sent} email${d.sent !== 1 ? 's' : ''}${d.skipped ? ` (${d.skipped} skipped - already sent or no code/email)` : ''}.`);
+      } else setResult(r.error || 'Send failed');
+    } catch { setResult('Send failed'); }
+    setSending(false);
+    setConfirming(false);
+  };
+
+  if (!preview) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-[260px]">
+          <h3 className="text-lg font-bold text-[#1d1d1f]">Low App Adoption Reminder</h3>
+          <p className="text-sm text-[#6e6e73] mt-1">
+            Emails the coaches of approved teams with fewer than{' '}
+            <input type="number" min={1} max={30} value={threshold}
+              onChange={(e) => setThreshold(Math.max(1, parseInt(e.target.value) || 5))}
+              className="w-14 mx-1 px-2 py-0.5 rounded-lg border border-[#e8e8ed] text-center font-bold text-[#003e79]" />
+            {' '}app followers: how few of their families are on the app, their team code, and that schedules are only in the app.
+          </p>
+          <p className="text-sm font-semibold mt-2 text-[#1d1d1f]">
+            {lowTeams.length === 0
+              ? `Every approved team has ${threshold}+ followers. Nothing to send.`
+              : `${lowTeams.length} team${lowTeams.length !== 1 ? 's' : ''} under ${threshold} followers right now.`}
+            {lowTeams.length > 0 && (
+              <button onClick={() => setOpen(!open)} className="ml-2 text-xs font-semibold text-[#003e79] underline">{open ? 'hide list' : 'see list'}</button>
+            )}
+          </p>
+          {open && lowTeams.length > 0 && (
+            <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-[#f0f0f2] divide-y divide-[#f0f0f2]">
+              {lowTeams.map((t: any) => (
+                <div key={t.team + t.code} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                  <span className="font-medium text-[#3d3d3d] truncate">{t.team}</span>
+                  <span className={`font-bold shrink-0 ml-3 ${t.app_users === 0 ? 'text-red-600' : 'text-amber-600'}`}>{t.app_users} on app</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {result && <p className="text-xs font-semibold text-[#003e79] mt-2">{result}</p>}
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => send('utproducts1@gmail.com')} disabled={sending || lowTeams.length === 0}
+            className="px-4 py-2 rounded-xl bg-white border border-[#e8e8ed] text-[#003e79] text-xs font-semibold hover:bg-[#f0f7ff] transition disabled:opacity-50">
+            Send Test
+          </button>
+          {confirming ? (
+            <button onClick={() => send()} disabled={sending}
+              className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition disabled:opacity-50">
+              {sending ? 'Sending…' : `Confirm - email ${lowTeams.length} team${lowTeams.length !== 1 ? 's' : ''}`}
+            </button>
+          ) : (
+            <button onClick={() => setConfirming(true)} disabled={sending || lowTeams.length === 0}
+              className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-xs font-bold hover:bg-[#00294f] transition disabled:opacity-50">
+              Send to Coaches
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppInviteCard({ eventId }: { eventId: string }) {
   const [status, setStatus] = useState<{ teams: number; with_code: number; no_code: number; emails_sent: number } | null>(null);
   const [sending, setSending] = useState(false);
@@ -6373,6 +6471,9 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
           {/* App adoption email with per-team follow codes */}
           <AppInviteCard eventId={eventId} />
+
+          {/* Nudge coaches whose teams have almost no app followers */}
+          <LowAdoptionCard eventId={eventId} />
 
           {/* Info */}
           {event.information && (
