@@ -321,169 +321,119 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
         </div>
       </div>
 
-      {/* P&L Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-          <div className="text-2xl font-bold text-green-600">{fmt(summary.total_revenue_cents)}</div>
-          <div className="text-xs text-[#86868b] mt-1 font-semibold">Revenue</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-          <div className="text-2xl font-bold text-red-500">{fmt(summary.total_expenses_cents)}</div>
-          <div className="text-xs text-[#86868b] mt-1 font-semibold">Expenses</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-          <div className="text-2xl font-bold text-blue-600">{fmt(summary.total_rebates_cents)}</div>
-          <div className="text-xs text-[#86868b] mt-1 font-semibold">Hotel Rebates</div>
-        </div>
-        <div className={`rounded-2xl border p-5 text-center ${isProfit ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <div className={`text-2xl font-bold ${isProfit ? 'text-green-700' : 'text-red-600'}`}>{fmt(summary.net_income_cents)}</div>
-          <div className="text-xs text-[#86868b] mt-1 font-semibold">Net {isProfit ? 'Profit' : 'Loss'}</div>
-        </div>
+      {/* Compact stat strip */}
+      <div className="bg-white rounded-xl border border-[#e8e8ed] px-4 py-3 mb-4 flex flex-wrap items-center gap-x-8 gap-y-2">
+        {[['Revenue', fmt(summary.total_revenue_cents), 'text-green-600'],
+          ['Rebates', fmt(summary.total_rebates_cents), 'text-blue-600'],
+          ['Expenses', fmt(summary.total_expenses_cents), 'text-red-500'],
+          [isProfit ? 'Net Profit' : 'Net Loss', fmt(summary.net_income_cents), isProfit ? 'text-green-700' : 'text-red-600']].map(([label, val, cls]) => (
+          <div key={label as string} className="flex items-baseline gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{label}</span>
+            <span className={`text-lg font-extrabold ${cls}`}>{val}</span>
+          </div>
+        ))}
+        {revenue.team_count > 0 && (
+          <span className="text-[11px] text-[#86868b] ml-auto">{revenue.paid_teams} paid / {revenue.unpaid_teams} unpaid of {revenue.team_count} teams</span>
+        )}
       </div>
 
-      {/* Two column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Breakdown */}
-        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6">
-          <h3 className="text-base font-bold text-[#1d1d1f] mb-4">Revenue by Division</h3>
-          <div className="space-y-3">
-            {revenue.team_count > 0 && (
-              <div className="flex items-center justify-between text-sm pb-2 border-b border-[#f0f0f3]">
-                <span className="text-[#86868b]">{revenue.paid_teams} paid / {revenue.unpaid_teams} unpaid of {revenue.team_count} teams</span>
-              </div>
-            )}
+      {/* Dense two-column ledger */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {/* LEFT: revenue + rebates */}
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
+            <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase border-b-2 border-[#d4af37] pb-1.5 mb-2">Revenue by Division</h3>
             {revenueByDivision.filter((d: any) => (d.team_count || 0) > 0).map((d: any) => (
-              <div key={d.age_group + d.division_level} className="flex items-center justify-between text-sm">
-                <div>
-                  <span className="font-semibold text-[#1d1d1f]">{d.age_group}</span>
-                  {d.division_level && <span className="text-[#86868b] ml-1">{d.division_level}</span>}
-                  <span className="text-xs text-[#86868b] ml-2">({d.team_count} teams)</span>
-                </div>
-                <span className="font-bold text-green-600">{fmt(d.revenue_cents)}</span>
+              <div key={d.age_group + d.division_level} className="flex items-center justify-between text-[13px] py-1 border-b border-[#f5f5f7] last:border-0">
+                <span className="text-[#1d1d1f]">{d.age_group}{d.division_level ? ` ${d.division_level}` : ''} <span className="text-[#a1a1a6]">· {d.team_count}</span></span>
+                <span className="font-bold text-green-600 tabular-nums">{fmt(d.revenue_cents)}</span>
               </div>
             ))}
           </div>
+
+          {(() => {
+            const hotelRebates = rebates.filter((rb: any) => rb.rebate_type !== 'other');
+            const vendorRebates = rebates.filter((rb: any) => rb.rebate_type === 'other');
+            const rebateRow = (rb: any, sub: string) => (
+              <div key={rb.id} className="flex items-center justify-between text-[13px] py-1 border-b border-[#f5f5f7] last:border-0">
+                <span className="text-[#1d1d1f] truncate pr-2">{rb.hotel_name}{sub ? <span className="text-[#a1a1a6]"> · {sub}</span> : null}</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="font-bold text-blue-600 tabular-nums">{fmt(rb.total_rebate_cents)}</span>
+                  <button onClick={() => setRebateModal(rb)} className="text-[10px] text-[#a1a1a6] hover:text-[#003e79]">Edit</button>
+                  <button onClick={() => handleDeleteRebate(rb.id)} className="text-[10px] text-[#a1a1a6] hover:text-red-500">Del</button>
+                </span>
+              </div>
+            );
+            return (
+              <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
+                <div className="flex items-center justify-between border-b-2 border-[#d4af37] pb-1.5 mb-2">
+                  <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase">Rebates</h3>
+                  <button onClick={() => setRebateModal(null)} className="text-[11px] font-bold text-[#003e79] hover:underline">+ Add</button>
+                </div>
+                {hotelRebates.length === 0 && vendorRebates.length === 0 && (
+                  <p className="text-xs text-[#86868b] py-1">None recorded yet.</p>
+                )}
+                {hotelRebates.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-bold tracking-widest text-[#86868b] mt-1">HOTELS</p>
+                    {hotelRebates.map((rb: any) => rebateRow(rb, rb.room_nights ? `${rb.room_nights} blocks` : ''))}
+                  </>
+                )}
+                {vendorRebates.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-bold tracking-widest text-[#86868b] mt-2">OTHER VENDORS</p>
+                    {vendorRebates.map((rb: any) => rebateRow(rb, rb.notes || ''))}
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
-        {/* Expense Breakdown */}
-        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold text-[#1d1d1f]">Expenses by Category</h3>
-            <button onClick={() => setExpenseModal(null)} className="px-3 py-1.5 bg-[#003e79] text-white text-xs font-semibold rounded-lg hover:bg-[#002d5a] transition">+ Add</button>
+        {/* RIGHT: expenses */}
+        <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
+          <div className="flex items-center justify-between border-b-2 border-[#d4af37] pb-1.5 mb-2">
+            <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase">Expenses</h3>
+            <button onClick={() => setExpenseModal(null)} className="text-[11px] font-bold text-[#003e79] hover:underline">+ Add</button>
           </div>
           {expenseTotals.length === 0 ? (
-            <p className="text-sm text-[#86868b] text-center py-4">No expenses recorded yet. Click "+ Add" to start tracking.</p>
+            <p className="text-xs text-[#86868b] py-1">No expenses recorded yet.</p>
           ) : (
-            <div className="space-y-3">
+            <>
               {expenseTotals.map((et: any) => {
                 const cat = EXPENSE_CATEGORIES[et.category] || { label: et.category, color: 'bg-gray-500' };
                 return (
-                  <div key={et.category}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${cat.color}`} />
-                        <span className="font-semibold text-[#1d1d1f]">{cat.label}</span>
-                        <span className="text-xs text-[#86868b]">({et.line_items})</span>
-                      </div>
-                      <span className="font-bold text-red-500">{fmt(et.total_cents)}</span>
-                    </div>
+                  <div key={et.category} className="flex items-center justify-between text-[13px] py-1 border-b border-[#f5f5f7]">
+                    <span className="flex items-center gap-1.5 text-[#1d1d1f] font-semibold">
+                      <span className={`w-2 h-2 rounded-full ${cat.color}`} />{cat.label}
+                      <span className="text-[#a1a1a6] font-normal">· {et.line_items}</span>
+                    </span>
+                    <span className="font-bold text-red-500 tabular-nums">{fmt(et.total_cents)}</span>
                   </div>
                 );
               })}
-            </div>
+              {expenses.length > 0 && (
+                <>
+                  <p className="text-[10px] font-bold tracking-widest text-[#86868b] mt-3">LINE ITEMS</p>
+                  {expenses.map((exp: any) => (
+                    <div key={exp.id} className="flex items-center justify-between text-[12.5px] py-1 border-b border-[#f5f5f7] last:border-0">
+                      <span className="truncate pr-2 text-[#3d3d3d]">
+                        {exp.description}
+                        <span className="text-[#a1a1a6]"> · {EXPENSE_CATEGORIES[exp.category]?.label || exp.category}{exp.vendor ? ` · ${exp.vendor}` : ''}{exp.date ? ` · ${exp.date}` : ''}</span>
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className="font-semibold text-red-500 tabular-nums">{fmt(exp.amount_cents)}</span>
+                        <button onClick={() => setExpenseModal(exp)} className="text-[10px] text-[#a1a1a6] hover:text-[#003e79]">Edit</button>
+                        <button onClick={() => handleDeleteExpense(exp.id)} className="text-[10px] text-[#a1a1a6] hover:text-red-500">Del</button>
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
-
-      {/* Expense Detail Table */}
-      {expenses.length > 0 && (
-        <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mt-6">
-          <h3 className="text-base font-bold text-[#1d1d1f] mb-4">All Expenses</h3>
-          <div className="rounded-xl border border-[#e8e8ed] overflow-hidden">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">Category</th>
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">Description</th>
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden md:table-cell">Vendor</th>
-                <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">Amount</th>
-                <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase w-20"></th>
-              </tr></thead>
-              <tbody>
-                {expenses.map((exp: any, i: number) => (
-                  <tr key={exp.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} hover:bg-[#f0f7ff]`}>
-                    <td className="px-4 py-2.5"><span className="text-xs font-medium text-[#6e6e73]">{EXPENSE_CATEGORIES[exp.category]?.label || exp.category}</span></td>
-                    <td className="px-4 py-2.5 font-medium text-[#1d1d1f]">{exp.description}</td>
-                    <td className="px-4 py-2.5 text-[#86868b] hidden md:table-cell">{exp.vendor || '—'}</td>
-                    <td className="px-4 py-2.5 text-right font-bold text-red-500">{fmt(exp.amount_cents)}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => setExpenseModal(exp)} className="text-[#86868b] hover:text-[#003e79] text-xs mr-2">Edit</button>
-                      <button onClick={() => handleDeleteExpense(exp.id)} className="text-[#86868b] hover:text-red-500 text-xs">Del</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Hotel Rebates + Other Vendor Rebates (split by rebate_type) */}
-      {(() => {
-        const hotelRebates = rebates.filter((rb: any) => rb.rebate_type !== 'other');
-        const vendorRebates = rebates.filter((rb: any) => rb.rebate_type === 'other');
-        const table = (list: any[], nightsLabel: boolean) => (
-          <div className="rounded-xl border border-[#e8e8ed] overflow-hidden">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">{nightsLabel ? 'Hotel' : 'Vendor'}</th>
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden sm:table-cell">{nightsLabel ? 'Type' : 'Notes'}</th>
-                {nightsLabel && <th className="text-center px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden md:table-cell">Blocks</th>}
-                <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">Rebate</th>
-                <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase w-20"></th>
-              </tr></thead>
-              <tbody>
-                {list.map((rb: any, i: number) => (
-                  <tr key={rb.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} hover:bg-[#f0f7ff]`}>
-                    <td className="px-4 py-2.5 font-medium text-[#1d1d1f]">{rb.hotel_name}</td>
-                    <td className="px-4 py-2.5 text-[#86868b] hidden sm:table-cell">{nightsLabel ? (rb.rebate_type === 'per_night' ? 'Per Night' : rb.rebate_type === 'flat_fee' ? 'Flat Fee' : '%') : (rb.notes || '—')}</td>
-                    {nightsLabel && <td className="px-4 py-2.5 text-center hidden md:table-cell">{rb.room_nights || '—'}</td>}
-                    <td className="px-4 py-2.5 text-right font-bold text-blue-600">{fmt(rb.total_rebate_cents)}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => setRebateModal(rb)} className="text-[#86868b] hover:text-[#003e79] text-xs mr-2">Edit</button>
-                      <button onClick={() => handleDeleteRebate(rb.id)} className="text-[#86868b] hover:text-red-500 text-xs">Del</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-        return (
-          <>
-            <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-bold text-[#1d1d1f]">Hotel Rebates</h3>
-                <button onClick={() => setRebateModal(null)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition">+ Add Rebate</button>
-              </div>
-              {hotelRebates.length === 0 ? (
-                <p className="text-sm text-[#86868b] text-center py-4">No hotel rebates recorded yet.</p>
-              ) : table(hotelRebates, true)}
-            </div>
-            <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mt-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-[#1d1d1f]">Other Vendor Rebates</h3>
-                  <p className="text-xs text-[#86868b]">Apparel, merchandise, and other partner rebates. Add one with type "Other".</p>
-                </div>
-                <button onClick={() => setRebateModal(null)} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition">+ Add Rebate</button>
-              </div>
-              {vendorRebates.length === 0 ? (
-                <p className="text-sm text-[#86868b] text-center py-4">No vendor rebates recorded yet.</p>
-              ) : table(vendorRebates, false)}
-            </div>
-          </>
-        );
-      })()}
 
       {/* Modals */}
       {expenseModal !== false && (
