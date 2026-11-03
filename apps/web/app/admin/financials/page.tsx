@@ -467,6 +467,8 @@ export default function AdminFinancialsPage() {
   const [yearFilter, setYearFilter] = useState<string>('');
   const [seasonFilter, setSeasonFilter] = useState<string>('');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [pnlSort, setPnlSort] = useState<'date_desc' | 'date_asc' | 'revenue' | 'name'>('date_desc');
+  const [pnlSearch, setPnlSearch] = useState('');
 
   // Load dashboard data
   const loadDashboard = useCallback(() => {
@@ -667,6 +669,18 @@ export default function AdminFinancialsPage() {
               <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6">
                 <h3 className="text-base font-bold text-[#1d1d1f] mb-1">Event Profit & Loss</h3>
                 <p className="text-xs text-[#86868b] mb-4">Click an event to see full breakdown, add expenses, and track hotel rebates.</p>
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1">
+                    {([['date_desc', 'Newest'], ['date_asc', 'Oldest'], ['revenue', 'Revenue'], ['name', 'A-Z']] as const).map(([key, label]) => (
+                      <button key={key} onClick={() => setPnlSort(key)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${pnlSort === key ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73]'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <input value={pnlSearch} onChange={e => setPnlSearch(e.target.value)} placeholder="Search events..."
+                    className="px-3 py-1.5 rounded-xl border border-[#e8e8ed] text-sm outline-none focus:border-[#003e79] w-48" />
+                </div>
                 <div className="rounded-xl border border-[#e8e8ed] overflow-hidden">
                   <table className="w-full text-sm">
                     <thead><tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
@@ -677,12 +691,19 @@ export default function AdminFinancialsPage() {
                       <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase w-12"></th>
                     </tr></thead>
                     <tbody>
-                      {[...events].sort((a: any, b: any) => b.revenue_cents - a.revenue_cents).map((ev: any, i: number) => (
+                      {[...events]
+                        .filter((ev: any) => !pnlSearch.trim() || String(ev.name).toLowerCase().includes(pnlSearch.trim().toLowerCase()))
+                        .sort((a: any, b: any) =>
+                          pnlSort === 'revenue' ? b.revenue_cents - a.revenue_cents
+                          : pnlSort === 'name' ? String(a.name).localeCompare(String(b.name))
+                          : pnlSort === 'date_asc' ? String(a.start_date).localeCompare(String(b.start_date))
+                          : String(b.start_date).localeCompare(String(a.start_date)))
+                        .map((ev: any, i: number) => (
                         <tr key={ev.id} onClick={() => setSelectedEventId(ev.id)}
                           className={`cursor-pointer ${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} hover:bg-[#f0f7ff] transition-colors`}>
                           <td className="px-4 py-3">
                             <p className="font-semibold text-[#1d1d1f]">{ev.name}</p>
-                            <p className="text-xs text-[#86868b]">{ev.city}, {ev.state}</p>
+                            <p className="text-xs text-[#86868b]">{ev.start_date ? new Date(String(ev.start_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' : ''}{ev.city}, {ev.state}</p>
                           </td>
                           <td className="px-4 py-3 text-center hidden sm:table-cell">
                             <span className="text-sm font-bold text-[#003e79]">{ev.team_count}</span>
