@@ -293,11 +293,16 @@ userRoutes.get('/admin/follow-report', authMiddleware, requireRole('admin', 'dir
     FROM events e
     JOIN ${regTable} r ON r.event_id = e.id AND r.${statusCol} = 'approved' AND r.team_id IS NOT NULL
     JOIN teams t ON t.id = r.team_id
-    WHERE COALESCE(e.is_test, 0) = 0 AND date(e.end_date) >= date('now', '-14 days')`;
+    WHERE COALESCE(e.is_test, 0) = 0
+      AND e.status NOT IN ('cancelled', 'draft')
+      AND date(COALESCE(e.end_date, e.start_date)) >= date(?)`;
 
+  // Whole season (June 1 onward), past events included - adoption history matters
+  const now = new Date();
+  const seasonStart = `${now.getUTCMonth() + 1 >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1}-06-01`;
   const [er, nr] = await Promise.all([
-    db.prepare(base('event_registrations', 'status')).all(),
-    db.prepare(base('registrations', 'status')).all(),
+    db.prepare(base('event_registrations', 'status')).bind(seasonStart).all(),
+    db.prepare(base('registrations', 'status')).bind(seasonStart).all(),
   ]);
 
   const events = new Map<string, any>();
