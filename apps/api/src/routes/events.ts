@@ -943,11 +943,31 @@ eventRoutes.delete('/admin/delete/:id', authMiddleware, requireRole('admin', 'di
   const existing = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(id).first<any>();
   if (!existing) return c.json({ success: false, error: 'Event not found' }, 404);
 
-  // Cascade delete all related records
+  // Cascade delete all related records. Games have children of their own
+  // (events, lineups, stars, ...) - clear those first or the FK constraints
+  // 500 the whole delete.
+  const gameChildTables = [
+    'game_events', 'game_shots', 'game_contests', 'game_locker_rooms',
+    'game_status_log', 'referee_game_assignments', 'game_lineups',
+    'game_three_stars', 'goalie_game_stats', 'shootout_rounds',
+    'game_period_scores', 'game_notes', 'game_coaches', 'game_officials',
+    'game_checkins', 'game_official_signoffs',
+  ];
+  for (const table of gameChildTables) {
+    try {
+      await db.prepare(`DELETE FROM ${table} WHERE game_id IN (SELECT id FROM games WHERE event_id = ?)`).bind(id).run();
+    } catch (_) { /* table may not exist */ }
+  }
+  // Email campaign history is kept - just detach it from the event
+  try { await db.prepare('UPDATE email_campaigns SET event_id = NULL WHERE event_id = ?').bind(id).run(); } catch (_) {}
   const tables = [
     'event_registrations', 'registrations', 'event_divisions', 'event_hotels',
     'event_venues', 'scorekeeper_pins', 'games', 'promoted_events',
     'special_requests', 'game_slots', 'schedule_rules', 'audit_log',
+    'event_directors', 'pool_standings', 'event_sponsorships', 'champions',
+    'event_templates', 'event_expenses', 'hotel_rebates', 'event_meetings',
+    'event_photos', 'penalty_change_requests', 'sheet_corrections',
+    'referee_assigner_contracts', 'referee_payments', 'automated_email_log',
   ];
   for (const table of tables) {
     try {
