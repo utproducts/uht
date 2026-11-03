@@ -606,25 +606,30 @@ export default function AdminFinancialsPage() {
             {tab === 'overview' && (
               <>
                 {/* KPI Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-2xl font-bold text-green-600">{fmt(totalRevenue)}</div>
+                    <div className="text-xl font-bold text-green-600 whitespace-nowrap">{fmt(totalRevenue)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Total Revenue</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-2xl font-bold text-[#003e79]">{totalTeams.toLocaleString()}</div>
+                    <div className="text-xl font-bold text-amber-600 whitespace-nowrap">{fmt(dashboard?.outstanding?.owed_cents || 0)}</div>
+                    <div className="text-xs text-[#86868b] mt-1 font-semibold">Expected Revenue</div>
+                    <div className="text-[10px] text-[#86868b] mt-0.5">owed, not yet paid{dashboard?.outstanding?.owing_teams ? ` · ${dashboard.outstanding.owing_teams} teams` : ''}</div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
+                    <div className="text-xl font-bold text-[#003e79]">{totalTeams.toLocaleString()}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Total Teams</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-2xl font-bold text-[#1d1d1f]">{totalEvents}</div>
+                    <div className="text-xl font-bold text-[#1d1d1f]">{totalEvents}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Events</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-2xl font-bold text-purple-600">{fmt(avgPerEvent)}</div>
+                    <div className="text-xl font-bold text-purple-600 whitespace-nowrap">{fmt(avgPerEvent)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Avg / Event</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-2xl font-bold text-cyan-600">{fmt(avgPerTeam)}</div>
+                    <div className="text-xl font-bold text-cyan-600 whitespace-nowrap">{fmt(avgPerTeam)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Avg / Team</div>
                   </div>
                 </div>

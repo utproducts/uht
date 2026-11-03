@@ -211,6 +211,26 @@ financialRoutes.delete('/rebates/:id', authMiddleware, requireRole('admin'), asy
 // ==========================================
 // REPORTS: Dashboard overview
 // ==========================================
+
+  // Expected revenue = money owed but not yet collected: approved teams whose
+  // payment is not settled, division price minus discount minus what's paid
+  const OWED_SQL = `
+    SELECT COALESCE(SUM(MAX(0,
+      COALESCE(NULLIF(ed.price_cents, 0), er.payment_amount_cents, 0)
+      - COALESCE(er.discount_cents, 0)
+      - MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)
+    )), 0) as owed_cents,
+    COUNT(CASE WHEN MAX(0,
+      COALESCE(NULLIF(ed.price_cents, 0), er.payment_amount_cents, 0)
+      - COALESCE(er.discount_cents, 0)
+      - MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)
+    ) > 0 THEN 1 END) as owing_teams
+    FROM event_registrations er
+    JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.status = 'approved' AND er.payment_status NOT IN ('comp', 'paid')
+      AND e.status NOT IN ('cancelled', 'draft')`;
+
 financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c) => {
   const db = c.env.DB;
   const { year, season } = c.req.query();
@@ -289,6 +309,9 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
     ORDER BY month ASC
   `).bind(...params).all();
 
+  const outstandingRow = await db.prepare(OWED_SQL + ' ' + dateFilter).bind(...params).first<any>();
+  const outstanding = { owed_cents: outstandingRow?.owed_cents || 0, owing_teams: outstandingRow?.owing_teams || 0 };
+
   // Registrations by city (for city breakdown)
   const regsByCity = await db.prepare(`
     SELECT e.city, e.state,
@@ -319,6 +342,7 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
       rebatesByEvent,
       revenueByCity: revenueByCity.results,
       revenueByMonth: revenueByMonth.results,
+      outstanding: outstanding,
       regsByCity: regsByCity.results,
       filters: {
         seasons: seasons.results.map((s: any) => s.season),
@@ -592,4 +616,10 @@ financialRoutes.get('/by-city', authMiddleware, requireRole('admin'), async (c) 
       rebatesByCity,
     },
   });
+});
+
+// Lightweight expected-revenue figure for the admin overview dashboard
+financialRoutes.get('/outstanding', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const row = await c.env.DB.prepare(OWED_SQL).first<any>();
+  return c.json({ success: true, data: { owed_cents: row?.owed_cents || 0, owing_teams: row?.owing_teams || 0 } });
 });

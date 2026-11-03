@@ -261,7 +261,8 @@ export function AdminDash() {
       fetch(`${API}/analytics/reports/pending-registrations`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/analytics/reports/division-totals`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/users/admin/app-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-    ]).then(([upJson, allJson, pendJson, divJson, appJson]) => {
+      fetch(`${API}/financials/outstanding`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
+    ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson]) => {
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));
       const upcoming = noTest(upJson.success ? upJson.data : []);
       const all = noTest(allJson.success ? allJson.data : []);
@@ -278,6 +279,8 @@ export function AdminDash() {
         totalTeams,
         totalRevenue,
         appUsers: appJson?.success ? (appJson.data?.app_accounts || 0) : null,
+        owedCents: owedJson?.success ? (owedJson.data?.owed_cents || 0) : 0,
+        owingTeams: owedJson?.success ? (owedJson.data?.owing_teams || 0) : 0,
         pushUsers: appJson?.success ? (appJson.data?.push_users || 0) : 0,
       });
       setLoadingStats(false);
@@ -291,10 +294,11 @@ export function AdminDash() {
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard label="Upcoming Events" value={stats?.upcomingEvents || 0} sub={`${stats?.totalEvents || 0} total`} />
         <StatCard label="Teams Registered" value={stats?.totalTeams || 0} sub="Across all events" />
         <StatCard label="Total Revenue" value={`$${((stats?.totalRevenue || 0) / 100).toLocaleString()}`} sub="All events" />
+        <StatCard label="Expected Revenue" value={`$${((stats?.owedCents || 0) / 100).toLocaleString()}`} sub={`Owed, not yet paid${stats?.owingTeams ? ` · ${stats.owingTeams} teams` : ''}`} />
         {stats?.appUsers !== null && (
           <a href="/admin/app-users" className="block">
             <StatCard label="App Users" value={(stats?.appUsers || 0).toLocaleString()} sub={`${stats?.pushUsers || 0} with push on`} />
