@@ -265,7 +265,7 @@ analyticsRoutes.get('/reports/division-totals', authMiddleware, requireRole('adm
       LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
       LEFT JOIN teams t ON t.id = r.team_id
       WHERE ${eventFilter} AND r.status NOT IN ('denied','rejected','withdrawn')
-        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
+        AND r.event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     `).all(),
     db.prepare(`
       SELECT ed.age_group as ag, ed.event_id, ed.max_teams
