@@ -295,9 +295,30 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
       </button>
 
       {/* Event header */}
-      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mb-6">
-        <h2 className="text-xl font-extrabold text-[#1d1d1f] mb-1">{event.name}</h2>
-        <p className="text-sm text-[#86868b]">{event.city}, {event.state}</p>
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mb-6 flex flex-wrap items-center gap-4">
+        {event.logo_url && <img src={event.logo_url} alt="" className="w-16 h-16 object-contain rounded-xl bg-[#f5f5f7] p-1" />}
+        <div className="flex-1 min-w-[200px]">
+          <h2 className="text-xl font-extrabold text-[#1d1d1f] mb-0.5">{event.name}</h2>
+          <p className="text-sm text-[#86868b]">
+            {event.start_date ? `${new Date(String(event.start_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${event.end_date ? ' - ' + new Date(String(event.end_date).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} · ` : ''}{event.city}, {event.state}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={async () => {
+            const to = window.prompt('Email this P&L to:', 'john@ultimatetournaments.com');
+            if (!to) return;
+            try {
+              const res = await fetch(`${API}/event-pnl/${eventId}/email`, {
+                method: 'POST', headers: finHdrs({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ to: to.trim() }),
+              });
+              const j = await res.json();
+              alert(j.success ? `P&L emailed to ${to.trim()}` : (j.error || 'Send failed'));
+            } catch { alert('Send failed'); }
+          }} className="px-4 py-2 rounded-xl bg-[#003e79] text-white text-sm font-bold hover:bg-[#002d5a]">Email P&L</button>
+          <a href={`/print/pnl?event=${eventId}`} target="_blank"
+            className="px-4 py-2 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold hover:bg-[#d2d2d7]">Print / Save PDF</a>
+        </div>
       </div>
 
       {/* P&L Summary Cards */}
@@ -366,7 +387,6 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
                       </div>
                       <span className="font-bold text-red-500">{fmt(et.total_cents)}</span>
                     </div>
-                    <Bar value={et.total_cents} max={summary.total_expenses_cents} color={cat.color} />
                   </div>
                 );
               })}

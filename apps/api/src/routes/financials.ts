@@ -233,7 +233,7 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
       (SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved') as team_count,
       (SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment')) as revenue_cents
     FROM events e
-    WHERE 1=1 ${dateFilter}
+    WHERE e.status != 'cancelled' ${dateFilter}
     ORDER BY e.start_date DESC
   `).bind(...params).all();
 
@@ -271,20 +271,21 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
       SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
       SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents
     FROM events e
-    WHERE 1=1 ${dateFilter}
+    WHERE e.status != 'cancelled' ${dateFilter}
     GROUP BY e.city, e.state
     ORDER BY revenue_cents DESC
   `).bind(...params).all();
 
   // Revenue by month (for charts)
   const revenueByMonth = await db.prepare(`
-    SELECT substr(e.start_date, 1, 7) as month,
-      COUNT(DISTINCT e.id) as event_count,
-      SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
-      SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents
-    FROM events e
-    WHERE 1=1 ${dateFilter}
-    GROUP BY substr(e.start_date, 1, 7)
+    SELECT substr(er.created_at, 1, 7) as month,
+      COUNT(DISTINCT er.event_id) as event_count,
+      COUNT(CASE WHEN er.status = 'approved' THEN 1 END) as team_count,
+      COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)), 0) as revenue_cents
+    FROM event_registrations er
+    JOIN events e ON e.id = er.event_id
+    WHERE er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment') AND e.status != 'cancelled' ${dateFilter}
+    GROUP BY substr(er.created_at, 1, 7)
     ORDER BY month ASC
   `).bind(...params).all();
 
@@ -412,6 +413,70 @@ financialRoutes.get('/event-pnl/:eventId', authMiddleware, requireRole('admin'),
   });
 });
 
+// Email the event P&L (logo header, event details, full breakdown)
+financialRoutes.post('/event-pnl/:eventId/email', authMiddleware, requireRole('admin'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const body = await c.req.json().catch(() => ({})) as any;
+  const to = String(body.to || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return c.json({ success: false, error: 'Valid recipient email required' }, 400);
+
+  const ev = await db.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first<any>();
+  if (!ev) return c.json({ success: false, error: 'Event not found' }, 404);
+
+  const rev = await db.prepare(`
+    SELECT COALESCE(SUM(CASE WHEN er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment') THEN MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END) ELSE 0 END), 0) as total
+    FROM event_registrations er WHERE er.event_id = ?
+  `).bind(eventId).first<any>();
+  const expenses = (await db.prepare('SELECT * FROM event_expenses WHERE event_id = ? ORDER BY category, date').bind(eventId).all()).results || [];
+  const rebates = (await db.prepare('SELECT * FROM hotel_rebates WHERE event_id = ? ORDER BY hotel_name').bind(eventId).all()).results || [];
+  const totalExp = (expenses as any[]).reduce((s2, e) => s2 + (e.amount_cents || 0), 0);
+  const totalReb = (rebates as any[]).reduce((s2, r) => s2 + (r.total_rebate_cents || 0), 0);
+  const net = (rev?.total || 0) + totalReb - totalExp;
+  const fmt = (cents: number) => '$' + ((cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const fd = (d: string) => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const hotels = (rebates as any[]).filter(r => r.rebate_type !== 'other');
+  const vendors = (rebates as any[]).filter(r => r.rebate_type === 'other');
+  const line = (l: string, v: string, color = '#1d2b3d') => `<tr><td style="padding:5px 0;border-bottom:1px solid #f0f0f3;font-size:13px;color:#2a3c52;">${l}</td><td style="padding:5px 0;border-bottom:1px solid #f0f0f3;font-size:13px;font-weight:bold;color:${color};text-align:right;">${v}</td></tr>`;
+  const section = (t: string) => `<tr><td colspan="2" style="padding:18px 0 6px;font-size:12px;font-weight:800;letter-spacing:2px;color:#003e79;border-bottom:2px solid #d4af37;">${t.toUpperCase()}</td></tr>`;
+
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f2f4f8;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:620px;margin:0 auto;padding:24px 14px;">
+    <div style="background:#ffffff;border:2px solid #003e79;border-radius:18px;overflow:hidden;padding:26px;">
+      <table role="presentation" width="100%" style="border-collapse:collapse;"><tr>
+        ${ev.logo_url ? `<td width="76"><img src="${ev.logo_url}" width="68" style="display:block;" /></td>` : ''}
+        <td style="padding-left:12px;">
+          <div style="font-size:10px;letter-spacing:2.5px;color:#b8860b;font-weight:bold;">EVENT PROFIT &amp; LOSS</div>
+          <div style="font-size:21px;font-weight:900;color:#003e79;">${ev.name}</div>
+          <div style="font-size:12.5px;color:#5b6b80;">${fd(ev.start_date)}${ev.end_date && ev.end_date !== ev.start_date ? ' - ' + fd(ev.end_date) : ''} &middot; ${ev.city}, ${ev.state}</div>
+        </td>
+        <td width="50" align="right"><img src="https://ultimatetournaments.com/uht-logo.png" width="44" style="display:block;" /></td>
+      </tr></table>
+      <table role="presentation" width="100%" style="border-collapse:collapse;margin-top:14px;">
+        ${section('Summary')}
+        ${line('Registration revenue', fmt(rev?.total || 0), '#15803d')}
+        ${line('Rebates', fmt(totalReb), '#2563eb')}
+        ${line('Expenses', fmt(totalExp), '#dc2626')}
+        ${line('<b>Net ' + (net >= 0 ? 'profit' : 'loss') + '</b>', fmt(net), net >= 0 ? '#15803d' : '#dc2626')}
+        ${expenses.length ? section('Expenses') + (expenses as any[]).map(e2 => line(`${e2.description}${e2.vendor ? ' &middot; ' + e2.vendor : ''}${e2.date ? ' &middot; ' + e2.date : ''}`, fmt(e2.amount_cents), '#dc2626')).join('') : ''}
+        ${hotels.length ? section('Hotel Rebates') + hotels.map(r2 => line(`${r2.hotel_name}${r2.room_nights ? ' &middot; ' + r2.room_nights + ' blocks' : ''}`, fmt(r2.total_rebate_cents), '#2563eb')).join('') : ''}
+        ${vendors.length ? section('Other Vendor Rebates') + vendors.map(r2 => line(`${r2.hotel_name}${r2.notes ? ' &middot; ' + r2.notes : ''}`, fmt(r2.total_rebate_cents), '#2563eb')).join('') : ''}
+      </table>
+      <p style="font-size:10px;color:#8295ab;text-align:center;margin:18px 0 0;">Ultimate Hockey Tournaments &middot; generated ${new Date().toLocaleDateString('en-US')}</p>
+    </div>
+  </div></body></html>`;
+
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+      to: [to], subject: `P&L - ${ev.name}`, html,
+    }),
+  });
+  return c.json({ success: r.ok, ...(r.ok ? {} : { error: 'Email send failed' }) });
+});
+
 // ==========================================
 // REPORTS: Year-over-year comparison
 // ==========================================
@@ -425,6 +490,7 @@ financialRoutes.get('/yoy', authMiddleware, requireRole('admin'), async (c) => {
       SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents,
       COUNT(DISTINCT e.city || ',' || e.state) as city_count
     FROM events e
+    WHERE e.status != 'cancelled'
     GROUP BY substr(e.start_date, 1, 4)
     ORDER BY year DESC
   `).all();
@@ -485,7 +551,7 @@ financialRoutes.get('/by-city', authMiddleware, requireRole('admin'), async (c) 
       SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
       SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents
     FROM events e
-    WHERE 1=1 ${dateFilter}
+    WHERE e.status != 'cancelled' ${dateFilter}
     GROUP BY e.city, e.state
     ORDER BY revenue_cents DESC
   `).bind(...params).all();
