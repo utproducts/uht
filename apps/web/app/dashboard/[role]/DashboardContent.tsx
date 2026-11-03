@@ -8,10 +8,10 @@ import RegistrationTrends from './RegistrationTrends';
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
-      <p className="text-sm text-[#86868b] mb-1">{label}</p>
-      <p className="text-2xl font-bold text-[#1d1d1f]">{value}</p>
-      {sub && <p className="text-xs text-[#86868b] mt-1">{sub}</p>}
+    <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] min-w-0 overflow-hidden">
+      <p className="text-sm text-[#86868b] mb-1 truncate">{label}</p>
+      <p className="text-2xl font-bold text-[#1d1d1f] whitespace-nowrap [font-size:clamp(16px,1.6vw,24px)]">{value}</p>
+      {sub && <p className="text-xs text-[#86868b] mt-1 truncate">{sub}</p>}
     </div>
   );
 }
@@ -297,8 +297,8 @@ export function AdminDash() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard label="Upcoming Events" value={stats?.upcomingEvents || 0} sub={`${stats?.totalEvents || 0} total`} />
         <StatCard label="Teams Registered" value={stats?.totalTeams || 0} sub="Across all events" />
-        <StatCard label="Total Revenue" value={`$${((stats?.totalRevenue || 0) / 100).toLocaleString()}`} sub="All events" />
-        <StatCard label="Expected Revenue" value={`$${((stats?.owedCents || 0) / 100).toLocaleString()}`} sub={`Owed, not yet paid${stats?.owingTeams ? ` · ${stats.owingTeams} teams` : ''}`} />
+        <StatCard label="Total Revenue" value={`$${Math.round((stats?.totalRevenue || 0) / 100).toLocaleString()}`} sub="All events" />
+        <StatCard label="Expected Revenue" value={`$${Math.round((stats?.owedCents || 0) / 100).toLocaleString()}`} sub={`Owed, not yet paid${stats?.owingTeams ? ` · ${stats.owingTeams} teams` : ''}`} />
         {stats?.appUsers !== null && (
           <a href="/admin/app-users" className="block">
             <StatCard label="App Users" value={(stats?.appUsers || 0).toLocaleString()} sub={`${stats?.pushUsers || 0} with push on`} />

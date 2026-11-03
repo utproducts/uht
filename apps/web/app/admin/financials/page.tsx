@@ -512,6 +512,8 @@ export default function AdminFinancialsPage() {
   const totalRevenue = events.reduce((s: number, e: any) => s + e.revenue_cents, 0);
   const totalTeams = events.reduce((s: number, e: any) => s + e.team_count, 0);
   const totalEvents = events.length;
+  // KPI strip shows whole dollars so big numbers never clip the card
+  const fmtWhole = (c: number) => `$${Math.round((c || 0) / 100).toLocaleString()}`;
   const avgPerEvent = totalEvents > 0 ? totalRevenue / totalEvents : 0;
   const avgPerTeam = totalTeams > 0 ? totalRevenue / totalTeams : 0;
 
@@ -608,11 +610,11 @@ export default function AdminFinancialsPage() {
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-xl font-bold text-green-600 whitespace-nowrap">{fmt(totalRevenue)}</div>
+                    <div className="text-xl font-bold text-green-600 whitespace-nowrap">{fmtWhole(totalRevenue)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Total Revenue</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-xl font-bold text-amber-600 whitespace-nowrap">{fmt(dashboard?.outstanding?.owed_cents || 0)}</div>
+                    <div className="text-xl font-bold text-amber-600 whitespace-nowrap">{fmtWhole(dashboard?.outstanding?.owed_cents || 0)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Expected Revenue</div>
                     <div className="text-[10px] text-[#86868b] mt-0.5">owed, not yet paid{dashboard?.outstanding?.owing_teams ? ` · ${dashboard.outstanding.owing_teams} teams` : ''}</div>
                   </div>
@@ -625,11 +627,11 @@ export default function AdminFinancialsPage() {
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Events</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-xl font-bold text-purple-600 whitespace-nowrap">{fmt(avgPerEvent)}</div>
+                    <div className="text-xl font-bold text-purple-600 whitespace-nowrap">{fmtWhole(avgPerEvent)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Avg / Event</div>
                   </div>
                   <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 text-center">
-                    <div className="text-xl font-bold text-cyan-600 whitespace-nowrap">{fmt(avgPerTeam)}</div>
+                    <div className="text-xl font-bold text-cyan-600 whitespace-nowrap">{fmtWhole(avgPerTeam)}</div>
                     <div className="text-xs text-[#86868b] mt-1 font-semibold">Avg / Team</div>
                   </div>
                 </div>
