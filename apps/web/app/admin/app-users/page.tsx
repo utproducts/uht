@@ -87,7 +87,6 @@ export default function AppUsersPage() {
           <div className="flex flex-wrap gap-3 mb-8 text-sm text-[#6e6e73]">
             <span className="bg-white border border-[#e8e8ed] rounded-full px-3 py-1.5"> {stats.ios_devices.toLocaleString()} iOS</span>
             <span className="bg-white border border-[#e8e8ed] rounded-full px-3 py-1.5">🤖 {stats.android_devices.toLocaleString()} Android</span>
-            <span className="bg-white border border-[#e8e8ed] rounded-full px-3 py-1.5">🔔 {stats.push_users.toLocaleString()} users reachable by push</span>
           </div>
 
           <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-sm">
