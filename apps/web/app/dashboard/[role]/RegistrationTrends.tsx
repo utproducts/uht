@@ -105,11 +105,11 @@ export default function RegistrationTrends() {
         <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
           <thead>
             <tr className="border-b border-[#e8e8ed]">
-              <th className="text-left font-medium py-2 pr-4 text-xs uppercase tracking-wider" style={{ color: MUTED }}>Month</th>
+              <th className="text-left font-medium py-2 pr-2 text-xs uppercase tracking-wider" style={{ color: MUTED }}>Month</th>
               {visibleSeasons.map(s => (
-                <th key={s.season} className={`text-right font-semibold py-2 px-4 ${s.current ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>
+                <th key={s.season} className={`text-right font-semibold py-2 px-1.5 whitespace-nowrap ${s.current ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>
                   {s.season}
-                  {s.current && <span className="ml-1.5 text-[10px] font-bold uppercase bg-[#003e79] text-white rounded-full px-1.5 py-0.5 align-middle">Current</span>}
+                  {s.current && <span className="hidden sm:inline ml-1.5 text-[10px] font-bold uppercase bg-[#003e79] text-white rounded-full px-1.5 py-0.5 align-middle">Current</span>}
                 </th>
               ))}
             </tr>
@@ -117,23 +117,19 @@ export default function RegistrationTrends() {
           <tbody className="divide-y divide-[#f0f0f2]">
             {/* Total row */}
             <tr className="bg-[#fafafa]">
-              <td className="py-2.5 pr-4 font-bold text-[#1d1d1f]">Total Teams</td>
+              <td className="py-2.5 pr-2 font-bold text-[#1d1d1f] whitespace-nowrap">Total Teams</td>
               {visibleSeasons.map((s) => {
                 const prev = prevOf(s)?.total ?? null;
                 const st = cellStyle(s.total, prev);
                 const approvedT = s.current ? (s.approvedTotal || 0) : null;
                 const pendingT = s.current && s.total !== null ? s.total - (approvedT || 0) : null;
                 return (
-                  <td key={s.season} className="py-1.5 px-2 text-right align-top">
-                    <span className="inline-block min-w-[72px] rounded-lg px-3 py-1 text-lg font-bold" style={{ background: st.bg, color: st.text }}>
+                  <td key={s.season} className="py-1.5 px-1 text-right align-top">
+                    <span className="inline-block min-w-[60px] rounded-lg px-2.5 py-1 text-base font-bold" style={{ background: st.bg, color: st.text }}>
                       {s.total === null ? '—' : s.total.toLocaleString()}
                     </span>
-                    {s.current && (approvedT || 0) + (pendingT || 0) > 0 && (
-                      <div className="text-[10px] font-medium mt-0.5 pr-1">
-                        <span style={{ color: '#0ca30c' }}>{approvedT} approved</span>
-                        <span style={{ color: MUTED }}> · </span>
-                        <span className="text-amber-600">{pendingT} pending</span>
-                      </div>
+                    {s.current && (pendingT || 0) > 0 && (
+                      <div className="text-[10px] font-semibold mt-1 pr-1 whitespace-nowrap text-amber-600">{pendingT} pending</div>
                     )}
                   </td>
                 );
@@ -144,9 +140,9 @@ export default function RegistrationTrends() {
               const isFutureThisSeason = SEASON_MONTHS.indexOf(m) > SEASON_MONTHS.indexOf(currentMonthNum);
               return (
                 <tr key={m}>
-                  <td className="py-1.5 pr-4 font-medium" style={{ color: NEUTRAL_TEXT }}>
+                  <td className="py-1.5 pr-2 font-medium whitespace-nowrap" style={{ color: NEUTRAL_TEXT }}>
                     {MONTH_NAMES[m]}
-                    {m === currentMonthNum && <span className="ml-1.5 text-[10px] font-semibold" style={{ color: MUTED }}>(in progress)</span>}
+                    {m === currentMonthNum && <span className="hidden sm:inline ml-1.5 text-[10px] font-semibold" style={{ color: MUTED }}>(in progress)</span>}
                   </td>
                   {visibleSeasons.map((s) => {
                     const value = s.current && isFutureThisSeason ? null : (s.months[m] ?? (s.current ? 0 : null));
@@ -156,16 +152,12 @@ export default function RegistrationTrends() {
                     const approvedM = s.current ? (s.approvedMonths?.[m] || 0) : 0;
                     const pendingM = s.current && value ? value - approvedM : 0;
                     return (
-                      <td key={s.season} className="py-1 px-2 text-right align-top">
-                        <span className="inline-block min-w-[72px] rounded-lg px-3 py-1 font-semibold" style={{ background: st.bg, color: st.text }}>
+                      <td key={s.season} className="py-1 px-1 text-right align-top">
+                        <span className="inline-block min-w-[60px] rounded-lg px-2.5 py-1 font-semibold" style={{ background: st.bg, color: st.text }}>
                           {value === null || value === undefined ? '—' : value.toLocaleString()}
                         </span>
-                        {s.current && value !== null && value > 0 && (
-                          <div className="text-[10px] font-medium mt-0.5 pr-1">
-                            <span style={{ color: '#0ca30c' }}>{approvedM} approved</span>
-                            <span style={{ color: MUTED }}> · </span>
-                            <span className="text-amber-600">{pendingM} pending</span>
-                          </div>
+                        {s.current && value !== null && value > 0 && pendingM > 0 && (
+                          <div className="text-[10px] font-semibold mt-1 pr-1 whitespace-nowrap text-amber-600">{pendingM} pending</div>
                         )}
                       </td>
                     );
