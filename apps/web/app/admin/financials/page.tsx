@@ -467,8 +467,15 @@ export default function AdminFinancialsPage() {
   const [yearFilter, setYearFilter] = useState<string>('');
   const [seasonFilter, setSeasonFilter] = useState<string>('');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [pnlSort, setPnlSort] = useState<'date_desc' | 'date_asc' | 'revenue' | 'name'>('date_desc');
+  const [pnlSort, setPnlSort] = useState<'date_desc' | 'date_asc' | 'revenue' | 'name'>('date_asc');
   const [pnlSearch, setPnlSearch] = useState('');
+  const [pnlScope, setPnlScope] = useState<'season' | 'all'>('season');
+  // Hockey season window: Aug 1 through May 31 around today
+  const seasonWindow = (() => {
+    const now = new Date();
+    const startYear = now.getMonth() + 1 >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+    return { from: `${startYear}-08-01`, to: `${startYear + 1}-05-31` };
+  })();
 
   // Load dashboard data
   const loadDashboard = useCallback(() => {
@@ -671,7 +678,15 @@ export default function AdminFinancialsPage() {
                 <p className="text-xs text-[#86868b] mb-4">Click an event to see full breakdown, add expenses, and track hotel rebates.</p>
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1">
-                    {([['date_desc', 'Newest'], ['date_asc', 'Oldest'], ['revenue', 'Revenue'], ['name', 'A-Z']] as const).map(([key, label]) => (
+                    {([['season', 'This Season'], ['all', 'All Events']] as const).map(([key, label]) => (
+                      <button key={key} onClick={() => setPnlScope(key)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${pnlScope === key ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73]'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1">
+                    {([['date_asc', 'Chronological'], ['date_desc', 'Newest'], ['revenue', 'Revenue'], ['name', 'A-Z']] as const).map(([key, label]) => (
                       <button key={key} onClick={() => setPnlSort(key)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${pnlSort === key ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73]'}`}>
                         {label}
@@ -692,6 +707,7 @@ export default function AdminFinancialsPage() {
                     </tr></thead>
                     <tbody>
                       {[...events]
+                        .filter((ev: any) => pnlScope === 'all' || (String(ev.start_date).slice(0, 10) >= seasonWindow.from && String(ev.start_date).slice(0, 10) <= seasonWindow.to))
                         .filter((ev: any) => !pnlSearch.trim() || String(ev.name).toLowerCase().includes(pnlSearch.trim().toLowerCase()))
                         .sort((a: any, b: any) =>
                           pnlSort === 'revenue' ? b.revenue_cents - a.revenue_cents
