@@ -25,7 +25,7 @@ const SWAG: { name: string; desc: string; icon: string; img?: string }[] = [
 // back to the icon-only card meanwhile. Static export + hydration means a
 // plain <img onError> can fire before React attaches the handler, so probe
 // the image from an effect instead.
-function SwagCard({ s, i }: { s: { name: string; desc: string; icon: string; img?: string }; i: number }) {
+function SwagCard({ s, i, onOpen }: { s: { name: string; desc: string; icon: string; img?: string }; i: number; onOpen?: (src: string, title: string) => void }) {
   const [imgOk, setImgOk] = useState(false);
   useEffect(() => {
     if (!s.img) return;
@@ -37,10 +37,10 @@ function SwagCard({ s, i }: { s: { name: string; desc: string; icon: string; img
   return (
     <div className="lo-card rounded-2xl overflow-hidden transition-all flex flex-col" style={{ animation: `loFloat ${5 + (i % 3)}s ease-in-out infinite` }}>
       {imgOk && s.img && (
-        <div className="relative">
+        <button type="button" className="relative block w-full cursor-zoom-in" onClick={() => onOpen && onOpen(s.img as string, s.name)} aria-label={`View ${s.name} full size`}>
           <img src={s.img} alt={s.name} loading="lazy" className="w-full h-44 object-cover" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, transparent 55%, rgba(10,18,40,.92) 100%)' }} />
-        </div>
+        </button>
       )}
       <div className="p-5 flex-1">
         {!(imgOk && s.img) && (
@@ -51,6 +51,37 @@ function SwagCard({ s, i }: { s: { name: string; desc: string; icon: string; img
         <p className="font-black text-white">{s.name}</p>
         <p className="text-[13px] text-white/60 mt-1 leading-relaxed">{s.desc}</p>
       </div>
+    </div>
+  );
+}
+
+// Full-screen product viewer - click any swag photo to blow it up
+function Lightbox({ src, title, onClose }: { src: string; title: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[3200] flex flex-col items-center justify-center p-4 sm:p-8" style={{ background: 'rgba(2,5,14,.93)' }} onClick={onClose}>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-4 right-4 w-11 h-11 rounded-full flex items-center justify-center text-white/90 hover:text-white transition z-[3300]"
+        style={{ background: 'rgba(10,18,40,.9)', border: '1px solid rgba(0,204,255,.45)', boxShadow: '0 0 24px rgba(0,204,255,.25)' }}
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+      <img
+        src={src}
+        alt={title}
+        className="max-w-full max-h-[82vh] object-contain rounded-2xl"
+        style={{ border: '1px solid rgba(0,204,255,.35)', boxShadow: '0 0 70px rgba(0,204,255,.25)' }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      <p className="mt-4 text-sm font-black tracking-[0.2em] text-[#7fd8ff] text-center uppercase">{title}</p>
     </div>
   );
 }
@@ -143,6 +174,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
 
 export default function LightsOutPage() {
   const [showRegister, setShowRegister] = useState(false);
+  const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
   return (
     <div className="min-h-screen bg-[#04091a] text-white overflow-hidden" style={{ fontFamily: 'ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif' }}>
       <style>{`
@@ -240,9 +272,10 @@ export default function LightsOutPage() {
           <p className="text-white/55 text-sm mt-2">Home and away glow editions, made for this event only. Every player keeps both.</p>
         </div>
         <div className="pb-16">
-          <div className="rounded-3xl overflow-hidden" style={{ border: '1px solid rgba(0,204,255,.35)', boxShadow: '0 0 50px rgba(0,204,255,.18)' }}>
+          <button type="button" className="block w-full rounded-3xl overflow-hidden cursor-zoom-in" style={{ border: '1px solid rgba(0,204,255,.35)', boxShadow: '0 0 50px rgba(0,204,255,.18)' }}
+            onClick={() => setLightbox({ src: '/lights-out-jerseys.jpg', title: 'Home and Away Jerseys' })} aria-label="View jerseys full size">
             <img src="/lights-out-jerseys.jpg" alt="Lights Out Invitational home and away jerseys" className="w-full block" />
-          </div>
+          </button>
           <p className="text-center text-[11px] text-white/40 mt-3 tracking-wide">ST. LOUIS SKYLINE &middot; GATEWAY ARCH &middot; GLOW STITCHING THAT LIGHTS UP WHEN THE ARENA GOES DARK</p>
         </div>
 
@@ -253,7 +286,7 @@ export default function LightsOutPage() {
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-16">
           {SWAG.map((s, i) => (
-            <SwagCard key={s.name} s={s} i={i} />
+            <SwagCard key={s.name} s={s} i={i} onOpen={(src, title) => setLightbox({ src, title })} />
           ))}
         </div>
 
@@ -279,6 +312,7 @@ export default function LightsOutPage() {
       </div>
 
       {showRegister && <RegisterModal onClose={() => setShowRegister(false)} />}
+      {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
     </div>
   );
 }
