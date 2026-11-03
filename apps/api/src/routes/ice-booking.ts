@@ -65,7 +65,9 @@ const bookSlotSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   phone: z.string().min(1),
-  reason: z.string().min(1),
+  // The form sends "notes"; older clients sent "reason" - accept either
+  reason: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 iceBookingRoutes.post('/book', zValidator('json', bookSlotSchema), async (c) => {
@@ -85,7 +87,7 @@ iceBookingRoutes.post('/book', zValidator('json', bookSlotSchema), async (c) => 
   await db.prepare(`
     UPDATE ice_slots SET status = 'held', booked_by_name = ?, booked_by_email = ?,
     booked_by_phone = ?, notes = ?, updated_at = datetime('now') WHERE id = ?
-  `).bind(data.name, data.email, data.phone, data.reason, data.slotId).run();
+  `).bind(data.name, data.email, data.phone, (data.reason || data.notes || null), data.slotId).run();
 
   // Create Stripe Checkout Session
   const priceInCents = slot.price_cents;
@@ -110,7 +112,7 @@ iceBookingRoutes.post('/book', zValidator('json', bookSlotSchema), async (c) => 
       'metadata[slot_id]': data.slotId,
       'metadata[booker_name]': data.name,
       'metadata[booker_phone]': data.phone,
-      'metadata[reason]': data.reason,
+      'metadata[reason]': data.reason || data.notes || '',
       'payment_intent_data[metadata][slot_id]': data.slotId,
     }).toString(),
   });
@@ -171,6 +173,57 @@ iceBookingRoutes.get('/booking/:slotId', async (c) => {
 
   if (!slot) {
     return c.json({ success: false, error: 'Booking not found' }, 404);
+  }
+
+  // Landing on the confirmation page settles the booking: verify the Stripe
+  // session actually paid, mark the slot booked (once), and notify staff.
+  if (sessionId && slot.status === 'held') {
+    try {
+      const sres = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+        headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` },
+      });
+      const session = await sres.json() as any;
+      if (sres.ok && session.payment_status === 'paid' && session.metadata?.slot_id === slotId) {
+        const claim = await db.prepare(
+          "UPDATE ice_slots SET status = 'booked', updated_at = datetime('now') WHERE id = ? AND status = 'held'"
+        ).bind(slotId).run();
+        if ((claim.meta?.changes || 0) > 0) {
+          slot.status = 'booked';
+          const when = `${slot.date} ${slot.start_time}-${slot.end_time}`;
+          const amount = `$${((slot.price_cents || 0) / 100).toFixed(2)}`;
+          // Staff notification
+          try {
+            await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+                to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+                subject: `[Ice Booking] ${slot.booked_by_name || 'Someone'} booked ${when}`,
+                html: `<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">New PAID ice booking - ${slot.venue_name || 'Rosemont Outdoor Rink'}\n\nWhen: ${when}\nAmount: ${amount}\nName: ${slot.booked_by_name || ''}\nEmail: ${slot.booked_by_email || ''}\nPhone: ${slot.booked_by_phone || ''}\nNotes: ${slot.notes || '-'}\n\nManage: https://ultimatetournaments.com/admin/ice</pre>`,
+              }),
+            });
+          } catch {}
+          // Booker confirmation (simple for now - Chad is sending last
+          // year's template to upgrade this)
+          if (slot.booked_by_email) {
+            try {
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+                  reply_to: 'johnny@ultimatetournaments.com',
+                  to: [slot.booked_by_email],
+                  subject: `Ice time confirmed - ${when}`,
+                  html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;"><h2 style="color:#003e79;">You're on the ice!</h2><p style="font-size:14px;color:#2a3c52;line-height:1.6;">Your ice time at the ${slot.venue_name || 'Rosemont Outdoor Rink'} is confirmed and paid.</p><table style="font-size:14px;color:#2a3c52;line-height:1.8;"><tr><td style="font-weight:bold;padding-right:14px;">Date</td><td>${slot.date}</td></tr><tr><td style="font-weight:bold;padding-right:14px;">Time</td><td>${slot.start_time} - ${slot.end_time}</td></tr><tr><td style="font-weight:bold;padding-right:14px;">Paid</td><td>${amount}</td></tr></table><p style="font-size:13px;color:#5b6b80;">Questions? Just reply to this email.</p></div>`,
+                }),
+              });
+            } catch {}
+          }
+        }
+      }
+    } catch {}
   }
 
   return c.json({ success: true, data: slot });

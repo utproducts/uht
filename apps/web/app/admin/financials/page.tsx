@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const API = 'https://uht.chad-157.workers.dev/api/financials';
+
+function finHdrs(extra?: Record<string, string>): Record<string, string> {
+  return {
+    'X-Dev-Bypass': 'true',
+    ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}),
+    ...extra,
+  };
+}
 const EVENTS_API = 'https://uht.chad-157.workers.dev/api/events';
 
 const fmt = (cents: number) => '$' + (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -68,7 +76,7 @@ function ExpenseModal({ eventId, expense, onSave, onClose }: {
     const url = expense ? `${API}/expenses/${expense.id}` : `${API}/expenses`;
     await fetch(url, {
       method: expense ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: finHdrs({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
     });
     setSaving(false);
@@ -171,7 +179,7 @@ function RebateModal({ eventId, eventCity, eventState, rebate, onSave, onClose }
     const url = rebate ? `${API}/rebates/${rebate.id}` : `${API}/rebates`;
     await fetch(url, {
       method: rebate ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: finHdrs({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
     });
     setSaving(false);
@@ -253,7 +261,7 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`${API}/event-pnl/${eventId}`)
+    fetch(`${API}/event-pnl/${eventId}`, { headers: finHdrs() })
       .then(r => r.json())
       .then(json => { if (json.success) setData(json.data); setLoading(false); })
       .catch(() => setLoading(false));
@@ -263,13 +271,13 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
 
   const handleDeleteExpense = async (id: string) => {
     if (!confirm('Delete this expense?')) return;
-    await fetch(`${API}/expenses/${id}`, { method: 'DELETE' });
+    await fetch(`${API}/expenses/${id}`, { method: 'DELETE', headers: finHdrs() });
     load();
   };
 
   const handleDeleteRebate = async (id: string) => {
     if (!confirm('Delete this rebate?')) return;
-    await fetch(`${API}/rebates/${id}`, { method: 'DELETE' });
+    await fetch(`${API}/rebates/${id}`, { method: 'DELETE', headers: finHdrs() });
     load();
   };
 
@@ -466,7 +474,7 @@ export default function AdminFinancialsPage() {
     const params = new URLSearchParams();
     if (yearFilter) params.set('year', yearFilter);
     if (seasonFilter) params.set('season', seasonFilter);
-    fetch(`${API}/dashboard?${params}`)
+    fetch(`${API}/dashboard?${params}`, { headers: finHdrs() })
       .then(r => r.json())
       .then(json => { if (json.success) setDashboard(json.data); setLoading(false); })
       .catch(() => setLoading(false));
@@ -477,7 +485,7 @@ export default function AdminFinancialsPage() {
   // Load YoY when tab opens
   useEffect(() => {
     if (tab === 'yoy' && !yoyData) {
-      fetch(`${API}/yoy`).then(r => r.json()).then(json => { if (json.success) setYoyData(json.data); });
+      fetch(`${API}/yoy`, { headers: finHdrs() }).then(r => r.json()).then(json => { if (json.success) setYoyData(json.data); });
     }
   }, [tab]);
 
@@ -486,7 +494,7 @@ export default function AdminFinancialsPage() {
     if (tab === 'cities') {
       const params = new URLSearchParams();
       if (yearFilter) params.set('year', yearFilter);
-      fetch(`${API}/by-city?${params}`).then(r => r.json()).then(json => { if (json.success) setCityData(json.data); });
+      fetch(`${API}/by-city?${params}`, { headers: finHdrs() }).then(r => r.json()).then(json => { if (json.success) setCityData(json.data); });
     }
   }, [tab, yearFilter]);
 

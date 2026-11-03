@@ -230,13 +230,10 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
   // Revenue by event
   const revenueByEvent = await db.prepare(`
     SELECT e.id, e.name, e.city, e.state, e.start_date, e.end_date, e.season,
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as revenue_cents
+      (SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved') as team_count,
+      (SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment')) as revenue_cents
     FROM events e
-    LEFT JOIN registrations r ON r.event_id = e.id
-    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
     WHERE 1=1 ${dateFilter}
-    GROUP BY e.id
     ORDER BY e.start_date DESC
   `).bind(...params).all();
 
@@ -271,11 +268,9 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
   const revenueByCity = await db.prepare(`
     SELECT e.city, e.state,
       COUNT(DISTINCT e.id) as event_count,
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as revenue_cents
+      SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
+      SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents
     FROM events e
-    LEFT JOIN registrations r ON r.event_id = e.id
-    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
     WHERE 1=1 ${dateFilter}
     GROUP BY e.city, e.state
     ORDER BY revenue_cents DESC
@@ -285,11 +280,9 @@ financialRoutes.get('/dashboard', authMiddleware, requireRole('admin'), async (c
   const revenueByMonth = await db.prepare(`
     SELECT substr(e.start_date, 1, 7) as month,
       COUNT(DISTINCT e.id) as event_count,
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as revenue_cents
+      SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
+      SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents
     FROM events e
-    LEFT JOIN registrations r ON r.event_id = e.id
-    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
     WHERE 1=1 ${dateFilter}
     GROUP BY substr(e.start_date, 1, 7)
     ORDER BY month ASC
@@ -348,23 +341,23 @@ financialRoutes.get('/event-pnl/:eventId', authMiddleware, requireRole('admin'),
   // Revenue from registrations
   const revenue = await db.prepare(`
     SELECT
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COUNT(CASE WHEN r.status = 'approved' AND r.payment_status = 'paid' THEN 1 END) as paid_teams,
-      COUNT(CASE WHEN r.status = 'approved' AND r.payment_status != 'paid' THEN 1 END) as unpaid_teams,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as total_revenue_cents,
-      COALESCE(SUM(CASE WHEN r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as expected_revenue_cents
-    FROM registrations r
-    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
-    WHERE r.event_id = ?
+      COUNT(CASE WHEN er.status = 'approved' THEN 1 END) as team_count,
+      COUNT(CASE WHEN er.status = 'approved' AND er.payment_status = 'paid' THEN 1 END) as paid_teams,
+      COUNT(CASE WHEN er.status = 'approved' AND er.payment_status != 'paid' THEN 1 END) as unpaid_teams,
+      COALESCE(SUM(CASE WHEN er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment') THEN MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END) ELSE 0 END), 0) as total_revenue_cents,
+      COALESCE(SUM(CASE WHEN er.status = 'approved' THEN COALESCE(ed.price_cents, er.payment_amount_cents, 0) ELSE 0 END), 0) as expected_revenue_cents
+    FROM event_registrations er
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.event_id = ?
   `).bind(eventId).first();
 
   // Revenue by division
   const revenueByDivision = await db.prepare(`
     SELECT ed.age_group, ed.division_level, ed.price_cents as division_price,
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as revenue_cents
+      COUNT(CASE WHEN er.status = 'approved' THEN 1 END) as team_count,
+      COALESCE(SUM(CASE WHEN er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment') THEN MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END) ELSE 0 END), 0) as revenue_cents
     FROM event_divisions ed
-    LEFT JOIN registrations r ON r.event_division_id = ed.id
+    LEFT JOIN event_registrations er ON er.event_division_id = ed.id
     WHERE ed.event_id = ?
     GROUP BY ed.id
     ORDER BY ed.age_group ASC
@@ -428,12 +421,10 @@ financialRoutes.get('/yoy', authMiddleware, requireRole('admin'), async (c) => {
   const data = await db.prepare(`
     SELECT substr(e.start_date, 1, 4) as year,
       COUNT(DISTINCT e.id) as event_count,
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as revenue_cents,
+      SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
+      SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents,
       COUNT(DISTINCT e.city || ',' || e.state) as city_count
     FROM events e
-    LEFT JOIN registrations r ON r.event_id = e.id
-    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
     GROUP BY substr(e.start_date, 1, 4)
     ORDER BY year DESC
   `).all();
@@ -491,11 +482,9 @@ financialRoutes.get('/by-city', authMiddleware, requireRole('admin'), async (c) 
   const data = await db.prepare(`
     SELECT e.city, e.state,
       COUNT(DISTINCT e.id) as event_count,
-      COUNT(CASE WHEN r.status = 'approved' THEN 1 END) as team_count,
-      COALESCE(SUM(CASE WHEN r.payment_status = 'paid' AND r.status = 'approved' THEN COALESCE(r.amount_cents, ed.price_cents) ELSE 0 END), 0) as revenue_cents
+      SUM((SELECT COUNT(*) FROM event_registrations er2 WHERE er2.event_id = e.id AND er2.status = 'approved')) as team_count,
+      SUM((SELECT COALESCE(SUM(MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)),0) FROM event_registrations er WHERE er.event_id = e.id AND er.status NOT IN ('withdrawn','denied','rejected','awaiting_payment'))) as revenue_cents
     FROM events e
-    LEFT JOIN registrations r ON r.event_id = e.id
-    LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
     WHERE 1=1 ${dateFilter}
     GROUP BY e.city, e.state
     ORDER BY revenue_cents DESC

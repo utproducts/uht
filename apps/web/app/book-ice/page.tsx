@@ -248,7 +248,7 @@ function BookingForm({
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        setError(json.error || 'Booking failed. Please try again.');
+        setError(typeof json.error === 'string' ? json.error : 'Booking failed - please check your details and try again.');
         setSubmitting(false);
         return;
       }
