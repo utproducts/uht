@@ -1837,6 +1837,29 @@ eventRoutes.post('/admin/registration/:regId/resend-discount-code', authMiddlewa
 // MHR refresh now runs in the ADMIN'S BROWSER (r.jina.ai rate-limits
 // Cloudflare's shared egress IPs to death). These two endpoints feed it:
 // the linked-team list, and the save-back of scraped ratings.
+// Every three-stars selection across the event's games, newest game first.
+// The admin panel groups these into a per-player leaderboard client-side.
+eventRoutes.get('/admin/:eventId/three-stars', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const eventId = c.req.param('eventId');
+  const db = c.env.DB;
+  const rows = await db.prepare(`
+    SELECT ts.star_number, ts.player_name, ts.jersey_number, ts.team_id,
+           COALESCE(t.name, '') as team_name,
+           g.game_number, g.start_time,
+           TRIM(COALESCE(ed.age_group, '') || ' ' || COALESCE(ed.division_level, '')) as division,
+           ht.name as home_team, at.name as away_team
+    FROM game_three_stars ts
+    JOIN games g ON g.id = ts.game_id
+    LEFT JOIN teams t ON t.id = ts.team_id
+    LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
+    LEFT JOIN teams ht ON ht.id = g.home_team_id
+    LEFT JOIN teams at ON at.id = g.away_team_id
+    WHERE g.event_id = ?
+    ORDER BY g.start_time DESC, g.game_number DESC, ts.star_number ASC
+  `).bind(eventId).all<any>();
+  return c.json({ success: true, data: rows.results || [] });
+});
+
 eventRoutes.get('/admin/:eventId/mhr-links', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const eventId = c.req.param('eventId');
   const db = c.env.DB;

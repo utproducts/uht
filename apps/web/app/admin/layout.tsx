@@ -61,6 +61,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
       { name: 'Schedule Builder', href: '/admin/schedule' },
       { name: 'Referees', href: '/admin/referees' },
       { name: 'Penalties', href: '/admin/penalties' },
+      { name: 'Lights Out', href: '/admin/lights-out' },
       { name: 'RSVPs', href: '/admin/rsvps' },
     ],
   },

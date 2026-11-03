@@ -38,6 +38,7 @@ import { couponRoutes } from './routes/coupons';
 import { adminRoutes } from './routes/admin';
 import { socialRoutes } from './routes/social';
 import { webUpdateRoutes } from './routes/web-updates';
+import { lightsOutRoutes } from './routes/lights-out';
 import type { Env } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -125,6 +126,7 @@ app.route('/api/coupons', couponRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/social', socialRoutes);
 app.route('/api/web-updates', webUpdateRoutes);
+app.route('/api/lights-out', lightsOutRoutes);
 
 // RSVP endpoint for coaches meeting
 app.post('/api/rsvps', async (c) => {

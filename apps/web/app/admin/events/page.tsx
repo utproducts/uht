@@ -4747,6 +4747,102 @@ function AdminPhotosTab({ eventId }: { eventId: string }) {
   );
 }
 
+function ThreeStarsTab({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hdrs = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    fetch(`${API_BASE}/admin/${eventId}/three-stars`, { headers: hdrs })
+      .then(r => r.json())
+      .then(j => { if (j.success) setRows(j.data || []); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, [eventId]);
+
+  // Group by player (name + jersey + team) into a leaderboard
+  const players: Record<string, any> = {};
+  for (const r of rows) {
+    const key = `${(r.player_name || '').toLowerCase()}|${r.jersey_number || ''}|${r.team_id || r.team_name || ''}`;
+    if (!players[key]) players[key] = { name: r.player_name, jersey: r.jersey_number, team: r.team_name, s1: 0, s2: 0, s3: 0, total: 0, games: [] };
+    const p = players[key];
+    if (r.star_number === 1) p.s1++; else if (r.star_number === 2) p.s2++; else p.s3++;
+    p.total++;
+    p.games.push(r);
+  }
+  const q = search.trim().toLowerCase();
+  const board = Object.entries(players)
+    .filter(([, p]) => !q || String(p.name || '').toLowerCase().includes(q) || String(p.team || '').toLowerCase().includes(q))
+    .sort((a, b) => b[1].total - a[1].total || b[1].s1 - a[1].s1 || String(a[1].name || '').localeCompare(String(b[1].name || '')));
+
+  const starBadge = (n: number, count: number, color: string, bg: string) => (
+    <span className={`text-xs font-bold w-14 text-center shrink-0 whitespace-nowrap ${count ? color : 'text-[#d2d2d7]'}`}>
+      {count ? <span className={`${bg} rounded-full px-2 py-0.5`}>{count}× {n === 1 ? '1st' : n === 2 ? '2nd' : '3rd'}</span> : '—'}
+    </span>
+  );
+
+  if (!loaded) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>;
+
+  return (
+    <div className="space-y-4">
+      {/* stat strip */}
+      <div className="grid grid-cols-3 gap-3">
+        {[[rows.length, 'Stars Awarded'], [Object.keys(players).length, 'Players Recognized'], [new Set(rows.map((r: any) => r.game_number)).size, 'Games With Stars']].map(([v, l]) => (
+          <div key={l as string} className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-4 text-center">
+            <div className="text-2xl font-black text-[#003e79]">{v as number}</div>
+            <div className="text-xs text-[#6e6e73] font-medium mt-0.5">{l as string}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 border-b border-[#f0f0f2]">
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-[#1d1d1f]">Three Stars</h3>
+            <p className="text-xs text-[#6e6e73] mt-0.5">Every star selection from this event's scoresheets, grouped by player. Click a row to see the games.</p>
+          </div>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search player or team…"
+            className="px-4 py-2 rounded-xl border border-[#e8e8ed] text-sm w-full sm:w-64 focus:outline-none focus:border-[#003e79]"
+          />
+        </div>
+        {board.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-[#86868b]">{rows.length === 0 ? 'No three stars have been recorded for this event yet.' : 'No players match that search.'}</p>
+        ) : (
+          board.map(([key, p]) => (
+            <div key={key} className="border-t border-[#f0f0f2] first:border-t-0">
+              <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-[#fafafa] transition">
+                <span className="w-9 h-9 rounded-full bg-gradient-to-br from-[#d4af37] to-[#b8860b] text-white text-xs font-black flex items-center justify-center shrink-0">#{p.jersey || '–'}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-bold text-[#1d1d1f] truncate">{p.name}</span>
+                  <span className="block text-xs text-[#6e6e73] truncate">{p.team}</span>
+                </span>
+                {starBadge(1, p.s1, 'text-[#b8860b]', 'bg-[#fdf6e3]')}
+                {starBadge(2, p.s2, 'text-[#64748b]', 'bg-[#f1f5f9]')}
+                {starBadge(3, p.s3, 'text-[#b45309]', 'bg-[#fef3e2]')}
+                <span className="text-sm font-black text-[#003e79] w-10 text-right shrink-0 whitespace-nowrap">{p.total}</span>
+              </button>
+              {expanded === key && (
+                <div className="px-5 pb-3 pl-[68px] space-y-1">
+                  {p.games.map((g: any, i: number) => (
+                    <p key={i} className="text-xs text-[#6e6e73]">
+                      <span className="font-semibold text-[#3d3d3d]">{g.star_number === 1 ? '1st' : g.star_number === 2 ? '2nd' : '3rd'} Star</span>
+                      {' '}· Game {g.game_number}{g.division ? ` · ${g.division}` : ''}{g.home_team && g.away_team ? ` · ${g.away_team} at ${g.home_team}` : ''}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StandingsAdminTab({ eventId }: { eventId: string }) {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5969,7 +6065,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     setTimeout(() => setCopiedEmail(c => (c === email ? '' : c)), 1500);
   };
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'photos' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
+  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'three_stars' | 'photos' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
   const [dragRegId, setDragRegId] = useState<string | null>(null);
   // Full registration editor — the SAME slide-out panel as /admin/registrations,
   // hitting the same API row, so edits on either page always stay in sync.
@@ -6246,7 +6342,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tabs - scrolls within its own bar on mobile instead of stretching the page */}
       <div className="overflow-x-auto mb-6 max-w-full [-webkit-overflow-scrolling:touch]">
         <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
-          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'photos', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
+          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'three_stars', 'photos', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -6254,7 +6350,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
-              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'photos' ? 'Photos' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
+              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'three_stars' ? 'Three Stars' : t === 'photos' ? 'Photos' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
             </button>
           ))}
         </div>
@@ -6938,6 +7034,10 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {tab === 'standings' && (
         <StandingsAdminTab eventId={eventId} />
+      )}
+
+      {tab === 'three_stars' && (
+        <ThreeStarsTab eventId={eventId} />
       )}
 
       {tab === 'photos' && (
