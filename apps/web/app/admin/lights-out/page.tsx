@@ -99,7 +99,12 @@ export default function LightsOutAdminPage() {
                     <span className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 uppercase ${STATUS_STYLES[r.status] || STATUS_STYLES.pending}`}>{STATUS_LABELS[r.status] || r.status}</span>
                     {!!r.paid_at && (
                       <span className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
-                        PAID ${((r.amount_paid_cents || 0) / 100).toLocaleString()}
+                        PAID ${((r.amount_paid_cents || 0) / 100).toLocaleString()}{r.payment_plan === 'deposit' ? ' DEPOSIT' : ' IN FULL'}
+                      </span>
+                    )}
+                    {!!r.paid_at && r.payment_plan === 'deposit' && (r.amount_paid_cents || 0) < 55000 && (
+                      <span className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200">
+                        ${((55000 - (r.amount_paid_cents || 0)) / 100).toLocaleString()} BALANCE DUE
                       </span>
                     )}
                     <span className={`text-[11px] font-bold rounded-full px-2.5 py-0.5 border ${r.star_verified ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>

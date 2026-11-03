@@ -14,7 +14,8 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 export const lightsOutRoutes = new Hono<{ Bindings: Env }>();
 
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
-const LIGHTS_OUT_PRICE_CENTS = 55000; // $550 per player
+const LIGHTS_OUT_PRICE_CENTS = 55000; // $550 per player, paid in full
+const LIGHTS_OUT_DEPOSIT_CENTS = 20000; // $200 non-refundable deposit option
 
 async function sendEmail(env: Env, to: string, subject: string, html: string) {
   try {
@@ -61,6 +62,7 @@ const registerSchema = z.object({
   parentName: z.string().min(2).max(80),
   email: z.string().email(),
   phone: z.string().max(30).optional(),
+  payType: z.enum(['full', 'deposit']).default('full'),
 });
 
 lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
@@ -90,13 +92,15 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
   `).bind(b.starEventId, b.playerName.trim(), `% ${lastName}`).first<any>();
 
   const id = crypto.randomUUID().replace(/-/g, '');
+  const isDeposit = b.payType === 'deposit';
+  const chargeCents = isDeposit ? LIGHTS_OUT_DEPOSIT_CENTS : LIGHTS_OUT_PRICE_CENTS;
   await db.prepare(`
-    INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?)
+    INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified, payment_plan)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)
   `).bind(id, b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
-    b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0).run();
+    b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0, b.payType).run();
 
-  // $550 per player, paid up front through Stripe Checkout
+  // $550 in full or a $200 non-refundable deposit, through Stripe Checkout
   const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
     headers: {
@@ -109,9 +113,9 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
       'cancel_url': 'https://ultimatetournaments.com/lights-out/?cancelled=1',
       'customer_email': b.email.trim().toLowerCase(),
       'line_items[0][price_data][currency]': 'usd',
-      'line_items[0][price_data][unit_amount]': String(LIGHTS_OUT_PRICE_CENTS),
-      'line_items[0][price_data][product_data][name]': 'Lights Out Invitational - Player Registration',
-      'line_items[0][price_data][product_data][description]': `${b.playerName.trim()} · St. Louis, MO · jerseys, stick, puck, tee and duffle included`,
+      'line_items[0][price_data][unit_amount]': String(chargeCents),
+      'line_items[0][price_data][product_data][name]': isDeposit ? 'Lights Out Invitational - $200 Non-Refundable Deposit' : 'Lights Out Invitational - Player Registration (Paid in Full)',
+      'line_items[0][price_data][product_data][description]': `${b.playerName.trim()} · St. Louis, MO · jerseys, stick, puck, tee and duffle included${isDeposit ? ' · $350 balance due before the event' : ''}`,
       'line_items[0][quantity]': '1',
       'metadata[lights_out_reg_id]': id,
       'metadata[player_name]': b.playerName.trim(),
@@ -151,28 +155,32 @@ lightsOutRoutes.get('/register/:id/verify', async (c) => {
     return c.json({ success: false, error: 'Payment not completed' }, 402);
   }
 
+  const paidCents = session.amount_total || (row.payment_plan === 'deposit' ? LIGHTS_OUT_DEPOSIT_CENTS : LIGHTS_OUT_PRICE_CENTS);
+  const isDeposit = row.payment_plan === 'deposit';
+  const balanceCents = Math.max(0, LIGHTS_OUT_PRICE_CENTS - paidCents);
   await db.prepare(`
     UPDATE lights_out_registrations
     SET status = 'pending', amount_paid_cents = ?, paid_at = datetime('now')
     WHERE id = ? AND paid_at IS NULL
-  `).bind(session.amount_total || LIGHTS_OUT_PRICE_CENTS, id).run();
+  `).bind(paidCents, id).run();
 
   await sendEmail(c.env, row.email, 'Payment received - Lights Out Invitational',
     emailShell(`
       <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:#ffffff;">Payment received. ${row.player_name} is almost in.</p>
-      <p style="margin:0 0 14px;">We have your <b style="color:#39ff14;">$${((session.amount_total || LIGHTS_OUT_PRICE_CENTS) / 100).toFixed(0)}</b> registration for the <b style="color:#39ff14;">Lights Out Invitational</b>, claimed on a Three Stars selection at ${row.star_event_name || 'a UHT event'}.</p>
+      <p style="margin:0 0 14px;">We have your <b style="color:#39ff14;">$${(paidCents / 100).toFixed(0)} ${isDeposit ? 'non-refundable deposit' : 'paid-in-full registration'}</b> for the <b style="color:#39ff14;">Lights Out Invitational</b>, claimed on a Three Stars selection at ${row.star_event_name || 'a UHT event'}.</p>
+      ${isDeposit ? `<p style="margin:0 0 14px;">The remaining <b style="color:#7fd8ff;">$${(balanceCents / 100).toFixed(0)} balance</b> is due before the event - we will send a payment link with the event details.</p>` : ''}
       <p style="margin:0 0 14px;">Our team is confirming the star against the official scoresheets now - the final invite confirmation lands in this inbox shortly, followed by dates, rink details, and team placement.</p>
       <p style="margin:0;color:#7fd8ff;">The lights go out soon.</p>
     `));
 
-  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out PAID registration: ${row.player_name} ($${((session.amount_total || LIGHTS_OUT_PRICE_CENTS) / 100).toFixed(0)})`,
+  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out PAID registration: ${row.player_name} ($${(paidCents / 100).toFixed(0)}${isDeposit ? ' deposit' : ' full'})`,
     emailShell(`
       <p style="margin:0 0 12px;font-weight:bold;color:#fff;">New PAID Lights Out registration</p>
       <p style="margin:0 0 4px;">Player: <b>${row.player_name}</b> ${row.jersey_number ? `#${row.jersey_number}` : ''}</p>
       <p style="margin:0 0 4px;">Team: ${row.team_name}</p>
       <p style="margin:0 0 4px;">Star event: ${row.star_event_name || row.star_event_id}</p>
       <p style="margin:0 0 4px;">Star found on scoresheets: <b style="color:${row.star_verified ? '#39ff14' : '#ff6b6b'}">${row.star_verified ? 'YES' : 'NOT FOUND'}</b></p>
-      <p style="margin:0 0 4px;">Paid: <b style="color:#39ff14;">$${((session.amount_total || LIGHTS_OUT_PRICE_CENTS) / 100).toFixed(2)}</b></p>
+      <p style="margin:0 0 4px;">Paid: <b style="color:#39ff14;">$${(paidCents / 100).toFixed(2)}</b> (${isDeposit ? 'DEPOSIT - $' + (balanceCents / 100).toFixed(0) + ' balance due' : 'PAID IN FULL'})</p>
       <p style="margin:0 0 4px;">Parent: ${row.parent_name} · ${row.email}${row.phone ? ` · ${row.phone}` : ''}</p>
       <p style="margin:12px 0 0;">Confirm the invite at ultimatetournaments.com/admin/lights-out</p>
     `));

@@ -94,7 +94,7 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
 
 function RegisterModal({ onClose }: { onClose: () => void }) {
   const [events, setEvents] = useState<any[]>([]);
-  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', birthYear: '', position: '', parentName: '', email: '', phone: '' });
+  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -145,7 +145,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
             <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>INVITE REQUEST</p>
             <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>CLAIM YOUR SPOT</h3>
             <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Tell us where your player earned their Three Star. We verify every registration against the official scoresheets before the invite is confirmed.</p>
-            <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-4`}>$550 PER PLAYER &middot; JERSEYS, STICK, PUCK, TEE + DUFFLE INCLUDED</p>
+            <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-4`}>$550 PER PLAYER (OR $200 DEPOSIT) &middot; ALL SWAG INCLUDED</p>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <input className={`${inputCls} col-span-2`} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
@@ -168,10 +168,27 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
                 <input className={inputCls} type="email" placeholder="Email *" value={f.email} onChange={(e) => set('email', e.target.value)} />
                 <input className={inputCls} type="tel" placeholder="Phone" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
               </div>
+              {/* payment plan stepper */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                {[
+                  ['full', 'PAY IN FULL', '$550', 'Everything locked in today'],
+                  ['deposit', 'DEPOSIT', '$200', 'Non-refundable · $350 due before the event'],
+                ].map(([val, label, price, sub]) => (
+                  <button key={val} type="button" onClick={() => set('payType', val)}
+                    className="rounded-2xl px-4 py-3.5 text-left transition-all"
+                    style={f.payType === val
+                      ? { background: 'rgba(57,255,20,.1)', border: '2px solid rgba(57,255,20,.7)', boxShadow: '0 0 22px rgba(57,255,20,.2)' }
+                      : { background: 'rgba(10,18,40,.6)', border: '2px solid rgba(29,58,86,.9)' }}>
+                    <span className={`${rajdhani.className} block text-sm font-bold tracking-[0.15em] ${f.payType === val ? 'text-[#39ff14]' : 'text-white/60'}`}>{label}</span>
+                    <span className={`${rajdhani.className} block text-2xl font-bold ${f.payType === val ? 'text-white' : 'text-white/70'}`}>{price}</span>
+                    <span className="block text-[11px] leading-snug mt-0.5 text-white/45">{sub}</span>
+                  </button>
+                ))}
+              </div>
               {error && <p className="text-[#ff6b6b] text-xs font-semibold">{error}</p>}
               <button onClick={submit} disabled={busy}
                 className="w-full py-3.5 rounded-full text-sm font-black bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.35)] hover:brightness-110 transition disabled:opacity-60">
-                {busy ? 'STARTING CHECKOUT…' : 'REGISTER + PAY $550'}
+                {busy ? 'STARTING CHECKOUT…' : f.payType === 'deposit' ? 'REGISTER + PAY $200 DEPOSIT' : 'REGISTER + PAY $550'}
               </button>
               <p className="text-white/40 text-[11px] text-center">Secure payment by Stripe. Invites are confirmed by the UHT team - Three Stars recipients only.</p>
             </div>
