@@ -6317,16 +6317,20 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h3 className="text-lg font-bold text-[#1d1d1f] mb-3">Registration Breakdown</h3>
               <div className="space-y-2">
-                {summary.map((s: any) => {
+                {[...summary].sort((a: any, b: any) => {
+                  const ORDER = ['mite', 'squirt', 'pee wee', 'peewee', 'bantam', 'midget', 'girls', 'varsity', 'high school'];
+                  const key = (s: any) => { const l = String(s.age_group || '').toLowerCase(); const i = ORDER.findIndex(o => l.startsWith(o)); return i === -1 ? 99 : i; };
+                  return key(a) - key(b) || String(a.age_group || '').localeCompare(String(b.age_group || ''));
+                }).map((s: any) => {
                   const pct = Math.min(100, (s.team_count / (event.slots_count || 100)) * 100 * (ageGroups.length || 1));
                   return (
                     <div key={s.age_group} className="flex items-center gap-3">
-                      <span className="w-20 text-sm font-medium text-[#3d3d3d]">{s.age_group}</span>
-                      <div className="flex-1 bg-[#fafafa] rounded-full h-3 overflow-hidden">
+                      <span className="w-24 shrink-0 text-sm font-medium text-[#3d3d3d] whitespace-nowrap">{s.age_group}</span>
+                      <div className="flex-1 min-w-[60px] bg-[#fafafa] rounded-full h-3 overflow-hidden">
                         <div className="h-full bg-gradient-to-r from-[#003e79] to-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                       </div>
-                      <span className="text-sm font-bold text-[#1d1d1f] w-16 text-right">{s.team_count} teams</span>
-                      <span className="text-sm text-green-600 font-medium w-20 text-right">${(s.revenue_cents / 100).toLocaleString()}</span>
+                      <span className="text-sm font-bold text-[#1d1d1f] w-20 shrink-0 text-right whitespace-nowrap">{s.team_count} teams</span>
+                      <span className="text-sm text-green-600 font-medium w-20 shrink-0 text-right whitespace-nowrap">${(s.revenue_cents / 100).toLocaleString()}</span>
                     </div>
                   );
                 })}
