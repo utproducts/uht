@@ -64,7 +64,7 @@ export default function PenaltiesPage() {
   for (const r of rows) (byCat[r.category] = byCat[r.category] || []).push(r);
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl mx-auto px-6 py-6">
       <h1 className="text-2xl font-bold text-[#1d1d1f]">Penalty Catalog</h1>
       <p className="text-sm text-[#6e6e73] mt-1 mb-6">
         Check the box for any penalty that should count as a <b>misconduct</b>. Flagged penalties are
