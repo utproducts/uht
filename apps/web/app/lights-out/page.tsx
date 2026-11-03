@@ -103,6 +103,12 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
     fetch(`${API}/events`).then(r => r.json()).then(j => { if (j.success) setEvents(j.data || []); }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }));
   const inputCls = 'w-full rounded-xl px-4 py-2.5 text-sm text-white bg-[#0a1228] border border-[#1d3a56] focus:border-[#00ccff] focus:outline-none placeholder:text-white/30';
 
@@ -132,7 +138,16 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.86)' }} onClick={onClose}>
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8" style={{ background: '#070d20', border: '1px solid rgba(0,204,255,.4)', boxShadow: '0 0 60px rgba(0,204,255,.25)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8" style={{ background: '#070d20', border: '1px solid rgba(0,204,255,.4)', boxShadow: '0 0 60px rgba(0,204,255,.25)' }} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-3.5 right-3.5 w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white transition z-10"
+          style={{ background: 'rgba(10,18,40,.9)', border: '1px solid rgba(0,204,255,.4)' }}
+        >
+          <svg className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
         {done ? (
           <div className="text-center py-6">
             <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REQUEST RECEIVED</p>
