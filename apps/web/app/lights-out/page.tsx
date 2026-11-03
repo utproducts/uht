@@ -119,8 +119,11 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ ...f, playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim() }),
       });
       const j = await res.json();
-      if (j.success) setDone(true);
-      else setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
+      if (j.success && j.data?.checkoutUrl) {
+        window.location.href = j.data.checkoutUrl; // off to Stripe - $550 per player
+        return;
+      }
+      setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
     } catch {
       setError('Something went wrong - please try again.');
     }
@@ -141,7 +144,8 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
           <>
             <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>INVITE REQUEST</p>
             <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>CLAIM YOUR SPOT</h3>
-            <p className="text-white/60 text-[13px] leading-relaxed mb-5">Tell us where your player earned their Three Star. We verify every request against the official scoresheets before the invite is confirmed.</p>
+            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Tell us where your player earned their Three Star. We verify every registration against the official scoresheets before the invite is confirmed.</p>
+            <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-4`}>$550 PER PLAYER &middot; JERSEYS, STICK, PUCK, TEE + DUFFLE INCLUDED</p>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <input className={`${inputCls} col-span-2`} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
@@ -167,9 +171,9 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
               {error && <p className="text-[#ff6b6b] text-xs font-semibold">{error}</p>}
               <button onClick={submit} disabled={busy}
                 className="w-full py-3.5 rounded-full text-sm font-black bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.35)] hover:brightness-110 transition disabled:opacity-60">
-                {busy ? 'SUBMITTING…' : 'REQUEST MY INVITE'}
+                {busy ? 'STARTING CHECKOUT…' : 'REGISTER + PAY $550'}
               </button>
-              <p className="text-white/40 text-[11px] text-center">Invites are confirmed by the UHT team. Three Stars recipients only.</p>
+              <p className="text-white/40 text-[11px] text-center">Secure payment by Stripe. Invites are confirmed by the UHT team - Three Stars recipients only.</p>
             </div>
           </>
         )}
@@ -181,6 +185,21 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
 export default function LightsOutPage() {
   const [showRegister, setShowRegister] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
+  const [paidState, setPaidState] = useState<null | 'verifying' | 'paid' | 'failed'>(null);
+
+  // Back from Stripe: confirm the session actually paid, then celebrate
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const reg = q.get('reg');
+    const sid = q.get('session_id');
+    if (!reg || !sid) return;
+    window.history.replaceState({}, '', '/lights-out/');
+    setPaidState('verifying');
+    fetch(`${API}/register/${encodeURIComponent(reg)}/verify?session_id=${encodeURIComponent(sid)}`)
+      .then(r => r.json())
+      .then(j => setPaidState(j.success ? 'paid' : 'failed'))
+      .catch(() => setPaidState('failed'));
+  }, []);
   return (
     <div className="min-h-screen bg-[#04091a] text-white overflow-hidden" style={{ fontFamily: 'ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif' }}>
       <style>{`
@@ -255,7 +274,7 @@ export default function LightsOutPage() {
                 MEET THE THREE STARS
               </a>
             </div>
-            <p className={`${rajdhani.className} mt-5 text-[#7fd8ff]/55 text-sm font-medium tracking-[0.25em]`}>THREE STARS WINNERS ONLY &middot; EVERY INVITE IS VERIFIED</p>
+            <p className={`${rajdhani.className} mt-5 text-[#7fd8ff]/55 text-sm font-medium tracking-[0.25em]`}>$550 PER PLAYER &middot; THREE STARS WINNERS ONLY &middot; EVERY INVITE IS VERIFIED</p>
           </div>
 
           <div className="order-1 lg:order-2 flex justify-center">
@@ -340,6 +359,31 @@ export default function LightsOutPage() {
 
       {showRegister && <RegisterModal onClose={() => setShowRegister(false)} />}
       {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
+      {paidState && (
+        <div className="fixed inset-0 z-[3400] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.9)' }} onClick={() => paidState !== 'verifying' && setPaidState(null)}>
+          <div className="w-full max-w-md rounded-3xl p-8 text-center" style={{ background: '#070d20', border: '1px solid rgba(57,255,20,.45)', boxShadow: '0 0 60px rgba(57,255,20,.2)' }} onClick={(e) => e.stopPropagation()}>
+            {paidState === 'verifying' ? (
+              <>
+                <p className={`${rajdhani.className} text-lg font-bold tracking-[0.2em] text-[#7fd8ff]`}>CONFIRMING PAYMENT…</p>
+                <p className="text-white/60 text-sm mt-3">One second while we check with Stripe.</p>
+              </>
+            ) : paidState === 'paid' ? (
+              <>
+                <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] lo-glow-green mb-3`}>PAYMENT RECEIVED</p>
+                <p className={`${rajdhani.className} text-3xl font-bold text-white mb-3`}>YOU'RE ALMOST IN.</p>
+                <p className="text-white/70 text-sm leading-relaxed mb-6">Registration and payment are locked in. We're verifying the Three Star against the official scoresheets - the final invite confirmation hits your inbox shortly.</p>
+                <button onClick={() => setPaidState(null)} className={`${rajdhani.className} px-8 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a]`}>LIGHTS OUT</button>
+              </>
+            ) : (
+              <>
+                <p className={`${rajdhani.className} text-lg font-bold tracking-[0.2em] text-[#ff6b6b] mb-3`}>PAYMENT NOT CONFIRMED</p>
+                <p className="text-white/70 text-sm leading-relaxed mb-6">We couldn't confirm the payment. If your card was charged, email us and we'll sort it out right away - otherwise try registering again.</p>
+                <button onClick={() => setPaidState(null)} className={`${rajdhani.className} px-8 py-3 rounded-full text-base font-bold tracking-[0.12em] border border-white/25 text-white`}>CLOSE</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

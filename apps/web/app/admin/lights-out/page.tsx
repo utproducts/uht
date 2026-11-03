@@ -21,8 +21,15 @@ function hdrs(extra?: Record<string, string>): Record<string, string> {
 
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  pending_payment: 'bg-gray-50 text-gray-500 border-gray-200',
   approved: 'bg-green-50 text-green-700 border-green-200',
   denied: 'bg-red-50 text-red-600 border-red-200',
+};
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'PAID - AWAITING APPROVAL',
+  pending_payment: 'CHECKOUT NOT COMPLETED',
+  approved: 'APPROVED',
+  denied: 'DENIED',
 };
 
 export default function LightsOutAdminPage() {
@@ -89,7 +96,12 @@ export default function LightsOutAdminPage() {
                 <div className="flex-1 min-w-[220px]">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-base font-bold text-[#1d1d1f]">{r.player_name}{r.jersey_number ? ` #${r.jersey_number}` : ''}</p>
-                    <span className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 uppercase ${STATUS_STYLES[r.status] || STATUS_STYLES.pending}`}>{r.status}</span>
+                    <span className={`text-[11px] font-bold border rounded-full px-2.5 py-0.5 uppercase ${STATUS_STYLES[r.status] || STATUS_STYLES.pending}`}>{STATUS_LABELS[r.status] || r.status}</span>
+                    {!!r.paid_at && (
+                      <span className="text-[11px] font-bold border rounded-full px-2.5 py-0.5 bg-green-50 text-green-700 border-green-200">
+                        PAID ${((r.amount_paid_cents || 0) / 100).toLocaleString()}
+                      </span>
+                    )}
                     <span className={`text-[11px] font-bold rounded-full px-2.5 py-0.5 border ${r.star_verified ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
                       {r.star_verified ? 'STAR VERIFIED' : 'STAR NOT FOUND'}
                     </span>

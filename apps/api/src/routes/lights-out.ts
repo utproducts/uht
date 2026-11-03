@@ -14,6 +14,7 @@ import { authMiddleware, requireRole } from '../middleware/auth';
 export const lightsOutRoutes = new Hono<{ Bindings: Env }>();
 
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
+const LIGHTS_OUT_PRICE_CENTS = 55000; // $550 per player
 
 async function sendEmail(env: Env, to: string, subject: string, html: string) {
   try {
@@ -70,9 +71,13 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
   if (!ev) return c.json({ success: false, error: 'Unknown event' }, 400);
 
   const dup = await db.prepare(
-    `SELECT id FROM lights_out_registrations WHERE LOWER(player_name) = LOWER(?) AND star_event_id = ? AND status != 'denied'`
+    `SELECT id, status FROM lights_out_registrations WHERE LOWER(player_name) = LOWER(?) AND star_event_id = ? AND status != 'denied'`
   ).bind(b.playerName.trim(), b.starEventId).first<any>();
-  if (dup) return c.json({ success: false, error: 'This player already has an invite request in. We will be in touch soon.' }, 409);
+  if (dup && dup.status !== 'pending_payment') {
+    return c.json({ success: false, error: 'This player is already registered. Check your email, or reach out and we will help.' }, 409);
+  }
+  // An abandoned checkout should never block the family from trying again
+  if (dup) await db.prepare('DELETE FROM lights_out_registrations WHERE id = ?').bind(dup.id).run();
 
   // Check the star claim against the scoresheets (last-name match is enough
   // for the admin signal; parents sometimes enter a nickname first name)
@@ -87,30 +92,92 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
   const id = crypto.randomUUID().replace(/-/g, '');
   await db.prepare(`
     INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?)
   `).bind(id, b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
     b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0).run();
 
-  await sendEmail(c.env, b.email.trim(), 'Your Lights Out Invitational request is in',
+  // $550 per player, paid up front through Stripe Checkout
+  const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${c.env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'mode': 'payment',
+      'success_url': `https://ultimatetournaments.com/lights-out/?reg=${id}&session_id={CHECKOUT_SESSION_ID}`,
+      'cancel_url': 'https://ultimatetournaments.com/lights-out/?cancelled=1',
+      'customer_email': b.email.trim().toLowerCase(),
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': String(LIGHTS_OUT_PRICE_CENTS),
+      'line_items[0][price_data][product_data][name]': 'Lights Out Invitational - Player Registration',
+      'line_items[0][price_data][product_data][description]': `${b.playerName.trim()} · St. Louis, MO · jerseys, stick, puck, tee and duffle included`,
+      'line_items[0][quantity]': '1',
+      'metadata[lights_out_reg_id]': id,
+      'metadata[player_name]': b.playerName.trim(),
+      'payment_intent_data[metadata][lights_out_reg_id]': id,
+    }).toString(),
+  });
+  const session = await stripeResponse.json() as any;
+  if (!stripeResponse.ok || !session?.url) {
+    await db.prepare('DELETE FROM lights_out_registrations WHERE id = ?').bind(id).run();
+    return c.json({ success: false, error: 'Could not start checkout - please try again.' }, 500);
+  }
+  await db.prepare('UPDATE lights_out_registrations SET stripe_session_id = ? WHERE id = ?').bind(session.id, id).run();
+
+  return c.json({ success: true, data: { id, checkoutUrl: session.url, starVerified: !!starHit } });
+});
+
+// Success-URL verification: confirm the Stripe session really paid, then
+// mark the registration paid (idempotent) and send the emails.
+lightsOutRoutes.get('/register/:id/verify', async (c) => {
+  const id = c.req.param('id');
+  const sessionId = c.req.query('session_id') || '';
+  const db = c.env.DB;
+
+  const row = await db.prepare(`
+    SELECT lr.*, e.name as star_event_name FROM lights_out_registrations lr
+    LEFT JOIN events e ON e.id = lr.star_event_id WHERE lr.id = ?
+  `).bind(id).first<any>();
+  if (!row) return c.json({ success: false, error: 'Not found' }, 404);
+  if (row.paid_at) return c.json({ success: true, data: { alreadyPaid: true } });
+  if (!sessionId || sessionId !== row.stripe_session_id) return c.json({ success: false, error: 'Session mismatch' }, 400);
+
+  const sres = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+    headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` },
+  });
+  const session = await sres.json() as any;
+  if (!sres.ok || session.payment_status !== 'paid') {
+    return c.json({ success: false, error: 'Payment not completed' }, 402);
+  }
+
+  await db.prepare(`
+    UPDATE lights_out_registrations
+    SET status = 'pending', amount_paid_cents = ?, paid_at = datetime('now')
+    WHERE id = ? AND paid_at IS NULL
+  `).bind(session.amount_total || LIGHTS_OUT_PRICE_CENTS, id).run();
+
+  await sendEmail(c.env, row.email, 'Payment received - Lights Out Invitational',
     emailShell(`
-      <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:#ffffff;">We received your invite request.</p>
-      <p style="margin:0 0 14px;">${b.playerName} has requested a spot at the <b style="color:#39ff14;">Lights Out Invitational</b> based on a Three Stars selection at ${ev.name}.</p>
-      <p style="margin:0 0 14px;">Our team is confirming the star against the official scoresheets now. Spots are limited to Three Stars recipients only, and you will hear from us as soon as the invite is confirmed.</p>
-      <p style="margin:0;color:#7fd8ff;">Keep an eye on this inbox. The lights go out soon.</p>
+      <p style="margin:0 0 14px;font-size:17px;font-weight:bold;color:#ffffff;">Payment received. ${row.player_name} is almost in.</p>
+      <p style="margin:0 0 14px;">We have your <b style="color:#39ff14;">$${((session.amount_total || LIGHTS_OUT_PRICE_CENTS) / 100).toFixed(0)}</b> registration for the <b style="color:#39ff14;">Lights Out Invitational</b>, claimed on a Three Stars selection at ${row.star_event_name || 'a UHT event'}.</p>
+      <p style="margin:0 0 14px;">Our team is confirming the star against the official scoresheets now - the final invite confirmation lands in this inbox shortly, followed by dates, rink details, and team placement.</p>
+      <p style="margin:0;color:#7fd8ff;">The lights go out soon.</p>
     `));
 
-  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out invite request: ${b.playerName}`,
+  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out PAID registration: ${row.player_name} ($${((session.amount_total || LIGHTS_OUT_PRICE_CENTS) / 100).toFixed(0)})`,
     emailShell(`
-      <p style="margin:0 0 12px;font-weight:bold;color:#fff;">New Lights Out invite request</p>
-      <p style="margin:0 0 4px;">Player: <b>${b.playerName}</b> ${b.jerseyNumber ? `#${b.jerseyNumber}` : ''}</p>
-      <p style="margin:0 0 4px;">Team: ${b.teamName}</p>
-      <p style="margin:0 0 4px;">Star event: ${ev.name}</p>
-      <p style="margin:0 0 4px;">Star found on scoresheets: <b style="color:${starHit ? '#39ff14' : '#ff6b6b'}">${starHit ? 'YES' : 'NOT FOUND'}</b></p>
-      <p style="margin:0 0 4px;">Parent: ${b.parentName} · ${b.email}${b.phone ? ` · ${b.phone}` : ''}</p>
-      <p style="margin:12px 0 0;">Approve or deny at ultimatetournaments.com/admin/lights-out</p>
+      <p style="margin:0 0 12px;font-weight:bold;color:#fff;">New PAID Lights Out registration</p>
+      <p style="margin:0 0 4px;">Player: <b>${row.player_name}</b> ${row.jersey_number ? `#${row.jersey_number}` : ''}</p>
+      <p style="margin:0 0 4px;">Team: ${row.team_name}</p>
+      <p style="margin:0 0 4px;">Star event: ${row.star_event_name || row.star_event_id}</p>
+      <p style="margin:0 0 4px;">Star found on scoresheets: <b style="color:${row.star_verified ? '#39ff14' : '#ff6b6b'}">${row.star_verified ? 'YES' : 'NOT FOUND'}</b></p>
+      <p style="margin:0 0 4px;">Paid: <b style="color:#39ff14;">$${((session.amount_total || LIGHTS_OUT_PRICE_CENTS) / 100).toFixed(2)}</b></p>
+      <p style="margin:0 0 4px;">Parent: ${row.parent_name} · ${row.email}${row.phone ? ` · ${row.phone}` : ''}</p>
+      <p style="margin:12px 0 0;">Confirm the invite at ultimatetournaments.com/admin/lights-out</p>
     `));
 
-  return c.json({ success: true, data: { id, starVerified: !!starHit } });
+  return c.json({ success: true, data: { paid: true } });
 });
 
 // --- Admin ---
