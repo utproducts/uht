@@ -9,11 +9,17 @@
 /* eslint-disable react/no-unescaped-entities */
 
 import { useEffect, useState } from 'react';
+import { Oswald, Rajdhani } from 'next/font/google';
+
+// Oswald matches the homepage hero headline; Rajdhani carries the techy
+// arena-signage accents (badges, buttons, card titles)
+const oswald = Oswald({ subsets: ['latin'], weight: ['700'] });
+const rajdhani = Rajdhani({ subsets: ['latin'], weight: ['500', '600', '700'] });
 
 const API = 'https://uht.chad-157.workers.dev/api/lights-out';
 
 const SWAG: { name: string; desc: string; icon: string; img?: string }[] = [
-  { name: 'Two Custom Jerseys', desc: 'Home and away glow-edition jerseys, made for this event only. Keep both.', icon: 'M16 3l2 3h3v6l-2 1v8H5v-8l-2-1V6h3l2-3h8z', img: '/lights-out-jerseys.jpg' },
+  { name: 'Two Custom Jerseys', desc: 'Home and away glow-edition jerseys, made for this event only. Keep both.', icon: 'M16 3l2 3h3v6l-2 1v8H5v-8l-2-1V6h3l2-3h8z', img: '/lights-out-jerseys.jpg?v=2' },
   { name: 'Custom Hockey Stick Collectible', desc: 'A Lights Out edition collector stick with the Arch on the blade. Made once, never again.', icon: 'M4 17l6-6 4 4 6-6M4 7h4v4', img: '/lights-out-stick.jpg' },
   { name: 'Custom Glow UHT Puck', desc: 'A collector glow-in-the-dark UHT puck. Nobody else can get one.', icon: 'M12 12m-8 0a8 3.5 0 1 0 16 0a8 3.5 0 1 0 -16 0', img: '/lights-out-puck.jpg' },
   { name: 'Glow T-Shirt', desc: 'A custom glow tee for every player. Lights off, logo on.', icon: 'M8 4l4 2 4-2 4 4-3 3v9H7v-9L4 8l4-4z', img: '/lights-out-tee.jpg' },
@@ -48,7 +54,7 @@ function SwagCard({ s, i, onOpen }: { s: { name: string; desc: string; icon: str
             <svg className="w-6 h-6 text-[#00ccff]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d={s.icon} /></svg>
           </div>
         )}
-        <p className="font-black text-white">{s.name}</p>
+        <p className={`${rajdhani.className} text-lg font-bold tracking-[0.08em] text-white uppercase`}>{s.name}</p>
         <p className="text-[13px] text-white/60 mt-1 leading-relaxed">{s.desc}</p>
       </div>
     </div>
@@ -81,7 +87,7 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
         style={{ border: '1px solid rgba(0,204,255,.35)', boxShadow: '0 0 70px rgba(0,204,255,.25)' }}
         onClick={(e) => e.stopPropagation()}
       />
-      <p className="mt-4 text-sm font-black tracking-[0.2em] text-[#7fd8ff] text-center uppercase">{title}</p>
+      <p className={`${rajdhani.className} mt-4 text-lg font-bold tracking-[0.25em] text-[#7fd8ff] text-center uppercase`}>{title}</p>
     </div>
   );
 }
@@ -133,8 +139,8 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            <p className="text-[11px] font-black tracking-[0.3em] text-[#39ff14] mb-1">INVITE REQUEST</p>
-            <h3 className="text-2xl font-black text-white lo-glow mb-1">CLAIM YOUR SPOT</h3>
+            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>INVITE REQUEST</p>
+            <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>CLAIM YOUR SPOT</h3>
             <p className="text-white/60 text-[13px] leading-relaxed mb-5">Tell us where your player earned their Three Star. We verify every request against the official scoresheets before the invite is confirmed.</p>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
@@ -218,70 +224,91 @@ export default function LightsOutPage() {
       </svg>
 
       <div className="relative max-w-5xl mx-auto px-5">
-        {/* top bar - centered invite-only badge */}
-        <div className="flex items-center justify-center pt-8 pb-2">
-          <span className="text-sm sm:text-base font-black tracking-[0.35em] text-[#39ff14] border-2 border-[#39ff14]/60 rounded-full px-8 py-3 lo-glow-green" style={{ animation: 'loPulse 2.6s ease-in-out infinite' }}>INVITE ONLY</span>
-        </div>
+        {/* HERO - homepage-style split: big type left, logo right */}
+        <div className="grid lg:grid-cols-[1.05fr_0.95fr] items-center gap-10 lg:gap-6 pt-14 pb-16 min-h-[72vh]">
+          <div className="text-center lg:text-left order-2 lg:order-1">
+            {/* badge */}
+            <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-[#39ff14]/40 mb-7" style={{ animation: 'loPulse 2.6s ease-in-out infinite' }}>
+              <span className="w-2 h-2 rounded-full bg-[#39ff14]" />
+              <span className={`${rajdhani.className} text-sm font-bold tracking-[0.35em] pl-[0.35em] text-[#39ff14]`}>INVITE ONLY</span>
+            </div>
 
-        {/* HERO */}
-        <div className="text-center pt-10 pb-10">
-          <p className="text-[12px] font-black tracking-[0.5em] text-[#7fd8ff] mb-2">UHT PRESENTS</p>
-          <h1 className="sr-only">Lights Out Invitational</h1>
-          <img
-            src="/lights-out-logo.png"
-            alt="UHT Lights Out Invitational"
-            className="mx-auto w-[320px] sm:w-[460px] max-w-full"
-            style={{ filter: 'drop-shadow(0 0 28px rgba(0,204,255,.35)) drop-shadow(0 0 60px rgba(57,255,20,.18))', animation: 'loFloat 7s ease-in-out infinite' }}
-          />
-          <p className="mt-4 text-[#9fd4f5] text-lg font-semibold">The first-ever glow-in-the-dark hockey tournament.</p>
-          <p className="mt-2 text-white/60 text-sm font-medium tracking-wide">ST. LOUIS, MISSOURI &middot; DATES REVEALED TO INVITEES</p>
-          <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button onClick={() => setShowRegister(true)}
-              className="px-9 py-3.5 rounded-full text-base font-black bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_36px_rgba(57,255,20,.45)] hover:brightness-110 transition">
-              REGISTER NOW
-            </button>
-            <span className="text-[#7fd8ff] text-xs font-bold tracking-wider">THREE STARS WINNERS ONLY · EVERY INVITE IS VERIFIED</span>
+            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.5em] text-[#7fd8ff]/70 mb-3`}>UHT PRESENTS</p>
+            <h1 className={`${oswald.className} text-6xl sm:text-7xl lg:text-[86px] font-bold uppercase tracking-tight leading-[0.95] text-white`}>
+              <span className="bg-gradient-to-r from-[#39ff14] via-[#8aff5e] to-[#d9ffc4] bg-clip-text text-transparent">LIGHTS OUT</span>
+              <br />
+              INVITATIONAL
+            </h1>
+
+            <p className="mt-6 text-lg sm:text-xl text-white/60 leading-relaxed max-w-xl mx-auto lg:mx-0">
+              The first-ever glow-in-the-dark hockey tournament. The arena goes dark, the ice glows, and only the ones who earned a star get to play.
+            </p>
+            <p className={`${rajdhani.className} mt-3 text-[#7fd8ff]/70 text-base font-medium tracking-[0.3em]`}>ST. LOUIS, MO &middot; DATES REVEALED TO INVITEES</p>
+
+            <div className="mt-9 flex flex-col sm:flex-row items-center lg:justify-start justify-center gap-4 flex-wrap">
+              <button onClick={() => setShowRegister(true)}
+                className={`${rajdhani.className} group px-10 py-4 rounded-full text-lg font-bold tracking-[0.12em] bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_40px_rgba(57,255,20,.4)] hover:brightness-110 active:scale-[0.98] transition-all`}>
+                REGISTER NOW
+                <svg className="inline-block w-5 h-5 ml-2 -mt-0.5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+              </button>
+              <a href="/three-stars" className={`${rajdhani.className} px-8 py-4 rounded-full text-lg font-semibold tracking-[0.12em] bg-white/5 backdrop-blur-sm text-white/85 border border-white/20 hover:bg-white/10 hover:border-[#00ccff]/50 transition-all`}>
+                MEET THE THREE STARS
+              </a>
+            </div>
+            <p className={`${rajdhani.className} mt-5 text-[#7fd8ff]/55 text-sm font-medium tracking-[0.25em]`}>THREE STARS WINNERS ONLY &middot; EVERY INVITE IS VERIFIED</p>
+          </div>
+
+          <div className="order-1 lg:order-2 flex justify-center">
+            <img
+              src="/lights-out-logo.png"
+              alt="UHT Lights Out Invitational"
+              className="w-[280px] sm:w-[360px] lg:w-[470px] max-w-full"
+              style={{ filter: 'drop-shadow(0 0 28px rgba(0,204,255,.35)) drop-shadow(0 0 60px rgba(57,255,20,.18))', animation: 'loFloat 7s ease-in-out infinite' }}
+            />
           </div>
         </div>
 
         {/* THE PITCH */}
-        <div className="max-w-2xl mx-auto text-center pb-14">
-          <p className="text-white/80 text-[15px] leading-relaxed">
+        <div className="max-w-xl mx-auto text-center pb-14">
+          <p className="text-white/70 text-base leading-[1.8]">
             The arena goes dark. The ice glows. Your tape leaves light trails and the puck burns neon across the blue line.
-            One weekend a year, we turn hockey into something nobody has played before - and the only way in is to <b className="text-[#39ff14]">earn it</b>.
+            One weekend a year, we turn hockey into something nobody has played before - and the only way in is to <b className="text-[#39ff14] font-semibold">earn it</b>.
           </p>
         </div>
 
         {/* HOW YOU GET IN */}
-        <div className="grid sm:grid-cols-3 gap-4 pb-14">
+        <div className="grid sm:grid-cols-3 gap-4 pb-16">
           {[
-            ['EARN A STAR', 'Get named one of the Three Stars at any UHT tournament game. Every star earns an invite.', '#00ccff'],
-            ['GET THE CALL', 'Invitations arrive through the UHT app and email. Family and fans welcome in the stands.', '#a855f7'],
-            ['GET DRAFTED', 'No team entry needed - we build balanced teams by age and position. Show up and shine.', '#39ff14'],
-          ].map(([t, d, c]) => (
-            <div key={t as string} className="lo-card rounded-2xl p-5 transition-all">
-              <p className="text-[11px] font-black tracking-[0.25em] mb-2" style={{ color: c as string }}>{t}</p>
-              <p className="text-sm text-white/75 leading-relaxed">{d}</p>
+            ['1', 'EARN A STAR', 'Get named one of the Three Stars at any UHT tournament game. Every star earns an invite.', '#00ccff'],
+            ['2', 'GET THE CALL', 'Invitations arrive through the UHT app and email. Family and fans welcome in the stands.', '#a855f7'],
+            ['3', 'GET DRAFTED', 'No team entry needed - we build balanced teams by age and position. Show up and shine.', '#39ff14'],
+          ].map(([n, t, d, c]) => (
+            <div key={t as string} className="lo-card rounded-2xl p-6 transition-all">
+              <div className="flex items-center gap-3 mb-3">
+                <span className={`${rajdhani.className} w-8 h-8 rounded-full flex items-center justify-center text-base font-bold shrink-0`} style={{ color: c as string, border: `1.5px solid ${c}66`, background: `${c}14` }}>{n}</span>
+                <p className={`${rajdhani.className} text-lg font-bold tracking-[0.18em]`} style={{ color: c as string }}>{t}</p>
+              </div>
+              <p className="text-sm text-white/70 leading-relaxed">{d}</p>
             </div>
           ))}
         </div>
 
         {/* THE JERSEYS */}
         <div className="text-center pb-7">
-          <h2 className="text-3xl font-black lo-glow">THE JERSEYS</h2>
+          <h2 className={`${rajdhani.className} text-4xl font-bold tracking-[0.12em] lo-glow`}>THE JERSEYS</h2>
           <p className="text-white/55 text-sm mt-2">Home and away glow editions, made for this event only. Every player keeps both.</p>
         </div>
         <div className="pb-16">
           <button type="button" className="block w-full rounded-3xl overflow-hidden cursor-zoom-in" style={{ border: '1px solid rgba(0,204,255,.35)', boxShadow: '0 0 50px rgba(0,204,255,.18)' }}
-            onClick={() => setLightbox({ src: '/lights-out-jerseys.jpg', title: 'Home and Away Jerseys' })} aria-label="View jerseys full size">
-            <img src="/lights-out-jerseys.jpg" alt="Lights Out Invitational home and away jerseys" className="w-full block" />
+            onClick={() => setLightbox({ src: '/lights-out-jerseys.jpg?v=2', title: 'Home and Away Jerseys' })} aria-label="View jerseys full size">
+            <img src="/lights-out-jerseys.jpg?v=2" alt="Lights Out Invitational home and away jerseys" className="w-full block" />
           </button>
           <p className="text-center text-[11px] text-white/40 mt-3 tracking-wide">ST. LOUIS SKYLINE &middot; GATEWAY ARCH &middot; GLOW STITCHING THAT LIGHTS UP WHEN THE ARENA GOES DARK</p>
         </div>
 
         {/* SWAG */}
         <div className="text-center pb-7">
-          <h2 className="text-3xl font-black lo-glow">EVERY PLAYER LEAVES LOADED</h2>
+          <h2 className={`${rajdhani.className} text-4xl font-bold tracking-[0.12em] lo-glow`}>EVERY PLAYER LEAVES LOADED</h2>
           <p className="text-white/55 text-sm mt-2">All of this is yours to keep - included with your invitation.</p>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-16">
@@ -292,7 +319,7 @@ export default function LightsOutPage() {
 
         {/* CLOSER */}
         <div className="lo-card rounded-3xl p-8 sm:p-10 text-center mb-16" style={{ borderColor: 'rgba(57,255,20,.3)' }}>
-          <h2 className="text-2xl sm:text-3xl font-black lo-glow-green text-white">THE MOST FUN YOU WILL HAVE IN HOCKEY THIS YEAR.</h2>
+          <h2 className={`${rajdhani.className} text-3xl sm:text-4xl font-bold tracking-[0.08em] lo-glow-green text-white`}>THE MOST FUN YOU WILL HAVE IN HOCKEY THIS YEAR.</h2>
           <p className="text-white/70 text-sm mt-3 max-w-xl mx-auto leading-relaxed">
             No standings grind. No seedings. Just the best moments from every UHT weekend - the kids who lit the lamp,
             stood on their head, and earned the star - together on glowing ice for one unforgettable night.
@@ -300,11 +327,11 @@ export default function LightsOutPage() {
           <p className="text-white/70 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
             Want in? There is only one door: <b className="text-[#00ccff]">win a Three Star at a UHT event.</b> Every game, every tournament, three more invites are earned.
           </p>
-          <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className={`${rajdhani.className} mt-7 flex flex-col sm:flex-row items-center justify-center gap-3`}>
             <button onClick={() => setShowRegister(true)}
-              className="px-8 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.4)] hover:brightness-110 transition">REGISTER NOW</button>
-            <a href="/events" className="px-7 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] shadow-[0_0_30px_rgba(0,204,255,.4)] hover:brightness-110 transition">SEE UPCOMING UHT EVENTS</a>
-            <a href="/three-stars" className="px-7 py-3 rounded-full text-sm font-bold border border-white/25 text-white/85 hover:border-[#00ccff] hover:text-white transition">MEET THE THREE STARS</a>
+              className="px-9 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.4)] hover:brightness-110 transition">REGISTER NOW</button>
+            <a href="/events" className="px-8 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] shadow-[0_0_30px_rgba(0,204,255,.4)] hover:brightness-110 transition">SEE UPCOMING UHT EVENTS</a>
+            <a href="/three-stars" className="px-8 py-3 rounded-full text-base font-semibold tracking-[0.12em] border border-white/25 text-white/85 hover:border-[#00ccff] hover:text-white transition">MEET THE THREE STARS</a>
           </div>
         </div>
 
