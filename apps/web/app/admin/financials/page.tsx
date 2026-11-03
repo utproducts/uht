@@ -407,30 +407,26 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
         </div>
       )}
 
-      {/* Hotel Rebates */}
-      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-[#1d1d1f]">Hotel Rebates</h3>
-          <button onClick={() => setRebateModal(null)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition">+ Add Rebate</button>
-        </div>
-        {rebates.length === 0 ? (
-          <p className="text-sm text-[#86868b] text-center py-4">No hotel rebates recorded yet.</p>
-        ) : (
+      {/* Hotel Rebates + Other Vendor Rebates (split by rebate_type) */}
+      {(() => {
+        const hotelRebates = rebates.filter((rb: any) => rb.rebate_type !== 'other');
+        const vendorRebates = rebates.filter((rb: any) => rb.rebate_type === 'other');
+        const table = (list: any[], nightsLabel: boolean) => (
           <div className="rounded-xl border border-[#e8e8ed] overflow-hidden">
             <table className="w-full text-sm">
               <thead><tr className="bg-[#fafafa] border-b border-[#e8e8ed]">
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">Hotel</th>
-                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden sm:table-cell">Type</th>
-                <th className="text-center px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden md:table-cell">Room Nights</th>
+                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">{nightsLabel ? 'Hotel' : 'Vendor'}</th>
+                <th className="text-left px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden sm:table-cell">{nightsLabel ? 'Type' : 'Notes'}</th>
+                {nightsLabel && <th className="text-center px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase hidden md:table-cell">Blocks</th>}
                 <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase">Rebate</th>
                 <th className="text-right px-4 py-2.5 text-xs font-bold text-[#86868b] uppercase w-20"></th>
               </tr></thead>
               <tbody>
-                {rebates.map((rb: any, i: number) => (
+                {list.map((rb: any, i: number) => (
                   <tr key={rb.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'} hover:bg-[#f0f7ff]`}>
                     <td className="px-4 py-2.5 font-medium text-[#1d1d1f]">{rb.hotel_name}</td>
-                    <td className="px-4 py-2.5 text-[#86868b] hidden sm:table-cell">{rb.rebate_type === 'per_night' ? 'Per Night' : rb.rebate_type === 'flat_fee' ? 'Flat Fee' : rb.rebate_type === 'percentage' ? '%' : 'Other'}</td>
-                    <td className="px-4 py-2.5 text-center hidden md:table-cell">{rb.room_nights || '—'}</td>
+                    <td className="px-4 py-2.5 text-[#86868b] hidden sm:table-cell">{nightsLabel ? (rb.rebate_type === 'per_night' ? 'Per Night' : rb.rebate_type === 'flat_fee' ? 'Flat Fee' : '%') : (rb.notes || '—')}</td>
+                    {nightsLabel && <td className="px-4 py-2.5 text-center hidden md:table-cell">{rb.room_nights || '—'}</td>}
                     <td className="px-4 py-2.5 text-right font-bold text-blue-600">{fmt(rb.total_rebate_cents)}</td>
                     <td className="px-4 py-2.5 text-right">
                       <button onClick={() => setRebateModal(rb)} className="text-[#86868b] hover:text-[#003e79] text-xs mr-2">Edit</button>
@@ -441,8 +437,33 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        );
+        return (
+          <>
+            <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-[#1d1d1f]">Hotel Rebates</h3>
+                <button onClick={() => setRebateModal(null)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition">+ Add Rebate</button>
+              </div>
+              {hotelRebates.length === 0 ? (
+                <p className="text-sm text-[#86868b] text-center py-4">No hotel rebates recorded yet.</p>
+              ) : table(hotelRebates, true)}
+            </div>
+            <div className="bg-white rounded-2xl border border-[#e8e8ed] p-6 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-[#1d1d1f]">Other Vendor Rebates</h3>
+                  <p className="text-xs text-[#86868b]">Apparel, merchandise, and other partner rebates. Add one with type "Other".</p>
+                </div>
+                <button onClick={() => setRebateModal(null)} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition">+ Add Rebate</button>
+              </div>
+              {vendorRebates.length === 0 ? (
+                <p className="text-sm text-[#86868b] text-center py-4">No vendor rebates recorded yet.</p>
+              ) : table(vendorRebates, false)}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Modals */}
       {expenseModal !== false && (
