@@ -21,6 +21,40 @@ const SWAG: { name: string; desc: string; icon: string; img?: string }[] = [
   { name: 'And We Are Not Done', desc: 'More exclusive swag is being added. Invitees find out first.', icon: 'M12 3v18M3 12h18' },
 ];
 
+// Swag card: shows the real product photo once it exists in /public, falls
+// back to the icon-only card meanwhile. Static export + hydration means a
+// plain <img onError> can fire before React attaches the handler, so probe
+// the image from an effect instead.
+function SwagCard({ s, i }: { s: { name: string; desc: string; icon: string; img?: string }; i: number }) {
+  const [imgOk, setImgOk] = useState(false);
+  useEffect(() => {
+    if (!s.img) return;
+    const probe = new Image();
+    probe.onload = () => setImgOk(true);
+    probe.src = s.img;
+  }, [s.img]);
+
+  return (
+    <div className="lo-card rounded-2xl overflow-hidden transition-all flex flex-col" style={{ animation: `loFloat ${5 + (i % 3)}s ease-in-out infinite` }}>
+      {imgOk && s.img && (
+        <div className="relative">
+          <img src={s.img} alt={s.name} loading="lazy" className="w-full h-44 object-cover" />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, transparent 55%, rgba(10,18,40,.92) 100%)' }} />
+        </div>
+      )}
+      <div className="p-5 flex-1">
+        {!(imgOk && s.img) && (
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3" style={{ background: 'rgba(0,204,255,.12)', border: '1px solid rgba(0,204,255,.3)' }}>
+            <svg className="w-6 h-6 text-[#00ccff]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d={s.icon} /></svg>
+          </div>
+        )}
+        <p className="font-black text-white">{s.name}</p>
+        <p className="text-[13px] text-white/60 mt-1 leading-relaxed">{s.desc}</p>
+      </div>
+    </div>
+  );
+}
+
 function RegisterModal({ onClose }: { onClose: () => void }) {
   const [events, setEvents] = useState<any[]>([]);
   const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', birthYear: '', position: '', parentName: '', email: '', phone: '' });
@@ -219,18 +253,7 @@ export default function LightsOutPage() {
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-16">
           {SWAG.map((s, i) => (
-            <div key={s.name} className="lo-card rounded-2xl p-5 transition-all overflow-hidden" style={{ animation: `loFloat ${5 + (i % 3)}s ease-in-out infinite` }}>
-              {s.img && (
-                <img src={s.img} alt={s.name} className="w-full rounded-xl mb-4" loading="lazy"
-                  style={{ border: '1px solid rgba(0,204,255,.25)' }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-              )}
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3" style={{ background: 'rgba(0,204,255,.12)', border: '1px solid rgba(0,204,255,.3)' }}>
-                <svg className="w-6 h-6 text-[#00ccff]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d={s.icon} /></svg>
-              </div>
-              <p className="font-black text-white">{s.name}</p>
-              <p className="text-[13px] text-white/60 mt-1 leading-relaxed">{s.desc}</p>
-            </div>
+            <SwagCard key={s.name} s={s} i={i} />
           ))}
         </div>
 
