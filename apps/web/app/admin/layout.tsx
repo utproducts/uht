@@ -69,6 +69,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
     title: 'People',
     items: [
       { name: 'Teams', href: '/admin/teams' },
+      { name: 'Team Map', href: '/admin/team-map' },
       { name: 'Organizations', href: '/admin/organizations' },
       { name: 'Users', href: '/admin/users' },
       { name: 'App Users', href: '/admin/app-users' },

@@ -548,3 +548,52 @@ analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRol
     },
   });
 });
+
+// ─── Team map: where this season's teams come from ───────────────────
+// City coordinates come from city_geocodes (one-time Nominatim pass);
+// cities we cannot place fall back to nothing and are listed separately.
+analyticsRoutes.get('/reports/team-map', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const rows = (await db.prepare(`
+    SELECT LOWER(TRIM(t.city)) as city, UPPER(SUBSTR(TRIM(t.state),1,2)) as state, COUNT(DISTINCT t.id) as teams
+    FROM teams t WHERE COALESCE(t.city,'') != '' AND COALESCE(t.state,'') != ''
+      AND t.id IN (
+        SELECT er.team_id FROM event_registrations er JOIN events e ON e.id = er.event_id
+        WHERE e.status NOT IN ('cancelled','draft') AND date(COALESCE(e.end_date, e.start_date)) >= date('2026-06-01')
+          AND er.status = 'approved' AND er.team_id IS NOT NULL
+        UNION
+        SELECT r.team_id FROM registrations r JOIN events e ON e.id = r.event_id
+        WHERE e.status NOT IN ('cancelled','draft') AND date(COALESCE(e.end_date, e.start_date)) >= date('2026-06-01')
+          AND r.status = 'approved' AND r.team_id IS NOT NULL
+      )
+    GROUP BY 1, 2
+  `).all()).results as any[] || [];
+
+  const norm = (city: string) => city.replace(/[.,]/g, '').replace(/^saint /, 'st ').replace(/\s+/g, ' ').trim();
+  const agg = new Map<string, { city: string; state: string; teams: number }>();
+  for (const r of rows) {
+    const key = `${norm(r.city)}|${r.state}`;
+    const cur = agg.get(key) || { city: norm(r.city), state: r.state, teams: 0 };
+    cur.teams += r.teams;
+    agg.set(key, cur);
+  }
+
+  const geo = (await db.prepare('SELECT city_key, lat, lng FROM city_geocodes').all()).results as any[] || [];
+  const geoMap = new Map(geo.map((g: any) => [g.city_key, g]));
+
+  const placed: any[] = [];
+  const unplaced: any[] = [];
+  for (const [key, v] of agg.entries()) {
+    const g = geoMap.get(key);
+    if (g) placed.push({ ...v, lat: g.lat, lng: g.lng });
+    else unplaced.push(v);
+  }
+  placed.sort((a, b) => b.teams - a.teams);
+  unplaced.sort((a, b) => b.teams - a.teams);
+
+  const byState = new Map<string, number>();
+  for (const v of agg.values()) byState.set(v.state, (byState.get(v.state) || 0) + v.teams);
+  const states = Array.from(byState.entries()).map(([state, teams]) => ({ state, teams })).sort((a, b) => b.teams - a.teams);
+
+  return c.json({ success: true, data: { cities: placed, unplaced, states, total: Array.from(agg.values()).reduce((n, v) => n + v.teams, 0) } });
+});
