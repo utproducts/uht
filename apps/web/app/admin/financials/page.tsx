@@ -342,7 +342,7 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
         {/* LEFT: revenue + rebates */}
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
-            <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase border-b-2 border-[#d4af37] pb-1.5 mb-2">Revenue by Division</h3>
+            <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase border-b-2 border-[#00ccff] pb-1.5 mb-2">Revenue by Division</h3>
             {revenueByDivision.filter((d: any) => (d.team_count || 0) > 0).map((d: any) => (
               <div key={d.age_group + d.division_level} className="flex items-center justify-between text-[13px] py-1 border-b border-[#f5f5f7] last:border-0">
                 <span className="text-[#1d1d1f]">{d.age_group}{d.division_level ? ` ${d.division_level}` : ''} <span className="text-[#a1a1a6]">· {d.team_count}</span></span>
@@ -366,7 +366,7 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
             );
             return (
               <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
-                <div className="flex items-center justify-between border-b-2 border-[#d4af37] pb-1.5 mb-2">
+                <div className="flex items-center justify-between border-b-2 border-[#00ccff] pb-1.5 mb-2">
                   <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase">Rebates</h3>
                   <button onClick={() => setRebateModal(null)} className="text-[11px] font-bold text-[#003e79] hover:underline">+ Add</button>
                 </div>
@@ -392,7 +392,7 @@ function EventPnL({ eventId, onBack }: { eventId: string; onBack: () => void }) 
 
         {/* RIGHT: expenses */}
         <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
-          <div className="flex items-center justify-between border-b-2 border-[#d4af37] pb-1.5 mb-2">
+          <div className="flex items-center justify-between border-b-2 border-[#00ccff] pb-1.5 mb-2">
             <h3 className="text-[13px] font-extrabold tracking-wide text-[#003e79] uppercase">Expenses</h3>
             <button onClick={() => setExpenseModal(null)} className="text-[11px] font-bold text-[#003e79] hover:underline">+ Add</button>
           </div>

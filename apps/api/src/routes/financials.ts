@@ -438,7 +438,7 @@ financialRoutes.post('/event-pnl/:eventId/email', authMiddleware, requireRole('a
   const hotels = (rebates as any[]).filter(r => r.rebate_type !== 'other');
   const vendors = (rebates as any[]).filter(r => r.rebate_type === 'other');
   const line = (l: string, v: string, color = '#1d2b3d') => `<tr><td style="padding:5px 0;border-bottom:1px solid #f0f0f3;font-size:13px;color:#2a3c52;">${l}</td><td style="padding:5px 0;border-bottom:1px solid #f0f0f3;font-size:13px;font-weight:bold;color:${color};text-align:right;">${v}</td></tr>`;
-  const section = (t: string) => `<tr><td colspan="2" style="padding:18px 0 6px;font-size:12px;font-weight:800;letter-spacing:2px;color:#003e79;border-bottom:2px solid #d4af37;">${t.toUpperCase()}</td></tr>`;
+  const section = (t: string) => `<tr><td colspan="2" style="padding:18px 0 6px;font-size:12px;font-weight:800;letter-spacing:2px;color:#003e79;border-bottom:2px solid #00ccff;">${t.toUpperCase()}</td></tr>`;
 
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f2f4f8;font-family:Arial,Helvetica,sans-serif;">
   <div style="max-width:620px;margin:0 auto;padding:24px 14px;">

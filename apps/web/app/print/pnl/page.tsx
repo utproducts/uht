@@ -47,7 +47,7 @@ export default function PnlPrintPage() {
   const hotelRebates = (rebates || []).filter((r: any) => r.rebate_type !== 'other');
   const vendorRebates = (rebates || []).filter((r: any) => r.rebate_type === 'other');
 
-  const sectionTitle = { fontSize: 13, fontWeight: 800 as const, color: '#003e79', letterSpacing: 1.5, textTransform: 'uppercase' as const, borderBottom: '2px solid #d4af37', paddingBottom: 4, margin: '22px 0 10px' };
+  const sectionTitle = { fontSize: 13, fontWeight: 800 as const, color: '#003e79', letterSpacing: 1.5, textTransform: 'uppercase' as const, borderBottom: '2px solid #00ccff', paddingBottom: 4, margin: '22px 0 10px' };
   const row = { display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f0f0f3' };
 
   return (
