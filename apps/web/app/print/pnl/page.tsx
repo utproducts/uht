@@ -62,7 +62,7 @@ export default function PnlPrintPage() {
             {fmtDate(event.start_date)}{event.end_date && event.end_date !== event.start_date ? ` - ${fmtDate(event.end_date)}` : ''} · {event.city}, {event.state}
           </div>
         </div>
-        <img src="/uht-logo.png" alt="UHT" style={{ width: 54, height: 54 }} />
+        <img src="/uht-logo.png" alt="UHT" style={{ height: 54, width: 'auto' }} />
       </div>
 
       {/* Summary */}

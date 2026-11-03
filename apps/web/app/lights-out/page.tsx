@@ -36,21 +36,76 @@ export default function LightsOutPage() {
         <div className="absolute bottom-0 left-1/4 w-[560px] h-[420px] rounded-full" style={{ background: 'radial-gradient(circle, rgba(57,255,20,.07), transparent 65%)' }} />
       </div>
 
+      {/* glow rink + cracked ice backdrop */}
+      <svg aria-hidden className="pointer-events-none fixed inset-0 w-full h-full" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <filter id="loIceGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <radialGradient id="loSheen" cx="50%" cy="38%" r="75%">
+            <stop offset="0%" stopColor="rgba(120,200,255,.085)" />
+            <stop offset="55%" stopColor="rgba(40,90,140,.04)" />
+            <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+          </radialGradient>
+        </defs>
+        {/* ice sheen */}
+        <rect x="0" y="0" width="1200" height="800" fill="url(#loSheen)" />
+        {/* rink markings - top-down sheet fading into the dark */}
+        <g filter="url(#loIceGlow)" fill="none" strokeLinecap="round">
+          <rect x="60" y="60" width="1080" height="680" rx="150" stroke="rgba(0,204,255,.14)" strokeWidth="2.5" />
+          {/* center red line (neon cyan here) + blue lines */}
+          <line x1="600" y1="64" x2="600" y2="736" stroke="rgba(0,204,255,.17)" strokeWidth="5" />
+          <line x1="382" y1="62" x2="382" y2="738" stroke="rgba(57,120,255,.15)" strokeWidth="7" />
+          <line x1="818" y1="62" x2="818" y2="738" stroke="rgba(57,120,255,.15)" strokeWidth="7" />
+          {/* center circle + dot */}
+          <circle cx="600" cy="400" r="95" stroke="rgba(0,204,255,.2)" strokeWidth="2.5" />
+          <circle cx="600" cy="400" r="5" fill="rgba(0,204,255,.3)" />
+          {/* faceoff circles */}
+          <circle cx="212" cy="212" r="72" stroke="rgba(0,204,255,.12)" strokeWidth="2" />
+          <circle cx="212" cy="588" r="72" stroke="rgba(0,204,255,.12)" strokeWidth="2" />
+          <circle cx="988" cy="212" r="72" stroke="rgba(0,204,255,.12)" strokeWidth="2" />
+          <circle cx="988" cy="588" r="72" stroke="rgba(0,204,255,.12)" strokeWidth="2" />
+          <circle cx="212" cy="212" r="4" fill="rgba(0,204,255,.22)" /><circle cx="212" cy="588" r="4" fill="rgba(0,204,255,.22)" />
+          <circle cx="988" cy="212" r="4" fill="rgba(0,204,255,.22)" /><circle cx="988" cy="588" r="4" fill="rgba(0,204,255,.22)" />
+          {/* goal creases */}
+          <path d="M 60 352 A 56 56 0 0 1 60 448" stroke="rgba(57,255,20,.14)" strokeWidth="2" />
+          <path d="M 1140 352 A 56 56 0 0 0 1140 448" stroke="rgba(57,255,20,.14)" strokeWidth="2" />
+        </g>
+        {/* cracked ice - jagged fractures catching the neon */}
+        <g fill="none" strokeLinecap="round" opacity=".55">
+          <path d="M 80 780 L 190 640 L 175 560 L 300 470 L 285 400" stroke="rgba(190,235,255,.16)" strokeWidth="1.6" />
+          <path d="M 190 640 L 300 625 L 365 540" stroke="rgba(190,235,255,.10)" strokeWidth="1.1" />
+          <path d="M 1150 90 L 1010 200 L 1035 290 L 905 370" stroke="rgba(190,235,255,.14)" strokeWidth="1.5" />
+          <path d="M 1010 200 L 905 185 L 835 255" stroke="rgba(190,235,255,.09)" strokeWidth="1" />
+          <path d="M 40 150 L 160 215 L 150 310 L 255 345" stroke="rgba(0,204,255,.11)" strokeWidth="1.3" />
+          <path d="M 1160 700 L 1030 630 L 1015 540 L 900 515" stroke="rgba(57,255,20,.10)" strokeWidth="1.3" />
+          <path d="M 540 790 L 600 700 L 585 640" stroke="rgba(190,235,255,.10)" strokeWidth="1.1" />
+          <path d="M 600 700 L 672 668 L 700 600" stroke="rgba(190,235,255,.07)" strokeWidth="1" />
+        </g>
+      </svg>
+
       <div className="relative max-w-5xl mx-auto px-5">
         {/* top bar */}
         <div className="flex items-center justify-between py-5">
           <a href="/" className="flex items-center gap-2.5">
-            <img src="/uht-logo.png" alt="UHT" className="w-10 h-10" />
+            <img src="/uht-logo.png" alt="UHT" className="h-10 w-auto" />
             <span className="text-sm font-bold text-white/70">Ultimate Hockey Tournaments</span>
           </a>
           <span className="text-[11px] font-black tracking-[0.25em] text-[#39ff14] border border-[#39ff14]/50 rounded-full px-4 py-1.5 lo-glow-green" style={{ animation: 'loPulse 2.6s ease-in-out infinite' }}>INVITE ONLY</span>
         </div>
 
         {/* HERO */}
-        <div className="text-center pt-14 pb-10">
-          <p className="text-[12px] font-black tracking-[0.5em] text-[#7fd8ff] mb-5">UHT PRESENTS</p>
-          <h1 className="text-5xl sm:text-7xl font-black leading-[0.95] lo-glow text-white">LIGHTS OUT<br />INVITATIONAL</h1>
-          <p className="mt-6 text-[#9fd4f5] text-lg font-semibold">The first-ever glow-in-the-dark hockey tournament.</p>
+        <div className="text-center pt-10 pb-10">
+          <p className="text-[12px] font-black tracking-[0.5em] text-[#7fd8ff] mb-2">UHT PRESENTS</p>
+          <h1 className="sr-only">Lights Out Invitational</h1>
+          <img
+            src="/lights-out-logo.png"
+            alt="UHT Lights Out Invitational"
+            className="mx-auto w-[320px] sm:w-[460px] max-w-full"
+            style={{ filter: 'drop-shadow(0 0 28px rgba(0,204,255,.35)) drop-shadow(0 0 60px rgba(57,255,20,.18))', animation: 'loFloat 7s ease-in-out infinite' }}
+          />
+          <p className="mt-4 text-[#9fd4f5] text-lg font-semibold">The first-ever glow-in-the-dark hockey tournament.</p>
           <p className="mt-2 text-white/60 text-sm font-medium tracking-wide">ST. LOUIS, MISSOURI &middot; DATES REVEALED TO INVITEES</p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <span className="px-6 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] shadow-[0_0_30px_rgba(0,204,255,.45)]">
