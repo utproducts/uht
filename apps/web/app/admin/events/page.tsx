@@ -6163,7 +6163,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
     setTimeout(() => setCopiedEmail(c => (c === email ? '' : c)), 1500);
   };
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'three_stars' | 'photos' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
+  const [tab, setTab] = useState<'overview' | 'communication' | 'participants' | 'venues' | 'hotels' | 'schedules' | 'standings' | 'three_stars' | 'photos' | 'locker_rooms' | 'scorekeepers' | 'check_in'>('overview');
   const [dragRegId, setDragRegId] = useState<string | null>(null);
   // Full registration editor — the SAME slide-out panel as /admin/registrations,
   // hitting the same API row, so edits on either page always stay in sync.
@@ -6440,7 +6440,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
       {/* Tabs - scrolls within its own bar on mobile instead of stretching the page */}
       <div className="overflow-x-auto mb-6 max-w-full [-webkit-overflow-scrolling:touch]">
         <div className="flex gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
-          {(['overview', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'three_stars', 'photos', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
+          {(['overview', 'communication', 'participants', 'venues', 'hotels', 'schedules', 'standings', 'three_stars', 'photos', 'locker_rooms', 'scorekeepers', 'check_in'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -6448,7 +6448,7 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
                 tab === t ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'
               }`}
             >
-              {t === 'overview' ? 'Overview' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'three_stars' ? 'Three Stars' : t === 'photos' ? 'Photos' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
+              {t === 'overview' ? 'Overview' : t === 'communication' ? 'Communication' : t === 'participants' ? `Participants (${registrations.length})` : t === 'venues' ? 'Venues' : t === 'hotels' ? 'Hotel Report' : t === 'schedules' ? 'Schedules' : t === 'standings' ? 'Standings' : t === 'three_stars' ? 'Three Stars' : t === 'photos' ? 'Photos' : t === 'locker_rooms' ? 'Locker Rooms' : t === 'check_in' ? 'Check-In' : 'Scorekeepers'}
             </button>
           ))}
         </div>
@@ -6456,25 +6456,29 @@ function EventDetail({ eventId, onBack, onEdit }: { eventId: string; onBack: () 
 
       {/* Tab Content */}
       {tab === 'overview' && <PenaltyRequestsCard eventId={eventId} />}
-      {tab === 'overview' && <ChampionMerchCard eventId={eventId} />}
       {tab === 'overview' && <HotelOrderCard eventId={eventId} />}
-      {tab === 'overview' && <MeetingsCard eventId={eventId} />}
       {tab === 'overview' && <DirectorPinCard eventId={eventId} />}
       {tab === 'overview' && <EventRulesCard eventId={eventId} />}
-      {tab === 'overview' && <ReviewAskCard eventId={eventId} />}
-      {tab === 'overview' && <WelcomeEmailCard eventId={eventId} />}
-      {tab === 'overview' && <PushHistoryCard eventId={eventId} />}
+
+      {/* COMMUNICATION - every email, push, and meeting for this event in one place */}
+      {tab === 'communication' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] px-6 py-4">
+            <h3 className="text-lg font-bold text-[#1d1d1f]">Event Communication</h3>
+            <p className="text-sm text-[#6e6e73] mt-0.5">Every email, push reminder, and meeting for this event - in the order families experience them.</p>
+          </div>
+          <WelcomeEmailCard eventId={eventId} />
+          <MeetingsCard eventId={eventId} />
+          <TournamentGuideCard eventId={eventId} />
+          <AppInviteCard eventId={eventId} />
+          <LowAdoptionCard eventId={eventId} />
+          <PushHistoryCard eventId={eventId} />
+          <ReviewAskCard eventId={eventId} />
+          <ChampionMerchCard eventId={eventId} />
+        </div>
+      )}
       {tab === 'overview' && (
         <div className="space-y-6">
-          {/* Tournament guide email send */}
-          <TournamentGuideCard eventId={eventId} />
-
-          {/* App adoption email with per-team follow codes */}
-          <AppInviteCard eventId={eventId} />
-
-          {/* Nudge coaches whose teams have almost no app followers */}
-          <LowAdoptionCard eventId={eventId} />
-
           {/* Info */}
           {event.information && (
             <div className="bg-white rounded-2xl shadow-lg p-6">
