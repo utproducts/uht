@@ -83,6 +83,14 @@ export default function RegistrationTrends() {
 
   const currentMonthNum = new Date().getMonth() + 1;
 
+  // Chad wants the overview focused: show only last season and this season.
+  // Comparisons still look back at the full list, so colors stay correct.
+  const visibleSeasons = seasons.slice(-2);
+  const prevOf = (s2: SeasonRow) => {
+    const i = seasons.indexOf(s2);
+    return i > 0 ? seasons[i - 1] : null;
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)]">
       <div className="flex items-center justify-between mb-1">
@@ -98,7 +106,7 @@ export default function RegistrationTrends() {
           <thead>
             <tr className="border-b border-[#e8e8ed]">
               <th className="text-left font-medium py-2 pr-4 text-xs uppercase tracking-wider" style={{ color: MUTED }}>Month</th>
-              {seasons.map(s => (
+              {visibleSeasons.map(s => (
                 <th key={s.season} className={`text-right font-semibold py-2 px-4 ${s.current ? 'text-[#003e79]' : 'text-[#1d1d1f]'}`}>
                   {s.season}
                   {s.current && <span className="ml-1.5 text-[10px] font-bold uppercase bg-[#003e79] text-white rounded-full px-1.5 py-0.5 align-middle">Current</span>}
@@ -110,8 +118,8 @@ export default function RegistrationTrends() {
             {/* Total row */}
             <tr className="bg-[#fafafa]">
               <td className="py-2.5 pr-4 font-bold text-[#1d1d1f]">Total Teams</td>
-              {seasons.map((s, i) => {
-                const prev = i > 0 ? seasons[i - 1].total : null;
+              {visibleSeasons.map((s) => {
+                const prev = prevOf(s)?.total ?? null;
                 const st = cellStyle(s.total, prev);
                 const approvedT = s.current ? (s.approvedTotal || 0) : null;
                 const pendingT = s.current && s.total !== null ? s.total - (approvedT || 0) : null;
@@ -140,9 +148,9 @@ export default function RegistrationTrends() {
                     {MONTH_NAMES[m]}
                     {m === currentMonthNum && <span className="ml-1.5 text-[10px] font-semibold" style={{ color: MUTED }}>(in progress)</span>}
                   </td>
-                  {seasons.map((s, i) => {
+                  {visibleSeasons.map((s) => {
                     const value = s.current && isFutureThisSeason ? null : (s.months[m] ?? (s.current ? 0 : null));
-                    const prevSeason = i > 0 ? seasons[i - 1] : null;
+                    const prevSeason = prevOf(s);
                     const prevValue = prevSeason ? (prevSeason.months[m] ?? null) : null;
                     const st = cellStyle(value, prevValue);
                     const approvedM = s.current ? (s.approvedMonths?.[m] || 0) : 0;
