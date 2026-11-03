@@ -565,8 +565,27 @@ export default function AdminFinancialsPage() {
   const avgPerEvent = totalEvents > 0 ? totalRevenue / totalEvents : 0;
   const avgPerTeam = totalTeams > 0 ? totalRevenue / totalTeams : 0;
 
-  // For overview revenue by month
-  const months = dashboard?.revenueByMonth || [];
+  // For overview revenue by month - continuous chronological axis with
+  // zero-filled gaps so the season reads July through May in order
+  const months = (() => {
+    const raw: any[] = [...(dashboard?.revenueByMonth || [])].sort((a, b) => String(a.month).localeCompare(String(b.month)));
+    if (raw.length === 0) return raw;
+    const out: any[] = [];
+    const parts = String(raw[0].month).split('-');
+    let y = parseInt(parts[0], 10);
+    let m = parseInt(parts[1], 10);
+    const last = String(raw[raw.length - 1].month);
+    const byKey: Record<string, any> = {};
+    raw.forEach(r => { byKey[r.month] = r; });
+    let key = raw[0].month;
+    while (key <= last) {
+      out.push(byKey[key] || { month: key, event_count: 0, team_count: 0, revenue_cents: 0 });
+      m += 1;
+      if (m > 12) { m = 1; y += 1; }
+      key = y + '-' + ('0' + m).slice(-2);
+    }
+    return out;
+  })();
   const maxMonthRev = Math.max(...months.map((m: any) => m.revenue_cents), 1);
 
   return (
