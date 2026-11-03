@@ -70,22 +70,18 @@ export default function AppUsersPage() {
         <div className="text-[#86868b] text-sm py-10 text-center">Could not load app stats.</div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             {[
               { label: 'App Accounts', value: stats.app_accounts, color: 'text-[#003e79]' },
               { label: 'New This Week', value: stats.new_7d, color: 'text-green-600' },
               { label: 'New Last 30 Days', value: stats.new_30d, color: 'text-green-600' },
-              { label: 'Push-Ready Devices', value: stats.push_devices, color: 'text-[#00a0cc]', sub: `${stats.ios_devices.toLocaleString()} iOS · ${stats.android_devices.toLocaleString()} Android` },
-            ].map((t: any) => (
+            ].map((t) => (
               <div key={t.label} className="bg-white rounded-2xl border border-[#e8e8ed] px-5 py-4 text-center shadow-sm">
                 <div className={`text-3xl font-bold ${t.color}`}>{t.value.toLocaleString()}</div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-[#86868b] mt-1">{t.label}</div>
-                {t.sub && <div className="text-[11px] font-medium text-[#86868b] mt-0.5">{t.sub}</div>}
               </div>
             ))}
           </div>
-
-          <p className="text-xs text-[#86868b] mb-8">Push-ready counts devices that accepted notifications - app accounts without push on are not in that number.</p>
 
           <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-sm">
             <h2 className="font-bold text-[#1d1d1f] mb-4">New App Accounts by Month</h2>
