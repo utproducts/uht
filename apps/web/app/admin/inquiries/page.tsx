@@ -69,7 +69,7 @@ export default function InquiriesPage() {
   const newCount = submissions.filter(s => s.status === 'new').length;
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto px-6 py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-[#1d1d1f]">Contact Inquiries</h1>
