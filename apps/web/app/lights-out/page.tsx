@@ -25,6 +25,7 @@ const SWAG: { name: string; desc: string; icon: string; img?: string }[] = [
   { name: 'Glow T-Shirt', desc: 'A custom glow tee for every player. Lights off, logo on.', icon: 'M8 4l4 2 4-2 4 4-3 3v9H7v-9L4 8l4-4z', img: '/lights-out-tee.jpg' },
   { name: 'UHT Duffle Bag', desc: 'A full-size UHT duffle bag to haul it all home in.', icon: 'M3 9h18v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9zm5 0V7a4 4 0 018 0v2', img: '/lights-out-duffle.jpg' },
   { name: 'Custom Trading Cards', desc: 'Your own player trading card - name, number, and photo, printed like the pros.', icon: 'M7 5h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2zm2-2h8M9 10h6M9 13h6M9 16h4', img: '/lights-out-cards.jpg' },
+  { name: 'Trading Card Booklet', desc: 'A collector booklet to hold every card from the event - trade your way to the full set.', icon: 'M4 5a2 2 0 012-2h6v18H6a2 2 0 01-2-2V5zm8-2h6a2 2 0 012 2v14a2 2 0 01-2 2h-6M12 3v18', img: '/lights-out-booklet.jpg' },
   { name: 'Custom Lights Out Ring', desc: 'A heavyweight custom ring made only for this event. Wear the night forever.', icon: 'M12 14m-6 0a6 6 0 1 0 12 0a6 6 0 1 0 -12 0M9 8l3-5 3 5', img: '/lights-out-ring.jpg' },
   { name: 'And We Are Not Done', desc: 'More exclusive swag is being added. Invitees find out first.', icon: 'M12 3v18M3 12h18' },
 ];
