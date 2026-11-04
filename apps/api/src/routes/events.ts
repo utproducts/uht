@@ -334,7 +334,7 @@ eventRoutes.get('/:slugOrId', optionalAuth, async (c) => {
 
   // Get event venues with rinks
   const eventVenues = await db.prepare(`
-    SELECT ev.venue_id, v.name as venue_name, v.address, v.city, v.state, v.zip
+    SELECT ev.venue_id, v.name as venue_name, v.name as name, v.address, v.city, v.state, v.zip
     FROM event_venues ev
     JOIN venues v ON v.id = ev.venue_id
     WHERE ev.event_id = ?

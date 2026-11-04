@@ -1448,7 +1448,7 @@ function CoachEventDetail({ eventId, role }: { eventId: string; role: string }) 
                 <div key={venue.id || i} className="px-6 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold text-[#1d1d1f]">{venue.name}</h3>
+                      <h3 className="font-semibold text-[#1d1d1f]">{venue.name || venue.venue_name}</h3>
                       {fullAddress && <p className="text-sm text-[#6e6e73] mt-0.5">{fullAddress}</p>}
                       {venue.rinks && venue.rinks.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
