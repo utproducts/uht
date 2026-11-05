@@ -6,6 +6,8 @@
   it fires; idempotent via events.welcome_sent_at + per-team log rows.
 */
 
+import { recordCampaignSend } from './event-info-sweep';
+
 const FROM = 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>';
 const REPLY_TO = 'johnny@ultimatetournaments.com';
 const APP_STORE_URL = 'https://apps.apple.com/app/id6786085393';
@@ -102,6 +104,23 @@ export async function sendEventWelcome(env: any, eventId: string, opts: { force?
     if ((claim.meta?.changes || 0) === 0) return { skipped: 'already claimed' };
   }
 
+  // Listed on the Email Campaigns page like the tournament guide, so staff
+  // can see per-team recipients and opens (Resend webhook matches by id)
+  let campaignId: string | null = null;
+  try {
+    const cname = `Pre-Event Welcome - ${ev.name}`;
+    const existing = await db.prepare('SELECT id FROM email_campaigns WHERE name = ?').bind(cname).first<any>();
+    if (existing) campaignId = existing.id as string;
+    else {
+      campaignId = crypto.randomUUID().replace(/-/g, '');
+      await db.prepare(`
+        INSERT INTO email_campaigns (id, name, subject, body_html, event_id, template_type, status, sent_at)
+        VALUES (?, ?, ?, ?, ?, 'custom', 'sent', datetime('now'))
+      `).bind(campaignId, cname, `Welcome to ${ev.name} - Important Info for This Weekend`, ev.id,
+        '<p>Automated pre-event welcome - each team receives its own copy with its Parent/Fan code.</p>').run();
+    }
+  } catch (e: any) { console.error('Welcome campaign bookkeeping failed (sends continue):', e?.message); }
+
   const teams = await eventTeams(db, eventId);
   let sent = 0, skipped = 0;
   for (const t of teams) {
@@ -117,7 +136,15 @@ export async function sendEventWelcome(env: any, eventId: string, opts: { force?
           html,
         }),
       });
-      if (resp.ok) sent++;
+      if (resp.ok) {
+        sent++;
+        if (campaignId) {
+          const respJson: any = await resp.json().catch(() => null);
+          for (const email of t.emails.slice(0, 10)) {
+            await recordCampaignSend(db, campaignId, email, t.team_name, respJson?.id || null);
+          }
+        }
+      }
     } catch {}
   }
   if (opts.force) await db.prepare("UPDATE events SET welcome_sent_at = datetime('now') WHERE id = ?").bind(eventId).run();

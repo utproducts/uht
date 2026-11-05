@@ -34,7 +34,7 @@ async function guideCampaignFor(db: any, event: any, subjectTemplate: string): P
   return id;
 }
 
-async function recordGuideSend(db: any, campaignId: string, email: string, name: string, resendId: string | null) {
+export async function recordCampaignSend(db: any, campaignId: string, email: string, name: string, resendId: string | null) {
   try {
     let contact = await db.prepare('SELECT id FROM contacts WHERE LOWER(email) = ?').bind(email.toLowerCase()).first();
     let contactId = contact?.id as string | undefined;
@@ -280,7 +280,7 @@ async function sendEventInfoToRegs(env: any, event: any, regs: any[]): Promise<{
         await db.prepare(
           'INSERT OR IGNORE INTO automated_email_log (template_id, event_id, registration_id, email) VALUES (?, ?, ?, ?)'
         ).bind(TEMPLATE_ID, event.id, reg.id, email).run();
-        await recordGuideSend(db, campaignId, email, `${reg.team_name || ''}`, respJson?.id || null);
+        await recordCampaignSend(db, campaignId, email, `${reg.team_name || ''}`, respJson?.id || null);
         out.sent++;
         lastSample = { subject, html };
       } catch (e: any) {
