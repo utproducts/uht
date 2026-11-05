@@ -1221,14 +1221,16 @@ teamRoutes.get('/my-stats', authMiddleware, async (c) => {
         CASE WHEN home_score < away_score THEN 1 ELSE 0 END as l,
         CASE WHEN home_score = away_score THEN 1 ELSE 0 END as tie,
         home_score as gf, away_score as ga
-      FROM games WHERE status = 'final' AND home_team_id IS NOT NULL AND away_team_id IS NOT NULL
+      FROM games g1 JOIN events e1 ON e1.id = g1.event_id
+      WHERE g1.status = 'final' AND g1.home_team_id IS NOT NULL AND g1.away_team_id IS NOT NULL AND COALESCE(e1.is_test, 0) = 0
       UNION ALL
       SELECT away_team_id, 1,
         CASE WHEN away_score > home_score THEN 1 ELSE 0 END,
         CASE WHEN away_score < home_score THEN 1 ELSE 0 END,
         CASE WHEN away_score = home_score THEN 1 ELSE 0 END,
         away_score, home_score
-      FROM games WHERE status = 'final' AND home_team_id IS NOT NULL AND away_team_id IS NOT NULL
+      FROM games g2 JOIN events e2 ON e2.id = g2.event_id
+      WHERE g2.status = 'final' AND g2.home_team_id IS NOT NULL AND g2.away_team_id IS NOT NULL AND COALESCE(e2.is_test, 0) = 0
     ) s ON s.team_id = t.id
     WHERE t.is_active = 1 AND t.id IN (
       SELECT team_id FROM team_coaches WHERE user_id = ?
