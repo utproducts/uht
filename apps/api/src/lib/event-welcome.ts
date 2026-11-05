@@ -54,7 +54,7 @@ export function buildWelcomeHtml(ev: any, teamName: string, parentCode: string |
 </div>`;
 }
 
-async function eventTeams(db: any, eventId: string): Promise<Array<{ team_id: string; team_name: string; parent_code: string | null; emails: string[] }>> {
+export async function eventTeams(db: any, eventId: string): Promise<Array<{ team_id: string; team_name: string; parent_code: string | null; emails: string[] }>> {
   const rows = (await db.prepare(`
     SELECT t.id as team_id,
       COALESCE(t.schedule_name, t.name) as team_name,
