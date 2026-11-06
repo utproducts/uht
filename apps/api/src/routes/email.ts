@@ -894,6 +894,18 @@ emailRoutes.post('/glow-survey/test', authMiddleware, requireRole('admin', 'dire
 });
 
 // MHR link + USA Hockey roster reminders: preview (no send) or commit
+// Generic one-off blast to all coaches/managers of an event's approved teams
+emailRoutes.post('/event-blast/:eventId/send', authMiddleware, requireRole('admin'), async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  const { sendEventBlast } = await import('../lib/event-blast');
+  const res = await sendEventBlast(c.env, c.req.param('eventId'), {
+    subject: String(body.subject || ''), heading: String(body.heading || ''),
+    message: String(body.message || ''), testEmail: body.testEmail ? String(body.testEmail) : undefined,
+  });
+  if ((res as any).error) return c.json({ success: false, error: (res as any).error }, 400);
+  return c.json({ success: true, data: res });
+});
+
 // App how-to video email (Loom walkthrough) to all coaches/managers of approved teams
 emailRoutes.post('/event-app-video/:eventId/send', authMiddleware, requireRole('admin'), async (c) => {
   const body = await c.req.json().catch(() => ({})) as any;
