@@ -147,6 +147,10 @@ function ScoringPageInner() {
   // GameSheet-style sections
   type Section = 'details' | 'visitor' | 'home' | 'scoring' | 'postgame';
   const [section, setSection] = useState<Section>('scoring');
+  // Collapsible sidebar (tablet/desktop) - remembered per device
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem('uht_nav_collapsed') === '1') setNavCollapsed(true); } catch {} }, []);
+  const toggleNav = () => setNavCollapsed(v => { try { localStorage.setItem('uht_nav_collapsed', v ? '0' : '1'); } catch {} return !v; });
   // In-page confirm: native window.confirm() is unreliable (and can crash)
   // inside the app's kiosk WebView
   const [confirmBox, setConfirmBox] = useState<{ text: string; okLabel: string; onOk: () => void; onCancel?: () => void } | null>(null);
@@ -703,8 +707,22 @@ function ScoringPageInner() {
 
       {/* GameSheet-style layout: dark sidebar on md+, segmented bar on phones */}
       <div className="flex-1 md:flex md:items-stretch">
-        <aside className="hidden md:block w-64 shrink-0 bg-[#003e79]">
-          {NAV.map(item => (
+        <aside className={`hidden md:block shrink-0 bg-[#003e79] transition-all duration-200 ${navCollapsed ? 'w-14' : 'w-64'}`}>
+          <button onClick={toggleNav} title={navCollapsed ? 'Expand menu' : 'Collapse menu'}
+            className="w-full flex items-center justify-center gap-2 py-3 border-b border-white/10 text-white/60 hover:bg-white/10 hover:text-white transition-colors">
+            <span className="text-base font-black leading-none">{navCollapsed ? '»' : '«'}</span>
+            {!navCollapsed && <span className="text-xs font-semibold">Collapse menu</span>}
+          </button>
+          {NAV.map(item => navCollapsed ? (
+            <button key={item.key} onClick={() => setSection(item.key)} title={item.label}
+              className={`w-full flex flex-col items-center gap-2 py-4 border-b border-white/10 transition-colors ${
+                section === item.key ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
+              }`}>
+              <span className="text-[11px] font-bold tracking-wide [writing-mode:vertical-rl]">{item.short}</span>
+              {item.badge && <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />}
+              {item.ok && <span className="w-2.5 h-2.5 rounded-full bg-[#00ccff]" />}
+            </button>
+          ) : (
             <button key={item.key} onClick={() => setSection(item.key)}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left border-b border-white/10 transition-colors ${
                 section === item.key ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
