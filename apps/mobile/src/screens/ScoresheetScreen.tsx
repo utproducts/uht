@@ -315,7 +315,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                 <TouchableOpacity key={e.id} style={styles.tableRow} disabled={!data.share_url}
                   onPress={() => setPenReq({ ev: e, type: null, value: '', note: '' })} activeOpacity={0.6}>
                   <Text style={[styles.td, { width: 36 }]}>{e.period ?? '-'}</Text>
-                  <Text style={[styles.td, { width: 32, fontWeight: '800' }]}>{e.jersey_number || '?'}</Text>
+                  <Text style={[styles.td, { width: 32, fontWeight: '800' }]} numberOfLines={1}>{e.jersey_number === 'COACH' ? 'C' : (e.jersey_number || '?')}</Text>
                   <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes ?? '-'}</Text>
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <Text style={[styles.td, { textAlign: 'left', flexShrink: 1 }]} numberOfLines={1}>{e.penalty_type || 'Penalty'}</Text>
@@ -527,7 +527,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                 <>
                   <Text style={styles.fixTitle} maxFontSizeMultiplier={1.2}>Request Penalty Change</Text>
                   <Text style={styles.fixSub} maxFontSizeMultiplier={1.3}>
-                    {`P${ev.period ?? '?'} ${ev.game_time || ''} - ${ev.penalty_type || 'Penalty'} (${ev.penalty_minutes ?? '?'} min) on #${ev.jersey_number || '?'}`}
+                    {`P${ev.period ?? '?'} ${ev.game_time || ''} - ${ev.penalty_type || 'Penalty'} (${ev.penalty_minutes ?? '?'} min) on ${ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`}`}
                   </Text>
                   <Text style={styles.fixPrompt} maxFontSizeMultiplier={1.3}>
                     Penalty changes are reviewed and approved by the tournament director before they appear on the sheet.

@@ -989,7 +989,7 @@ function ScoringPageInner() {
                               <tr key={pe.id} onClick={() => setEditEvent(pe)}
                                 className="border-t border-[#f5f5f7] text-center font-semibold text-[#1d1d1f] cursor-pointer active:bg-amber-50">
                                 <td className="py-1.5">{pe.period ?? '-'}</td>
-                                <td className="py-1.5">{pe.jersey_number || '?'}</td>
+                                <td className="py-1.5">{pe.jersey_number === 'COACH' ? 'Coach' : (pe.jersey_number || '?')}</td>
                                 <td className="py-1.5">{pe.penalty_minutes ?? '-'}</td>
                                 <td className="py-1.5 text-left text-[11px]">{pe.penalty_type || 'Penalty'}</td>
                                 <td className="py-1.5">{pe.game_time || '-'}</td>
@@ -1069,7 +1069,7 @@ function ScoringPageInner() {
                     )}
                     {ev.event_type === 'penalty' && (
                       <p className="text-sm font-bold text-amber-600 truncate">
-                        {ev.penalty_type || 'Penalty'} — #{ev.jersey_number || '?'} {teamName}
+                        {ev.penalty_type || 'Penalty'} — {ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`} {teamName}
                         <span className="text-[#86868b] font-normal"> ({ev.penalty_minutes}:00)</span>
                       </p>
                     )}
@@ -1186,7 +1186,7 @@ function ScoringPageInner() {
           {penaltyStep === 'player' && (
             <PlayerPicker label="Player" players={playersForTeam(penaltyTeamId)}
               onPick={(jersey) => { setPenaltyJersey(jersey); setPenaltyStep('type'); }}
-              showKeypad />
+              showKeypad coachOption />
           )}
           {penaltyStep === 'type' && (
             <div className="w-full overflow-y-auto max-h-[75vh]">
@@ -1627,11 +1627,18 @@ function StepTeamPicker({ label, homeName, awayName, homeId, awayId, onPick }: {
   );
 }
 
-function PlayerPicker({ label, players, onPick, onSkip, optional, showKeypad }: {
-  label: string; players: RosterPlayer[]; onPick: (jersey: string) => void; onSkip?: () => void; optional?: boolean; showKeypad?: boolean;
+function PlayerPicker({ label, players, onPick, onSkip, optional, showKeypad, coachOption }: {
+  label: string; players: RosterPlayer[]; onPick: (jersey: string) => void; onSkip?: () => void; optional?: boolean; showKeypad?: boolean; coachOption?: boolean;
 }) {
   const [keypadMode, setKeypadMode] = useState(false);
   const [keypadValue, setKeypadValue] = useState('');
+
+  const coachBtn = coachOption ? (
+    <button onClick={() => onPick('COACH')}
+      className="w-full mt-3 py-3 rounded-full bg-[#003e79] text-white text-sm font-bold active:bg-[#002d5a]">
+      Coach / Bench Penalty
+    </button>
+  ) : null;
 
   if (keypadMode || players.length === 0) {
     return (
@@ -1641,6 +1648,7 @@ function PlayerPicker({ label, players, onPick, onSkip, optional, showKeypad }: 
         <JerseyKeypad value={keypadValue} onChange={setKeypadValue}
           onNext={() => onPick(keypadValue)} nextLabel={optional ? 'Add' : 'Next'}
           showSkip={optional} onSkip={onSkip} />
+        {coachBtn}
         {players.length > 0 && (
           <button onClick={() => setKeypadMode(false)}
             className="w-full mt-3 py-2 text-sm text-[#003e79] font-semibold">Show Roster</button>
@@ -1672,6 +1680,7 @@ function PlayerPicker({ label, players, onPick, onSkip, optional, showKeypad }: 
           </button>
         )}
       </div>
+      {coachBtn}
     </div>
   );
 }
@@ -2455,7 +2464,7 @@ function AnnounceModal({ event, teamName, players, onClose }: {
     lines.push(assists.length ? `Assisted by ${assists.join(' and ')},` : 'Unassisted,');
     if (event.game_time) lines.push(`Time of the goal, ${event.game_time}.`);
   } else {
-    lines.push(`To #${event.jersey_number || '?'}${nameOf(event.jersey_number)},`);
+    lines.push(event.jersey_number === 'COACH' ? 'Bench penalty to the coach,' : `To #${event.jersey_number || '?'}${nameOf(event.jersey_number)},`);
     lines.push(`${event.penalty_minutes || 2} minutes for ${event.penalty_type || 'a penalty'},`);
     if (event.game_time) lines.push(`Time of the penalty, ${event.game_time}.`);
   }

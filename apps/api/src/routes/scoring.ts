@@ -707,7 +707,10 @@ export async function attachAnnouncements(db: any, games: any[]) {
           (assists.length ? `, assisted by ${assists.join(' and ')}` : ', unassisted') +
           (e.game_time ? `. Time of the goal, ${e.game_time}` : '') + '.';
       } else {
-        g.announcement = `${teamName} penalty to #${e.jersey_number || '?'}${await playerName(e.jersey_number)}, ` +
+        const who = e.jersey_number === 'COACH'
+          ? 'bench penalty to the coach'
+          : `penalty to #${e.jersey_number || '?'}${await playerName(e.jersey_number)}`;
+        g.announcement = `${teamName} ${who}, ` +
           `${e.penalty_minutes || 2} minutes for ${e.penalty_type || 'a penalty'}` +
           (e.game_time ? `. Time of the penalty, ${e.game_time}` : '') + '.';
       }
@@ -1267,7 +1270,7 @@ scoringRoutes.post('/games/:gameId/sheet/email', authMiddleware, async (c) => {
     `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(gl.period)}${gl.game_time ? ' ' + esc(gl.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">#${esc(gl.jersey_number || '?')}${gl.assist1_jersey ? ` (A: #${esc(gl.assist1_jersey)}${gl.assist2_jersey ? ', #' + esc(gl.assist2_jersey) : ''})` : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(gl.team_id))}</td></tr>`
   ).join('');
   const penRows = penalties.map((pn: any) =>
-    `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(pn.period)}${pn.game_time ? ' ' + esc(pn.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">#${esc(pn.jersey_number || '?')} ${esc(pn.penalty_type || '')} (${pn.penalty_minutes || 2} min)</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(pn.team_id))}</td></tr>`
+    `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(pn.period)}${pn.game_time ? ' ' + esc(pn.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${pn.jersey_number === 'COACH' ? 'Coach' : '#' + esc(pn.jersey_number || '?')} ${esc(pn.penalty_type || '')} (${pn.penalty_minutes || 2} min)</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(pn.team_id))}</td></tr>`
   ).join('');
 
   const statusLine = game.status === 'final'

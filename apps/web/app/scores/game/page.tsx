@@ -464,7 +464,7 @@ function PenaltyList({ team, penalties, isHome }: { team: string; penalties: any
             <div key={i} className="flex items-start gap-2 text-sm">
               <span className="text-xs font-semibold text-[#86868b] w-6 shrink-0">P{pen.period}</span>
               <div className="flex-1 min-w-0">
-                <span className="font-bold text-[#1d1d1f]">#{pen.jersey_number || '?'}</span>
+                <span className="font-bold text-[#1d1d1f]">{pen.jersey_number === 'COACH' ? 'Coach' : `#${pen.jersey_number || '?'}`}</span>
                 <span className="text-[#3d3d3d] ml-1">{pen.penalty_type}</span>
                 <span className="text-[#86868b] text-xs ml-1">({pen.penalty_minutes}:00)</span>
               </div>

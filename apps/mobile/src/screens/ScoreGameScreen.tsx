@@ -164,7 +164,7 @@ function getEventDescription(event: GameEvent, game: GameData): string {
     case 'penalty': {
       const code = event.penalty_type || '';
       const mins = event.penalty_minutes || 2;
-      return `PENALTY - #${event.jersey_number || '?'} ${code} (${mins} min) - ${shortTeam}`;
+      return `PENALTY - ${event.jersey_number === 'COACH' ? 'Coach' : `#${event.jersey_number || '?'}`} ${code} (${mins} min) - ${shortTeam}`;
     }
     case 'period_start': return `Period ${event.period} started`;
     case 'period_end': return `Period ${event.period} ended`;
