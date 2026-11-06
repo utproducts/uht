@@ -1835,8 +1835,13 @@ function DetailsSection({ game, gameId, pin, onFlash, warnings, onFix, onDismiss
 const STATUS_META: Record<string, { label: string; cls: string; next: string }> = {
   playing: { label: 'Playing', cls: 'bg-emerald-100 text-emerald-700 border-emerald-300', next: 'not_playing' },
   not_playing: { label: 'Not Playing', cls: 'bg-[#e8e8ed] text-[#6e6e73] border-[#d2d2d7]', next: 'suspended' },
+  // Coach digital check-in (mobile app) uses 'out' instead of 'not_playing'
+  out: { label: 'Out', cls: 'bg-amber-100 text-amber-700 border-amber-300', next: 'playing' },
   suspended: { label: 'Suspended', cls: 'bg-red-100 text-red-700 border-red-300', next: 'playing' },
 };
+// A status value this console doesn't know must never crash the lineup view
+const statusMeta = (status: string | null | undefined) =>
+  STATUS_META[status || 'playing'] || { label: status || '?', cls: 'bg-[#e8e8ed] text-[#6e6e73] border-[#d2d2d7]', next: 'playing' };
 
 function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash }: {
   label: string; teamName: string; side: any; gameId: string; pin: string; onChanged: () => void; onFlash: (c: string) => void;
@@ -2011,7 +2016,7 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
         {players.length === 0 ? (
           <p className="text-sm text-[#86868b] p-4">No roster online for this team - players will appear here once the team's roster is uploaded on ultimatetournaments.com.</p>
         ) : players.map((p: any) => {
-          const st = STATUS_META[p.status || 'playing'];
+          const st = statusMeta(p.status);
           const isGoalie = (p.position || '').toUpperCase().startsWith('G');
           return (
             <div key={p.id} className={`px-4 py-2.5 border-t border-[#f5f5f7] flex items-center gap-3 ${busyId === p.id ? 'opacity-50' : ''}`}>
@@ -2033,6 +2038,7 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
                 style={{ backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='6'><path d='M0 0l4 6 4-6z' fill='%236e6e73'/></svg>\")" }}>
                 <option value="playing">Playing</option>
                 <option value="not_playing">Not Playing</option>
+                {(p.status === 'out' || !(p.status in STATUS_META) && p.status) ? <option value={p.status}>{statusMeta(p.status).label}</option> : null}
                 <option value="suspended">Suspended</option>
               </select>
             </div>
