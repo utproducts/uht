@@ -199,6 +199,7 @@ function ScoringPageInner() {
   const [penaltyJersey, setPenaltyJersey] = useState('');
   const [penaltyPick, setPenaltyPick] = useState<{ code: string; name?: string; min: number } | null>(null);
   const [penaltyTime, setPenaltyTime] = useState('');
+  const [penaltySearch, setPenaltySearch] = useState('');
 
   // Three Stars
   const [star1, setStar1] = useState({ teamId: '', jersey: '', name: '' });
@@ -480,7 +481,7 @@ function ScoringPageInner() {
   };
 
   // Penalty flow with roster
-  const resetPenalty = () => { setPenaltyStep('team'); setPenaltyTeamId(''); setPenaltyJersey('');  setPenaltyPick(null); setPenaltyTime(''); };
+  const resetPenalty = () => { setPenaltyStep('team'); setPenaltyTeamId(''); setPenaltyJersey('');  setPenaltyPick(null); setPenaltyTime(''); setPenaltySearch(''); };
   const openPenalty = () => { resetPenalty(); setModal('penalty'); };
 
   const submitPenalty = (penalty: { code: string; min: number }) => {
@@ -1188,23 +1189,39 @@ function ScoringPageInner() {
               showKeypad />
           )}
           {penaltyStep === 'type' && (
-            <div className="w-full overflow-y-auto max-h-[70vh]">
-              <p className="text-center text-lg font-bold text-[#1d1d1f] mb-4">Select Penalty</p>
+            <div className="w-full overflow-y-auto max-h-[75vh]">
+              <p className="text-center text-lg font-bold text-[#1d1d1f] mb-3">Select Penalty</p>
+              <div className="sticky top-0 z-10 bg-white pb-2 mb-1">
+                <div className="relative">
+                  <input type="search" inputMode="search" placeholder="Search penalties..."
+                    value={penaltySearch} onChange={e => setPenaltySearch(e.target.value)}
+                    className="w-full py-3 pl-4 pr-10 rounded-xl border-2 border-[#d2d2d7] text-base focus:border-[#003e79] focus:outline-none" />
+                  {penaltySearch && (
+                    <button onClick={() => setPenaltySearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#e8e8ed] text-[#6e6e73] text-sm font-bold">✕</button>
+                  )}
+                </div>
+              </div>
               {(penaltyGroups || [
                 { key: 'minor', label: 'Minor (2:00)', color: 'bg-amber-500 active:bg-amber-600', items: PENALTIES_MINOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
                 { key: 'major', label: 'Major (5:00)', color: 'bg-red-600 active:bg-red-700', items: PENALTIES_MAJOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
                 { key: 'misconduct', label: 'Misconduct (10:00)', color: 'bg-[#003e79] active:bg-[#002d5a]', items: PENALTIES_MISCONDUCT.map(p => ({ code: p.code, name: p.name, min: p.min })) },
-              ]).map(group => (
-                <div key={group.key}>
-                  <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest mb-2">{group.label}</p>
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    {group.items.map((p) => (
-                      <button key={p.code} onClick={() => submitPenalty(p)}
-                        className={`py-3 px-2 rounded-xl text-white text-sm font-bold ${group.color}`}>{p.name}</button>
-                    ))}
+              ]).map(group => {
+                const q = penaltySearch.trim().toLowerCase();
+                const items = q ? group.items.filter(p => p.name.toLowerCase().includes(q)) : group.items;
+                if (items.length === 0) return null;
+                return (
+                  <div key={group.key}>
+                    <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-1.5">{group.label}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">
+                      {items.map((p) => (
+                        <button key={p.code} onClick={() => submitPenalty(p)}
+                          className={`py-2 px-2 rounded-lg text-white text-[13px] font-bold leading-tight ${group.color}`}>{p.name}</button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {penaltyStep === 'time' && (
