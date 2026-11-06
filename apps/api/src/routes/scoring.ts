@@ -1774,8 +1774,18 @@ scoringRoutes.get('/games/:gameId/roster', async (c) => {
     WHERE tc.team_id = ?
   `).bind(game.away_team_id).all();
 
-  // Check if lineups already exist
-  const existingLineups = await db.prepare('SELECT COUNT(*) as cnt FROM game_lineups WHERE game_id = ?').bind(gameId).first<any>();
+  // Lineups count as loaded only when BOTH sides have rows. A coach doing
+  // digital check-in seeds only their own team; if the console treated that
+  // as "loaded" it skipped auto-load and the other team's roster came up
+  // blank at the scorekeeper table.
+  const existingLineups = await db.prepare(`
+    SELECT
+      SUM(CASE WHEN team_id = ?2 THEN 1 ELSE 0 END) as h,
+      SUM(CASE WHEN team_id = ?3 THEN 1 ELSE 0 END) as a
+    FROM game_lineups WHERE game_id = ?1
+  `).bind(gameId, game.home_team_id || '', game.away_team_id || '').first<any>();
+  const homeLoaded = !game.home_team_id || (existingLineups?.h || 0) > 0;
+  const awayLoaded = !game.away_team_id || (existingLineups?.a || 0) > 0;
 
   return c.json({
     success: true,
@@ -1784,7 +1794,7 @@ scoringRoutes.get('/games/:gameId/roster', async (c) => {
       awayPlayers: awayPlayers.results,
       homeCoaches: homeCoaches.results,
       awayCoaches: awayCoaches.results,
-      lineupsLoaded: (existingLineups?.cnt || 0) > 0,
+      lineupsLoaded: homeLoaded && awayLoaded,
     },
   });
 });
