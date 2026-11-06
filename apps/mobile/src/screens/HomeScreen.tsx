@@ -485,6 +485,7 @@ onPress={() => navigation.navigate('ScoringConsole')}
               { label: 'Score Management', sub: 'Fix scores and run games', icon: 'stats-chart-outline' as const, go: () => navigation.navigate('DirectorGames') },
               { label: 'Locker Rooms', sub: 'Assign rooms by rink and day', icon: 'lock-closed-outline' as const, go: () => navigation.navigate('DirectorLockerRooms', lockerAlerts.length > 0 ? { alert: lockerAlerts[0] } : {}) },
               { label: 'Championship Photos', sub: 'Post the winners', icon: 'trophy-outline' as const, go: () => navigation.navigate('DirectorChampions') },
+              { label: 'Event Rules', sub: 'Open the official rules PDF', icon: 'document-text-outline' as const, go: () => navigation.navigate('DirectorRules') },
               { label: 'Rink Addresses', sub: 'Share directions instantly', icon: 'location-outline' as const, go: () => navigation.navigate('DirectorRinks') },
               { label: 'Team Codes', sub: 'Help parents follow teams', icon: 'key-outline' as const, go: () => navigation.navigate('DirectorTeamCodes') },
               { label: 'Scorekeeper PIN', sub: 'Look up any rink PIN', icon: 'keypad-outline' as const, go: () => navigation.navigate('DirectorPins') },

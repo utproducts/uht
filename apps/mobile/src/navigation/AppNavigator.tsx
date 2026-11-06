@@ -41,7 +41,7 @@ try {
 } catch {
   ScoringConsoleScreen = require('../screens/ScoringConsoleFallback').default;
 }
-import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, DirectorRinksScreen, DirectorTeamCodesScreen, DirectorLockerRoomsScreen, DirectorVenueSetupScreen } from '../screens/DirectorToolsScreen';
+import { DirectorCheckinScreen, DirectorPinsScreen, DirectorChampionsScreen, DirectorRinksScreen, DirectorTeamCodesScreen, DirectorLockerRoomsScreen, DirectorVenueSetupScreen, DirectorRulesScreen } from '../screens/DirectorToolsScreen';
 import { OrgDetailsScreen, OrgTeamsScreen, OrgEventsScreen, OrgStatsScreen } from '../screens/OrgScreens';
 import TeamStatsScreen from '../screens/TeamStatsScreen';
 import GameSheetsScreen from '../screens/GameSheetsScreen';
@@ -96,6 +96,7 @@ function HomeStackNavigator() {
       <HomeStackNav.Screen name="DirectorTeamCodes" component={DirectorTeamCodesScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="DirectorLockerRooms" component={DirectorLockerRoomsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="DirectorVenueSetup" component={DirectorVenueSetupScreen} options={{ animation: 'slide_from_right' }} />
+      <HomeStackNav.Screen name="DirectorRules" component={DirectorRulesScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="ScoringConsole" component={ScoringConsoleScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="OrgDetails" component={OrgDetailsScreen} options={{ animation: 'slide_from_right' }} />
       <HomeStackNav.Screen name="OrgTeams" component={OrgTeamsScreen} options={{ animation: 'slide_from_right' }} />

@@ -368,6 +368,67 @@ export function DirectorRinksScreen({ navigation }: any) {
 // ─────────────────────────────────────────────────────────
 // 5. Team Codes
 // ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// 4b. Event Rules - one tap to the posted rules PDF
+// ─────────────────────────────────────────────────────────
+export function DirectorRulesScreen({ navigation }: any) {
+  const { events, selected, setSelected, loading } = useDirectorEvents();
+  const [busy, setBusy] = useState(false);
+
+  const rulesUrl = selected ? `https://ultimatetournaments.com/rules/${selected.id}` : '';
+
+  const openRules = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const head = await fetch(rulesUrl, { method: 'HEAD' });
+      if (!head.ok) {
+        Alert.alert('No rules posted', 'No rules PDF has been uploaded for this event yet. Rules are added on the event page in the admin panel.');
+      } else {
+        await Linking.openURL(rulesUrl);
+      }
+    } catch {
+      // Offline or HEAD blocked - just try to open it
+      try { await Linking.openURL(rulesUrl); } catch { Alert.alert('Error', 'Could not open the rules.'); }
+    }
+    setBusy(false);
+  };
+
+  const shareRules = async () => {
+    if (!selected) return;
+    try { await Share.share({ message: `${selected.name} tournament rules: ${rulesUrl}` }); } catch {}
+  };
+
+  return (
+    <View style={s.screen}>
+      <Header title="Event Rules" subtitle="The official rules PDF for your event" navigation={navigation} />
+      <EventPills events={events} selected={selected} onSelect={setSelected} />
+      {loading ? <ActivityIndicator style={{ marginTop: 40 }} color={colors.navy} /> : (
+        <ScrollView contentContainerStyle={s.body}>
+          {selected ? (
+            <View style={s.venueCard}>
+              <Text style={s.rowTitle}>{selected.name}</Text>
+              <Text style={s.rowSub}>Tournament rules - opens as a PDF</Text>
+              <View style={s.venueBtnRow}>
+                <TouchableOpacity style={s.venueBtn} onPress={openRules} disabled={busy}>
+                  <Ionicons name="document-text-outline" size={15} color={colors.white} />
+                  <Text style={s.venueBtnText}>{busy ? 'Opening...' : 'Open Rules'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.venueBtn, s.venueBtnLight]} onPress={shareRules}>
+                  <Ionicons name="share-outline" size={15} color={colors.navy} />
+                  <Text style={[s.venueBtnText, { color: colors.navy }]}>Share Link</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <Text style={s.empty}>No events assigned yet.</Text>
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
 export function DirectorTeamCodesScreen({ navigation }: any) {
   const { events, selected, setSelected, loading } = useDirectorEvents();
   const [rows, setRows] = useState<any[]>([]);

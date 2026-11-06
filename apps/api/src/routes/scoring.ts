@@ -1097,11 +1097,12 @@ scoringRoutes.get('/events/:eventId/director-games', authMiddleware, requireRole
       EXISTS(SELECT 1 FROM game_checkins gca WHERE gca.game_id = g.id AND gca.team_id = g.away_team_id) as away_checked_in,
       COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder) as away_team_name,
       ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
-      vr.name as rink_name, ed.age_group, ed.division_level
+      vr.name as rink_name, v.name as venue_name, ed.age_group, ed.division_level
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at2 ON at2.id = g.away_team_id
     LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = g.venue_id
     LEFT JOIN event_divisions ed ON ed.id = g.event_division_id
     WHERE g.event_id = ?
     ORDER BY g.start_time ASC, g.game_number ASC

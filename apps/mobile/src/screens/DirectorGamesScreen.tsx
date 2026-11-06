@@ -35,6 +35,7 @@ interface DirectorGame {
   home_team_name: string;
   away_team_name: string;
   rink_name: string;
+  venue_name?: string;
   age_group: string;
   division_level: string;
 }
@@ -396,7 +397,9 @@ export default function DirectorGamesScreen({ navigation }: any) {
 
               <View style={styles.gameFooter}>
                 <Text style={styles.gameInfo}>Game #{game.game_number}</Text>
-                <Text style={styles.gameInfo}>{game.rink_name}</Text>
+                <Text style={[styles.gameInfo, { flexShrink: 1 }]} numberOfLines={1}>
+                  {[game.venue_name, game.rink_name].filter(Boolean).join(' - ')}
+                </Text>
                 <Text style={styles.gameInfo}>{formatDate(game.start_time)} {formatTime(game.start_time)}</Text>
               </View>
 
@@ -425,6 +428,7 @@ export default function DirectorGamesScreen({ navigation }: any) {
               <>
                 <Text style={styles.modalDivision}>
                   {editGame.age_group} {editGame.division_level} — Game #{editGame.game_number}
+                  {(editGame.venue_name || editGame.rink_name) ? `\n${[editGame.venue_name, editGame.rink_name].filter(Boolean).join(' - ')}` : ''}
                 </Text>
 
                 {/* Home Score */}
