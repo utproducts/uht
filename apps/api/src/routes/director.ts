@@ -1010,11 +1010,10 @@ directorRoutes.get('/events/:eventId/games/live', async (c) => {
       })
     );
 
-    // Calculate cascading delays per rink
-    // Group games by rink
+    // Calculate cascading delays per rink per DAY (a delay never crosses midnight)
     const gamesByRink: Record<string, any[]> = {};
     for (const game of enrichedGames) {
-      const rinkId = game.rink_id || 'unknown';
+      const rinkId = `${game.rink_id || 'unknown'}|${String(game.start_time || '').slice(0, 10)}`;
       if (!gamesByRink[rinkId]) gamesByRink[rinkId] = [];
       gamesByRink[rinkId].push(game);
     }

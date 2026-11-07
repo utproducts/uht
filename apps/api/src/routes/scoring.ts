@@ -824,12 +824,14 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
 
 // Shared: enrich a time-ordered games list with cascading rink delays.
 // A delay on one game pushes back every later scheduled game on the same rink
-// until a game goes in_progress/final (the rink caught up).
+// until a game goes in_progress/final (the rink caught up). The cascade is
+// per rink PER DAY — overnight the rink resets, so a Friday delay never
+// touches Saturday or Sunday games.
 export function applyDelayCascade(gamesList: any[]) {
-  const rinkDelays: Record<string, number> = {}; // rinkId -> accumulated delay minutes
+  const rinkDelays: Record<string, number> = {}; // rink|day -> accumulated delay minutes
 
   return gamesList.map((g: any) => {
-    const rinkKey = g.rink_id || 'unknown';
+    const rinkKey = `${g.rink_id || 'unknown'}|${String(g.start_time || '').slice(0, 10)}`;
 
     // Delay inherited from earlier games on this rink (excludes this game's own delay)
     const inherited = rinkDelays[rinkKey] || 0;
