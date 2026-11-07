@@ -244,6 +244,11 @@ function ScoringPageInner() {
   // Flash feedback
   const [flash, setFlash] = useState('');
 
+  // Unsent shots-clicker taps (key `teamId|period` -> latest local count);
+  // declared before fetchGame so the poll can overlay them
+  const shotsPendingRef = useRef<Record<string, number>>({});
+  const shotsTimersRef = useRef<Record<string, any>>({});
+
   const fetchGame = useCallback(async () => {
     if (!gameId) return;
     try {
@@ -261,6 +266,20 @@ function ScoringPageInner() {
             else if (ev.eventType === 'period_start' && ev.period) g = { ...g, status: 'in_progress', period: ev.period };
             else if (ev.eventType === 'period_end') g = { ...g, status: 'intermission' };
             else if (ev.eventType === 'game_end') g = { ...g, status: 'final' };
+          }
+        } catch {}
+        // Shots taps that haven't synced yet must not jump backwards when
+        // the 10s poll lands - overlay the pending local counts
+        try {
+          const pending = shotsPendingRef.current || {};
+          for (const key of Object.keys(pending)) {
+            const [tid, perStr] = key.split('|');
+            const per = Number(perStr);
+            const shots = Array.isArray(g.shots) ? [...g.shots] : [];
+            const i = shots.findIndex((s: any) => s.team_id === tid && s.period === per);
+            if (i >= 0) shots[i] = { ...shots[i], shot_count: pending[key] };
+            else shots.push({ team_id: tid, period: per, shot_count: pending[key] });
+            g = { ...g, shots };
           }
         } catch {}
         setGame(g);
@@ -380,6 +399,39 @@ function ScoringPageInner() {
     if (!gameId || !pin || posting) return;
     const stamped = { ...payload, clientEventId: (crypto as any).randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
     setPosting(true);
+
+    // game_end is the one event the server may legitimately reject (tied
+    // bracket games), so it keeps the confirm-first flow below. Everything
+    // else is optimistic: holding every button through a POST plus a full
+    // refetch made taps feel frozen on rink wifi (scorekeeper lag
+    // complaints, Gateway 11/7). Show it, free the buttons after a short
+    // double-tap guard, reconcile with the server reply in the background.
+    if (payload.eventType !== 'game_end') {
+      applyLocally(stamped);
+      doFlash('green');
+      setTimeout(() => setPosting(false), 350);
+      if (readOutbox().length > 0) {
+        // Keep strict order: once anything is queued, new events queue too
+        writeOutbox([...readOutbox(), stamped]);
+        drainOutbox();
+        return;
+      }
+      try {
+        const json = await sendEvent(stamped);
+        if (json.success) { setPostError(''); fetchGame(); }
+        else {
+          doFlash('red');
+          setPostError(typeof json.error === 'string' ? json.error : 'That entry was not saved - please try again.');
+          fetchGame(); // pull server truth to undo the optimistic change
+        }
+      } catch {
+        // Network problem: queue it (already shown locally), keep scoring
+        writeOutbox([...readOutbox(), stamped]);
+        setPostError('');
+      }
+      return;
+    }
+
     try {
       if (readOutbox().length > 0) {
         // Keep strict order: once anything is queued, new events queue too
@@ -405,14 +457,47 @@ function ScoringPageInner() {
     finally { setPosting(false); }
   };
 
-  const postShots = async (teamId: string, period: number, shotCount: number) => {
+  // Shots clicker: the counter moves INSTANTLY on every tap and rapid taps
+  // collapse into one debounced request carrying the final number (the
+  // endpoint stores shotCount verbatim, so last write wins). The old
+  // POST-then-refetch-per-tap froze the counter ~1s per tap on rink wifi
+  // and dropped taps that read a stale count (scorekeeper lag, Gateway 11/7).
+  const shotsPending = shotsPendingRef;
+  const shotsTimers = shotsTimersRef;
+
+  const setShotsLocal = (teamId: string, period2: number, count: number) => {
+    setGame((g: any) => {
+      if (!g) return g;
+      const shots = Array.isArray(g.shots) ? [...g.shots] : [];
+      const i = shots.findIndex((s: any) => s.team_id === teamId && s.period === period2);
+      if (i >= 0) shots[i] = { ...shots[i], shot_count: count };
+      else shots.push({ team_id: teamId, period: period2, shot_count: count });
+      return { ...g, shots };
+    });
+  };
+
+  const postShots = (teamId: string, period2: number, shotCount: number) => {
     if (!gameId || !pin) return;
-    try {
-      await fetch(`${API_BASE}/scoring/games/${gameId}/shots`, {
-        method: 'POST', headers: headers(), body: JSON.stringify({ teamId, period, shotCount }),
-      });
-      await fetchGame();
-    } catch { /* */ }
+    const key = `${teamId}|${period2}`;
+    setShotsLocal(teamId, period2, shotCount);
+    shotsPending.current[key] = shotCount;
+    clearTimeout(shotsTimers.current[key]);
+    shotsTimers.current[key] = setTimeout(async () => {
+      const count = shotsPending.current[key];
+      let ok = false;
+      try {
+        const res = await fetch(`${API_BASE}/scoring/games/${gameId}/shots`, {
+          method: 'POST', headers: headers(), body: JSON.stringify({ teamId, period: period2, shotCount: count }),
+        });
+        ok = res.ok;
+      } catch { /* retry below */ }
+      if (ok && shotsPending.current[key] === count) {
+        delete shotsPending.current[key];
+      } else if (!ok && shotsPending.current[key] === count) {
+        // Send failed and no newer tap since - retry with the same value
+        shotsTimers.current[key] = setTimeout(() => postShots(teamId, period2, count), 4000);
+      }
+    }, 500);
   };
 
   const deleteEvent = async (eventId: string) => {
