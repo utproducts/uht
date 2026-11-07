@@ -607,7 +607,7 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
   const db = c.env.DB;
   const CIDS = ['reengage2026e1', 'reengage2026e2', 'reengage2026e3'];
 
-  const [campaigns, statuses, cohorts, daily, redemptions, recent] = await Promise.all([
+  const [campaigns, statuses, cohorts, daily, redemptions, recent, cityDrip, audienceCount, e2due, e3due, pendingE1] = await Promise.all([
     db.prepare(`SELECT id, name, total_sent, total_delivered, total_opened, total_clicked FROM email_campaigns WHERE id IN ('reengage2026e1','reengage2026e2','reengage2026e3') ORDER BY id`).all(),
     db.prepare('SELECT status, COUNT(*) as n FROM reengagement_targets GROUP BY status').all(),
     db.prepare(`
@@ -643,6 +643,37 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       WHERE es.campaign_id IN ('reengage2026e1','reengage2026e2','reengage2026e3')
       ORDER BY es.created_at DESC LIMIT 25
     `).all(),
+    db.prepare(`
+      SELECT id, name, subject, status, scheduled_at, sent_at, total_sent, total_delivered, total_opened, total_clicked
+      FROM email_campaigns WHERE template_type = 'city_drip' ORDER BY scheduled_at
+    `).all(),
+    // Live city-drip audience count — mirrors the event_participants scope
+    // in email.ts (every event/app email, 7+ days old, not unsubscribed)
+    // D1 caps compound SELECTs at 5 terms — hence the two nested 3-term unions
+    db.prepare(`
+      SELECT COUNT(DISTINCT email) as n FROM (
+        SELECT email FROM (
+          SELECT LOWER(TRIM(er.email1)) as email FROM event_registrations er WHERE er.email1 LIKE '%_@_%' AND er.created_at <= datetime('now','-7 days')
+          UNION ALL SELECT LOWER(TRIM(er.email2)) FROM event_registrations er WHERE er.email2 LIKE '%_@_%' AND er.created_at <= datetime('now','-7 days')
+          UNION ALL SELECT LOWER(TRIM(er.coach_email)) FROM event_registrations er WHERE er.coach_email LIKE '%_@_%' AND er.created_at <= datetime('now','-7 days')
+        )
+        UNION ALL
+        SELECT email FROM (
+          SELECT LOWER(TRIM(u.email)) as email FROM users u WHERE u.is_active = 1 AND u.email LIKE '%_@_%' AND u.email NOT LIKE '%@system.internal' AND u.created_at <= datetime('now','-7 days')
+          UNION ALL SELECT LOWER(TRIM(ltc.email)) FROM legacy_team_contacts ltc WHERE ltc.email LIKE '%_@_%'
+          UNION ALL SELECT LOWER(TRIM(c.email)) FROM contacts c WHERE c.source IN ('registration','players_2025_26','airtable_regs','reengagement') AND c.email LIKE '%_@_%' AND c.created_at <= datetime('now','-7 days')
+        )
+      ) p WHERE email NOT IN (SELECT LOWER(email) FROM contacts WHERE is_subscribed_email = 0 AND email IS NOT NULL)
+    `).first(),
+    db.prepare(`
+      SELECT date(e1_sent_at, '+7 days') as day, COUNT(*) as n FROM reengagement_targets
+      WHERE status = 'active' AND e2_sent_at IS NULL AND e1_sent_at IS NOT NULL GROUP BY day
+    `).all(),
+    db.prepare(`
+      SELECT date(e2_sent_at, '+11 days') as day, COUNT(*) as n FROM reengagement_targets
+      WHERE status = 'active' AND e3_sent_at IS NULL AND e2_sent_at IS NOT NULL GROUP BY day
+    `).all(),
+    db.prepare("SELECT COUNT(*) as n FROM reengagement_targets WHERE status = 'pending' AND e1_sent_at IS NULL").first(),
   ]);
 
   return c.json({
@@ -654,6 +685,11 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       daily: daily.results || [],
       redemptions: redemptions.results || [],
       recent: recent.results || [],
+      cityDrip: cityDrip.results || [],
+      cityDripAudience: (audienceCount as any)?.n || 0,
+      reengageE2Due: e2due.results || [],
+      reengageE3Due: e3due.results || [],
+      reengagePendingE1: (pendingE1 as any)?.n || 0,
     },
   });
 });

@@ -36,6 +36,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   redeemed: { label: 'Redeemed code', cls: 'bg-green-100 text-green-700' },
   returned: { label: 'Came back', cls: 'bg-emerald-100 text-emerald-700' },
   unsubscribed: { label: 'Unsubscribed', cls: 'bg-amber-100 text-amber-700' },
+  held_club_returned: { label: 'Held - club already back', cls: 'bg-purple-100 text-purple-700' },
 };
 
 function dayName(d: string): string {
@@ -48,10 +49,85 @@ function pct(part: number, whole: number): string {
   return Math.round((part / whole) * 100) + '%';
 }
 
+type CalItem = { type: 'city' | 'e1' | 'e2' | 'e3'; label: string; count: number; campaignId?: string; status?: string; opened?: number };
+
+function buildCalendar(data: any): { day: string; items: CalItem[] }[] {
+  const items = new Map<string, CalItem[]>();
+  const add = (day: string, item: CalItem) => {
+    if (!day) return;
+    if (!items.has(day)) items.set(day, []);
+    items.get(day)!.push(item);
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const plus = (base: string, days: number) => {
+    const d = new Date(base + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  for (const cp of (data.cityDrip || [])) {
+    const day = (cp.scheduled_at || '').slice(0, 10);
+    add(day, {
+      type: 'city',
+      label: cp.name.replace('City Drip - ', 'City Spotlight: '),
+      count: cp.status === 'scheduled' ? data.cityDripAudience : cp.total_sent,
+      campaignId: cp.id, status: cp.status, opened: cp.total_opened,
+    });
+  }
+  // Comeback e1: pending targets roll out 75/day starting tomorrow
+  let pending = data.reengagePendingE1 || 0;
+  let d = plus(today, 1);
+  while (pending > 0) {
+    add(d, { type: 'e1', label: 'Comeback email 1 - check-in', count: Math.min(75, pending) });
+    pending -= 75;
+    d = plus(d, 1);
+  }
+  for (const r of (data.reengageE2Due || [])) {
+    add(r.day < today ? plus(today, 1) : r.day, { type: 'e2', label: 'Comeback email 2 - $100 offer', count: r.n });
+  }
+  for (const r of (data.reengageE3Due || [])) {
+    add(r.day < today ? plus(today, 1) : r.day, { type: 'e3', label: 'Comeback email 3 - last chance', count: r.n });
+  }
+  return Array.from(items.entries())
+    .filter(([day]) => day >= today || (data.cityDrip || []).some((c: any) => (c.scheduled_at || '').slice(0, 10) === day))
+    .sort((a, b) => a[0] < b[0] ? -1 : 1)
+    .map(([day, list]) => ({ day, items: list }));
+}
+
+const CAL_STYLE: Record<string, string> = {
+  city: 'bg-[#003e79] text-white',
+  e1: 'bg-blue-100 text-blue-800',
+  e2: 'bg-green-100 text-green-800',
+  e3: 'bg-amber-100 text-amber-800',
+};
+
 export default function MarketingPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [preview, setPreview] = useState<{ title: string; count: number; html: string; subject: string; when: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const openPreview = async (item: CalItem, day: string) => {
+    if (!item.campaignId) return;
+    setPreviewLoading(true);
+    try {
+      const r = await fetch(`${API}/api/email/campaigns/${item.campaignId}`, { headers: authHeaders() });
+      const json = await r.json();
+      const cp = json?.data?.campaign || json?.data || {};
+      setPreview({
+        title: item.label,
+        count: item.count,
+        subject: cp.subject || '',
+        html: cp.body_html || '<p>Template not found</p>',
+        when: day,
+      });
+    } catch {
+      setPreview({ title: item.label, count: item.count, subject: '', html: '<p>Could not load template</p>', when: day });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetch(`${API}/api/analytics/reports/marketing`, { headers: authHeaders() })
@@ -111,6 +187,61 @@ export default function MarketingPage() {
           <p className="text-2xl font-bold text-emerald-700">{statuses.find(s => s.status === 'returned')?.n || 0}</p>
         </div>
       </div>
+
+      {/* Send calendar — what goes out each day */}
+      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 mb-6">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+          <h2 className="text-sm font-semibold text-[#1d1d1f]">Send calendar</h2>
+          <span className="text-xs text-[#86868b]">City emails go to {Number(data?.cityDripAudience || 0).toLocaleString()} people (live count, grows as new folks join)</span>
+        </div>
+        <p className="text-xs text-[#86868b] mb-4">Everything scheduled to go out, day by day - click a city email to read it</p>
+        <div className="space-y-3">
+          {buildCalendar(data).map(({ day, items }) => (
+            <div key={day} className="flex gap-3 items-start">
+              <div className="w-24 shrink-0 pt-1.5">
+                <p className="text-xs font-bold text-[#1d1d1f]">{dayName(day)}</p>
+              </div>
+              <div className="flex flex-wrap gap-2 min-w-0">
+                {items.map((it, i) => (
+                  <button key={i}
+                    onClick={() => openPreview(it, day)}
+                    disabled={!it.campaignId}
+                    className={`text-left px-3 py-1.5 rounded-lg text-xs font-semibold ${CAL_STYLE[it.type]} ${it.campaignId ? 'cursor-pointer hover:opacity-85' : 'cursor-default'}`}>
+                    {it.label}
+                    <span className="font-normal opacity-80"> - {Number(it.count || 0).toLocaleString()} {it.type === 'city' ? 'people' : 'teams'}</span>
+                    {it.status === 'sent' && <span className="font-normal opacity-80"> (sent, {it.opened} opens)</span>}
+                    {it.status === 'sending' && <span className="font-normal opacity-80"> (sending now)</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {buildCalendar(data).length === 0 && <p className="text-sm text-[#86868b]">Nothing scheduled</p>}
+        </div>
+      </div>
+
+      {/* Template preview modal */}
+      {(preview || previewLoading) && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            {previewLoading ? (
+              <div className="p-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>
+            ) : preview && (
+              <>
+                <div className="p-4 border-b border-[#e8e8ed] flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#1d1d1f] text-sm">{preview.title}</p>
+                    <p className="text-xs text-[#86868b] mt-0.5">Subject: {preview.subject}</p>
+                    <p className="text-xs text-[#003e79] font-semibold mt-0.5">Sends {dayName(preview.when)} to {preview.count.toLocaleString()} people</p>
+                  </div>
+                  <button onClick={() => setPreview(null)} className="text-[#86868b] hover:text-[#1d1d1f] text-xl leading-none shrink-0">&times;</button>
+                </div>
+                <iframe srcDoc={preview.html} className="flex-1 w-full" style={{ minHeight: '60vh', border: 0 }} title="Email preview" />
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pipeline statuses */}
       <div className="flex flex-wrap gap-2 mb-6">

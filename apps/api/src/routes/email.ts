@@ -1581,6 +1581,50 @@ emailRoutes.post('/unsubscribe', async (c) => {
 function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionId?: string; ageGroup?: string; excludeRegisteredForEvent?: string }) {
   const params: string[] = [];
 
+  // "event_participants" → every email that has ever joined a UHT event or
+  // the app: registration contacts (all three email fields), ALL app users,
+  // imported 2025-26 player/parent contacts, and imported Airtable-era
+  // registration contacts. Evaluated LIVE at each send, so new people join
+  // all future sends automatically — but only after 7 days in the system
+  // (Chad: no marketing in someone's first week). Unsubscribed excluded.
+  // This is the city-drip audience.
+  if (filter.scope === 'event_participants') {
+    // NOTE: D1 rejects compound SELECTs with more than 5 terms, so the six
+    // sources are nested as two 3-term unions.
+    const query = `
+      SELECT email, MAX(name) as name, '' as team_name, '' as age_group, '' as event_name FROM (
+        SELECT * FROM (
+          SELECT LOWER(TRIM(er.email1)) as email, COALESCE(er.manager_first_name || ' ' || er.manager_last_name, '') as name
+          FROM event_registrations er WHERE er.email1 LIKE '%_@_%' AND er.created_at <= datetime('now', '-7 days')
+          UNION ALL
+          SELECT LOWER(TRIM(er.email2)), '' FROM event_registrations er
+          WHERE er.email2 LIKE '%_@_%' AND er.created_at <= datetime('now', '-7 days')
+          UNION ALL
+          SELECT LOWER(TRIM(er.coach_email)), COALESCE(er.coach_name, '') FROM event_registrations er
+          WHERE er.coach_email LIKE '%_@_%' AND er.created_at <= datetime('now', '-7 days')
+        )
+        UNION ALL
+        SELECT * FROM (
+          SELECT LOWER(TRIM(u.email)) as email, COALESCE(u.first_name || ' ' || u.last_name, '') as name
+          FROM users u
+          WHERE u.is_active = 1 AND u.email LIKE '%_@_%' AND u.email NOT LIKE '%@system.internal'
+            AND u.created_at <= datetime('now', '-7 days')
+          UNION ALL
+          SELECT LOWER(TRIM(ltc.email)), COALESCE(ltc.first_name || ' ' || ltc.last_name, '')
+          FROM legacy_team_contacts ltc WHERE ltc.email LIKE '%_@_%'
+          UNION ALL
+          SELECT LOWER(TRIM(c.email)), COALESCE(c.first_name || ' ' || c.last_name, '')
+          FROM contacts c
+          WHERE c.source IN ('registration', 'players_2025_26', 'airtable_regs', 'reengagement')
+            AND c.email LIKE '%_@_%' AND c.created_at <= datetime('now', '-7 days')
+        )
+      ) p
+      WHERE email NOT IN (SELECT LOWER(email) FROM contacts WHERE is_subscribed_email = 0 AND email IS NOT NULL)
+      GROUP BY email
+    `;
+    return { query, params };
+  }
+
   // "everyone" → every contact source combined (users + contacts + iContact
   // list), deduplicated by email. Unsubscribed contacts are excluded.
   if (filter.scope === 'everyone') {

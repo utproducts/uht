@@ -1263,6 +1263,22 @@ export default {
       ctx.waitUntil(import('./lib/event-recap').then(m => m.runEventRecapSweep(env)).catch((e: any) => console.error('Event recap sweep error:', e)));
       ctx.waitUntil(import('./lib/event-welcome').then(m => m.runEventWelcomeSweep(env)).catch((e: any) => console.error('Event welcome sweep error:', e)));
     }
+    // City drip: scheduled city-spotlight campaigns go live on their date at
+    // 17:00 UTC (11am CT). Flipping to 'sending' with a stale updated_at
+    // hands the campaign to runScheduled's wave engine on the next tick, so
+    // sends, email_sends rows, and webhook stats all ride the existing rails.
+    // The event_participants audience is evaluated live at send time (new
+    // people join future sends automatically after 7 days in the system).
+    if (new Date().getUTCHours() === 17) {
+      ctx.waitUntil((async () => {
+        const r = await env.DB.prepare(`
+          UPDATE email_campaigns SET status = 'sending', updated_at = datetime('now', '-3 minutes'),
+            audience_filter = COALESCE(audience_filter, '{"scope":"event_participants"}')
+          WHERE template_type = 'city_drip' AND status = 'scheduled' AND date(scheduled_at) <= date('now')
+        `).run();
+        if (r.meta?.changes) console.log(`City drip: activated ${r.meta.changes} campaign(s)`);
+      })().catch((e: any) => console.error('City drip activation error:', e)));
+    }
     // Re-engagement drip (Johnny's comeback emails) — 16:00 UTC window
     // (10am CST); the sweep gates its own hour and is idempotent per target
     // and per daily cohort, so every tick in the hour is safe
