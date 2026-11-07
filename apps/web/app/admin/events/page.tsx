@@ -3275,7 +3275,7 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
     setSavingDelay(gameId);
     const form = delayForm[gameId];
     try {
-      await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/${gameId}/delay`, {
+      const res = await apiFetch(`${API_BASE.replace('/api/events', '/api/scoring')}/games/${gameId}/delay`, {
         method: 'PUT',
         body: JSON.stringify({
           delayStatus: status,
@@ -3283,9 +3283,16 @@ function ScheduleGamesTab({ eventId }: { eventId: string }) {
           delayMinutes: status === 'delayed' ? (parseInt(form?.minutes || '15') || 15) : 0,
         }),
       });
-      setExpandedDelay(null);
+      const json = await res.json().catch(() => ({} as any));
+      if (!res.ok || !json.success) {
+        alert(`Delay was NOT saved: ${json.error || `HTTP ${res.status}`}`);
+      } else {
+        setExpandedDelay(null);
+      }
       loadGames();
-    } catch {}
+    } catch (e: any) {
+      alert(`Delay was NOT saved: ${e?.message || 'network error'}`);
+    }
     setSavingDelay(null);
   };
 

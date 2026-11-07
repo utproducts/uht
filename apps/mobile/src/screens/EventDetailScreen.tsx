@@ -103,6 +103,9 @@ interface GameSlot {
   is_overtime?: number;
   is_shootout?: number;
   delay_note?: string;
+  delay_status?: string;
+  delay_reason?: string;
+  cascaded_delay_minutes?: number;
   venue_name?: string;
   round?: string;
   pool_name?: string;
@@ -588,6 +591,24 @@ export default function EventDetailScreen({
     const d = parseGameDate(startTime);
     if (!d) return '';
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  // Delay on this game, or one cascaded from an earlier game on the same rink
+  // (the schedule API sends cascaded_delay_minutes). games.status never holds
+  // 'delayed' - the flag lives in delay_status.
+  function gameDelayInfo(item: any): { minutes: number; delayed: boolean; newTime: string } {
+    const started = ['in_progress', 'intermission', 'final', 'cancelled', 'forfeit'].includes(String(item.status || ''));
+    const minutes = Math.max(item.delay_minutes || 0, item.cascaded_delay_minutes || 0);
+    const delayed = !started && (minutes > 0 || item.status === 'delayed' || item.delay_status === 'delayed');
+    let newTime = '';
+    if (delayed && minutes > 0) {
+      const d = parseGameDate(item.start_time);
+      if (d) {
+        d.setMinutes(d.getMinutes() + minutes);
+        newTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      }
+    }
+    return { minutes, delayed, newTime };
   }
 
   function getDateKey(startTime?: string): string {
@@ -1222,7 +1243,9 @@ export default function EventDetailScreen({
           const isMyAway = myTeamIds.includes(item.away_team_id || '');
           const gameStatus = item.status || 'scheduled';
           const isLive = gameStatus === 'in_progress' || gameStatus === 'intermission' || gameStatus === 'warmup';
-          const isDelayed = gameStatus === 'delayed';
+          const delay = gameDelayInfo(item);
+          const isDelayed = delay.delayed;
+          const badgeStatus = isDelayed ? 'delayed' : gameStatus;
           const isFinal = gameStatus === 'final';
 
           return (
@@ -1243,22 +1266,25 @@ export default function EventDetailScreen({
                 </View>
               ) : null}
               {/* Status badge */}
-              {gameStatus !== 'scheduled' && (
+              {(gameStatus !== 'scheduled' || isDelayed) && (
                 <View style={styles.gameStatusRow}>
-                  <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
+                  <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(badgeStatus) }]}>
                     {isLive && <View style={styles.gameStatusDot} />}
-                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}{isFinal && item.is_shootout ? ' - SO' : isFinal && item.is_overtime ? ' - OT' : ''}</Text>
+                    <Text style={styles.gameStatusText}>{getStatusLabel(badgeStatus)}{isFinal && item.is_shootout ? ' - SO' : isFinal && item.is_overtime ? ' - OT' : ''}</Text>
                   </View>
                   {isLive && item.period ? (
                     <Text style={styles.livePeriodText}>{periodLabel(item.period)}</Text>
                   ) : null}
-                  {isDelayed && item.delay_note && (
-                    <Text style={styles.delayNoteText}>{item.delay_note}</Text>
+                  {isDelayed && (item.delay_reason || item.delay_note) && (
+                    <Text style={styles.delayNoteText}>{item.delay_reason || item.delay_note}</Text>
                   )}
                 </View>
               )}
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
+                {isDelayed && delay.minutes > 0 ? (
+                  <Text style={styles.delayMinText} maxFontSizeMultiplier={1.2}>  +{delay.minutes} min{delay.newTime ? ` - now ${delay.newTime}` : ''}</Text>
+                ) : null}
               </View>
               {item.venue_name || item.rink_name || item.rink ? (
                 <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>
@@ -1749,7 +1775,9 @@ export default function EventDetailScreen({
         renderItem={({ item }) => {
           const gameStatus = item.status || 'scheduled';
           const isLive = gameStatus === 'in_progress' || gameStatus === 'intermission' || gameStatus === 'warmup';
-          const isDelayed = gameStatus === 'delayed';
+          const delay = gameDelayInfo(item);
+          const isDelayed = delay.delayed;
+          const badgeStatus = isDelayed ? 'delayed' : gameStatus;
           const isFinal = gameStatus === 'final';
           const isMyHome = myTeamIds.includes(item.home_team_id || '');
           const isMyAway = myTeamIds.includes(item.away_team_id || '');
@@ -1771,22 +1799,25 @@ export default function EventDetailScreen({
                   </View>
                 </View>
               ) : null}
-              {gameStatus !== 'scheduled' && (
+              {(gameStatus !== 'scheduled' || isDelayed) && (
                 <View style={styles.gameStatusRow}>
-                  <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(gameStatus) }]}>
+                  <View style={[styles.gameStatusBadge, { backgroundColor: getStatusColor(badgeStatus) }]}>
                     {isLive && <View style={styles.gameStatusDot} />}
-                    <Text style={styles.gameStatusText}>{getStatusLabel(gameStatus)}{isFinal && item.is_shootout ? ' - SO' : isFinal && item.is_overtime ? ' - OT' : ''}</Text>
+                    <Text style={styles.gameStatusText}>{getStatusLabel(badgeStatus)}{isFinal && item.is_shootout ? ' - SO' : isFinal && item.is_overtime ? ' - OT' : ''}</Text>
                   </View>
                   {isLive && item.period ? (
                     <Text style={styles.livePeriodText}>{periodLabel(item.period)}</Text>
                   ) : null}
-                  {isDelayed && item.delay_minutes && (
-                    <Text style={styles.delayMinText}>{item.delay_minutes} min delay</Text>
+                  {isDelayed && (item.delay_reason || item.delay_note) && (
+                    <Text style={styles.delayNoteText}>{item.delay_reason || item.delay_note}</Text>
                   )}
                 </View>
               )}
               <View style={styles.gameTimeRow}>
                 <Text style={styles.gameTime}>{gameTimeLabel(item)}</Text>
+                {isDelayed && delay.minutes > 0 ? (
+                  <Text style={styles.delayMinText} maxFontSizeMultiplier={1.2}>  +{delay.minutes} min{delay.newTime ? ` - now ${delay.newTime}` : ''}</Text>
+                ) : null}
               </View>
               {item.venue_name || item.rink_name || item.rink ? (
                 <Text style={styles.gameRink}>{[item.venue_name, item.rink_name || item.rink].filter(Boolean).join(' - ')}</Text>

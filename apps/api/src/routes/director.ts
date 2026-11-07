@@ -317,7 +317,7 @@ directorRoutes.get('/events/:eventId/games', authMiddleware, requireRole('direct
         `SELECT g.id, g.event_id, g.game_number, g.game_type, g.pool_name,
                 g.home_team_id, g.away_team_id, g.rink_id, g.venue_id,
                 g.start_time, g.status, g.period, g.home_score, g.away_score,
-                g.delay_minutes, g.delay_note, g.checked_in_at, g.checked_in_by,
+                g.delay_minutes, g.delay_note, g.delay_status, g.delay_reason, g.checked_in_at, g.checked_in_by,
                 g.event_division_id, g.created_at, g.updated_at,
                 COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
                 COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
@@ -421,15 +421,27 @@ directorRoutes.put(
         );
       }
 
-      // Update game
-      await db
-        .prepare(
-          `UPDATE games
-           SET status = ?, delay_minutes = ?, delay_note = ?, updated_at = datetime('now')
-           WHERE id = ?`
-        )
-        .bind(status, delayMinutes || null, delayNote || null, gameId)
-        .run();
+      // Update game. games.status has a CHECK constraint without 'delayed',
+      // so a delay is stored in delay_status/delay_minutes and status is left alone.
+      if (status === 'delayed') {
+        await db
+          .prepare(
+            `UPDATE games
+             SET delay_status = 'delayed', delay_minutes = ?, delay_note = ?, delay_reason = ?, updated_at = datetime('now')
+             WHERE id = ?`
+          )
+          .bind(delayMinutes || null, delayNote || null, delayNote || null, gameId)
+          .run();
+      } else {
+        await db
+          .prepare(
+            `UPDATE games
+             SET status = ?, delay_status = NULL, delay_minutes = ?, delay_note = ?, updated_at = datetime('now')
+             WHERE id = ?`
+          )
+          .bind(status, delayMinutes || null, delayNote || null, gameId)
+          .run();
+      }
 
       // Log the status change
       const logId = crypto.randomUUID().replace(/-/g, '');
@@ -957,7 +969,7 @@ directorRoutes.get('/events/:eventId/games/live', async (c) => {
         `SELECT g.id, g.event_id, g.game_number, g.game_type, g.pool_name,
                 g.home_team_id, g.away_team_id, g.rink_id, g.venue_id,
                 g.start_time, g.status, g.period, g.home_score, g.away_score,
-                g.delay_minutes, g.delay_note, g.checked_in_at, g.checked_in_by,
+                g.delay_minutes, g.delay_note, g.delay_status, g.delay_reason, g.checked_in_at, g.checked_in_by,
                 g.event_division_id, g.created_at, g.updated_at,
                 COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END) as home_team_name, ht.logo_url as home_team_logo,
                 COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END) as away_team_name, at2.logo_url as away_team_logo,
@@ -1029,7 +1041,8 @@ directorRoutes.get('/events/:eventId/games/live', async (c) => {
         result.push(enrichedGame);
 
         // If this game is delayed, add to cumulative
-        if (game.status === 'delayed' && game.delay_minutes) {
+        // (status never holds 'delayed' — its CHECK constraint lacks it; delay_status is the flag)
+        if ((game.delay_status === 'delayed' || game.status === 'delayed') && game.delay_minutes) {
           cumulativeDelay += game.delay_minutes;
         }
       }

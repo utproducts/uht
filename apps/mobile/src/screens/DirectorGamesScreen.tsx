@@ -505,16 +505,16 @@ export default function DirectorGamesScreen({ navigation }: any) {
                 </View>
 
                 {/* Delay controls - pushes straight to both teams' families */}
-                <Text style={styles.statusLabel}>Delay</Text>
+                <Text style={styles.statusLabel}>Delay (minutes)</Text>
                 <View style={styles.statusRow}>
-                  {[15, 30, 45, 60].map(min => (
+                  {[10, 15, 20, 30, 45, 60].map(min => (
                     <TouchableOpacity
                       key={min}
                       style={[styles.statusOption, delayBusy ? { opacity: 0.5 } : null]}
                       disabled={delayBusy}
                       onPress={() => markDelayed(min)}
                     >
-                      <Text style={styles.statusOptionText}>+{min} min</Text>
+                      <Text style={styles.statusOptionText} maxFontSizeMultiplier={1.2}>+{min}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>

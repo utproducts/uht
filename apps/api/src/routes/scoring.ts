@@ -816,16 +816,27 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
     ORDER BY g.start_time ASC, vr.name ASC
   `).bind(eventId).all();
 
-  // Calculate cascading delays per rink
-  const gamesList = (games.results || []) as any[];
+  const enriched = applyDelayCascade((games.results || []) as any[]);
+
+  await attachAnnouncements(db, enriched);
+  return c.json({ success: true, data: enriched });
+});
+
+// Shared: enrich a time-ordered games list with cascading rink delays.
+// A delay on one game pushes back every later scheduled game on the same rink
+// until a game goes in_progress/final (the rink caught up).
+export function applyDelayCascade(gamesList: any[]) {
   const rinkDelays: Record<string, number> = {}; // rinkId -> accumulated delay minutes
 
-  const enriched = gamesList.map((g: any) => {
+  return gamesList.map((g: any) => {
     const rinkKey = g.rink_id || 'unknown';
 
-    // If this game itself is delayed, set/update the rink delay
+    // Delay inherited from earlier games on this rink (excludes this game's own delay)
+    const inherited = rinkDelays[rinkKey] || 0;
+
+    // If this game itself is delayed, the rink now runs at least that late
     if (g.delay_minutes > 0) {
-      rinkDelays[rinkKey] = Math.max(rinkDelays[rinkKey] || 0, g.delay_minutes);
+      rinkDelays[rinkKey] = Math.max(inherited, g.delay_minutes);
     }
 
     // If a game on this rink is final or in_progress, it's caught up — reduce cascaded delay
@@ -837,24 +848,21 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
       }
     }
 
-    const cascadedDelay = rinkDelays[rinkKey] || 0;
+    const effectiveDelay = Math.max(inherited, g.delay_minutes || 0);
     let adjustedStartTime = g.start_time;
-    if (cascadedDelay > 0 && g.status === 'scheduled') {
+    if (effectiveDelay > 0 && (g.status === 'scheduled' || g.status === 'warmup')) {
       const original = new Date(g.start_time);
-      original.setMinutes(original.getMinutes() + cascadedDelay);
+      original.setMinutes(original.getMinutes() + effectiveDelay);
       adjustedStartTime = original.toISOString();
     }
 
     return {
       ...g,
-      cascaded_delay_minutes: cascadedDelay,
+      cascaded_delay_minutes: inherited,
       adjusted_start_time: adjustedStartTime,
     };
   });
-
-  await attachAnnouncements(db, enriched);
-  return c.json({ success: true, data: enriched });
-});
+}
 
 // ==========================================
 // ADMIN: Set game delay status
@@ -900,18 +908,8 @@ scoringRoutes.put('/games/:gameId/delay', authMiddleware, requireRole('admin', '
       params.push(0);
     }
 
-    // If marking delayed, also update game status
-    if (delayStatus === 'delayed') {
-      updates.push('status = ?');
-      params.push('delayed');
-    } else if (delayStatus === 'on_time') {
-      // Only reset status if currently delayed
-      const currentGame = await db.prepare('SELECT status FROM games WHERE id = ?').bind(gameId).first<any>();
-      if (currentGame?.status === 'delayed') {
-        updates.push('status = ?');
-        params.push('scheduled');
-      }
-    }
+    // games.status has a CHECK constraint without 'delayed' — writing it rolls back
+    // the whole UPDATE. The delay lives in delay_status/delay_minutes only.
 
     params.push(gameId);
     await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
@@ -1096,6 +1094,7 @@ scoringRoutes.get('/events/:eventId/director-games', authMiddleware, requireRole
   const games = await db.prepare(`
     SELECT g.id, g.game_number, g.start_time, g.status, g.home_score, g.away_score,
       g.period, g.game_type, g.home_team_id, g.away_team_id,
+      g.delay_status, g.delay_minutes, g.delay_reason,
       EXISTS(SELECT 1 FROM game_checkins gch WHERE gch.game_id = g.id AND gch.team_id = g.home_team_id) as home_checked_in,
       EXISTS(SELECT 1 FROM game_checkins gca WHERE gca.game_id = g.id AND gca.team_id = g.away_team_id) as away_checked_in,
       COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder) as home_team_name, COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder) as away_team_name,

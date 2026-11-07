@@ -3005,7 +3005,7 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
       g.start_time, g.end_time, g.status, g.game_type, g.pool_name,
       g.home_score, g.away_score, g.period, g.is_overtime, g.is_shootout,
       g.home_locker_room, g.away_locker_room,
-      g.delay_minutes, g.delay_note,
+      g.delay_minutes, g.delay_note, g.delay_status, g.delay_reason,
       COALESCE(ht.schedule_name, CASE WHEN ht.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = ht.organization_id), ht.name) || ' (' || TRIM(SUBSTR(ht.head_coach_name, INSTR(ht.head_coach_name, ' '))) || ')' ELSE ht.name END, g.home_placeholder) as home_team_name,
       COALESCE(at2.schedule_name, CASE WHEN at2.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = at2.organization_id), at2.name) || ' (' || TRIM(SUBSTR(at2.head_coach_name, INSTR(at2.head_coach_name, ' '))) || ')' ELSE at2.name END, g.away_placeholder) as away_team_name,
       vr.name as rink_name,
@@ -3034,9 +3034,11 @@ eventRoutes.get('/:eventId/schedule', async (c) => {
   const result = await db.prepare(query).bind(...bindings).all();
   const rows = (result.results || []) as any[];
   // Live announcer line for in-progress games (what the PA is reading)
-  const { attachAnnouncements } = await import('./scoring');
-  await attachAnnouncements(db, rows);
-  return c.json({ success: true, data: rows });
+  const { attachAnnouncements, applyDelayCascade } = await import('./scoring');
+  // A delayed game pushes back every later game on its rink (cascaded_delay_minutes)
+  const enriched = applyDelayCascade(rows);
+  await attachAnnouncements(db, enriched);
+  return c.json({ success: true, data: enriched });
 });
 
 // ==================

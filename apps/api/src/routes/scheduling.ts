@@ -855,7 +855,18 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
   if (data.game_type !== undefined) { updates.push('game_type = ?'); values.push(data.game_type); }
   if (data.pool_name !== undefined) { updates.push('pool_name = ?'); values.push(data.pool_name); }
   if (data.notes !== undefined) { updates.push('notes = ?'); values.push(data.notes); }
-  if (data.status !== undefined) { updates.push('status = ?'); values.push(data.status); }
+  if (data.status !== undefined) {
+    if (data.status === 'delayed') {
+      // games.status CHECK constraint has no 'delayed' — the flag lives in delay_status
+      updates.push("delay_status = 'delayed'");
+    } else {
+      updates.push('status = ?'); values.push(data.status);
+      if (data.status === 'in_progress' || data.status === 'final') {
+        // Game underway or done — the delay flag no longer applies
+        updates.push('delay_status = NULL');
+      }
+    }
+  }
   if (data.home_locker_room !== undefined) { updates.push('home_locker_room = ?'); values.push(data.home_locker_room); }
   if (data.away_locker_room !== undefined) { updates.push('away_locker_room = ?'); values.push(data.away_locker_room); }
   if (data.delay_minutes !== undefined) { updates.push('delay_minutes = ?'); values.push(data.delay_minutes); }
