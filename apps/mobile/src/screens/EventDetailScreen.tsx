@@ -271,6 +271,8 @@ export default function EventDetailScreen({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [selectedDay, setSelectedDay] = useState<string>('all');
+  const [selectedRink, setSelectedRink] = useState<string>('all');
   // PER-GAME check-in: teams check in before every game. Coaches check their
   // own team in; admins/directors can check in (and undo) either side.
   const [gameCheckins, setGameCheckins] = useState<Record<string, string>>({});
@@ -1661,10 +1663,19 @@ export default function EventDetailScreen({
     return sortByAgeGroup([...divMap.values()], d => d.label);
   })();
 
+  // "Venue - Rink" label a game card displays; also the rink filter key
+  const rinkLabelOf = (g: any): string => [g.venue_name, g.rink_name || g.rink].filter(Boolean).join(' - ');
+
   function getFilteredSchedule() {
     let filtered = schedule;
     if (selectedDivision !== 'all') {
       filtered = filtered.filter(g => g.event_division_id === selectedDivision);
+    }
+    if (selectedDay !== 'all') {
+      filtered = filtered.filter(g => String(g.start_time || '').slice(0, 10) === selectedDay);
+    }
+    if (selectedRink !== 'all') {
+      filtered = filtered.filter(g => rinkLabelOf(g) === selectedRink);
     }
     const liveNow = (g: GameSlot) => g.status === 'in_progress' || g.status === 'intermission' || g.status === 'warmup';
     if (gameTimeFilter === 'live') {
@@ -1741,6 +1752,13 @@ export default function EventDetailScreen({
 
   function renderFullSchedule() {
     const filteredSchedule = getFilteredSchedule();
+    // Day + rink pills come from the schedule itself (dates as YYYY-MM-DD)
+    const scheduleDays = [...new Set(schedule.map(g => String(g.start_time || '').slice(0, 10)).filter(Boolean))].sort();
+    const scheduleRinks = [...new Set(schedule.map(rinkLabelOf).filter(Boolean))].sort();
+    const dayLabel = (d: string) => {
+      const dt = new Date(`${d}T12:00:00`);
+      return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    };
 
     return (
       <FlatList
@@ -1749,7 +1767,32 @@ export default function EventDetailScreen({
         contentContainerStyle={styles.tabContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         ListHeaderComponent={
-          <View style={styles.timeFilterRow}>
+          <View>
+            {scheduleDays.length > 1 ? (
+              <View style={styles.subFilterRow}>
+                {['all', ...scheduleDays].map(d => {
+                  const active = selectedDay === d;
+                  return (
+                    <TouchableOpacity key={d} style={[styles.subFilterPill, active ? styles.subFilterPillActive : null]} onPress={() => setSelectedDay(d)} activeOpacity={0.7}>
+                      <Text style={[styles.subFilterPillText, active ? styles.subFilterPillTextActive : null]} maxFontSizeMultiplier={1.2}>{d === 'all' ? 'All Days' : dayLabel(d)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
+            {scheduleRinks.length > 1 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subFilterScroll} contentContainerStyle={styles.subFilterScrollContent}>
+                {['all', ...scheduleRinks].map(r => {
+                  const active = selectedRink === r;
+                  return (
+                    <TouchableOpacity key={r} style={[styles.subFilterPill, active ? styles.subFilterPillActive : null]} onPress={() => setSelectedRink(r)} activeOpacity={0.7}>
+                      <Text style={[styles.subFilterPillText, active ? styles.subFilterPillTextActive : null]} maxFontSizeMultiplier={1.2}>{r === 'all' ? 'All Rinks' : r}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+            <View style={styles.timeFilterRow}>
             {(['all', 'live', 'upcoming', 'past'] as const).map(f => {
               const liveCount = f === 'live'
                 ? schedule.filter(g => (selectedDivision === 'all' || g.event_division_id === selectedDivision)
@@ -1770,6 +1813,7 @@ export default function EventDetailScreen({
                 </TouchableOpacity>
               );
             })}
+            </View>
           </View>
         }
         renderItem={({ item }) => {
@@ -3082,6 +3126,16 @@ const styles = StyleSheet.create({
 
   // Time filter
   timeFilterRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  subFilterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  subFilterScroll: { marginBottom: spacing.sm, flexGrow: 0 },
+  subFilterScrollContent: { flexDirection: 'row', gap: spacing.xs, paddingRight: spacing.md },
+  subFilterPill: {
+    paddingVertical: 5, paddingHorizontal: spacing.md, borderRadius: radii.full,
+    backgroundColor: '#e9eef5',
+  },
+  subFilterPillActive: { backgroundColor: colors.navy },
+  subFilterPillText: { fontSize: 12, color: colors.textSecondary, ...fonts.semibold },
+  subFilterPillTextActive: { color: colors.white },
   timeFilterBtn: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 5, paddingHorizontal: spacing.md, borderRadius: radii.full,
