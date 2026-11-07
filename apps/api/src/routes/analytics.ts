@@ -597,3 +597,63 @@ analyticsRoutes.get('/reports/team-map', authMiddleware, requireRole('admin', 'd
 
   return c.json({ success: true, data: { cities: placed, unplaced, states, total: Array.from(agg.values()).reduce((n, v) => n + v.teams, 0) } });
 });
+
+// ==================
+// ADMIN: Marketing dashboard — re-engagement campaign performance.
+// Cohorts are keyed by the day each contact got email 1, so day-of-week
+// open/click/redeem comparisons fall straight out of the table.
+// ==================
+analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const CIDS = ['reengage2026e1', 'reengage2026e2', 'reengage2026e3'];
+
+  const [campaigns, statuses, cohorts, daily, redemptions, recent] = await Promise.all([
+    db.prepare(`SELECT id, name, total_sent, total_delivered, total_opened, total_clicked FROM email_campaigns WHERE id IN ('reengage2026e1','reengage2026e2','reengage2026e3') ORDER BY id`).all(),
+    db.prepare('SELECT status, COUNT(*) as n FROM reengagement_targets GROUP BY status').all(),
+    db.prepare(`
+      SELECT date(e1_sent_at) as day, COUNT(*) as cohort_size,
+        SUM(CASE WHEN status = 'redeemed' THEN 1 ELSE 0 END) as redeemed,
+        SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) as returned,
+        SUM(CASE WHEN e2_sent_at IS NOT NULL THEN 1 ELSE 0 END) as got_e2,
+        SUM(CASE WHEN e3_sent_at IS NOT NULL THEN 1 ELSE 0 END) as got_e3
+      FROM reengagement_targets WHERE e1_sent_at IS NOT NULL
+      GROUP BY day ORDER BY day
+    `).all(),
+    db.prepare(`
+      SELECT campaign_id, date(created_at) as day, COUNT(*) as sent,
+        SUM(CASE WHEN status IN ('opened','clicked') THEN 1 ELSE 0 END) as opened,
+        SUM(CASE WHEN status = 'clicked' THEN 1 ELSE 0 END) as clicked,
+        SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) as bounced
+      FROM email_sends WHERE campaign_id IN ('reengage2026e1','reengage2026e2','reengage2026e3')
+      GROUP BY campaign_id, day ORDER BY day
+    `).all(),
+    db.prepare(`
+      SELECT dc.code, dc.team_name, dc.used_at,
+        COALESCE(er.payment_amount_cents, r.amount_cents, 0) as amount_cents,
+        COALESCE(er.team_name, dc.team_name) as reg_team
+      FROM discount_codes dc
+      LEFT JOIN event_registrations er ON er.id = dc.used_registration_id
+      LEFT JOIN registrations r ON r.id = dc.used_registration_id
+      WHERE dc.event_id = 'reengagement-2026-27' AND dc.is_used = 1
+      ORDER BY dc.used_at DESC
+    `).all(),
+    db.prepare(`
+      SELECT es.campaign_id, es.status, es.created_at, es.opened_at, c2.email
+      FROM email_sends es LEFT JOIN contacts c2 ON c2.id = es.contact_id
+      WHERE es.campaign_id IN ('reengage2026e1','reengage2026e2','reengage2026e3')
+      ORDER BY es.created_at DESC LIMIT 25
+    `).all(),
+  ]);
+
+  return c.json({
+    success: true,
+    data: {
+      campaigns: campaigns.results || [],
+      statuses: statuses.results || [],
+      cohorts: cohorts.results || [],
+      daily: daily.results || [],
+      redemptions: redemptions.results || [],
+      recent: recent.results || [],
+    },
+  });
+});

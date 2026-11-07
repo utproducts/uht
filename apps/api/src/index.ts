@@ -1263,6 +1263,14 @@ export default {
       ctx.waitUntil(import('./lib/event-recap').then(m => m.runEventRecapSweep(env)).catch((e: any) => console.error('Event recap sweep error:', e)));
       ctx.waitUntil(import('./lib/event-welcome').then(m => m.runEventWelcomeSweep(env)).catch((e: any) => console.error('Event welcome sweep error:', e)));
     }
+    // Re-engagement drip (Johnny's comeback emails) — 16:00 UTC window
+    // (10am CST); the sweep gates its own hour and is idempotent per target
+    // and per daily cohort, so every tick in the hour is safe
+    if (new Date().getUTCHours() === 16) {
+      ctx.waitUntil(import('./lib/reengagement').then(m => m.runReengagementSweep(env)).then((r: any) => {
+        if (r.e1 || r.e2 || r.e3) console.log(`Reengagement sweep: e1=${r.e1} e2=${r.e2} e3=${r.e3}`);
+      }).catch((e: any) => console.error('Reengagement sweep error:', e)));
+    }
     // MHR link + roster nag: 30 days out, weekly per team until complete
     // (idempotent via week-bucketed automated_email_log rows)
     if (new Date().getUTCHours() === 15) {

@@ -91,6 +91,7 @@ const ADMIN_NAV_SECTIONS: { title: string | null; items: { name: string; href: s
     title: 'Communication',
     items: [
       { name: 'Email Campaigns', href: '/admin/email' },
+      { name: 'Marketing', href: '/admin/marketing' },
       { name: 'Push Notifications', href: '/admin/notifications' },
     ],
   },
