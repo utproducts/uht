@@ -224,7 +224,7 @@ analyticsRoutes.get('/reports/pending-registrations', authMiddleware, requireRol
     JOIN events e ON e.id = r.event_id
     LEFT JOIN users u ON u.id = r.registered_by
     WHERE r.status = 'pending'
-        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
+        AND r.event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     ORDER BY r.created_at ASC
   `).all();
 
@@ -341,7 +341,7 @@ analyticsRoutes.get('/reports/registration-trends', authMiddleware, requireRole(
       LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
       WHERE r.created_at >= date('now', '-12 months')
         AND r.status NOT IN ('rejected', 'withdrawn')
-        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
+        AND r.event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
     `).all(),
   ]);
 
@@ -534,7 +534,7 @@ analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRol
       JOIN event_divisions ed ON ed.id = r.event_division_id
       JOIN teams t ON t.id = r.team_id
       WHERE r.registered_by = ?
-        AND event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
+        AND r.event_id NOT IN (SELECT id FROM events WHERE COALESCE(is_test, 0) = 1)
       ORDER BY r.created_at DESC
     `).bind(userId).all(),
   ]);
