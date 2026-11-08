@@ -107,9 +107,32 @@ export default function MarketingPage() {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<{ title: string; count: number; html: string; subject: string; when: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [iframeH, setIframeH] = useState(0);
+
+  // Lock the page behind the preview modal (iOS scrolls the background otherwise)
+  useEffect(() => {
+    if (!(preview || previewLoading)) return;
+    const y = window.scrollY;
+    const { style } = document.body;
+    const prev = { position: style.position, top: style.top, left: style.left, right: style.right, overflow: style.overflow };
+    style.position = 'fixed';
+    style.top = `-${y}px`;
+    style.left = '0';
+    style.right = '0';
+    style.overflow = 'hidden';
+    return () => {
+      style.position = prev.position;
+      style.top = prev.top;
+      style.left = prev.left;
+      style.right = prev.right;
+      style.overflow = prev.overflow;
+      window.scrollTo(0, y);
+    };
+  }, [preview, previewLoading]);
 
   const openPreview = async (item: CalItem, day: string) => {
     if (!item.campaignId) return;
+    setIframeH(0);
     setPreviewLoading(true);
     try {
       const r = await fetch(`${API}/api/email/campaigns/${item.campaignId}`, { headers: authHeaders() });
@@ -236,7 +259,22 @@ export default function MarketingPage() {
                   </div>
                   <button onClick={() => setPreview(null)} className="text-[#86868b] hover:text-[#1d1d1f] text-xl leading-none shrink-0">&times;</button>
                 </div>
-                <iframe srcDoc={preview.html} className="flex-1 w-full" style={{ minHeight: '60vh', border: 0 }} title="Email preview" />
+                <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+                  <iframe
+                    srcDoc={preview.html}
+                    className="w-full block"
+                    scrolling="no"
+                    style={{ border: 0, height: iframeH || '60vh', pointerEvents: iframeH ? 'none' : 'auto' }}
+                    onLoad={e => {
+                      try {
+                        const d = (e.target as HTMLIFrameElement).contentDocument;
+                        const h = Math.max(d?.documentElement?.scrollHeight || 0, d?.body?.scrollHeight || 0);
+                        if (h) setIframeH(h + 20);
+                      } catch { /* cross-origin — leave default height */ }
+                    }}
+                    title="Email preview"
+                  />
+                </div>
               </>
             )}
           </div>
