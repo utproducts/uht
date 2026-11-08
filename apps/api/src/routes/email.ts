@@ -209,8 +209,8 @@ emailRoutes.post('/campaigns', authMiddleware, requireRole('admin', 'director'),
   const id = crypto.randomUUID().replace(/-/g, '');
 
   await db.prepare(`
-    INSERT INTO email_campaigns (id, name, subject, body_html, body_text, event_id, template_type, sent_by, audience_filter)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO email_campaigns (id, name, subject, body_html, body_text, event_id, template_type, sent_by, audience_filter, is_marketing)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).bind(id, data.name, data.subject, data.bodyHtml, data.bodyText || null,
     data.eventId || null, data.templateType || 'custom', c.get('user').id,
     data.audience ? JSON.stringify(data.audience) : null
@@ -381,7 +381,19 @@ export async function processSendWave(env: any, campaign: any, audience: any, ba
   for (const r of (sentRows.results || [])) sentAlready.add(r.contact_id);
 
   const pending = uniqueRecipients.filter(r => !sentAlready.has(emailToContact.get(r.email.toLowerCase()) as string));
-  const slice = pending.slice(0, batchLimit);
+
+  // 72h marketing cooldown (Chad 11/8): a marketing campaign never emails an
+  // address within 72 hours of its last marketing email. Cooled-down
+  // recipients are DEFERRED, not dropped — they stay pending (no email_sends
+  // row), `remaining` keeps counting them so the campaign stays 'sending',
+  // and a later wave picks them up once their window clears.
+  let eligible = pending;
+  if ((campaign.is_marketing ?? 1) === 1) {
+    const { recentlyMarketedSet } = await import('../lib/marketing-guard');
+    const cooled = await recentlyMarketedSet(db);
+    if (cooled.size) eligible = pending.filter(r => !cooled.has(r.email.toLowerCase()));
+  }
+  const slice = eligible.slice(0, batchLimit);
 
   const fromEmail = campaign.from_email || 'info@ultimatetournaments.com';
   const fromName = campaign.from_name || 'Ultimate Hockey Tournaments';

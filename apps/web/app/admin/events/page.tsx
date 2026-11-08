@@ -5303,6 +5303,7 @@ function ScheduleVisibilityCard({ eventId }: { eventId: string }) {
 // per Chad 10/15)
 function PushHistoryCard({ eventId }: { eventId: string }) {
   const [pushHistory, setPushHistory] = useState<any[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   useEffect(() => {
     fetch(`${API_BASE.replace('/api/events', '/api/push')}/notifications?event_id=${eventId}&limit=30`, { headers: { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) } })
       .then(r => r.json())
@@ -5323,10 +5324,11 @@ function PushHistoryCard({ eventId }: { eventId: string }) {
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {pushHistory.map((n: any) => (
-              <div key={n.id} className="flex items-start justify-between gap-3 border border-[#e8e8ed] rounded-xl px-4 py-2.5">
+              <div key={n.id} onClick={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                className="flex items-start justify-between gap-3 border border-[#e8e8ed] rounded-xl px-4 py-2.5 cursor-pointer hover:bg-[#fafafa]">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#1d1d1f] truncate">{n.title}</p>
-                  <p className="text-xs text-[#86868b] truncate">{n.body}</p>
+                  <p className={`text-sm font-semibold text-[#1d1d1f] ${expandedId === n.id ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>{n.title}</p>
+                  <p className={`text-xs text-[#86868b] ${expandedId === n.id ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>{n.body}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${n.sent_by === 'system' || !n.sent_by_name ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>

@@ -118,6 +118,7 @@ async function ensureSetup(db: D1Database): Promise<void> {
       VALUES (?, ?, ?, '(per-recipient template in lib/reengagement.ts)', 'Johnny - Ultimate Hockey Tournaments', 'johnny@ultimatetournaments.com', 'reengagement', 'sent', datetime('now'))
     `).bind(c.id, c.name, c.subject || '$100 off - welcome back').run();
   }
+  await db.prepare("UPDATE email_campaigns SET is_marketing = 1 WHERE id IN ('reengage2026e1','reengage2026e2','reengage2026e3') AND COALESCE(is_marketing,0) = 0").run().catch(() => {});
 }
 
 // Drop anyone who came back, redeemed, or unsubscribed since the last run.
@@ -213,6 +214,18 @@ export async function runReengagementSweep(env: any): Promise<{ e1: number; e2: 
   const today = now.toISOString().slice(0, 10);
   const counts = { e1: 0, e2: 0, e3: 0 };
 
+  // 72h marketing cooldown (Chad 11/8): defer anyone who got a marketing
+  // email in the last 72 hours — they stay active/pending and a later day's
+  // sweep sends their email once the window clears. The set also dedupes
+  // same-email targets inside this run (two teams, one manager).
+  const { recentlyMarketedSet } = await import('./marketing-guard');
+  const cooled = await recentlyMarketedSet(db);
+  const clear = (list: Target[]) => list.filter(t => {
+    if (cooled.has(t.email)) return false;
+    cooled.add(t.email);
+    return true;
+  });
+
   // e3: last chance, day 18+, only before the deadline
   if (today < DEADLINE) {
     const r3 = await db.prepare(`
@@ -221,7 +234,8 @@ export async function runReengagementSweep(env: any): Promise<{ e1: number; e2: 
         AND e2_sent_at <= datetime('now', '-${E3_AFTER_E2_DAYS} days')
       ORDER BY e2_sent_at LIMIT 150
     `).all<Target>();
-    if (r3.results?.length) counts.e3 = await sendBatch(db, env, r3.results, 3);
+    const r3c = clear(r3.results || []);
+    if (r3c.length) counts.e3 = await sendBatch(db, env, r3c, 3);
   }
 
   // e2: the offer, day 7+
@@ -231,7 +245,8 @@ export async function runReengagementSweep(env: any): Promise<{ e1: number; e2: 
       AND e1_sent_at <= datetime('now', '-${E2_AFTER_DAYS} days')
     ORDER BY e1_sent_at LIMIT 150
   `).all<Target>();
-  if (r2.results?.length) counts.e2 = await sendBatch(db, env, r2.results, 2);
+  const r2c = clear(r2.results || []);
+  if (r2c.length) counts.e2 = await sendBatch(db, env, r2c, 2);
 
   // e1: today's cohort, capped per day
   const sentToday = await db.prepare(
@@ -241,8 +256,9 @@ export async function runReengagementSweep(env: any): Promise<{ e1: number; e2: 
   if (room > 0) {
     const r1 = await db.prepare(
       "SELECT * FROM reengagement_targets WHERE status = 'pending' AND e1_sent_at IS NULL ORDER BY events_count DESC, email LIMIT ?"
-    ).bind(room).all<Target>();
-    if (r1.results?.length) counts.e1 = await sendBatch(db, env, r1.results, 1);
+    ).bind(room * 3).all<Target>(); // overfetch: cooldown deferrals still leave a full cohort
+    const r1c = clear(r1.results || []).slice(0, room);
+    if (r1c.length) counts.e1 = await sendBatch(db, env, r1c, 1);
   }
 
   return counts;

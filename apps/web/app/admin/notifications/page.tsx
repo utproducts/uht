@@ -26,6 +26,7 @@ export default function NotificationsPage() {
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; sent?: number; error?: string } | null>(null);
 
@@ -401,9 +402,10 @@ export default function NotificationsPage() {
                 </thead>
                 <tbody>
                   {notifications.map((n: any) => (
-                    <tr key={n.id} className="border-t border-[#e8e8ed] hover:bg-[#fafafa]">
-                      <td className="px-4 py-3 font-medium text-[#1d1d1f] max-w-[180px] truncate">{n.title}</td>
-                      <td className="px-4 py-3 text-[#6e6e73] max-w-[200px] truncate">{n.body}</td>
+                    <tr key={n.id} onClick={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                      className="border-t border-[#e8e8ed] hover:bg-[#fafafa] cursor-pointer align-top">
+                      <td className={`px-4 py-3 font-medium text-[#1d1d1f] max-w-[180px] ${expandedId === n.id ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>{n.title}</td>
+                      <td className={`px-4 py-3 text-[#6e6e73] ${expandedId === n.id ? 'whitespace-pre-wrap break-words max-w-[420px]' : 'truncate max-w-[200px]'}`}>{n.body}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                           n.type === 'locker_room' || n.type === 'locker_room_auto'

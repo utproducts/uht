@@ -123,6 +123,7 @@ async function ensureSetup(db: D1Database): Promise<void> {
     INSERT OR IGNORE INTO email_campaigns (id, name, subject, body_html, from_name, from_email, template_type, status, sent_at)
     VALUES (?, 'Coupon reminder - unused $100 credits', 'Your team has a $100 credit waiting', '(per-recipient template in lib/coupon-reminders.ts)', 'Johnny - Ultimate Hockey Tournaments', 'johnny@ultimatetournaments.com', 'coupon_reminder', 'sent', datetime('now'))
   `).bind(CAMPAIGN_ID).run();
+  await db.prepare("UPDATE email_campaigns SET is_marketing = 1 WHERE id = ? AND COALESCE(is_marketing,0) = 0").bind(CAMPAIGN_ID).run().catch(() => {});
 }
 
 // Drop anyone whose code got used or who unsubscribed since the last run.
@@ -195,9 +196,21 @@ export async function runCouponReminderSweep(env: any): Promise<{ sent: number }
   const room = PER_DAY - (sentToday?.n || 0);
   if (room <= 0) return { sent: 0 };
 
-  const targets = ((await db.prepare(
+  // Overfetch so cooldown deferrals still leave a full cohort to send
+  const raw = ((await db.prepare(
     "SELECT * FROM coupon_reminder_targets WHERE status = 'pending' AND sent_at IS NULL ORDER BY created_at, email LIMIT ?"
-  ).bind(room).all<Target>()).results || []);
+  ).bind(room * 3).all<Target>()).results || []);
+
+  // 72h marketing cooldown (Chad 11/8): defer anyone who got a marketing
+  // email in the last 72 hours; they stay pending for a later day. The set
+  // also dedupes same-email targets inside this run (two teams, one manager).
+  const { recentlyMarketedSet } = await import('./marketing-guard');
+  const cooled = await recentlyMarketedSet(db);
+  const targets = raw.filter(t => {
+    if (cooled.has(t.email)) return false;
+    cooled.add(t.email);
+    return true;
+  }).slice(0, room);
   if (!targets.length) return { sent: 0 };
 
   const events = await loadUpcomingEvents(db);
