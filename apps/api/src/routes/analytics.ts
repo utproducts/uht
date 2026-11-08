@@ -607,7 +607,7 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
   const db = c.env.DB;
   const CIDS = ['reengage2026e1', 'reengage2026e2', 'reengage2026e3'];
 
-  const [campaigns, statuses, cohorts, daily, redemptions, recent, cityDrip, audienceCount, e2due, e3due, pendingE1] = await Promise.all([
+  const [campaigns, statuses, cohorts, daily, redemptions, recent, cityDrip, audienceCount, e2due, e3due, pendingE1, couponPending, couponCampaign] = await Promise.all([
     db.prepare(`SELECT id, name, total_sent, total_delivered, total_opened, total_clicked FROM email_campaigns WHERE id IN ('reengage2026e1','reengage2026e2','reengage2026e3') ORDER BY id`).all(),
     db.prepare('SELECT status, COUNT(*) as n FROM reengagement_targets GROUP BY status').all(),
     db.prepare(`
@@ -674,6 +674,9 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       WHERE status = 'active' AND e3_sent_at IS NULL AND e2_sent_at IS NOT NULL GROUP BY day
     `).all(),
     db.prepare("SELECT COUNT(*) as n FROM reengagement_targets WHERE status = 'pending' AND e1_sent_at IS NULL").first(),
+    // Coupon reminder lane — tolerate the table not existing yet
+    db.prepare("SELECT COUNT(*) as n FROM coupon_reminder_targets WHERE status = 'pending' AND sent_at IS NULL").first().catch(() => ({ n: 0 })),
+    db.prepare("SELECT id, name, total_sent, total_delivered, total_opened, total_clicked FROM email_campaigns WHERE id = 'couponrem2026'").first().catch(() => null),
   ]);
 
   return c.json({
@@ -690,6 +693,8 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       reengageE2Due: e2due.results || [],
       reengageE3Due: e3due.results || [],
       reengagePendingE1: (pendingE1 as any)?.n || 0,
+      couponPending: (couponPending as any)?.n || 0,
+      couponCampaign: couponCampaign || null,
     },
   });
 });

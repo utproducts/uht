@@ -49,7 +49,7 @@ function pct(part: number, whole: number): string {
   return Math.round((part / whole) * 100) + '%';
 }
 
-type CalItem = { type: 'city' | 'e1' | 'e2' | 'e3'; label: string; count: number; campaignId?: string; status?: string; opened?: number };
+type CalItem = { type: 'city' | 'e1' | 'e2' | 'e3' | 'coupon'; label: string; count: number; campaignId?: string; status?: string; opened?: number };
 
 function buildCalendar(data: any): { day: string; items: CalItem[] }[] {
   const items = new Map<string, CalItem[]>();
@@ -88,6 +88,14 @@ function buildCalendar(data: any): { day: string; items: CalItem[] }[] {
   for (const r of (data.reengageE3Due || [])) {
     add(r.day < today ? plus(today, 1) : r.day, { type: 'e3', label: 'Comeback email 3 - last chance', count: r.n });
   }
+  // Coupon reminders: unused $100 registration credits roll out 75/day
+  let coupons = data.couponPending || 0;
+  let cd = plus(today, 1) < '2026-11-09' ? '2026-11-09' : plus(today, 1);
+  while (coupons > 0) {
+    add(cd, { type: 'coupon', label: 'Coupon reminder - unused $100 credit', count: Math.min(75, coupons), campaignId: 'couponrem2026' });
+    coupons -= 75;
+    cd = plus(cd, 1);
+  }
   return Array.from(items.entries())
     .filter(([day]) => day >= today || (data.cityDrip || []).some((c: any) => (c.scheduled_at || '').slice(0, 10) === day))
     .sort((a, b) => a[0] < b[0] ? -1 : 1)
@@ -99,6 +107,7 @@ const CAL_STYLE: Record<string, string> = {
   e1: 'bg-blue-100 text-blue-800',
   e2: 'bg-green-100 text-green-800',
   e3: 'bg-amber-100 text-amber-800',
+  coupon: 'bg-cyan-100 text-cyan-900',
 };
 
 export default function MarketingPage() {

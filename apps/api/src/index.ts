@@ -1287,6 +1287,13 @@ export default {
         if (r.e1 || r.e2 || r.e3) console.log(`Reengagement sweep: e1=${r.e1} e2=${r.e2} e3=${r.e3}`);
       }).catch((e: any) => console.error('Reengagement sweep error:', e)));
     }
+    // Coupon reminders (unused post-registration $100 codes) — 17:00 UTC
+    // window (11am CST); same idempotent daily-cohort pattern as above
+    if (new Date().getUTCHours() === 17) {
+      ctx.waitUntil(import('./lib/coupon-reminders').then(m => m.runCouponReminderSweep(env)).then((r: any) => {
+        if (r.sent) console.log(`Coupon reminder sweep: sent=${r.sent}`);
+      }).catch((e: any) => console.error('Coupon reminder sweep error:', e)));
+    }
     // MHR link + roster nag: 30 days out, weekly per team until complete
     // (idempotent via week-bucketed automated_email_log rows)
     if (new Date().getUTCHours() === 15) {
