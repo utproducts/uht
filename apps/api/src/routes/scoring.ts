@@ -1270,8 +1270,9 @@ scoringRoutes.post('/games/:gameId/sheet/email', authMiddleware, async (c) => {
   const goalRows = goals.map((gl: any) =>
     `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(gl.period)}${gl.game_time ? ' ' + esc(gl.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">#${esc(gl.jersey_number || '?')}${gl.assist1_jersey ? ` (A: #${esc(gl.assist1_jersey)}${gl.assist2_jersey ? ', #' + esc(gl.assist2_jersey) : ''})` : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(gl.team_id))}</td></tr>`
   ).join('');
+  const penLen = (m: any) => { const s = Math.round((Number(m) || 2) * 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   const penRows = penalties.map((pn: any) =>
-    `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(pn.period)}${pn.game_time ? ' ' + esc(pn.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${pn.jersey_number === 'COACH' ? 'Coach' : '#' + esc(pn.jersey_number || '?')} ${esc(pn.penalty_type || '')} (${pn.penalty_minutes || 2} min)</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(pn.team_id))}</td></tr>`
+    `<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${perLabel(pn.period)}${pn.game_time ? ' ' + esc(pn.game_time) : ''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${pn.jersey_number === 'COACH' ? 'Coach' : '#' + esc(pn.jersey_number || '?')} ${esc(pn.penalty_type || '')} (${penLen(pn.penalty_minutes)})</td><td style="padding:4px 8px;border-bottom:1px solid #e5e9f0;">${esc(teamName(pn.team_id))}</td></tr>`
   ).join('');
 
   const statusLine = game.status === 'final'

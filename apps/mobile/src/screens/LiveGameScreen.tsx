@@ -146,9 +146,10 @@ export default function LiveGameScreen({ navigation, route }: any) {
         return team ? `${d} - ${team}` : d;
       }
       case 'penalty': {
-        const mins = ev.penalty_minutes || 2;
+        const secs = Math.round((Number(ev.penalty_minutes) || 2) * 60);
+        const mins = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
         const code = ev.penalty_type ? ` ${ev.penalty_type}` : '';
-        return `Penalty - ${ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`}${code} (${mins} min)${team ? ` - ${team}` : ''}`;
+        return `Penalty - ${ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`}${code} (${mins})${team ? ` - ${team}` : ''}`;
       }
       case 'period_start': return ev.period >= 4 ? 'Overtime started' : `Period ${ev.period} started`;
       case 'period_end': return ev.period >= 4 ? 'Overtime ended' : `Period ${ev.period} ended`;

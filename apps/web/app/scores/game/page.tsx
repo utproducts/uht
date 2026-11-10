@@ -466,7 +466,7 @@ function PenaltyList({ team, penalties, isHome }: { team: string; penalties: any
               <div className="flex-1 min-w-0">
                 <span className="font-bold text-[#1d1d1f]">{pen.jersey_number === 'COACH' ? 'Coach' : `#${pen.jersey_number || '?'}`}</span>
                 <span className="text-[#3d3d3d] ml-1">{pen.penalty_type}</span>
-                <span className="text-[#86868b] text-xs ml-1">({pen.penalty_minutes}:00)</span>
+                <span className="text-[#86868b] text-xs ml-1">({(() => { const s = Math.round((Number(pen.penalty_minutes) || 0) * 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; })()})</span>
               </div>
             </div>
           ))}

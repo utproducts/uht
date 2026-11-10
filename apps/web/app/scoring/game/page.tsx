@@ -89,7 +89,16 @@ interface GameData {
 
 type ModalType = null | 'goal' | 'penalty' | 'shots' | 'roster' | 'three-stars' | 'shootout' | 'goalie' | 'notes' | 'officials' | 'menu';
 type GoalStep = 'team' | 'player' | 'assist1' | 'assist2' | 'time' | 'goalie';
-type PenaltyStep = 'team' | 'player' | 'type' | 'time';
+type PenaltyStep = 'team' | 'player' | 'type' | 'time' | 'length';
+
+// Every penalty offers the same five lengths; the scorekeeper picks the one
+// the refs assessed (Johnny, Nov 2026). The catalog's own minutes is only
+// the pre-highlighted default.
+const PENALTY_LENGTHS = [1.5, 2, 5, 6, 10];
+const fmtPenLen = (m: any) => {
+  const s = Math.round((Number(m) || 0) * 60);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 
 function ScoringPageInner() {
   const searchParams = useSearchParams();
@@ -571,10 +580,15 @@ function ScoringPageInner() {
   const resetPenalty = () => { setPenaltyStep('time'); setPenaltyTeamId(''); setPenaltyJersey('');  setPenaltyPick(null); setPenaltyTime(''); setPenaltySearch(''); };
   const openPenalty = () => { resetPenalty(); setModal('penalty'); };
 
-  const submitPenalty = async (penalty: { code: string; min: number }) => {
+  const submitPenalty = (penalty: { code: string; name?: string; min: number }) => {
+    setPenaltyPick(penalty);
+    setPenaltyStep('length');
+  };
+  const submitPenaltyWithLength = async (minutes: number) => {
+    if (!penaltyPick) return;
     await postEvent({
       eventType: 'penalty', teamId: penaltyTeamId,
-      jerseyNumber: penaltyJersey || null, penaltyCode: penalty.code, penaltyMinutes: penalty.min,
+      jerseyNumber: penaltyJersey || null, penaltyCode: penaltyPick.code, penaltyMinutes: minutes,
       period: game?.period || 1,
       gameTime: penaltyTime || null,
     });
@@ -1152,7 +1166,7 @@ function ScoringPageInner() {
                     {ev.event_type === 'penalty' && (
                       <p className="text-sm font-bold text-amber-600 truncate">
                         {ev.penalty_type || 'Penalty'} — {ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`} {teamName}
-                        <span className="text-[#86868b] font-normal"> ({ev.penalty_minutes}:00)</span>
+                        <span className="text-[#86868b] font-normal"> ({fmtPenLen(ev.penalty_minutes)})</span>
                       </p>
                     )}
                     {ev.event_type === 'period_start' && <p className="text-sm text-[#6e6e73]">Period {ev.period} started</p>}
@@ -1309,6 +1323,25 @@ function ScoringPageInner() {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {penaltyStep === 'length' && penaltyPick && (
+            <div className="w-full">
+              <p className="text-center text-lg font-bold text-[#1d1d1f] mb-1">How long?</p>
+              <p className="text-center text-xs text-[#86868b] mb-4">{penaltyPick.name || penaltyPick.code} - pick the length the refs assessed</p>
+              <div className="space-y-2">
+                {PENALTY_LENGTHS.map((len) => {
+                  const isDefault = Math.abs(len - (penaltyPick.min || 0)) < 0.01;
+                  return (
+                    <button key={len} onClick={() => submitPenaltyWithLength(len)}
+                      className={`w-full py-4 rounded-2xl text-xl font-black tabular-nums ${isDefault
+                        ? 'bg-[#003e79] text-white active:bg-[#002d5a] ring-4 ring-[#7dd3fc]'
+                        : 'bg-[#f0f7ff] text-[#003e79] active:bg-[#e0efff]'}`}>
+                      {fmtPenLen(len)}{isDefault ? '  (usual)' : ''}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </FullScreenModal>
@@ -2504,9 +2537,12 @@ function EventEditModal({ event, submitting, onClose, onSave, onDelete }: {
             </div>
           </div>
         ) : (
-          <div className="w-1/3">
-            <span className={label}>Minutes</span>
-            <input value={mins} onChange={e => setMins(e.target.value)} inputMode="numeric" className={field} />
+          <div className="w-1/2">
+            <span className={label}>Length</span>
+            <select value={mins} onChange={e => setMins(e.target.value)} className={`${field} bg-white`}>
+              {!PENALTY_LENGTHS.some(l => String(l) === mins) && mins !== '' && <option value={mins}>{fmtPenLen(mins)}</option>}
+              {PENALTY_LENGTHS.map(l => <option key={l} value={String(l)}>{fmtPenLen(l)}</option>)}
+            </select>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
@@ -2515,7 +2551,7 @@ function EventEditModal({ event, submitting, onClose, onSave, onDelete }: {
           <button disabled={submitting || !timeOk}
             onClick={() => onSave(isGoal
               ? { jerseyNumber: jersey || null, assist1Jersey: a1 || null, assist2Jersey: a2 || null, goalieJersey: goalie.trim().toUpperCase() === 'EN' ? 'EN' : (goalie || null), period: parseInt(periodV), gameTime: time || null }
-              : { jerseyNumber: jersey || null, penaltyMinutes: mins ? parseInt(mins) : null, period: parseInt(periodV), gameTime: time || null })}
+              : { jerseyNumber: jersey || null, penaltyMinutes: mins ? parseFloat(mins) : null, period: parseInt(periodV), gameTime: time || null })}
             className="py-3 rounded-xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-40">
             {submitting ? 'Saving…' : 'Save Changes'}
           </button>

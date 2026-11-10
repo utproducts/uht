@@ -15,6 +15,12 @@ import { colors } from '../constants/theme';
 import { authFetch } from '../services/auth';
 import { StrokeDrawing } from '../components/SignaturePad';
 
+// 1.5 -> "1:30", 2 -> "2:00" (penalty lengths can be fractional minutes)
+const fmtPenLen = (m: any) => {
+  const s = Math.round((Number(m) || 0) * 60);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
 // Official game scoresheet — the GameSheet-style record coaches and managers
 // open from the "Scoresheet Ready" push or from My Schedule's completed games.
 export default function ScoresheetScreen({ route, navigation }: any) {
@@ -316,7 +322,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                   onPress={() => setPenReq({ ev: e, type: null, value: '', note: '' })} activeOpacity={0.6}>
                   <Text style={[styles.td, { width: 36 }]}>{e.period ?? '-'}</Text>
                   <Text style={[styles.td, { width: 32, fontWeight: '800' }]} numberOfLines={1}>{e.jersey_number === 'COACH' ? 'C' : (e.jersey_number || '?')}</Text>
-                  <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes ?? '-'}</Text>
+                  <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes != null ? fmtPenLen(e.penalty_minutes) : '-'}</Text>
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <Text style={[styles.td, { textAlign: 'left', flexShrink: 1 }]} numberOfLines={1}>{e.penalty_type || 'Penalty'}</Text>
                     {e.is_misconduct ? <View style={styles.miscBadge}><Text style={styles.miscBadgeText} maxFontSizeMultiplier={1.1}>MISC</Text></View> : null}
@@ -527,7 +533,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                 <>
                   <Text style={styles.fixTitle} maxFontSizeMultiplier={1.2}>Request Penalty Change</Text>
                   <Text style={styles.fixSub} maxFontSizeMultiplier={1.3}>
-                    {`P${ev.period ?? '?'} ${ev.game_time || ''} - ${ev.penalty_type || 'Penalty'} (${ev.penalty_minutes ?? '?'} min) on ${ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`}`}
+                    {`P${ev.period ?? '?'} ${ev.game_time || ''} - ${ev.penalty_type || 'Penalty'} (${ev.penalty_minutes != null ? fmtPenLen(ev.penalty_minutes) : '?'}) on ${ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`}`}
                   </Text>
                   <Text style={styles.fixPrompt} maxFontSizeMultiplier={1.3}>
                     Penalty changes are reviewed and approved by the tournament director before they appear on the sheet.

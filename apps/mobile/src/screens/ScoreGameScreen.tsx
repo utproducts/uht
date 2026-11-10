@@ -163,8 +163,9 @@ function getEventDescription(event: GameEvent, game: GameData): string {
     }
     case 'penalty': {
       const code = event.penalty_type || '';
-      const mins = event.penalty_minutes || 2;
-      return `PENALTY - ${event.jersey_number === 'COACH' ? 'Coach' : `#${event.jersey_number || '?'}`} ${code} (${mins} min) - ${shortTeam}`;
+      const secs = Math.round((Number(event.penalty_minutes) || 2) * 60);
+      const mins = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+      return `PENALTY - ${event.jersey_number === 'COACH' ? 'Coach' : `#${event.jersey_number || '?'}`} ${code} (${mins}) - ${shortTeam}`;
     }
     case 'period_start': return `Period ${event.period} started`;
     case 'period_end': return `Period ${event.period} ended`;
