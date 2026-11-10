@@ -11,6 +11,11 @@
 //      plus exactly 1 crossover game
 //   6. 4 and 5 team divisions: full round robin, everyone plays everyone once
 //   7. 5-team division: every team gets exactly 2 home and 2 away games
+//
+// Chad's rule 8 (2026-11-10, after Gateway Classic bracket mislabels):
+//   Blue/Grey seeds belong ONLY in 6-team two-pool divisions, and the
+//   bracket must be exactly: 1st Blue v 2nd Blue, 1st Grey v 2nd Grey,
+//   3rd Blue v 3rd Grey. Anything else can't auto-advance and gets flagged.
 
 export interface CheckGame {
   div: string;                 // division label from the sheet
@@ -156,6 +161,62 @@ export function runScheduleChecks(games: CheckGame[], poolsByName?: Record<strin
           }
         }
         if (!valid) errors.push(`${div}: 6-team pool games don't form two groups of 3 with 1 crossover each - check the matchups`);
+      }
+    }
+
+    // ---- Rule 8: Blue/Grey seeds only in 6-team two-pool divisions, and
+    // only as 1B v 2B, 1G v 2G, 3B v 3G (anything else can't auto-advance) ----
+    {
+      const parseColor = (label: string | null) => {
+        if (!label) return null;
+        const m = label.match(/(\d+)\s*(?:st|nd|rd|th)?\s*(?:place\s*)?\s*(blue|grey|gray)\b/i);
+        return m ? { rank: parseInt(m[1], 10), color: m[2].toLowerCase().replace('gray', 'grey') } : null;
+      };
+      const coloredGames = divGames.filter(g =>
+        parseColor(g.homeIsSeed ? g.homeName : null) || parseColor(g.awayIsSeed ? g.awayName : null));
+      if (coloredGames.length > 0) {
+        if (n !== 6) {
+          for (const g of coloredGames) {
+            const lbls = [g.homeIsSeed ? g.homeName : null, g.awayIsSeed ? g.awayName : null]
+              .filter(s0 => parseColor(s0)).join('" and "');
+            errors.push(`${div}: "${lbls}" at ${fmtTime(g.start)} ${fmtDay(dateOf(g.start))} - Blue/Grey seeds only belong in 6-team two-pool divisions and this division has ${n} teams, so this game will NOT auto-fill. Use plain seeds like "1st", "2nd" instead.`);
+          }
+        } else {
+          const LEGAL: Array<[string, string, string]> = [
+            ['1blue', '2blue', '1st Blue vs 2nd Blue'],
+            ['1grey', '2grey', '1st Grey vs 2nd Grey'],
+            ['3blue', '3grey', '3rd Blue vs 3rd Grey'],
+          ];
+          const legalKeys = new Map(LEGAL.map(([a, b, label]) => [[a, b].sort().join('|'), label]));
+          const present = new Set<string>();
+          for (const g of coloredGames) {
+            const hc = parseColor(g.homeIsSeed ? g.homeName : null);
+            const ac = parseColor(g.awayIsSeed ? g.awayName : null);
+            const when = `at ${fmtTime(g.start)} ${fmtDay(dateOf(g.start))}`;
+            if (!hc || !ac) {
+              errors.push(`${div}: "${g.homeName}" vs "${g.awayName}" ${when} mixes a Blue/Grey seed with something else - a 6-team bracket pairs colored seeds only (1st Blue vs 2nd Blue, 1st Grey vs 2nd Grey, 3rd Blue vs 3rd Grey)`);
+              continue;
+            }
+            if (hc.rank > 3 || ac.rank > 3) {
+              errors.push(`${div}: "${g.homeName}" vs "${g.awayName}" ${when} - pools of 3 only have places 1-3, so this seed can never fill`);
+              continue;
+            }
+            const key = [`${hc.rank}${hc.color}`, `${ac.rank}${ac.color}`].sort().join('|');
+            if (!legalKeys.has(key)) {
+              errors.push(`${div}: "${g.homeName}" vs "${g.awayName}" ${when} is not a valid 6-team bracket matchup - it must be 1st Blue vs 2nd Blue, 1st Grey vs 2nd Grey, or 3rd Blue vs 3rd Grey`);
+            } else {
+              present.add(key);
+            }
+          }
+          for (const [key, label] of legalKeys) {
+            if (!present.has(key)) warnings.push(`${div}: no "${label}" game in the schedule - a 6-team Blue/Grey bracket normally has all three matchups`);
+          }
+          const poolsKnown = poolsByName && Object.values(poolsByName)
+            .some(p => /^(blue|grey|gray)$/i.test(String(p || '').trim()));
+          if (!poolsKnown) {
+            warnings.push(`${div}: Blue/Grey seeds need the pool games labeled Blue/Grey to auto-fill - assign each team's pool after upload or the bracket will not advance on its own`);
+          }
+        }
       }
     }
 
