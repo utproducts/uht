@@ -322,7 +322,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
                   onPress={() => setPenReq({ ev: e, type: null, value: '', note: '' })} activeOpacity={0.6}>
                   <Text style={[styles.td, { width: 36 }]}>{e.period ?? '-'}</Text>
                   <Text style={[styles.td, { width: 32, fontWeight: '800' }]} numberOfLines={1}>{e.jersey_number === 'COACH' ? 'C' : (e.jersey_number || '?')}</Text>
-                  <Text style={[styles.td, { width: 36 }]}>{e.penalty_minutes != null ? fmtPenLen(e.penalty_minutes) : '-'}</Text>
+                  <Text style={[styles.td, { width: 36 }]}>{e.details === 'match' ? 'Match' : e.penalty_minutes != null ? fmtPenLen(e.penalty_minutes) : '-'}</Text>
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <Text style={[styles.td, { textAlign: 'left', flexShrink: 1 }]} numberOfLines={1}>{e.penalty_type || 'Penalty'}</Text>
                     {e.is_misconduct ? <View style={styles.miscBadge}><Text style={styles.miscBadgeText} maxFontSizeMultiplier={1.1}>MISC</Text></View> : null}

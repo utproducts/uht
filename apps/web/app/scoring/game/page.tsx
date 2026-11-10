@@ -94,8 +94,8 @@ type PenaltyStep = 'team' | 'player' | 'type' | 'time' | 'length';
 // Every penalty offers the same five lengths; the scorekeeper picks the one
 // the refs assessed (Johnny, Nov 2026). The catalog's own minutes is only
 // the pre-highlighted default. Youth minors are often 1:30.
-const PENALTY_LENGTHS = [1.5, 2, 5, 6, 10];
-const PENALTY_LENGTH_TAGS: Record<string, string> = { '1.5': 'Minor', '2': 'Minor', '5': 'Major', '6': 'Major', '10': 'Misconduct' };
+const PENALTY_LENGTHS = [1.5, 2, 3, 4, 5, 6, 10];
+const PENALTY_LENGTH_TAGS: Record<string, string> = { '1.5': 'Minor', '2': 'Minor', '3': 'Double Minor', '4': 'Double Minor', '5': 'Major', '6': 'Major', '10': 'Misconduct' };
 const fmtPenLen = (m: any) => {
   const s = Math.round((Number(m) || 0) * 60);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -585,13 +585,15 @@ function ScoringPageInner() {
     setPenaltyPick(penalty);
     setPenaltyStep('length');
   };
-  const submitPenaltyWithLength = async (minutes: number) => {
+  const submitPenaltyWithLength = async (minutes: number, isMatch = false) => {
     if (!penaltyPick) return;
     await postEvent({
       eventType: 'penalty', teamId: penaltyTeamId,
       jerseyNumber: penaltyJersey || null, penaltyCode: penaltyPick.code, penaltyMinutes: minutes,
       period: game?.period || 1,
       gameTime: penaltyTime || null,
+      // Match = 5 min + ejection; the marker makes sheets print "Match"
+      details: isMatch ? 'match' : null,
     });
     setPenaltyPick(null);
     setModal(null);
@@ -1167,7 +1169,7 @@ function ScoringPageInner() {
                     {ev.event_type === 'penalty' && (
                       <p className="text-sm font-bold text-amber-600 truncate">
                         {ev.penalty_type || 'Penalty'} — {ev.jersey_number === 'COACH' ? 'Coach' : `#${ev.jersey_number || '?'}`} {teamName}
-                        <span className="text-[#86868b] font-normal"> ({fmtPenLen(ev.penalty_minutes)})</span>
+                        <span className="text-[#86868b] font-normal"> ({ev.details === 'match' ? 'Match' : fmtPenLen(ev.penalty_minutes)})</span>
                       </p>
                     )}
                     {ev.event_type === 'period_start' && <p className="text-sm text-[#6e6e73]">Period {ev.period} started</p>}
@@ -1330,18 +1332,22 @@ function ScoringPageInner() {
             <div className="w-full">
               <p className="text-center text-lg font-bold text-[#1d1d1f] mb-1">How long?</p>
               <p className="text-center text-xs text-[#86868b] mb-4">{penaltyPick.name || penaltyPick.code} - pick the length the refs assessed</p>
-              <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 {PENALTY_LENGTHS.map((len) => {
                   const isDefault = Math.abs(len - (penaltyPick.min || 0)) < 0.01;
                   return (
                     <button key={len} onClick={() => submitPenaltyWithLength(len)}
-                      className={`w-full py-4 rounded-2xl text-xl font-black tabular-nums ${isDefault
+                      className={`py-4 rounded-2xl text-lg font-black tabular-nums leading-tight ${isDefault
                         ? 'bg-[#003e79] text-white active:bg-[#002d5a] ring-4 ring-[#7dd3fc]'
                         : 'bg-[#f0f7ff] text-[#003e79] active:bg-[#e0efff]'}`}>
-                      {fmtPenLen(len)} ({PENALTY_LENGTH_TAGS[String(len)]})
+                      {fmtPenLen(len)}<span className="block text-[11px] font-bold opacity-70">{PENALTY_LENGTH_TAGS[String(len)]}</span>
                     </button>
                   );
                 })}
+                <button onClick={() => submitPenaltyWithLength(5, true)}
+                  className="py-4 rounded-2xl text-lg font-black leading-tight bg-rose-900 text-white active:bg-rose-950">
+                  Match<span className="block text-[11px] font-bold opacity-70">Ejection</span>
+                </button>
               </div>
             </div>
           )}
