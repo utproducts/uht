@@ -20,7 +20,7 @@ iceBookingRoutes.get('/slots', async (c) => {
     FROM ice_slots is2
     LEFT JOIN venues v ON v.id = is2.venue_id
     LEFT JOIN venue_rinks vr ON vr.id = is2.rink_id
-    WHERE 1=1
+    WHERE is2.date >= date('now', '-1 day')
   `;
   const params: string[] = [];
 
@@ -46,7 +46,7 @@ iceBookingRoutes.get('/slots/counts', async (c) => {
       COUNT(*) as total_count,
       SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) as available_count
     FROM ice_slots
-    WHERE 1=1
+    WHERE date >= date('now', '-1 day')
   `;
   const params: string[] = [];
 
