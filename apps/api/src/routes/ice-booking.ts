@@ -190,57 +190,10 @@ iceBookingRoutes.get('/booking/:slotId', async (c) => {
         if ((claim.meta?.changes || 0) > 0) {
           slot.status = 'booked';
           // Both emails are admin-editable templates on the Automated Emails
-          // page (ice_booking_staff / ice_booking_confirmation)
-          const { buildIceBookingConfirmationHtml, buildIceBookingStaffHtml, iceBookingVars } = await import('../lib/ice-booking-email');
-          const { getResolvedFields, replaceVars, isTemplateEnabled } = await import('../lib/template-overrides');
-          const booking = {
-            venueName: slot.venue_name || 'Rosemont Outdoor Rink',
-            rinkName: slot.rink_name || null,
-            date: slot.date,
-            startTime: slot.start_time,
-            endTime: slot.end_time,
-            amountCents: slot.price_cents || 0,
-            name: slot.booked_by_name || '',
-            email: slot.booked_by_email || '',
-            phone: slot.booked_by_phone || null,
-            notes: slot.notes || null,
-          };
-          const vars = iceBookingVars(booking);
-          // Staff notification (John + Johnny)
-          try {
-            if (await isTemplateEnabled(db, 'ice_booking_staff')) {
-              const f = await getResolvedFields(db, 'ice_booking_staff');
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
-                  to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
-                  subject: replaceVars(f.subject, vars),
-                  html: buildIceBookingStaffHtml(booking, f),
-                }),
-              });
-            }
-          } catch {}
-          // Booker confirmation
-          if (slot.booked_by_email) {
-            try {
-              if (await isTemplateEnabled(db, 'ice_booking_confirmation')) {
-                const f = await getResolvedFields(db, 'ice_booking_confirmation');
-                await fetch('https://api.resend.com/emails', {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
-                    reply_to: 'johnny@ultimatetournaments.com',
-                    to: [slot.booked_by_email],
-                    subject: replaceVars(f.subject, vars),
-                    html: buildIceBookingConfirmationHtml(booking, f),
-                  }),
-                });
-              }
-            } catch {}
-          }
+          // page (ice_booking_staff / ice_booking_confirmation); the same
+          // helper also serves the cron settle sweep.
+          const { sendIceBookingEmails } = await import('../lib/ice-settle-sweep');
+          await sendIceBookingEmails(c.env, db, slot).catch(() => {});
         }
       }
     } catch {}

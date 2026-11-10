@@ -1249,6 +1249,11 @@ export default {
     ctx.waitUntil(import('./lib/push').then(m => m.runCheckinReminderSweep(env.DB, env)).catch((e: any) => console.error('Check-in reminder sweep error:', e)));
     // games <2h out with unassigned locker rooms alarm the directors
     ctx.waitUntil(import('./lib/push').then(m => m.runLockerMissingSweep(env.DB)).catch((e: any) => console.error('Locker missing sweep error:', e)));
+    // Settle paid-but-stuck Book Ice holds against Stripe (customer paid but
+    // never returned to the confirmation page); releases expired holds too
+    ctx.waitUntil(import('./lib/ice-settle-sweep').then(m => m.runIceSettleSweep(env)).then((r: any) => {
+      if (r.settled || r.released) console.log(`Ice settle sweep: settled=${r.settled} released=${r.released}`);
+    }).catch((e: any) => console.error('Ice settle sweep error:', e)));
     // 30-days-out event info email — 14:00 UTC window (9am CDT / 8am CST);
     // idempotent per recipient, so every tick in the hour is safe
     if (new Date().getUTCHours() === 14) {
