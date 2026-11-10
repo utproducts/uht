@@ -189,6 +189,126 @@ export function buildIceBookingConfirmationHtml(b: IceBookingEmailData, fields: 
 </html>`;
 }
 
+/** Day-before reminder to the booker (branded shell, same booking card) */
+export function buildIceBookingReminderHtml(b: IceBookingEmailData, fields: Record<string, string>): string {
+  const vars = iceBookingVars(b);
+  const heading = sub(fields.heading || 'See you on the ice tomorrow!', vars);
+  const headingSubtitle = sub(fields.heading_subtitle || 'A quick reminder about your booking', vars);
+  const bodyText = sub(fields.body_text || 'Hi {firstName}, just a reminder that your ice time at the {venueName} is tomorrow. Everything you need is below.', vars);
+  const arrivalText = sub(fields.arrival_text || 'Please arrive 15 minutes before your start time so you get your full hour on the ice. If something came up and you need to make a change, reply to this email and we will take care of it.', vars);
+  const footerText = sub(fields.footer_text || 'Questions? Reply to this email and we will get right back to you.', vars);
+
+  const arrivalHtml = arrivalText.split('\n').map((line) => {
+    line = line.trim();
+    if (!line) return '';
+    if (line.startsWith('•') || line.startsWith('-') || line.startsWith('*')) {
+      return `<p style="margin: 0 0 4px 0;">&bull; ${line.replace(/^[•\-*]\s*/, '')}</p>`;
+    }
+    return `<p style="margin: 0 0 8px 0;">${line}</p>`;
+  }).join('\n              ');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f7; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+
+          <!-- Header (locked) -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #003e79, #001f3f); padding: 32px; text-align: center;">
+              <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Tournaments" width="180" style="height: auto; margin-bottom: 16px;">
+              <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 700;">${esc(heading)}</h1>
+              <p style="color: rgba(255,255,255,0.7); font-size: 14px; margin: 8px 0 0 0;">${esc(headingSubtitle)}</p>
+            </td>
+          </tr>
+
+          <!-- Body (editable) -->
+          <tr>
+            <td style="padding: 24px 32px 0 32px; font-size: 15px; line-height: 1.6; color: #1d1d1f;">
+              <p style="margin: 0 0 16px 0;">${esc(bodyText)}</p>
+            </td>
+          </tr>
+
+          <!-- Booking Summary (locked - dynamic data) -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px; font-size: 14px; color: #1d1d1f;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e8e8ed; border-radius: 12px; overflow: hidden;">
+                <tr>
+                  <td style="background-color: #f5f5f7; padding: 12px 16px; font-weight: 700; font-size: 13px; color: #6e6e73; text-transform: uppercase; letter-spacing: 0.5px;">Your Ice Time</td>
+                </tr>
+                <tr>
+                  <td style="padding: 16px;">
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding: 4px 0; color: #6e6e73; font-size: 13px; width: 120px;">Rink</td>
+                        <td style="padding: 4px 0; font-weight: 600;">${esc(vars.venueName)}${b.rinkName ? ` - ${esc(b.rinkName)}` : ''}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; color: #6e6e73; font-size: 13px;">Date</td>
+                        <td style="padding: 4px 0; font-weight: 600;">${esc(vars.date)}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; color: #6e6e73; font-size: 13px;">Time</td>
+                        <td style="padding: 4px 0; font-weight: 600;">${esc(vars.startTime)} - ${esc(vars.endTime)}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 4px 0; color: #6e6e73; font-size: 13px;">Booked By</td>
+                        <td style="padding: 4px 0; font-weight: 600;">${esc(b.name)}</td>
+                      </tr>
+                      ${b.notes ? `<tr><td style="padding: 4px 0; color: #6e6e73; font-size: 13px;">Notes</td><td style="padding: 4px 0; font-weight: 600;">${esc(b.notes)}</td></tr>` : ''}
+                      <tr>
+                        <td style="padding: 4px 0; color: #6e6e73; font-size: 13px;">Payment</td>
+                        <td style="padding: 4px 0;"><span style="background-color: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;">PAID &middot; ${esc(vars.amount)}</span></td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Arrival info (editable) -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px;">
+                <tr>
+                  <td style="padding: 16px 20px; font-size: 14px; color: #0c4a6e; line-height: 1.6;">
+                    ${arrivalHtml}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer note (editable) -->
+          <tr>
+            <td style="padding: 0 32px 28px 32px; font-size: 14px; line-height: 1.6; color: #6e6e73;">
+              <p style="margin: 0;">${esc(footerText)}</p>
+            </td>
+          </tr>
+
+          <!-- Footer (locked) -->
+          <tr>
+            <td style="background-color: #f5f5f7; padding: 20px 32px; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #aeaeb2;">Ultimate Hockey Tournaments &middot; ultimatetournaments.com</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 /** Staff alert to John + Johnny on every paid booking */
 export function buildIceBookingStaffHtml(b: IceBookingEmailData, fields: Record<string, string>): string {
   const vars = iceBookingVars(b);

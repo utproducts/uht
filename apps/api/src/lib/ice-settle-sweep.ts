@@ -68,6 +68,85 @@ export async function runIceSettleSweep(env: any): Promise<{ settled: number; re
   return out;
 }
 
+/**
+ * Day-before booking reminder. Runs inside the 16:00 UTC hour (10am CT at the
+ * rink): every booked slot dated tomorrow whose reminder has not gone out yet
+ * gets the ice_booking_reminder template. Idempotent via an atomic claim on
+ * ice_slots.reminder_sent_at, so every cron tick in the hour is safe.
+ */
+export async function runIceReminderSweep(env: any): Promise<{ sent: number }> {
+  const db = env.DB;
+  const out = { sent: 0 };
+
+  const { isTemplateEnabled, getResolvedFields, replaceVars } = await import('./template-overrides');
+  if (!(await isTemplateEnabled(db, 'ice_booking_reminder'))) return out;
+
+  const due = await db.prepare(`
+    SELECT is2.*, v.name as venue_name, vr.name as rink_name
+    FROM ice_slots is2
+    LEFT JOIN venues v ON v.id = is2.venue_id
+    LEFT JOIN venue_rinks vr ON vr.id = is2.rink_id
+    WHERE is2.status = 'booked'
+      AND is2.date = date('now', '+1 day')
+      AND is2.reminder_sent_at IS NULL
+      AND is2.booked_by_email IS NOT NULL AND is2.booked_by_email != ''
+    ORDER BY is2.start_time ASC
+    LIMIT 25
+  `).all<any>();
+
+  if (!(due.results || []).length) return out;
+
+  const { buildIceBookingReminderHtml, iceBookingVars } = await import('./ice-booking-email');
+  const fields = await getResolvedFields(db, 'ice_booking_reminder');
+
+  for (const slot of (due.results || [])) {
+    const claim = await db.prepare(
+      "UPDATE ice_slots SET reminder_sent_at = datetime('now') WHERE id = ? AND reminder_sent_at IS NULL"
+    ).bind(slot.id).run();
+    if ((claim.meta?.changes || 0) === 0) continue; // another tick got it
+
+    const booking = {
+      venueName: slot.venue_name || 'Rosemont Outdoor Rink',
+      rinkName: slot.rink_name || null,
+      date: slot.date,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      amountCents: slot.price_cents || 0,
+      name: slot.booked_by_name || '',
+      email: slot.booked_by_email || '',
+      phone: slot.booked_by_phone || null,
+      notes: slot.notes || null,
+    };
+    const vars = iceBookingVars(booking);
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+          reply_to: 'johnny@ultimatetournaments.com',
+          to: [slot.booked_by_email],
+          subject: replaceVars(fields.subject, vars),
+          html: buildIceBookingReminderHtml(booking, fields),
+        }),
+      });
+      if (resp.ok) {
+        out.sent++;
+        console.log(`Ice reminder sweep: reminded ${slot.booked_by_email} for ${slot.date} ${slot.start_time}`);
+      } else {
+        // Send failed - release the claim so the next tick retries
+        await db.prepare('UPDATE ice_slots SET reminder_sent_at = NULL WHERE id = ?').bind(slot.id).run();
+        console.error(`Ice reminder sweep: Resend ${resp.status} for slot ${slot.id}`);
+      }
+    } catch (e) {
+      await db.prepare('UPDATE ice_slots SET reminder_sent_at = NULL WHERE id = ?').bind(slot.id).run();
+      console.error('Ice reminder sweep send error:', e);
+    }
+  }
+
+  return out;
+}
+
 /** Send the confirmation + staff alert for a settled slot (template-driven) */
 export async function sendIceBookingEmails(env: any, db: any, slot: any): Promise<void> {
   const { buildIceBookingConfirmationHtml, buildIceBookingStaffHtml, iceBookingVars } = await import('./ice-booking-email');

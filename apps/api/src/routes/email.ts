@@ -1301,6 +1301,12 @@ emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('a
       html = buildIceBookingConfirmationHtml(SAMPLE_ICE_BOOKING, fields);
       break;
     }
+    case 'ice_booking_reminder': {
+      const { buildIceBookingReminderHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
+      subject = replaceVars(fields.subject, iceBookingVars(SAMPLE_ICE_BOOKING));
+      html = buildIceBookingReminderHtml(SAMPLE_ICE_BOOKING, fields);
+      break;
+    }
     case 'ice_booking_staff': {
       const { buildIceBookingStaffHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
       subject = replaceVars(fields.subject, iceBookingVars(SAMPLE_ICE_BOOKING));
@@ -1415,12 +1421,15 @@ emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), z
       break;
     }
     case 'ice_booking_confirmation':
+    case 'ice_booking_reminder':
     case 'ice_booking_staff': {
-      const { buildIceBookingConfirmationHtml, buildIceBookingStaffHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
+      const { buildIceBookingConfirmationHtml, buildIceBookingReminderHtml, buildIceBookingStaffHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
       const iceVars = iceBookingVars(SAMPLE_ICE_BOOKING);
       const html = templateId === 'ice_booking_staff'
         ? buildIceBookingStaffHtml(SAMPLE_ICE_BOOKING, fields)
-        : buildIceBookingConfirmationHtml(SAMPLE_ICE_BOOKING, fields);
+        : templateId === 'ice_booking_reminder'
+          ? buildIceBookingReminderHtml(SAMPLE_ICE_BOOKING, fields)
+          : buildIceBookingConfirmationHtml(SAMPLE_ICE_BOOKING, fields);
       const resendResp = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
