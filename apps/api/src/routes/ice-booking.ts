@@ -189,36 +189,56 @@ iceBookingRoutes.get('/booking/:slotId', async (c) => {
         ).bind(slotId).run();
         if ((claim.meta?.changes || 0) > 0) {
           slot.status = 'booked';
-          const when = `${slot.date} ${slot.start_time}-${slot.end_time}`;
-          const amount = `$${((slot.price_cents || 0) / 100).toFixed(2)}`;
-          // Staff notification
+          // Both emails are admin-editable templates on the Automated Emails
+          // page (ice_booking_staff / ice_booking_confirmation)
+          const { buildIceBookingConfirmationHtml, buildIceBookingStaffHtml, iceBookingVars } = await import('../lib/ice-booking-email');
+          const { getResolvedFields, replaceVars, isTemplateEnabled } = await import('../lib/template-overrides');
+          const booking = {
+            venueName: slot.venue_name || 'Rosemont Outdoor Rink',
+            rinkName: slot.rink_name || null,
+            date: slot.date,
+            startTime: slot.start_time,
+            endTime: slot.end_time,
+            amountCents: slot.price_cents || 0,
+            name: slot.booked_by_name || '',
+            email: slot.booked_by_email || '',
+            phone: slot.booked_by_phone || null,
+            notes: slot.notes || null,
+          };
+          const vars = iceBookingVars(booking);
+          // Staff notification (John + Johnny)
           try {
-            await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
-                to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
-                subject: `[Ice Booking] ${slot.booked_by_name || 'Someone'} booked ${when}`,
-                html: `<pre style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap;">New PAID ice booking - ${slot.venue_name || 'Rosemont Outdoor Rink'}\n\nWhen: ${when}\nAmount: ${amount}\nName: ${slot.booked_by_name || ''}\nEmail: ${slot.booked_by_email || ''}\nPhone: ${slot.booked_by_phone || ''}\nNotes: ${slot.notes || '-'}\n\nManage: https://ultimatetournaments.com/admin/ice</pre>`,
-              }),
-            });
-          } catch {}
-          // Booker confirmation (simple for now - Chad is sending last
-          // year's template to upgrade this)
-          if (slot.booked_by_email) {
-            try {
+            if (await isTemplateEnabled(db, 'ice_booking_staff')) {
+              const f = await getResolvedFields(db, 'ice_booking_staff');
               await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
-                  reply_to: 'johnny@ultimatetournaments.com',
-                  to: [slot.booked_by_email],
-                  subject: `Ice time confirmed - ${when}`,
-                  html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;"><h2 style="color:#003e79;">You're on the ice!</h2><p style="font-size:14px;color:#2a3c52;line-height:1.6;">Your ice time at the ${slot.venue_name || 'Rosemont Outdoor Rink'} is confirmed and paid.</p><table style="font-size:14px;color:#2a3c52;line-height:1.8;"><tr><td style="font-weight:bold;padding-right:14px;">Date</td><td>${slot.date}</td></tr><tr><td style="font-weight:bold;padding-right:14px;">Time</td><td>${slot.start_time} - ${slot.end_time}</td></tr><tr><td style="font-weight:bold;padding-right:14px;">Paid</td><td>${amount}</td></tr></table><p style="font-size:13px;color:#5b6b80;">Questions? Just reply to this email.</p></div>`,
+                  to: ['johnny@ultimatetournaments.com', 'john@ultimatetournaments.com'],
+                  subject: replaceVars(f.subject, vars),
+                  html: buildIceBookingStaffHtml(booking, f),
                 }),
               });
+            }
+          } catch {}
+          // Booker confirmation
+          if (slot.booked_by_email) {
+            try {
+              if (await isTemplateEnabled(db, 'ice_booking_confirmation')) {
+                const f = await getResolvedFields(db, 'ice_booking_confirmation');
+                await fetch('https://api.resend.com/emails', {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+                    reply_to: 'johnny@ultimatetournaments.com',
+                    to: [slot.booked_by_email],
+                    subject: replaceVars(f.subject, vars),
+                    html: buildIceBookingConfirmationHtml(booking, f),
+                  }),
+                });
+              }
             } catch {}
           }
         }

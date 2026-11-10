@@ -1295,24 +1295,19 @@ emailRoutes.get('/automated/:templateId/preview', authMiddleware, requireRole('a
       html = buildMagicLinkHtml('Coach Johnson', '#', fields);
       break;
     }
+    case 'ice_booking_confirmation': {
+      const { buildIceBookingConfirmationHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
+      subject = replaceVars(fields.subject, iceBookingVars(SAMPLE_ICE_BOOKING));
+      html = buildIceBookingConfirmationHtml(SAMPLE_ICE_BOOKING, fields);
+      break;
+    }
+    case 'ice_booking_staff': {
+      const { buildIceBookingStaffHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
+      subject = replaceVars(fields.subject, iceBookingVars(SAMPLE_ICE_BOOKING));
+      html = buildIceBookingStaffHtml(SAMPLE_ICE_BOOKING, fields);
+      break;
+    }
     case 'event_info_30day': {
-      if (registrationId) {
-        const { buildGuideForRegistration } = await import('../lib/event-info-sweep');
-        const built = await buildGuideForRegistration(c.env, registrationId);
-        if (!built) { result = { success: false, error: 'Registration not found' }; break; }
-        const resendResp = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
-            to: [email],
-            subject: `[COPY - ${built.teamName}] ${built.subject}`,
-            html: built.html,
-          }),
-        });
-        result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };
-        break;
-      }
       const { buildEventInfoHtml } = await import('../lib/event-info-email');
       const infoVars = { ...vars, eventDates: sampleData.eventDate, scheduleDate: 'May 19' };
       subject = replaceVars(fields.subject, infoVars);
@@ -1419,7 +1414,44 @@ emailRoutes.post('/automated/send-test', authMiddleware, requireRole('admin'), z
       result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };
       break;
     }
+    case 'ice_booking_confirmation':
+    case 'ice_booking_staff': {
+      const { buildIceBookingConfirmationHtml, buildIceBookingStaffHtml, iceBookingVars, SAMPLE_ICE_BOOKING } = await import('../lib/ice-booking-email');
+      const iceVars = iceBookingVars(SAMPLE_ICE_BOOKING);
+      const html = templateId === 'ice_booking_staff'
+        ? buildIceBookingStaffHtml(SAMPLE_ICE_BOOKING, fields)
+        : buildIceBookingConfirmationHtml(SAMPLE_ICE_BOOKING, fields);
+      const resendResp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: 'Ultimate Hockey Tournaments <info@ultimatetournaments.com>',
+          to: [email],
+          subject: `[TEST] ${replaceVars(fields.subject, iceVars)}`,
+          html,
+        }),
+      });
+      result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };
+      break;
+    }
     case 'event_info_30day': {
+      if (registrationId) {
+        const { buildGuideForRegistration } = await import('../lib/event-info-sweep');
+        const built = await buildGuideForRegistration(c.env, registrationId);
+        if (!built) { result = { success: false, error: 'Registration not found' }; break; }
+        const resendResp = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${c.env.RESEND_API}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Ultimate Hockey Tournaments <johnny@ultimatetournaments.com>',
+            to: [email],
+            subject: `[COPY - ${built.teamName}] ${built.subject}`,
+            html: built.html,
+          }),
+        });
+        result = { success: resendResp.ok, error: resendResp.ok ? undefined : `Resend ${resendResp.status}` };
+        break;
+      }
       const { buildEventInfoHtml } = await import('../lib/event-info-email');
       const infoVars = {
         eventName: sampleData.eventName,
