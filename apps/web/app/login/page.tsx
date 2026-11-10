@@ -18,7 +18,13 @@ function shouldUseSameOrigin() {
 async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   if (shouldUseSameOrigin()) {
     try {
-      return await fetch(path, init);
+      const resp = await fetch(path, init);
+      // A filtering proxy or challenge page can answer with HTML instead of
+      // letting the request reach the Worker. A real API answer is always
+      // JSON (even errors like 401/429), so anything else gets the fallback
+      // instead of surfacing as "Unable to connect".
+      const ct = resp.headers.get('content-type') || '';
+      if (ct.includes('application/json')) return resp;
     } catch {
       // same-origin route unreachable — fall through to the direct Worker URL
     }
