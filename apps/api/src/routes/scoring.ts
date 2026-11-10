@@ -581,6 +581,38 @@ scoringRoutes.put('/penalty-catalog/:code', authMiddleware, requireRole('admin')
   return c.json({ success: true });
 });
 
+// Admin: add a last-minute penalty. The scoring console loads the catalog
+// fresh on every open, so a new penalty shows up in the app immediately.
+scoringRoutes.post('/penalty-catalog', authMiddleware, requireRole('admin'), zValidator('json', z.object({
+  name: z.string().trim().min(2).max(60),
+  minutes: z.number().min(0.5).max(30),
+})), async (c) => {
+  const { name, minutes } = c.req.valid('json');
+  const db = c.env.DB;
+  const dupe = await db.prepare('SELECT code FROM penalty_catalog WHERE LOWER(name) = LOWER(?)').bind(name).first<any>();
+  if (dupe) return c.json({ success: false, error: 'A penalty with that name already exists' }, 409);
+  const category = minutes <= 2 ? 'minor' : minutes <= 4 ? 'double' : minutes <= 6 ? 'major' : 'misconduct';
+  const slug = name.toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 16) || 'PEN';
+  let code = `CUSTOM_${slug}`;
+  if (await db.prepare('SELECT code FROM penalty_catalog WHERE code = ?').bind(code).first()) {
+    code = `CUSTOM_${slug}_${Date.now().toString(36).toUpperCase()}`;
+  }
+  const maxSort = await db.prepare('SELECT COALESCE(MAX(sort), 0) AS s FROM penalty_catalog').first<any>();
+  await db.prepare('INSERT INTO penalty_catalog (code, name, minutes, category, is_misconduct, sort) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(code, name, minutes, category, minutes >= 10 ? 1 : 0, (maxSort?.s || 0) + 1).run();
+  return c.json({ success: true, data: { code, name, minutes, category } }, 201);
+});
+
+// Admin: remove a custom penalty (built-in USA Hockey entries stay)
+scoringRoutes.delete('/penalty-catalog/:code', authMiddleware, requireRole('admin'), async (c) => {
+  const code = c.req.param('code');
+  if (!code.startsWith('CUSTOM_')) {
+    return c.json({ success: false, error: 'Only custom penalties can be removed' }, 400);
+  }
+  await c.env.DB.prepare('DELETE FROM penalty_catalog WHERE code = ?').bind(code).run();
+  return c.json({ success: true });
+});
+
 // ==========================================
 // PUBLIC: Get standings for an event
 // ==========================================
