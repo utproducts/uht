@@ -1306,26 +1306,33 @@ function ScoringPageInner() {
                   )}
                 </div>
               </div>
-              {(penaltyGroups || [
-                { key: 'minor', label: 'Minor (2:00)', color: 'bg-amber-500 active:bg-amber-600', items: PENALTIES_MINOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
-                { key: 'major', label: 'Major (5:00)', color: 'bg-red-600 active:bg-red-700', items: PENALTIES_MAJOR.map(p => ({ code: p.code, name: p.name, min: p.min })) },
-                { key: 'misconduct', label: 'Misconduct (10:00)', color: 'bg-[#003e79] active:bg-[#002d5a]', items: PENALTIES_MISCONDUCT.map(p => ({ code: p.code, name: p.name, min: p.min })) },
-              ]).map(group => {
+              {(() => {
+                // One flat list: severity variants of the same infraction
+                // ("Cross-Checking" / "Cross-Checking (Major)") collapse to a
+                // single entry - the LENGTH step decides minor vs major now.
+                const all = penaltyGroups
+                  ? penaltyGroups.flatMap(g => g.items)
+                  : [...PENALTIES_MINOR, ...PENALTIES_MAJOR, ...PENALTIES_MISCONDUCT].map(p => ({ code: p.code, name: p.name, min: p.min }));
+                const baseName = (n: string) => n.replace(/\s*\((Major|Double|Match|Game)\)\s*$/i, '');
+                const byBase = new Map<string, { code: string; name: string; min: number }>();
+                for (const it of all) {
+                  const b = baseName(it.name);
+                  const cur = byBase.get(b);
+                  if (!cur || it.min < cur.min) byBase.set(b, { code: it.code, name: b, min: it.min });
+                }
+                const flat = Array.from(byBase.values()).sort((a, b) => a.name.localeCompare(b.name));
                 const q = penaltySearch.trim().toLowerCase();
-                const items = q ? group.items.filter(p => p.name.toLowerCase().includes(q)) : group.items;
-                if (items.length === 0) return null;
+                const items = q ? flat.filter(p => p.name.toLowerCase().includes(q)) : flat;
                 return (
-                  <div key={group.key}>
-                    <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-1.5">{group.label}</p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 mb-3">
-                      {items.map((p) => (
-                        <button key={p.code} onClick={() => submitPenalty(p)}
-                          className={`py-2 px-2 rounded-lg text-white text-[13px] font-bold leading-tight ${group.color}`}>{p.name}</button>
-                      ))}
-                    </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {items.map((p) => (
+                      <button key={p.code} onClick={() => submitPenalty(p)}
+                        className="py-3 px-2 rounded-lg bg-[#f0f7ff] text-[#003e79] text-[13px] font-bold leading-tight active:bg-[#e0efff]">{p.name}</button>
+                    ))}
+                    {items.length === 0 && <p className="col-span-2 text-center text-sm text-[#86868b] py-6">No penalties match</p>}
                   </div>
                 );
-              })}
+              })()}
             </div>
           )}
           {penaltyStep === 'length' && penaltyPick && (
