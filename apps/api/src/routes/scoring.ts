@@ -303,7 +303,7 @@ scoringRoutes.get('/games/:gameId', async (c) => {
     SELECT ge.*
     FROM game_events ge
     WHERE ge.game_id = ?
-    ORDER BY ge.period ASC, ge.game_time DESC, ge.created_at ASC
+    ORDER BY ge.period ASC, (CAST(substr(COALESCE(ge.game_time,'0:0'), 1, instr(COALESCE(ge.game_time,'0:0'), ':') - 1) AS INTEGER) * 60 + CAST(substr(COALESCE(ge.game_time,'0:0'), instr(COALESCE(ge.game_time,'0:0'), ':') + 1) AS INTEGER)) DESC, ge.created_at ASC
   `).bind(gameId).all();
 
   const shots = await db.prepare('SELECT * FROM game_shots WHERE game_id = ? ORDER BY period ASC').bind(gameId).all();
@@ -1259,7 +1259,7 @@ scoringRoutes.post('/games/:gameId/sheet/email', authMiddleware, async (c) => {
   const sheetUrl = `https://ultimatetournaments.com/scores/game?gameId=${gameId}&share=${token}`;
 
   const events = (await db.prepare(
-    'SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, created_at ASC'
+    `SELECT * FROM game_events WHERE game_id = ? ORDER BY period ASC, (CAST(substr(COALESCE(game_time,'0:0'), 1, instr(COALESCE(game_time,'0:0'), ':') - 1) AS INTEGER) * 60 + CAST(substr(COALESCE(game_time,'0:0'), instr(COALESCE(game_time,'0:0'), ':') + 1) AS INTEGER)) DESC, created_at ASC`
   ).bind(gameId).all()).results || [];
   const goals = events.filter((e: any) => e.event_type === 'goal');
   const penalties = events.filter((e: any) => e.event_type === 'penalty');
