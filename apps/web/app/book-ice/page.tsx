@@ -37,6 +37,28 @@ function Calendar({
     return { year: now.getFullYear(), month: now.getMonth() };
   });
 
+  // Only months that actually have ice are shown: the calendar opens on the
+  // first one and the arrows stop at the edges of the season.
+  const monthKey = (y: number, m: number) => y * 12 + m;
+  const dataMonths = Object.keys(availableDates).map((d) => {
+    const [y, m] = d.split('-').map(Number);
+    return monthKey(y, m - 1);
+  });
+  const minMonth = dataMonths.length ? Math.min(...dataMonths) : null;
+  const maxMonth = dataMonths.length ? Math.max(...dataMonths) : null;
+
+  useEffect(() => {
+    if (minMonth === null || maxMonth === null) return;
+    setViewMonth((v) => {
+      const cur = monthKey(v.year, v.month);
+      if (cur >= minMonth && cur <= maxMonth) return v;
+      return { year: Math.floor(minMonth / 12), month: minMonth % 12 };
+    });
+  }, [minMonth, maxMonth]);
+
+  const canPrev = minMonth !== null && monthKey(viewMonth.year, viewMonth.month) > minMonth;
+  const canNext = maxMonth !== null && monthKey(viewMonth.year, viewMonth.month) < maxMonth;
+
   const daysInMonth = new Date(viewMonth.year, viewMonth.month + 1, 0).getDate();
   const firstDow = new Date(viewMonth.year, viewMonth.month, 1).getDay();
   const monthLabel = new Date(viewMonth.year, viewMonth.month).toLocaleString('default', {
@@ -60,13 +82,13 @@ function Calendar({
     <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_20px_-6px_rgba(0,0,0,0.08)] p-6">
       {/* header */}
       <div className="flex items-center justify-between mb-4">
-        <button onClick={prev} className="p-2 rounded-full hover:bg-[#f5f5f7] transition">
+        <button onClick={prev} disabled={!canPrev} className={`p-2 rounded-full transition ${canPrev ? 'hover:bg-[#f5f5f7]' : 'opacity-25 cursor-default'}`}>
           <svg className="w-5 h-5 text-[#1d1d1f]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         <h3 className="text-lg font-bold text-[#1d1d1f]">{monthLabel}</h3>
-        <button onClick={next} className="p-2 rounded-full hover:bg-[#f5f5f7] transition">
+        <button onClick={next} disabled={!canNext} className={`p-2 rounded-full transition ${canNext ? 'hover:bg-[#f5f5f7]' : 'opacity-25 cursor-default'}`}>
           <svg className="w-5 h-5 text-[#1d1d1f]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
@@ -398,7 +420,7 @@ export default function BookIcePage() {
     const now = new Date();
     const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const endDate = new Date(now);
-    endDate.setMonth(endDate.getMonth() + 3);
+    endDate.setMonth(endDate.getMonth() + 12);
     const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
 
     fetch(`${API_BASE}/slots/counts?start_date=${start}&end_date=${end}`)
