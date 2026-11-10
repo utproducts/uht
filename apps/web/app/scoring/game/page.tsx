@@ -93,8 +93,9 @@ type PenaltyStep = 'team' | 'player' | 'type' | 'time' | 'length';
 
 // Every penalty offers the same five lengths; the scorekeeper picks the one
 // the refs assessed (Johnny, Nov 2026). The catalog's own minutes is only
-// the pre-highlighted default.
+// the pre-highlighted default. Youth minors are often 1:30.
 const PENALTY_LENGTHS = [1.5, 2, 5, 6, 10];
+const PENALTY_LENGTH_TAGS: Record<string, string> = { '1.5': 'Minor', '2': 'Minor', '5': 'Major', '6': 'Major', '10': 'Misconduct' };
 const fmtPenLen = (m: any) => {
   const s = Math.round((Number(m) || 0) * 60);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -1337,7 +1338,7 @@ function ScoringPageInner() {
                       className={`w-full py-4 rounded-2xl text-xl font-black tabular-nums ${isDefault
                         ? 'bg-[#003e79] text-white active:bg-[#002d5a] ring-4 ring-[#7dd3fc]'
                         : 'bg-[#f0f7ff] text-[#003e79] active:bg-[#e0efff]'}`}>
-                      {fmtPenLen(len)}{isDefault ? '  (usual)' : ''}
+                      {fmtPenLen(len)} ({PENALTY_LENGTH_TAGS[String(len)]})
                     </button>
                   );
                 })}
@@ -2541,7 +2542,7 @@ function EventEditModal({ event, submitting, onClose, onSave, onDelete }: {
             <span className={label}>Length</span>
             <select value={mins} onChange={e => setMins(e.target.value)} className={`${field} bg-white`}>
               {!PENALTY_LENGTHS.some(l => String(l) === mins) && mins !== '' && <option value={mins}>{fmtPenLen(mins)}</option>}
-              {PENALTY_LENGTHS.map(l => <option key={l} value={String(l)}>{fmtPenLen(l)}</option>)}
+              {PENALTY_LENGTHS.map(l => <option key={l} value={String(l)}>{fmtPenLen(l)} ({PENALTY_LENGTH_TAGS[String(l)]})</option>)}
             </select>
           </div>
         )}
