@@ -94,8 +94,8 @@ function GameSheetInner() {
   });
 
   // Group penalties by team
-  const homePenalties = data.penalties.filter(p => p.team_id === g.home_team_id);
-  const awayPenalties = data.penalties.filter(p => p.team_id === g.away_team_id);
+  const homePenalties = data.penalties.filter(p => p.team_id != null && p.team_id === g.home_team_id);
+  const awayPenalties = data.penalties.filter(p => p.team_id != null && p.team_id === g.away_team_id);
 
   // Build shots table
   const shotsMap: Record<string, Record<number, number>> = {};
@@ -232,7 +232,7 @@ function GameSheetInner() {
                   </p>
                   <div className="space-y-1.5">
                     {goals.map((goal: any, i: number) => {
-                      const isHome = goal.team_id === g.home_team_id;
+                      const isHome = goal.team_id != null && goal.team_id === g.home_team_id;
                       const teamName = isHome ? g.home_team_name : g.away_team_name;
                       return (
                         <div key={i} className="flex items-center gap-3 text-sm">

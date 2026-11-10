@@ -1014,7 +1014,7 @@ function ScoringPageInner() {
                 <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Scoring</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {teams.map(team => {
-                    const goals = evs.filter((e: any) => e.event_type === 'goal' && e.team_id === team.id && inView(e)).sort(sortByClock);
+                    const goals = evs.filter((e: any) => e.event_type === 'goal' && team.id != null && e.team_id === team.id && inView(e)).sort(sortByClock);
                     return (
                       <div key={team.tag} className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
                         <p className="px-3 py-2 text-xs font-bold text-[#003e79] bg-[#f5f5f7]">{team.tag} - {team.name}</p>
@@ -1065,7 +1065,7 @@ function ScoringPageInner() {
                 <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-widest mb-2 text-center">Penalties</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {teams.map(team => {
-                    const pens = evs.filter((e: any) => e.event_type === 'penalty' && e.team_id === team.id && inView(e)).sort(sortByClock);
+                    const pens = evs.filter((e: any) => e.event_type === 'penalty' && team.id != null && e.team_id === team.id && inView(e)).sort(sortByClock);
                     return (
                       <div key={team.tag} className="bg-white border border-[#e8e8ed] rounded-xl overflow-hidden">
                         <p className="px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50">{team.tag} - {team.name}</p>
@@ -1151,8 +1151,8 @@ function ScoringPageInner() {
         {game.events && game.events.length > 0 ? (
           <div className="space-y-2">
             {[...game.events].reverse().map((ev) => {
-              const isHome = ev.team_id === game.home_team_id;
-              const teamName = isHome ? game.home_team_name : game.away_team_name;
+              const isHome = ev.team_id != null && ev.team_id === game.home_team_id;
+              const teamName = ev.team_id == null ? '' : isHome ? game.home_team_name : game.away_team_name;
               return (
                 <div key={ev.id} className="bg-white border border-[#e8e8ed] rounded-xl p-3 flex items-center gap-3">
                   <div className="w-12 text-center">
@@ -1200,7 +1200,7 @@ function ScoringPageInner() {
 
       {announceEvent && (
         <AnnounceModal event={announceEvent}
-          teamName={announceEvent.team_id === game.home_team_id ? game.home_team_name : game.away_team_name}
+          teamName={announceEvent.team_id != null && announceEvent.team_id === game.home_team_id ? game.home_team_name : game.away_team_name}
           players={playersForTeam(announceEvent.team_id)}
           onClose={() => setAnnounceEvent(null)} />
       )}

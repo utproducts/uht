@@ -134,7 +134,8 @@ export default function LiveGameScreen({ navigation, route }: any) {
 
   const describe = (ev: GameEvent): string => {
     if (!game) return ev.event_type;
-    const team = ev.team_id === game.home_team_id ? game.home_team_name
+    const team = ev.team_id == null ? ''
+      : ev.team_id === game.home_team_id ? game.home_team_name
       : ev.team_id === game.away_team_id ? game.away_team_name : '';
     switch (ev.event_type) {
       case 'goal': {

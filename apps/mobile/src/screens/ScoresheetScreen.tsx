@@ -269,7 +269,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
         {/* SCORING */}
         <Text style={styles.sectionTitle}>SCORING</Text>
         {teams.map(team => {
-          const tGoals = goals.filter((e: any) => e.team_id === team.id);
+          const tGoals = goals.filter((e: any) => team.id != null && e.team_id === team.id);
           return (
             <View key={`sc-${team.tag}`} style={styles.card}>
               <Text style={styles.cardHeader}>{team.tag} - {team.name}</Text>
@@ -304,7 +304,7 @@ export default function ScoresheetScreen({ route, navigation }: any) {
         {/* PENALTIES */}
         <Text style={styles.sectionTitle}>PENALTIES</Text>
         {teams.map(team => {
-          const tPens = penalties.filter((e: any) => e.team_id === team.id);
+          const tPens = penalties.filter((e: any) => team.id != null && e.team_id === team.id);
           return (
             <View key={`pe-${team.tag}`} style={styles.card}>
               <Text style={[styles.cardHeader, { color: '#b45309' }]}>{team.tag} - {team.name}</Text>
