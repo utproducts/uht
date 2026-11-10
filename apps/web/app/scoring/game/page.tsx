@@ -537,8 +537,9 @@ function ScoringPageInner() {
 
   const doFlash = (color: string) => { setFlash(color); setTimeout(() => setFlash(''), 400); };
 
-  // Goal flow with roster
-  const resetGoal = () => { setGoalStep('team'); setGoalTeamId(''); setGoalJersey(''); setGoalAssist1(''); setGoalAssist2(''); setGoalTime(''); };
+  // Goal flow with roster - scorekeepers punch in the clock time FIRST,
+  // while it's still on the board, then work out who touched the puck
+  const resetGoal = () => { setGoalStep('time'); setGoalTeamId(''); setGoalJersey(''); setGoalAssist1(''); setGoalAssist2(''); setGoalTime(''); };
   const openGoal = () => { resetGoal(); setModal('goal'); };
 
   const submitGoal = async (time?: string, goalie?: string | null) => {
@@ -565,21 +566,17 @@ function ScoringPageInner() {
     setPosting(false);
   };
 
-  // Penalty flow with roster
-  const resetPenalty = () => { setPenaltyStep('team'); setPenaltyTeamId(''); setPenaltyJersey('');  setPenaltyPick(null); setPenaltyTime(''); setPenaltySearch(''); };
+  // Penalty flow with roster - clock time first, then team/player/infraction;
+  // picking the infraction submits with the time captured up front
+  const resetPenalty = () => { setPenaltyStep('time'); setPenaltyTeamId(''); setPenaltyJersey('');  setPenaltyPick(null); setPenaltyTime(''); setPenaltySearch(''); };
   const openPenalty = () => { resetPenalty(); setModal('penalty'); };
 
-  const submitPenalty = (penalty: { code: string; min: number }) => {
-    setPenaltyPick(penalty);
-    setPenaltyStep('time');
-  };
-  const submitPenaltyWithTime = async (time?: string) => {
-    if (!penaltyPick) return;
+  const submitPenalty = async (penalty: { code: string; min: number }) => {
     await postEvent({
       eventType: 'penalty', teamId: penaltyTeamId,
-      jerseyNumber: penaltyJersey || null, penaltyCode: penaltyPick.code, penaltyMinutes: penaltyPick.min,
+      jerseyNumber: penaltyJersey || null, penaltyCode: penalty.code, penaltyMinutes: penalty.min,
       period: game?.period || 1,
-      gameTime: time || null,
+      gameTime: penaltyTime || null,
     });
     setPenaltyPick(null);
     setModal(null);
@@ -1200,6 +1197,11 @@ function ScoringPageInner() {
       {/* ==================== GOAL MODAL (with roster) ==================== */}
       {modal === 'goal' && (
         <FullScreenModal title="GOAL" onClose={() => setModal(null)}>
+          {goalStep === 'time' && (
+            <ClockTimePicker label="Time of Goal"
+              onConfirm={(t) => { setGoalTime(t); setGoalStep('team'); }}
+              onSkip={() => { setGoalTime(''); setGoalStep('team'); }} />
+          )}
           {goalStep === 'team' && (
             <StepTeamPicker label="Which team scored?" homeName={game.home_team_name} awayName={game.away_team_name}
               onPick={(id) => { setGoalTeamId(id); setGoalStep('player'); }} homeId={game.home_team_id} awayId={game.away_team_id} />
@@ -1217,14 +1219,9 @@ function ScoringPageInner() {
           )}
           {goalStep === 'assist2' && (
             <PlayerPicker label="2nd Assist" players={playersForTeam(goalTeamId)} optional
-              onPick={(jersey) => { setGoalAssist2(jersey); setGoalStep('time'); }}
-              onSkip={() => { setGoalAssist2(''); setGoalStep('time'); }}
+              onPick={(jersey) => { setGoalAssist2(jersey); setGoalStep('goalie'); }}
+              onSkip={() => { setGoalAssist2(''); setGoalStep('goalie'); }}
               showKeypad />
-          )}
-          {goalStep === 'time' && (
-            <ClockTimePicker label="Time of Goal"
-              onConfirm={(t) => { setGoalTime(t); setGoalStep('goalie'); }}
-              onSkip={() => { setGoalTime(''); setGoalStep('goalie'); }} />
           )}
           {goalStep === 'goalie' && (() => {
             // The game LINEUP knows who is actually in net (starting-goalie
@@ -1264,6 +1261,11 @@ function ScoringPageInner() {
       {/* ==================== PENALTY MODAL (with roster) ==================== */}
       {modal === 'penalty' && (
         <FullScreenModal title="PENALTY" onClose={() => setModal(null)}>
+          {penaltyStep === 'time' && (
+            <ClockTimePicker label="Time of Penalty"
+              onConfirm={(t) => { setPenaltyTime(t); setPenaltyStep('team'); }}
+              onSkip={() => { setPenaltyTime(''); setPenaltyStep('team'); }} />
+          )}
           {penaltyStep === 'team' && (
             <StepTeamPicker label="Which team?" homeName={game.home_team_name} awayName={game.away_team_name}
               onPick={(id) => { setPenaltyTeamId(id); setPenaltyStep('player'); }} homeId={game.home_team_id} awayId={game.away_team_id} />
@@ -1308,10 +1310,6 @@ function ScoringPageInner() {
                 );
               })}
             </div>
-          )}
-          {penaltyStep === 'time' && (
-            <ClockTimePicker label={`Time of Penalty${penaltyPick?.name ? ` - ${penaltyPick.name}` : ''}`}
-              onConfirm={(t) => submitPenaltyWithTime(t)} onSkip={() => submitPenaltyWithTime()} />
           )}
         </FullScreenModal>
       )}
