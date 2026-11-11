@@ -127,16 +127,20 @@ async function ensureSetup(db: D1Database): Promise<void> {
 }
 
 // Drop anyone whose code got used or who unsubscribed since the last run.
+// IN-subqueries, NOT correlated EXISTS with LOWER(): the correlated version
+// read 17.9M rows PER RUN (contacts scanned once per pending target) and took
+// D1 down on 11/10 and 11/11. Target emails are stored lowercased at seed
+// time, so a one-pass LOWER(email) subquery matches them fine.
 async function refreshEligibility(db: D1Database): Promise<void> {
   await db.prepare(`
     UPDATE coupon_reminder_targets SET status = 'redeemed'
     WHERE status = 'pending'
-      AND EXISTS (SELECT 1 FROM discount_codes dc WHERE dc.code = coupon_reminder_targets.code AND dc.is_used = 1)
+      AND code IN (SELECT code FROM discount_codes WHERE is_used = 1)
   `).run();
   await db.prepare(`
     UPDATE coupon_reminder_targets SET status = 'unsubscribed'
     WHERE status = 'pending'
-      AND EXISTS (SELECT 1 FROM contacts c WHERE LOWER(c.email) = coupon_reminder_targets.email AND c.is_subscribed_email = 0)
+      AND email IN (SELECT LOWER(email) FROM contacts WHERE is_subscribed_email = 0 AND email IS NOT NULL)
   `).run();
 }
 
@@ -187,14 +191,17 @@ export async function runCouponReminderSweep(env: any): Promise<{ sent: number }
   const probe = await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name = 'coupon_reminder_targets'").first<any>();
   if (!probe?.n) return { skipped: 'no targets table' };
 
-  await ensureSetup(db);
-  await refreshEligibility(db);
-
+  // Cheap room check FIRST: once today's cohort is out, the other ~58 ticks
+  // in the send hour exit here instead of re-running eligibility refresh +
+  // the 72h cooldown scan every minute (D1 overload, 11/11)
   const sentToday = await db.prepare(
     "SELECT COUNT(*) n FROM coupon_reminder_targets WHERE date(sent_at) = date('now')"
   ).first<any>();
   const room = PER_DAY - (sentToday?.n || 0);
   if (room <= 0) return { sent: 0 };
+
+  await ensureSetup(db);
+  await refreshEligibility(db);
 
   // Overfetch so cooldown deferrals still leave a full cohort to send
   const raw = ((await db.prepare(

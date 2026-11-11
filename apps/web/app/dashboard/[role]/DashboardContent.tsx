@@ -250,6 +250,7 @@ export function AdminDash() {
   const [events, setEvents] = useState<any[]>([]);
   const [divisionTotals, setDivisionTotals] = useState<any[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
@@ -262,7 +263,9 @@ export function AdminDash() {
       fetch(`${API}/analytics/reports/division-totals`, { headers: devHeaders }).then(r => r.json()),
       fetch(`${API}/users/admin/app-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/financials/outstanding`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-    ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson]) => {
+      fetch(`${API}/financials/payment-methods`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
+    ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson, payJson]) => {
+      setPaymentMethods(payJson?.success ? (payJson.data || []) : []);
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));
       const upcoming = noTest(upJson.success ? upJson.data : []);
       const all = noTest(allJson.success ? allJson.data : []);
@@ -321,6 +324,39 @@ export function AdminDash() {
           <PendingRegistrations />
         </>
       )}
+
+      {/* Payments by Method */}
+      {paymentMethods.length > 0 && (() => {
+        const grand = paymentMethods.reduce((s: number, m: any) => s + (m.total_cents || 0), 0) || 1;
+        return (
+          <>
+            <SectionTitle>Payments by Method</SectionTitle>
+            <div className="bg-white rounded-2xl border border-[#e8e8ed] shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] p-5">
+              <div className="space-y-3">
+                {paymentMethods.map((m: any) => {
+                  const pct = Math.round(((m.total_cents || 0) / grand) * 100);
+                  return (
+                    <div key={m.method}>
+                      <div className="flex items-baseline justify-between text-sm">
+                        <p className="font-semibold text-[#1d1d1f]">{m.label}
+                          <span className="text-[#86868b] font-normal ml-2">{m.n} payment{m.n === 1 ? '' : 's'}</span>
+                        </p>
+                        <p className="font-bold text-[#003e79] tabular-nums">${Math.round((m.total_cents || 0) / 100).toLocaleString()}<span className="text-[#86868b] font-normal text-xs ml-1.5">{pct}%</span></p>
+                      </div>
+                      <div className="h-2 rounded-full bg-[#f0f0f2] mt-1 overflow-hidden">
+                        <div className={`h-full rounded-full ${m.method === 'check' ? 'bg-amber-400' : 'bg-[#0e7fb8]'}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                      </div>
+                      {m.method === 'check' && (
+                        <p className="text-xs text-amber-700 mt-1 italic">John... it is 2026. The bank teller knows you by name. We can let the checkbook rest.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Registration Trends — month-over-month analytics (replaces Airtable tracking) */}
       <SectionTitle>Registration Trends</SectionTitle>

@@ -623,3 +623,31 @@ financialRoutes.get('/outstanding', authMiddleware, requireRole('admin', 'direct
   const row = await c.env.DB.prepare(OWED_SQL).first<any>();
   return c.json({ success: true, data: { owed_cents: row?.owed_cents || 0, owing_teams: row?.owing_teams || 0 } });
 });
+
+// Payment-method breakdown for the admin overview: Stripe card money from
+// both registration tables + the manual payments ledger grouped by method
+financialRoutes.get('/payment-methods', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const [manual, card] = await Promise.all([
+    db.prepare(`
+      SELECT LOWER(COALESCE(method, 'other')) AS method, COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS total_cents
+      FROM registration_payments GROUP BY LOWER(COALESCE(method, 'other'))
+    `).all<any>(),
+    db.prepare(`
+      SELECT
+        (SELECT COALESCE(SUM(card_paid_cents), 0) FROM event_registrations WHERE status NOT IN ('denied','rejected','withdrawn')) +
+        (SELECT COALESCE(SUM(card_paid_cents), 0) FROM registrations WHERE status NOT IN ('rejected','withdrawn')) AS total_cents,
+        (SELECT COUNT(*) FROM event_registrations WHERE COALESCE(card_paid_cents, 0) > 0) +
+        (SELECT COUNT(*) FROM registrations WHERE COALESCE(card_paid_cents, 0) > 0) AS n
+    `).first<any>(),
+  ]);
+  const methods = [
+    { method: 'card', label: 'Credit Card (Stripe)', n: card?.n || 0, total_cents: card?.total_cents || 0 },
+    ...(manual.results || []).map((r: any) => ({
+      method: r.method,
+      label: r.method === 'check' ? 'Check' : r.method.charAt(0).toUpperCase() + r.method.slice(1),
+      n: r.n, total_cents: r.total_cents,
+    })),
+  ].sort((a, b) => b.total_cents - a.total_cents);
+  return c.json({ success: true, data: methods });
+});

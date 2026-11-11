@@ -122,28 +122,34 @@ async function ensureSetup(db: D1Database): Promise<void> {
 }
 
 // Drop anyone who came back, redeemed, or unsubscribed since the last run.
+// IN-subqueries, NOT correlated EXISTS with LOWER() - the correlated form
+// re-scans the inner table once per target and melted D1 (11/11 outage; the
+// coupon sweep's identical pattern read 17.9M rows per run). Target emails
+// are stored lowercased, so one-pass LOWER() subqueries match them.
 async function refreshEligibility(db: D1Database): Promise<void> {
   await db.prepare(`
     UPDATE reengagement_targets SET status = 'redeemed'
     WHERE status IN ('pending', 'active')
-      AND EXISTS (SELECT 1 FROM discount_codes dc WHERE dc.code = reengagement_targets.code AND dc.is_used = 1)
+      AND code IN (SELECT code FROM discount_codes WHERE is_used = 1)
   `).run();
   await db.prepare(`
     UPDATE reengagement_targets SET status = 'returned'
     WHERE status IN ('pending', 'active')
-      AND EXISTS (
-        SELECT 1 FROM event_registrations er
-        WHERE er.created_at >= '2026-06-01'
-          AND COALESCE(er.status,'') NOT IN ('denied','rejected','withdrawn')
-          AND (LOWER(er.email1) = reengagement_targets.email
-               OR LOWER(er.email2) = reengagement_targets.email
-               OR LOWER(er.coach_email) = reengagement_targets.email)
+      AND email IN (
+        SELECT LOWER(email1) FROM event_registrations
+        WHERE created_at >= '2026-06-01' AND COALESCE(status,'') NOT IN ('denied','rejected','withdrawn') AND email1 IS NOT NULL
+        UNION
+        SELECT LOWER(email2) FROM event_registrations
+        WHERE created_at >= '2026-06-01' AND COALESCE(status,'') NOT IN ('denied','rejected','withdrawn') AND email2 IS NOT NULL
+        UNION
+        SELECT LOWER(coach_email) FROM event_registrations
+        WHERE created_at >= '2026-06-01' AND COALESCE(status,'') NOT IN ('denied','rejected','withdrawn') AND coach_email IS NOT NULL
       )
   `).run();
   await db.prepare(`
     UPDATE reengagement_targets SET status = 'unsubscribed'
     WHERE status IN ('pending', 'active')
-      AND EXISTS (SELECT 1 FROM contacts c WHERE LOWER(c.email) = reengagement_targets.email AND c.is_subscribed_email = 0)
+      AND email IN (SELECT LOWER(email) FROM contacts WHERE is_subscribed_email = 0 AND email IS NOT NULL)
   `).run();
 }
 
@@ -207,6 +213,18 @@ export async function runReengagementSweep(env: any): Promise<{ e1: number; e2: 
   // Cheap existence probe doubles as the "campaign loaded?" check
   const probe = await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE name = 'reengagement_targets'").first<any>();
   if (!probe?.n) return { skipped: 'no targets table' };
+
+  // Cheap due-work probe FIRST (725-row table): most ticks in the send hour
+  // have nothing due, and skipping them avoids re-running the eligibility
+  // refresh + 72h cooldown scan every minute (D1 overload, 11/11)
+  const due = await db.prepare(`SELECT
+    (SELECT COUNT(*) FROM reengagement_targets WHERE status = 'active' AND e3_sent_at IS NULL AND e2_sent_at IS NOT NULL AND e2_sent_at <= datetime('now', '-${E3_AFTER_E2_DAYS} days')) AS d3,
+    (SELECT COUNT(*) FROM reengagement_targets WHERE status = 'active' AND e2_sent_at IS NULL AND e1_sent_at IS NOT NULL AND e1_sent_at <= datetime('now', '-${E2_AFTER_DAYS} days')) AS d2,
+    (SELECT COUNT(*) FROM reengagement_targets WHERE status = 'pending' AND e1_sent_at IS NULL) AS d1,
+    (SELECT COUNT(*) FROM reengagement_targets WHERE date(e1_sent_at) = date('now')) AS s1
+  `).first<any>();
+  const e1Due = (due?.d1 || 0) > 0 && (E1_PER_DAY - (due?.s1 || 0)) > 0;
+  if (!due?.d3 && !due?.d2 && !e1Due) return { e1: 0, e2: 0, e3: 0 };
 
   await ensureSetup(db);
   await refreshEligibility(db);

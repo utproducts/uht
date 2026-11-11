@@ -91,6 +91,15 @@ analyticsRoutes.get('/reports/active-users', authMiddleware, requireRole('admin'
 
   const rowLimit = Math.min(parseInt(limitParam || '50'), 100);
 
+  // user_activity_log is 5M+ rows and this report runs four GROUP BY
+  // subqueries over it - cache per period/limit so repeated dashboard
+  // opens don't overload D1 (outage 11/11)
+  const cacheKey = `analytics:active-users:${period || '30d'}:${rowLimit}`;
+  try {
+    const cached = await c.env.SESSIONS.get(cacheKey, 'json');
+    if (cached) return c.json({ success: true, data: cached, cached: true });
+  } catch {}
+
   const result = await db.prepare(`
     SELECT
       u.id,
@@ -153,6 +162,7 @@ analyticsRoutes.get('/reports/active-users', authMiddleware, requireRole('admin'
     LIMIT ?
   `).bind(rowLimit).all();
 
+  try { await c.env.SESSIONS.put(cacheKey, JSON.stringify(result.results), { expirationTtl: 300 }); } catch {}
   return c.json({ success: true, data: result.results });
 });
 
@@ -162,8 +172,19 @@ analyticsRoutes.get('/reports/active-users', authMiddleware, requireRole('admin'
 analyticsRoutes.get('/reports/summary', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
 
+  // Full-table COUNT(DISTINCT) over 5M+ activity rows took down D1 when
+  // several admins had dashboards open (outage 11/11): cache the whole
+  // summary for 5 minutes, and the slow-moving all-time block for 6 hours.
+  try {
+    const cached = await c.env.SESSIONS.get('analytics:summary', 'json');
+    if (cached) return c.json({ success: true, data: cached, cached: true });
+  } catch {}
+
+  let totalsCached: any = null;
+  try { totalsCached = await c.env.SESSIONS.get('analytics:summary:alltime', 'json'); } catch {}
+
   const [totals, today, week, registrations] = await Promise.all([
-    db.prepare(`
+    totalsCached ? Promise.resolve(totalsCached) : db.prepare(`
       SELECT
         COUNT(DISTINCT user_id) as total_users_tracked,
         COUNT(*) as total_events,
@@ -192,15 +213,18 @@ analyticsRoutes.get('/reports/summary', authMiddleware, requireRole('admin', 'di
     `).first<any>(),
   ]);
 
-  return c.json({
-    success: true,
-    data: {
-      allTime: totals,
-      today,
-      thisWeek: week,
-      pendingRegistrations: registrations?.pending || 0,
-    },
-  });
+  const data = {
+    allTime: totals,
+    today,
+    thisWeek: week,
+    pendingRegistrations: registrations?.pending || 0,
+  };
+  try {
+    await c.env.SESSIONS.put('analytics:summary', JSON.stringify(data), { expirationTtl: 300 });
+    if (!totalsCached && totals) await c.env.SESSIONS.put('analytics:summary:alltime', JSON.stringify(totals), { expirationTtl: 21600 });
+  } catch {}
+
+  return c.json({ success: true, data });
 });
 
 // ==================
