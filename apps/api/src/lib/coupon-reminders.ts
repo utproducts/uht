@@ -98,7 +98,7 @@ function eventRows(events: UpcomingEvent[]): string {
 }
 
 export function reminderSubject(t: Target): string {
-  return `${t.team_name} has a $100 credit waiting`;
+  return `${t.team_name} has a $100 credit for your next event`;
 }
 
 export function reminderHtml(t: Target, eligible: UpcomingEvent[]): string {
@@ -109,11 +109,12 @@ export function reminderHtml(t: Target, eligible: UpcomingEvent[]): string {
     : `<p>Every open weekend is on the schedule at <a href="https://ultimatetournaments.com/events/" style="color:#003e79;">ultimatetournaments.com/events</a>.</p>`;
   return wrap(`
 <p>${greeting}</p>
-<p>Johnny here from Ultimate Hockey Tournaments. When ${esc(t.team_name)} registered for ${esc(t.earned_event_name)}, we set aside a thank-you credit for your next event. I checked today and it has not been used yet, so I wanted to make sure it did not get buried in your inbox.</p>
+<p>Johnny here from Ultimate Hockey Tournaments. When ${esc(t.team_name)} registered for ${esc(t.earned_event_name)}, we set aside a thank-you credit toward your NEXT event. I checked today and it has not been used yet, so I wanted to make sure it did not get buried in your inbox.</p>
 <p style="text-align:center;margin:24px 0 10px 0;"><span style="display:inline-block;background:#f0f6ff;border:2px dashed #003e79;border-radius:10px;padding:14px 28px;font-size:20px;font-weight:700;letter-spacing:1px;color:#003e79;">${esc(t.code)}</span></p>
-<p style="text-align:center;margin:0 0 20px 0;color:#6e6e73;font-size:13px;">$100 off your next event, or $200 off when you book your hotel block with it</p>
+<p style="text-align:center;margin:0 0 16px 0;color:#6e6e73;font-size:13px;">$100 off a NEW event registration, or $200 off when you book your hotel block with it</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px 0;"><tr><td style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:14px;color:#78350f;line-height:1.5;"><strong>Heads up: this credit is for your NEXT event.</strong> It works when you register ${esc(t.team_name)} for a new weekend - it cannot be applied to ${esc(t.earned_event_name)} or any event you are already signed up for.</td></tr></table>
 ${eventsBlock}
-<p>Enter the code at checkout and it comes right off your deposit. If you have questions about dates or divisions, just reply to this email and I will help you find the right fit.</p>
+<p>Enter the code when you register for your next event and it comes right off your deposit. If you have questions about dates or divisions, just reply to this email and I will help you find the right fit.</p>
 <p>See you at the rink,</p>
 <p>Johnny<br/>Ultimate Hockey Tournaments</p>`);
 }
