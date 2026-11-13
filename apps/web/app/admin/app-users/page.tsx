@@ -58,6 +58,9 @@ export default function AppUsersPage() {
   }, []);
 
   const maxSignups = Math.max(1, ...(stats?.monthly || []).map(m => m.signups));
+  const totalTeams = followReport.reduce((n, ev) => n + ev.team_count, 0);
+  const totalFollowers = followReport.reduce((n, ev) => n + ev.total_followers, 0);
+  const avgFollowers = totalTeams > 0 ? totalFollowers / totalTeams : null;
 
   return (
     <div className="p-6 sm:p-8 max-w-[1100px] mx-auto">
@@ -70,15 +73,17 @@ export default function AppUsersPage() {
         <div className="text-[#86868b] text-sm py-10 text-center">Could not load app stats.</div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {[
-              { label: 'App Accounts', value: stats.app_accounts, color: 'text-[#003e79]' },
-              { label: 'New This Week', value: stats.new_7d, color: 'text-green-600' },
-              { label: 'New Last 30 Days', value: stats.new_30d, color: 'text-green-600' },
-            ].map((t) => (
+              { label: 'App Accounts', value: stats.app_accounts.toLocaleString(), color: 'text-[#003e79]' },
+              { label: 'New This Week', value: stats.new_7d.toLocaleString(), color: 'text-green-600' },
+              { label: 'New Last 30 Days', value: stats.new_30d.toLocaleString(), color: 'text-green-600' },
+              { label: 'Avg Followers / Team', value: avgFollowers === null ? '--' : avgFollowers.toFixed(1), color: 'text-[#0077b0]', sub: 'current events' },
+            ].map((t: any) => (
               <div key={t.label} className="bg-white rounded-2xl border border-[#e8e8ed] px-5 py-4 text-center shadow-sm">
-                <div className={`text-3xl font-bold ${t.color}`}>{t.value.toLocaleString()}</div>
+                <div className={`text-3xl font-bold ${t.color}`}>{t.value}</div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-[#86868b] mt-1">{t.label}</div>
+                {t.sub && <div className="text-[10px] text-[#a8a8ad] mt-0.5">{t.sub}</div>}
               </div>
             ))}
           </div>
@@ -125,6 +130,7 @@ export default function AppUsersPage() {
                         <div className="flex items-center gap-3 text-xs">
                           <span className="font-semibold text-[#003e79]">{ev.total_followers} follower{ev.total_followers !== 1 ? 's' : ''}</span>
                           <span className="text-[#86868b]">{ev.team_count} teams</span>
+                          {ev.team_count > 0 && <span className="text-[#0077b0] font-semibold">avg {(ev.total_followers / ev.team_count).toFixed(1)}</span>}
                           {zeroTeams > 0 && <span className="text-amber-600 font-semibold">{zeroTeams} at zero</span>}
                           <span className="text-[#86868b]">{open ? '▴' : '▾'}</span>
                         </div>
