@@ -25,8 +25,8 @@ export default function App() {
           await Updates.fetchUpdateAsync();
           prompted.current = true;
           Alert.alert(
-            'App Update Ready',
-            'The latest version has been downloaded. Tap Refresh App to apply it - this only refreshes the app, not your phone.',
+            'App Refresh Ready',
+            'The latest improvements are ready. Tap Refresh App to apply them - this only refreshes the app, not your phone.',
             [
               { text: 'Refresh App', onPress: () => Updates.reloadAsync() },
             ],
