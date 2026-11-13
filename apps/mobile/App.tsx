@@ -25,12 +25,12 @@ export default function App() {
           await Updates.fetchUpdateAsync();
           prompted.current = true;
           Alert.alert(
-            'Update Available',
-            'A new version has been downloaded. Restart to apply.',
+            'App Update Ready',
+            'The latest version has been downloaded. Tap Refresh App to apply it - this only refreshes the app, not your phone.',
             [
-              { text: 'Later', style: 'cancel' },
-              { text: 'Restart', onPress: () => Updates.reloadAsync() },
-            ]
+              { text: 'Refresh App', onPress: () => Updates.reloadAsync() },
+            ],
+            { cancelable: false }
           );
         }
       } catch (e) {
