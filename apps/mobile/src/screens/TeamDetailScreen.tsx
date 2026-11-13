@@ -11,6 +11,8 @@ import {
   Alert,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -531,33 +533,36 @@ export default function TeamDetailScreen({ route, navigation }: { route: any; na
 
       {/* Jersey number editor */}
       <Modal visible={!!jerseyEdit} transparent animationType="fade" onRequestClose={() => setJerseyEdit(null)}>
-        <View style={styles.jerseyModalBackdrop}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.jerseyModalBackdrop}>
           <View style={styles.jerseyModalCard}>
-            <Text style={styles.jerseyModalTitle} maxFontSizeMultiplier={1.2}>Jersey Number</Text>
-            <Text style={styles.jerseyModalSub} maxFontSizeMultiplier={1.3}>{jerseyEdit?.name}</Text>
-            <TextInput
-              style={styles.jerseyModalInput}
-              value={jerseyValue}
-              onChangeText={setJerseyValue}
-              keyboardType="number-pad"
-              maxLength={3}
-              placeholder="--"
-              placeholderTextColor="#9fb0c3"
-              autoFocus
-            />
-            <Text style={styles.jerseyModalNote} maxFontSizeMultiplier={1.3}>
-              Updates the team roster, check-in roster, and scorekeeper roster for upcoming games.
-            </Text>
-            <View style={styles.jerseyModalBtns}>
-              <TouchableOpacity style={styles.jerseyModalCancel} onPress={() => setJerseyEdit(null)}>
-                <Text style={styles.jerseyModalCancelText} maxFontSizeMultiplier={1.2}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.jerseyModalSave} onPress={saveJersey} disabled={jerseySaving}>
-                <Text style={styles.jerseyModalSaveText} maxFontSizeMultiplier={1.2}>{jerseySaving ? 'Saving...' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 0 }}>
+              <Text style={styles.jerseyModalTitle} maxFontSizeMultiplier={1.2}>Jersey Number</Text>
+              <Text style={styles.jerseyModalSub} maxFontSizeMultiplier={1.2} numberOfLines={1}>{jerseyEdit?.name}</Text>
+              <TextInput
+                style={styles.jerseyModalInput}
+                value={jerseyValue}
+                onChangeText={setJerseyValue}
+                keyboardType="number-pad"
+                maxLength={3}
+                placeholder="--"
+                placeholderTextColor="#9fb0c3"
+                maxFontSizeMultiplier={1.2}
+                autoFocus
+              />
+              <Text style={styles.jerseyModalNote} maxFontSizeMultiplier={1.2}>
+                Updates the team roster, check-in roster, and scorekeeper roster for upcoming games.
+              </Text>
+              <View style={styles.jerseyModalBtns}>
+                <TouchableOpacity style={styles.jerseyModalCancel} onPress={() => setJerseyEdit(null)}>
+                  <Text style={styles.jerseyModalCancelText} maxFontSizeMultiplier={1.2}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.jerseyModalSave} onPress={saveJersey} disabled={jerseySaving}>
+                  <Text style={styles.jerseyModalSaveText} maxFontSizeMultiplier={1.2}>{jerseySaving ? 'Saving...' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -791,7 +796,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   jerseyModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,25,50,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  jerseyModalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 360 },
+  jerseyModalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 360, maxHeight: '85%' },
   jerseyModalTitle: { fontSize: 17, color: colors.navy, ...fonts.bold, textAlign: 'center' },
   jerseyModalSub: { fontSize: 14, color: '#5b6b80', ...fonts.regular, textAlign: 'center', marginTop: 2 },
   jerseyModalInput: {
