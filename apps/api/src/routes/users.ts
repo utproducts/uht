@@ -287,7 +287,7 @@ userRoutes.get('/admin/follow-report', authMiddleware, requireRole('admin', 'dir
   const db = c.env.DB;
   const NAME_SQL = `COALESCE(t.schedule_name, CASE WHEN t.head_coach_name LIKE '% %' THEN COALESCE((SELECT og.name FROM organizations og WHERE og.id = t.organization_id), t.name) || ' (' || TRIM(SUBSTR(t.head_coach_name, INSTR(t.head_coach_name, ' '))) || ')' ELSE t.name END)`;
   const base = (regTable: string, statusCol: string) => `
-    SELECT e.id as event_id, e.name as event_name, e.start_date,
+    SELECT e.id as event_id, e.name as event_name, e.start_date, e.end_date,
       t.id as team_id, ${NAME_SQL} as team_name,
       (SELECT COUNT(*) FROM user_follows uf WHERE uf.team_id = t.id) as followers
     FROM events e
@@ -308,7 +308,7 @@ userRoutes.get('/admin/follow-report', authMiddleware, requireRole('admin', 'dir
   const events = new Map<string, any>();
   for (const row of ([...(er.results || []), ...(nr.results || [])] as any[])) {
     if (!events.has(row.event_id)) {
-      events.set(row.event_id, { event_id: row.event_id, event_name: row.event_name, start_date: row.start_date, teams: new Map() });
+      events.set(row.event_id, { event_id: row.event_id, event_name: row.event_name, start_date: row.start_date, end_date: row.end_date, teams: new Map() });
     }
     events.get(row.event_id).teams.set(row.team_id, { team_id: row.team_id, team_name: row.team_name, followers: row.followers || 0 });
   }
@@ -320,6 +320,7 @@ userRoutes.get('/admin/follow-report', authMiddleware, requireRole('admin', 'dir
         event_id: ev.event_id,
         event_name: ev.event_name,
         start_date: ev.start_date,
+        end_date: ev.end_date,
         teams,
         team_count: teams.length,
         total_followers: teams.reduce((n: number, t: any) => n + t.followers, 0),

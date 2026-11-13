@@ -34,6 +34,7 @@ interface FollowReportEvent {
   event_id: string;
   event_name: string;
   start_date: string;
+  end_date?: string;
   team_count: number;
   total_followers: number;
   teams: { team_id: string; team_name: string; followers: number }[];
@@ -58,8 +59,10 @@ export default function AppUsersPage() {
   }, []);
 
   const maxSignups = Math.max(1, ...(stats?.monthly || []).map(m => m.signups));
-  const totalTeams = followReport.reduce((n, ev) => n + ev.team_count, 0);
-  const totalFollowers = followReport.reduce((n, ev) => n + ev.total_followers, 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const completed = followReport.filter(ev => (ev.end_date || ev.start_date || '').slice(0, 10) < today);
+  const totalTeams = completed.reduce((n, ev) => n + ev.team_count, 0);
+  const totalFollowers = completed.reduce((n, ev) => n + ev.total_followers, 0);
   const avgFollowers = totalTeams > 0 ? totalFollowers / totalTeams : null;
 
   return (
@@ -78,7 +81,7 @@ export default function AppUsersPage() {
               { label: 'App Accounts', value: stats.app_accounts.toLocaleString(), color: 'text-[#003e79]' },
               { label: 'New This Week', value: stats.new_7d.toLocaleString(), color: 'text-green-600' },
               { label: 'New Last 30 Days', value: stats.new_30d.toLocaleString(), color: 'text-green-600' },
-              { label: 'Avg Followers / Team', value: avgFollowers === null ? '--' : avgFollowers.toFixed(1), color: 'text-[#0077b0]', sub: 'current events' },
+              { label: 'Avg Followers / Team', value: avgFollowers === null ? '--' : avgFollowers.toFixed(1), color: 'text-[#0077b0]', sub: 'completed events' },
             ].map((t: any) => (
               <div key={t.label} className="bg-white rounded-2xl border border-[#e8e8ed] px-5 py-4 text-center shadow-sm">
                 <div className={`text-3xl font-bold ${t.color}`}>{t.value}</div>
