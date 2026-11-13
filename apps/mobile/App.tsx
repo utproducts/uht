@@ -13,7 +13,7 @@ export default function App() {
   const prompted = useRef(false);
 
   useEffect(() => {
-    async function checkForUpdates() {
+    async function checkForUpdates(coldStart: boolean) {
       if (__DEV__) return; // Skip in development mode
       if (prompted.current) return; // one prompt per session is enough
       const now = Date.now();
@@ -24,6 +24,11 @@ export default function App() {
         if (update.isAvailable) {
           await Updates.fetchUpdateAsync();
           prompted.current = true;
+          if (coldStart) {
+            // Fresh launch: nothing in progress to lose, apply silently
+            await Updates.reloadAsync();
+            return;
+          }
           Alert.alert(
             'App Refresh Ready',
             'The latest improvements are ready. Tap Refresh App to apply them - this only refreshes the app, not your phone.',
@@ -38,11 +43,11 @@ export default function App() {
         console.log('Update check failed:', e);
       }
     }
-    checkForUpdates();
+    checkForUpdates(true);
     // Cold-start-only checks left users on stale bundles for days - re-check
     // whenever the app returns to the foreground too.
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkForUpdates();
+      if (state === 'active') checkForUpdates(false);
     });
     return () => sub.remove();
   }, []);
