@@ -385,7 +385,8 @@ registrationRoutes.get('/admin/checkin/:eventId', authMiddleware, requireRole('a
       ed.price_cents as division_price_cents, e2.price_cents as event_price_cents,
       COALESCE(er.card_paid_cents, CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents, 0) ELSE 0 END) as card_cents,
       (SELECT COALESCE(SUM(rp.amount_cents), 0) FROM registration_payments rp WHERE rp.registration_id = er.id) as manual_cents,
-      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = er.team_id AND tp.status = 'active') as roster_count
+      (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = er.team_id AND tp.status = 'active') as roster_count,
+      (SELECT COUNT(*) FROM user_follows uf WHERE uf.team_id = er.team_id) as follower_count
     FROM event_registrations er
     LEFT JOIN teams ct ON ct.id = er.team_id
     LEFT JOIN event_divisions ed ON ed.id = er.event_division_id

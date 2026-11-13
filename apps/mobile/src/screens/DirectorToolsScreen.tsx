@@ -129,10 +129,25 @@ export function DirectorCheckinScreen({ navigation }: any) {
                     <Text style={s.rowSub} numberOfLines={1}>
                       {t.checked_in_at ? `Checked in ${String(t.checked_in_at).slice(5, 16)}` : 'Not checked in'}
                     </Text>
-                    <View style={s.playerCountChip}>
-                      <Ionicons name="people-outline" size={11} color={colors.navy} />
-                      <Text style={s.playerCountText} maxFontSizeMultiplier={1.2}>{t.roster_count ?? 0} players</Text>
+                    <View style={s.chipRow}>
+                      <View style={s.playerCountChip}>
+                        <Ionicons name="people-outline" size={11} color={colors.navy} />
+                        <Text style={s.playerCountText} maxFontSizeMultiplier={1.2}>{t.roster_count ?? 0} players</Text>
+                      </View>
+                      {typeof t.follower_count === 'number' && (
+                        <View style={[s.playerCountChip, t.follower_count < 5 && s.lowFollowChip]}>
+                          <Ionicons name="phone-portrait-outline" size={11} color={t.follower_count < 5 ? '#92600a' : colors.navy} />
+                          <Text style={[s.playerCountText, t.follower_count < 5 && s.lowFollowText]} maxFontSizeMultiplier={1.2}>
+                            {t.follower_count} app follower{t.follower_count === 1 ? '' : 's'}
+                          </Text>
+                        </View>
+                      )}
                     </View>
+                    {typeof t.follower_count === 'number' && t.follower_count < 5 ? (
+                      <Text style={s.lowFollowHint} numberOfLines={2}>
+                        Ask the coach to share the parent code so families get scores and updates
+                      </Text>
+                    ) : null}
                     {t.missing_roster ? (
                       <Text style={s.rowAlertText} numberOfLines={1}>NO ROSTER</Text>
                     ) : null}
@@ -951,4 +966,8 @@ const s = StyleSheet.create({
   codeChipText: { color: colors.navy, fontSize: 14, letterSpacing: 2, ...fonts.bold },
   playerCountChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: '#eef4fa', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginTop: 3 },
   playerCountText: { fontSize: 11, color: colors.navy, ...fonts.semibold },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  lowFollowChip: { backgroundColor: '#fff7e6', borderWidth: 1, borderColor: '#f3d9a4' },
+  lowFollowText: { color: '#92600a' },
+  lowFollowHint: { fontSize: 11, color: '#92600a', marginTop: 2, lineHeight: 15 },
 });
