@@ -21,6 +21,19 @@ export default function ThreeStarsRulesPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-6 py-10 space-y-6 w-full flex-1">
+        {/* Lights Out banner - every star is an invite */}
+        <a href="/lights-out" className="block relative overflow-hidden rounded-2xl bg-[#001d3d] p-6 border border-[#39ff14]/30 shadow-sm hover:shadow-[0_0_30px_rgba(57,255,20,.2)] transition-shadow">
+          <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-[#39ff14]/10 blur-3xl" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+            <div>
+              <p className="text-xs font-bold tracking-[0.3em] text-[#39ff14] mb-1.5">INVITE ONLY · JUNE 11-13, 2027</p>
+              <h2 className="text-xl font-bold text-white">Every star is a <span className="bg-gradient-to-r from-[#39ff14] to-[#00ccff] bg-clip-text text-transparent">Lights Out Invitational</span> invite</h2>
+              <p className="text-white/70 text-sm mt-1.5">Earn a star at any UHT event this season and your player is invited to the first-ever glow-in-the-dark tournament in St. Louis.</p>
+            </div>
+            <span className="shrink-0 self-start sm:self-center px-5 py-2.5 rounded-full text-sm font-bold bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a]">See the Invitational</span>
+          </div>
+        </a>
+
         <div className={CARD}>
           <h2 className="text-xl font-bold text-[#1d1d1f] mb-3">How players earn points</h2>
           <p className="text-sm text-[#6e6e73] mb-4">
@@ -92,6 +105,17 @@ export default function ThreeStarsRulesPage() {
             <li>Only players on the game's signed lineup who were marked Playing are eligible.</li>
             <li>Stars are assigned the moment the game goes final and announced by push notification to both teams.</li>
           </ul>
+        </div>
+
+        <div className={CARD}>
+          <h2 className="text-xl font-bold text-[#1d1d1f] mb-3">What a star earns</h2>
+          <p className="text-sm text-[#3c3c43] leading-relaxed">
+            Beyond the announcement at the rink and in the app, every Three Stars selection earns the
+            player an invitation to the <strong>Lights Out Invitational</strong> - the invite-only,
+            glow-in-the-dark tournament held June 11-13, 2027 in St. Louis. One star at any UHT event
+            this season is enough; every invite is verified against the official scoresheets.{' '}
+            <a href="/lights-out" className="text-[#0077b0] font-semibold hover:underline">Learn more and claim a spot.</a>
+          </p>
         </div>
 
         <div className={CARD}>

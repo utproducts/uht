@@ -428,6 +428,42 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ═══════════════════════ LIGHTS OUT INVITATIONAL ═══════════════════════ */}
+      <section className="relative overflow-hidden bg-[#001d3d] py-16">
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-[#39ff14]/10 blur-3xl" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-[#00ccff]/10 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+          <div className="grid lg:grid-cols-[1fr_auto] items-center gap-10">
+            <div className="text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-[#39ff14]/40 mb-5">
+                <span className="w-2 h-2 rounded-full bg-[#39ff14]" />
+                <span className="text-xs font-bold tracking-[0.3em] text-[#39ff14]">INVITE ONLY</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">
+                <span className="bg-gradient-to-r from-[#39ff14] via-[#8aff5e] to-[#00ccff] bg-clip-text text-transparent">Lights Out</span> Invitational
+              </h2>
+              <p className="mt-2 text-[#7fd8ff] font-semibold tracking-widest text-sm uppercase">June 11-13, 2027 · St. Louis, MO</p>
+              <p className="mt-4 text-white/70 text-lg leading-relaxed max-w-2xl mx-auto lg:mx-0">
+                The first-ever glow-in-the-dark hockey tournament. The arena goes dark, the ice glows,
+                and the only way in is to be named one of the Three Stars at a UHT event this season.
+              </p>
+              <div className="mt-7 flex flex-col sm:flex-row items-center lg:justify-start justify-center gap-4">
+                <a href="/lights-out" className="px-8 py-3.5 rounded-full text-base font-bold bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.35)] hover:brightness-110 transition">
+                  See the Invitational
+                </a>
+                <a href="/three-stars" className="px-8 py-3.5 rounded-full text-base font-semibold text-white/85 border border-white/25 hover:bg-white/10 transition">
+                  How to Earn a Star
+                </a>
+              </div>
+            </div>
+            <div className="hidden lg:block">
+              <img src="/lights-out-logo.png" alt="Lights Out Invitational"
+                className="w-[300px]" style={{ filter: 'drop-shadow(0 0 24px rgba(0,204,255,.3))' }} />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ═══════════════════════ CITY SHOWCASE ═══════════════════════ */}
       <section className="bg-white py-20">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
