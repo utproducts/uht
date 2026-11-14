@@ -183,7 +183,7 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function RegisterModal({ onClose }: { onClose: () => void }) {
+function RegisterModal({ onClose, onRequestInstead }: { onClose: () => void; onRequestInstead: () => void }) {
   const [events, setEvents] = useState<any[]>([]);
   const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
   const [busy, setBusy] = useState(false);
@@ -250,16 +250,16 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
         </button>
         {done ? (
           <div className="text-center py-6">
-            <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REQUEST RECEIVED</p>
+            <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REGISTRATION RECEIVED</p>
             <p className="text-white text-xl font-black mb-3">We're confirming the star.</p>
             <p className="text-white/70 text-sm leading-relaxed mb-6">Every invite is verified against the official scoresheets. You'll get an email the moment {f.playerName.split(' ')[0] || 'your player'}'s spot is confirmed.</p>
             <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a]">DONE</button>
           </div>
         ) : (
           <>
-            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>INVITE REQUEST</p>
+            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>OFFICIAL REGISTRATION</p>
             <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>CLAIM YOUR SPOT</h3>
-            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Tell us where your player earned their Three Star. We verify every registration against the official scoresheets before the invite is confirmed.</p>
+            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">For Three Stars winners and invite code holders. Tell us where your player earned their Three Star - we verify every registration against the official scoresheets before the invite is confirmed.</p>
             <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-1`}>$550 PER PLAYER (OR $200 DEPOSIT) &middot; ALL SWAG INCLUDED</p>
             <p className={`${rajdhani.className} text-[#ffb84d]/85 text-sm font-semibold tracking-[0.12em] mb-4`}>EXTREMELY LIMITED EVENT &middot; A $200 DEPOSIT HOLDS YOUR SPOT</p>
             <div className="space-y-3">
@@ -277,6 +277,13 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
                 <input className={inputCls} placeholder="Invite code (from your approval email) *" value={f.inviteCode}
                   onChange={(e) => set('inviteCode', e.target.value.toUpperCase())} style={{ letterSpacing: '2px' }} />
               )}
+              <p className="text-white/55 text-[12px] leading-snug">
+                No Three Star and no code yet?{' '}
+                <button type="button" onClick={onRequestInstead} className="text-[#39ff14] font-bold underline underline-offset-2 hover:brightness-110">
+                  Request an invite instead - it&apos;s free
+                </button>
+                {' '}- no payment to request.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Birth year" value={f.birthYear} onChange={(e) => set('birthYear', e.target.value)} />
                 <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
@@ -506,7 +513,7 @@ export default function LightsOutPage() {
         <p className="text-center text-[11px] text-white/35 pb-10">Ultimate Hockey Tournaments &middot; Lights Out Invitational &middot; St. Louis, MO</p>
       </div>
 
-      {showRegister && <RegisterModal onClose={() => setShowRegister(false)} />}
+      {showRegister && <RegisterModal onClose={() => setShowRegister(false)} onRequestInstead={() => { setShowRegister(false); setShowRequest(true); }} />}
       {showRequest && <RequestInviteModal onClose={() => setShowRequest(false)} />}
       {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
       {paidState && (
