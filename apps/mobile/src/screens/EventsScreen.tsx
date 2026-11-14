@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, fonts, spacing, radii } from '../constants/theme';
 import { getUser, getActiveRole, setActiveRole, refreshUser, addRoleToAccount } from '../services/auth';
 import { refreshBadgeCount } from '../services/notifications';
+import LightsOutBanner from '../components/LightsOutBanner';
 import AppHeader from '../components/AppHeader';
 import RoleBar from '../components/RoleBar';
 import { getEvents } from '../services/api';
@@ -402,6 +403,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         data={displayedEvents}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={<LightsOutBanner pitch="The arena goes dark. The ice glows. Earn a Three Stars selection at any UHT event and you are in." />}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
