@@ -13,6 +13,9 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
   const [failed, setFailed] = useState(false);
   const [q, setQ] = useState('');
   const [eventFilter, setEventFilter] = useState('all');
+  // Events start collapsed - totals first, detail on tap. A search opens
+  // everything so matches are never hidden behind a closed group.
+  const [openEvents, setOpenEvents] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const API = 'https://uht.chad-157.workers.dev/api';
@@ -65,13 +68,16 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
           ) : filtered.length === 0 ? (
             <p className="text-sm text-center py-8 text-[#86868b]">{rows.length === 0 ? 'Nobody owes anything right now.' : 'No teams match that search.'}</p>
           ) : (
-            Array.from(byEvent.entries()).map(([evId, list]) => (
-              <div key={evId} className="mb-4">
-                <div className="flex items-center justify-between bg-[#f5f5f7] rounded-lg px-3 py-1.5 mb-1">
-                  <p className="text-[11px] font-bold text-[#1d1d1f] truncate">{list[0].event_name} <span className="font-normal text-[#86868b]">{(list[0].start_date || '').slice(0, 10)}</span></p>
-                  <p className="text-[11px] font-bold text-amber-700 shrink-0 ml-2">{fmt$(list.reduce((s: number, r: any) => s + r.owed_cents, 0))}</p>
-                </div>
-                {list.map((r: any) => (
+            Array.from(byEvent.entries()).map(([evId, list]) => {
+              const open = q !== '' || !!openEvents[evId];
+              return (
+              <div key={evId} className="mb-2">
+                <button onClick={() => setOpenEvents(prev => ({ ...prev, [evId]: !prev[evId] }))}
+                  className="w-full flex items-center justify-between bg-[#f5f5f7] hover:bg-[#eef1f5] rounded-lg px-3 py-2 mb-1 text-left transition">
+                  <p className="text-[11px] font-bold text-[#1d1d1f] truncate">{list[0].event_name} <span className="font-normal text-[#86868b]">{(list[0].start_date || '').slice(0, 10)} · {list.length} team{list.length !== 1 ? 's' : ''}</span></p>
+                  <p className="text-[11px] font-bold text-amber-700 shrink-0 ml-2">{fmt$(list.reduce((s: number, r: any) => s + r.owed_cents, 0))} <span className="text-[#86868b] font-normal ml-1">{open ? '▴' : '▾'}</span></p>
+                </button>
+                {open && list.map((r: any) => (
                   <div key={r.id} className="flex items-start justify-between gap-3 px-3 py-2 border-b border-[#f0f0f3] last:border-0">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[#1d1d1f] leading-tight truncate">{r.team_name}</p>
@@ -85,7 +91,8 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
                   </div>
                 ))}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
