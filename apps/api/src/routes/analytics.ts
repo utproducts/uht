@@ -565,8 +565,9 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
     db.prepare(`
       SELECT substr(er.created_at, 1, 10) as day, er.team_name, er.age_group, er.division,
              er.status, LOWER(COALESCE(NULLIF(er.email1, ''), er.coach_email)) as email,
-             e.name as event_name
+             e.name as event_name, tm.state as state
       FROM event_registrations er JOIN events e ON e.id = er.event_id
+      LEFT JOIN teams tm ON tm.id = er.team_id
       WHERE er.created_at >= ? AND er.created_at < ?
         AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
         AND COALESCE(e.is_test, 0) = 0
@@ -574,7 +575,7 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
     `).bind(curFrom, curTo).all(),
     db.prepare(`
       SELECT substr(r.created_at, 1, 10) as day, t.name as team_name, ed.age_group,
-             ed.division_level as division, r.status, NULL as email, e.name as event_name
+             ed.division_level as division, r.status, NULL as email, e.name as event_name, t.state as state
       FROM registrations r
       JOIN events e ON e.id = r.event_id
       LEFT JOIN teams t ON t.id = r.team_id
@@ -585,12 +586,22 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
       ORDER BY r.created_at
     `).bind(curFrom, curTo).all(),
     db.prepare(`
-      SELECT approved_on as day, team_name, event_name, division, email
+      SELECT approved_on as day, team_name, event_name, division, email, state
       FROM legacy_registrations
       WHERE status = 'approved' AND approved_on >= ? AND approved_on < ?
       ORDER BY approved_on
     `).bind(prevFrom, prevTo).all(),
   ]);
+
+  // Team profiles store anything from "IL" to "Illinois" — fold both seasons
+  // onto 2-letter codes so the state report groups cleanly
+  const STATE_CODES: Record<string, string> = { alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD', massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT', virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY', 'district of columbia': 'DC' };
+  const normState = (s: string | null | undefined): string => {
+    const v = (s || '').trim();
+    if (!v) return '';
+    if (v.length <= 3) return v.toUpperCase().replace(/\./g, '').slice(0, 2);
+    return STATE_CODES[v.toLowerCase()] || v.slice(0, 20);
+  };
 
   // This season: one row per registration, grouped by day
   const curByDay = new Map<string, any[]>();
@@ -601,6 +612,7 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
       event_name: r.event_name,
       division: [r.age_group, r.division].filter(Boolean).join(' '),
       status: r.status,
+      state: normState(r.state),
       ...(restricted ? {} : { email: r.email || null }),
     });
     curByDay.set(r.day, list);
@@ -616,6 +628,7 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
       team_name: r.team_name,
       event_name: r.event_name,
       division: r.division || undefined,
+      state: normState(r.state),
       ...(restricted ? {} : { email: r.email || null }),
     });
     prevByDay.set(r.day, list);

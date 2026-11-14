@@ -36,8 +36,8 @@ type MonthDetail = {
   month: number;
   this_year: number;
   last_year: number;
-  this_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; status?: string }[] }[]; total: number };
-  last_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; email?: string | null }[] }[]; total: number };
+  this_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; status?: string; state?: string; email?: string | null }[] }[]; total: number };
+  last_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; state?: string; email?: string | null }[] }[]; total: number };
 };
 
 function fmtDay(iso: string): string {
@@ -53,12 +53,16 @@ export default function RegistrationTrends() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailSeason, setDetailSeason] = useState<'this' | 'last'>('this');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [detailView, setDetailView] = useState<'calendar' | 'states'>('calendar');
+  const [selectedState, setSelectedState] = useState<string | null>(null);
 
   const openMonth = (m: number) => {
     setDetailMonth(m);
     setDetail(null);
     setDetailSeason('this');
     setSelectedDay(null);
+    setDetailView('calendar');
+    setSelectedState(null);
     setDetailLoading(true);
     const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
     fetch(`${API}/api/analytics/reports/month-detail/${m}`, {
@@ -230,10 +234,20 @@ export default function RegistrationTrends() {
                           { key: 'this' as const, label: `${detail.this_year} · this season`, total: detail.this_season.total },
                           { key: 'last' as const, label: `${detail.last_year} · last season`, total: detail.last_season.total },
                         ]).map(s => (
-                          <button key={s.key} onClick={() => { setDetailSeason(s.key); setSelectedDay(null); }}
+                          <button key={s.key} onClick={() => { setDetailSeason(s.key); setSelectedDay(null); setSelectedState(null); }}
                             className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${detailSeason === s.key ? 'bg-[#003e79] text-white shadow' : 'text-[#6e6e73]'}`}>
                             {s.label}
                             <span className={`ml-1.5 text-[10px] font-semibold ${detailSeason === s.key ? 'text-[#9fd1ff]' : 'text-[#86868b]'}`}>{s.total}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Calendar / By State view switch */}
+                      <div className="flex justify-center gap-1.5 mb-4">
+                        {([{ key: 'calendar' as const, label: 'Calendar' }, { key: 'states' as const, label: 'By State' }]).map(v => (
+                          <button key={v.key} onClick={() => setDetailView(v.key)}
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${detailView === v.key ? 'bg-[#0077b0] text-white' : 'bg-white border border-[#e8e8ed] text-[#6e6e73]'}`}>
+                            {v.label}
                           </button>
                         ))}
                       </div>
@@ -242,6 +256,52 @@ export default function RegistrationTrends() {
                         <p className="text-sm text-center py-8" style={{ color: MUTED }}>
                           {detailSeason === 'this' ? `No registrations yet this ${MONTH_NAMES[detailMonth]}.` : `No data on file for ${MONTH_NAMES[detailMonth]} ${year}.`}
                         </p>
+                      ) : detailView === 'states' ? (
+                        (() => {
+                          const stateMap = new Map<string, any[]>();
+                          for (const d of season.days) for (const t of d.teams) {
+                            const st = t.state || 'Unknown';
+                            const list = stateMap.get(st) || [];
+                            list.push({ ...t, day: d.day });
+                            stateMap.set(st, list);
+                          }
+                          const states = Array.from(stateMap.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+                          const maxSt = states.length ? states[0][1].length : 1;
+                          return (
+                            <div className="space-y-1.5">
+                              {states.map(([st, teams]) => {
+                                const open = selectedState === st;
+                                return (
+                                  <div key={st} className={`rounded-xl border overflow-hidden ${open ? 'border-[#0077b0]' : 'border-[#ededf0]'}`}>
+                                    <button onClick={() => setSelectedState(open ? null : st)}
+                                      className={`w-full flex items-center gap-3 px-3 py-2 text-left transition ${open ? 'bg-[#f0f7ff]' : 'bg-white hover:bg-[#fafafa]'}`}>
+                                      <span className="w-16 text-sm font-bold text-[#003e79] shrink-0">{st}</span>
+                                      <div className="flex-1 bg-[#f5f5f7] rounded-full h-3.5 overflow-hidden">
+                                        <div className="h-3.5 rounded-full bg-gradient-to-r from-[#003e79] to-[#00ccff]"
+                                          style={{ width: `${Math.max(5, (teams.length / maxSt) * 100)}%` }} />
+                                      </div>
+                                      <span className="w-8 text-right text-sm font-bold text-[#1d1d1f] shrink-0">{teams.length}</span>
+                                      <span className="text-[#86868b] text-xs shrink-0">{open ? '▴' : '▾'}</span>
+                                    </button>
+                                    {open && (
+                                      <div className="divide-y divide-[#f0f0f3] border-t border-[#f0f0f3]">
+                                        {teams.sort((a: any, b: any) => a.day.localeCompare(b.day)).map((t: any, i: number) => (
+                                          <div key={i} className="px-3 py-1.5">
+                                            <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
+                                            <p className="text-[11px] truncate" style={{ color: MUTED }}>
+                                              {fmtDay(t.day)} · {t.event_name}{t.division ? ` · ${t.division}` : ''}
+                                              {t.email ? <> · <a href={`mailto:${t.email}`} className="text-[#0077b0] hover:underline">{t.email}</a></> : ''}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()
                       ) : (
                         <>
                           {/* Calendar grid */}
