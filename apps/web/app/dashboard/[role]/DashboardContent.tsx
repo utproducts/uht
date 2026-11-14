@@ -41,14 +41,41 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
       .finally(() => setSendingId(null));
   };
 
-  useEffect(() => {
+  const [bulkSendingEvent, setBulkSendingEvent] = useState<string | null>(null);
+  const load = () => {
     const API = 'https://uht.chad-157.workers.dev/api';
     const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
     fetch(`${API}/financials/outstanding/detail`, { headers: devHeaders })
       .then(r => r.json())
       .then(j => { if (j.success) setRows(j.data || []); else setFailed(true); })
       .catch(() => setFailed(true));
-  }, []);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, []);
+
+  const sendEventReminders = (evId: string, evName: string, count: number) => {
+    if (bulkSendingEvent) return;
+    if (!window.confirm(`Email a payment reminder to all ${count} owing team${count !== 1 ? 's' : ''} on ${evName}? Teams already reminded in the last 3 days are skipped automatically.`)) return;
+    setBulkSendingEvent(evId);
+    const API = 'https://uht.chad-157.workers.dev/api';
+    const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    fetch(`${API}/financials/outstanding/remind-event/${evId}`, { method: 'POST', headers: devHeaders })
+      .then(res => res.json())
+      .then(j => {
+        if (j.success) {
+          const d = j.data || {};
+          const parts = [`${d.sent || 0} reminder${d.sent === 1 ? '' : 's'} sent`];
+          if (d.skipped_recent) parts.push(`${d.skipped_recent} skipped (reminded in the last 3 days)`);
+          if (d.no_email) parts.push(`${d.no_email} with no email on file`);
+          window.alert(parts.join(' · '));
+          load();
+        } else {
+          window.alert(j.error || 'Could not send the reminders.');
+        }
+      })
+      .catch(() => window.alert('Could not send the reminders.'))
+      .finally(() => setBulkSendingEvent(null));
+  };
 
   const events = rows ? Array.from(new Map(rows.map(r => [r.event_id, { id: r.event_id, name: r.event_name, start: r.start_date }])).values()) : [];
   const filtered = (rows || []).filter(r =>
@@ -96,11 +123,22 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
               const open = q !== '' || !!openEvents[evId];
               return (
               <div key={evId} className="mb-2">
-                <button onClick={() => setOpenEvents(prev => ({ ...prev, [evId]: !prev[evId] }))}
-                  className="w-full flex items-center justify-between bg-[#f5f5f7] hover:bg-[#eef1f5] rounded-lg px-3 py-2 mb-1 text-left transition">
-                  <p className="text-[11px] font-bold text-[#1d1d1f] truncate">{list[0].event_name} <span className="font-normal text-[#86868b]">{(list[0].start_date || '').slice(0, 10)} · {list.length} team{list.length !== 1 ? 's' : ''}</span></p>
-                  <p className="text-[11px] font-bold text-amber-700 shrink-0 ml-2">{fmt$(list.reduce((s: number, r: any) => s + r.owed_cents, 0))} <span className="text-[#86868b] font-normal ml-1">{open ? '▴' : '▾'}</span></p>
-                </button>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <button onClick={() => setOpenEvents(prev => ({ ...prev, [evId]: !prev[evId] }))}
+                    className="flex-1 min-w-0 flex items-center justify-between bg-[#f5f5f7] hover:bg-[#eef1f5] rounded-lg px-3 py-2 text-left transition">
+                    <p className="text-[11px] font-bold text-[#1d1d1f] truncate">{list[0].event_name} <span className="font-normal text-[#86868b]">{(list[0].start_date || '').slice(0, 10)} · {list.length} team{list.length !== 1 ? 's' : ''}</span></p>
+                    <p className="text-[11px] font-bold text-amber-700 shrink-0 ml-2">{fmt$(list.reduce((s: number, r: any) => s + r.owed_cents, 0))} <span className="text-[#86868b] font-normal ml-1">{open ? '▴' : '▾'}</span></p>
+                  </button>
+                  <button onClick={() => sendEventReminders(evId, list[0].event_name, list.length)}
+                    disabled={bulkSendingEvent !== null}
+                    title={`Email all ${list.length} owing teams on this event`}
+                    className="shrink-0 flex items-center gap-1 h-[34px] px-2.5 rounded-lg bg-[#f0f7ff] text-[#003e79] hover:bg-[#dcedff] transition disabled:opacity-40">
+                    {bulkSendingEvent === evId
+                      ? <span className="w-3.5 h-3.5 rounded-full border-2 border-[#003e79] border-t-transparent animate-spin" />
+                      : <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
+                    <span className="text-[10px] font-bold">All</span>
+                  </button>
+                </div>
                 {open && list.map((r: any) => (
                   <div key={r.id} className="border-b border-[#f0f0f3] last:border-0">
                     <div className="flex items-start justify-between gap-3 px-3 py-2">

@@ -664,6 +664,96 @@ financialRoutes.get('/outstanding/detail', authMiddleware, requireRole('admin', 
   return c.json({ success: true, data });
 });
 
+// Remind every owing team on one event in one tap. Same email as the single
+// reminder; teams nudged in the last 3 days are skipped so staff can't
+// accidentally double-send.
+financialRoutes.post('/outstanding/remind-event/:eventId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const eventId = c.req.param('eventId');
+  const user = (c as any).get('user');
+  if (await isDataRestricted(c)) return c.json({ success: false, error: 'Not available for this account' }, 403);
+
+  const OWED_EXPR = `MAX(0,
+    COALESCE(NULLIF(ed.price_cents, 0), er.payment_amount_cents, 0)
+    - COALESCE(er.discount_cents, 0)
+    - MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)
+  )`;
+  const rows = ((await db.prepare(`
+    SELECT er.id, er.team_name, e.name as event_name, e.start_date,
+      LOWER(COALESCE(NULLIF(er.email1, ''), er.coach_email)) as email,
+      ${OWED_EXPR} as owed_cents
+    FROM event_registrations er
+    JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.event_id = ? AND er.status = 'approved' AND er.payment_status NOT IN ('comp', 'paid')
+      AND ${OWED_EXPR} > 0
+  `).bind(eventId).all<any>()).results || []);
+  if (rows.length === 0) return c.json({ success: false, error: 'No owing teams on this event' }, 400);
+
+  await db.prepare(`CREATE TABLE IF NOT EXISTS payment_reminders (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    registration_id TEXT NOT NULL, event_id TEXT, email TEXT,
+    amount_cents INTEGER, sent_by TEXT, sent_at TEXT DEFAULT (datetime('now'))
+  )`).run();
+  const recent = new Set((((await db.prepare(
+    `SELECT DISTINCT registration_id FROM payment_reminders WHERE sent_at >= datetime('now', '-3 days')`
+  ).all<any>()).results) || []).map((r: any) => r.registration_id));
+
+  const noEmail = rows.filter((r: any) => !r.email);
+  const skippedRecent = rows.filter((r: any) => r.email && recent.has(r.id));
+  const toSend = rows.filter((r: any) => r.email && !recent.has(r.id));
+
+  const fmtOwed = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 2 }).replace(/\.00$/, '')}`;
+  const buildHtml = (r: any) => {
+    const owed = fmtOwed(r.owed_cents);
+    const dates = r.start_date ? new Date(r.start_date.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : '';
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f7fa;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 20px;font-family:Arial,Helvetica,sans-serif;">
+    <div style="text-align:center;margin-bottom:22px;">
+      <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Hockey Tournaments" width="160" style="max-width:55%;height:auto;" />
+    </div>
+    <div style="background:#ffffff;border:1px solid #e3e9f0;border-radius:14px;padding:28px 24px;color:#1d1d1f;font-size:14px;line-height:1.65;">
+      <h2 style="margin:0 0 14px;color:#003e79;font-size:19px;">Payment Reminder</h2>
+      <p style="margin:0 0 14px;">Hi ${r.team_name},</p>
+      <p style="margin:0 0 14px;">This is a friendly reminder that your registration for <b>${r.event_name}</b>${dates ? ` (starting ${dates})` : ''} has a remaining balance of <b style="color:#003e79;">${owed}</b>.</p>
+      <div style="text-align:center;margin:22px 0;">
+        <a href="https://ultimatetournaments.com/pay?reg=${r.id}" style="display:inline-block;background:#003e79;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 34px;border-radius:10px;font-size:15px;">Pay Balance Online</a>
+      </div>
+      <p style="margin:0 0 6px;color:#6e6e73;font-size:13px;">If you have already mailed a check or have questions about your balance, just reply to this email and we will get you squared away.</p>
+    </div>
+    <p style="text-align:center;color:#9aa4b0;font-size:11px;margin-top:18px;">Ultimate Hockey Tournaments</p>
+  </div></body></html>`;
+  };
+
+  // Resend batch endpoint: up to 100 emails per call, one subrequest per chunk
+  let sent = 0;
+  for (let i = 0; i < toSend.length; i += 100) {
+    const chunk = toSend.slice(i, i + 100);
+    const resp = await fetch('https://api.resend.com/emails/batch', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${(c.env as any).RESEND_API}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(chunk.map((r: any) => ({
+        from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+        to: [r.email],
+        reply_to: 'johnny@ultimatetournaments.com',
+        subject: `Payment reminder - ${r.event_name} - ${fmtOwed(r.owed_cents)} due`,
+        html: buildHtml(r),
+      }))),
+    });
+    if (!resp.ok) break;
+    sent += chunk.length;
+    const values = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ');
+    const binds = chunk.flatMap((r: any) => [r.id, eventId, r.email, r.owed_cents, user?.id || null]);
+    await db.prepare(`INSERT INTO payment_reminders (registration_id, event_id, email, amount_cents, sent_by) VALUES ${values}`)
+      .bind(...binds).run();
+  }
+
+  return c.json({
+    success: sent > 0 || toSend.length === 0,
+    data: { sent, skipped_recent: skippedRecent.length, no_email: noEmail.length, eligible: toSend.length },
+  });
+});
+
 // One-tap payment reminder from the Teams That Owe list. Operational email
 // (not marketing): amount due + pay link, logged to payment_reminders.
 financialRoutes.post('/outstanding/remind/:regId', authMiddleware, requireRole('admin', 'director'), async (c) => {

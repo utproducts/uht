@@ -18,11 +18,17 @@ directorRoutes.post('/claim', authMiddleware, async (c) => {
   const pin = String(body.pin || '').trim();
   if (pin.length < 3) return c.json({ success: false, error: 'Enter the event director PIN' }, 400);
   const row = await db.prepare(`
-    SELECT dp.event_id, e.name as event_name FROM director_pins dp
+    SELECT dp.event_id, e.name as event_name, COALESCE(e.end_date, e.start_date) as end_date FROM director_pins dp
     JOIN events e ON e.id = dp.event_id
     WHERE dp.pin_code = ? AND dp.is_active = 1
   `).bind(pin).first<any>();
   if (!row) return c.json({ success: false, error: 'Invalid director PIN' }, 404);
+  // Completed event: kill the PIN permanently so nobody can reclaim, and so
+  // the number frees up for a future event
+  if (row.end_date && `${row.end_date}`.slice(0, 10) < new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10)) {
+    await db.prepare('UPDATE director_pins SET is_active = 0 WHERE event_id = ?').bind(row.event_id).run();
+    return c.json({ success: false, error: 'This event has ended, so its director PIN is no longer active.' }, 410);
+  }
   // The PIN dies 3 hours after the event's last game goes final
   const done = await db.prepare(`
     SELECT COUNT(*) as total,
@@ -31,6 +37,7 @@ directorRoutes.post('/claim', authMiddleware, async (c) => {
     FROM games WHERE event_id = ?
   `).bind(row.event_id).first<any>();
   if (done && done.total > 0 && done.finals === done.total && done.recent === 0) {
+    await db.prepare('UPDATE director_pins SET is_active = 0 WHERE event_id = ?').bind(row.event_id).run();
     return c.json({ success: false, error: 'This event has ended, so its director PIN is no longer active.' }, 410);
   }
   // One active event per PIN entry: a new PIN replaces any older claim
@@ -81,8 +88,12 @@ directorRoutes.put('/pins/:eventId', authMiddleware, requireRole('admin'), async
   const pin = String(body.pin || '').trim();
   if (!/^[0-9]{3,8}$/.test(pin)) return c.json({ success: false, error: 'PIN must be 3-8 digits' }, 400);
   // One PIN per event; a PIN must be unique across events so the claim can find the event
-  const clash = await db.prepare('SELECT event_id FROM director_pins WHERE pin_code = ? AND is_active = 1 AND event_id != ?')
-    .bind(pin, eventId).first<any>();
+  // Only live events hold their PIN number — completed events' pins are free to reuse
+  const clash = await db.prepare(`
+    SELECT dp.event_id FROM director_pins dp JOIN events e ON e.id = dp.event_id
+    WHERE dp.pin_code = ? AND dp.is_active = 1 AND dp.event_id != ?
+      AND date(COALESCE(e.end_date, e.start_date), '+1 day') >= date('now')
+  `).bind(pin, eventId).first<any>();
   if (clash) return c.json({ success: false, error: 'That PIN is already used by another event' }, 409);
   await db.prepare('DELETE FROM director_pins WHERE event_id = ?').bind(eventId).run();
   await db.prepare("INSERT INTO director_pins (id, event_id, pin_code, is_active, created_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, datetime('now'))")
