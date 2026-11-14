@@ -143,7 +143,15 @@ export async function runLightsOutSweep(env: any): Promise<{ sent: number; activ
     }
   }
 
-  // 2. Wednesday announcement: hand the scheduled campaign to the wave engine
+  // 2. Abandoned checkouts: one nudge each with a fresh Stripe link
+  try {
+    const { remindIncompleteCheckouts } = await import('../routes/lights-out');
+    await remindIncompleteCheckouts(env);
+  } catch (e) {
+    console.error('LightsOut incomplete-checkout nudge error:', e);
+  }
+
+  // 3. Wednesday announcement: hand the scheduled campaign to the wave engine
   const r = await db.prepare(`
     UPDATE email_campaigns SET status = 'sending', updated_at = datetime('now', '-3 minutes')
     WHERE template_type = 'lightsout_announce' AND status = 'scheduled' AND date(scheduled_at) <= date('now')

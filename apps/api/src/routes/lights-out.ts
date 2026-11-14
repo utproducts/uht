@@ -324,3 +324,81 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
     }
     return c.json({ success: true });
   });
+
+// ==========================================
+// Abandoned checkout nudge: families who started registration but never
+// paid get ONE reminder with a fresh Stripe link straight to checkout.
+// Runs daily from the Lights Out sweep and on demand from the admin panel.
+// ==========================================
+export async function remindIncompleteCheckouts(env: Env): Promise<{ sent: number; skipped: number }> {
+  const db = env.DB;
+  const rows = (await db.prepare(`
+    SELECT * FROM lights_out_registrations
+    WHERE status = 'pending_payment' AND paid_at IS NULL
+      AND payment_reminder_at IS NULL
+      AND created_at <= datetime('now', '-45 minutes')
+      AND created_at >= '2026-11-13'
+  `).all()).results || [];
+
+  let sent = 0, skipped = 0;
+  for (const r of rows as any[]) {
+    // Same family already completed a registration - no nudge needed
+    const alreadyPaid = await db.prepare(
+      `SELECT 1 as x FROM lights_out_registrations WHERE email = ? AND paid_at IS NOT NULL LIMIT 1`
+    ).bind(r.email).first<any>();
+    if (alreadyPaid) {
+      await db.prepare(`UPDATE lights_out_registrations SET payment_reminder_at = datetime('now') WHERE id = ?`).bind(r.id).run();
+      skipped++;
+      continue;
+    }
+
+    const isDeposit = r.payment_plan === 'deposit';
+    const chargeCents = isDeposit ? LIGHTS_OUT_DEPOSIT_CENTS : LIGHTS_OUT_PRICE_CENTS;
+    const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${(env as any).STRIPE_SECRET_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'mode': 'payment',
+        'success_url': `https://ultimatetournaments.com/lights-out/?reg=${r.id}&session_id={CHECKOUT_SESSION_ID}`,
+        'cancel_url': 'https://ultimatetournaments.com/lights-out/?cancelled=1',
+        'customer_email': String(r.email),
+        'line_items[0][price_data][currency]': 'usd',
+        'line_items[0][price_data][unit_amount]': String(chargeCents),
+        'line_items[0][price_data][product_data][name]': isDeposit ? 'Lights Out Invitational - $200 Non-Refundable Deposit' : 'Lights Out Invitational - Player Registration (Paid in Full)',
+        'line_items[0][price_data][product_data][description]': `${r.player_name} · St. Louis, MO · jerseys, stick, puck, tee and duffle included${isDeposit ? ' · $350 balance due before the event' : ''}`,
+        'line_items[0][quantity]': '1',
+        'metadata[lights_out_reg_id]': String(r.id),
+        'metadata[player_name]': String(r.player_name),
+        'payment_intent_data[metadata][lights_out_reg_id]': String(r.id),
+      }).toString(),
+    });
+    const session = await stripeResponse.json() as any;
+    if (!stripeResponse.ok || !session?.url) continue;
+
+    const first = String(r.player_name).trim().split(/\s+/)[0] || 'your player';
+    await sendEmail(env, String(r.email), `${first}'s Lights Out spot is not locked in yet`,
+      emailShell(`
+        <h2 style="margin:0 0 14px;color:#39ff14;font-size:19px;">One step left</h2>
+        <p style="margin:0 0 14px;">Hi ${r.parent_name},</p>
+        <p style="margin:0 0 14px;">You started <b style="color:#7fd8ff;">${r.player_name}</b>'s registration for the Lights Out Invitational - June 11-13, 2027 in St. Louis - but the payment never went through, so the spot is not locked in yet.</p>
+        <p style="margin:0 0 14px;">A heads up on timing: registrations are moving fast, and at this pace the event will be sold out this week. ${isDeposit ? 'The $200 non-refundable deposit is all it takes to hold the spot.' : ''}</p>
+        <p style="margin:0 0 16px;text-align:center;">
+          <a href="${session.url}" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">${isDeposit ? 'FINISH PAYMENT - $200 DEPOSIT' : 'FINISH PAYMENT - $550'}</a>
+        </p>
+        <p style="margin:0 0 14px;color:#9fb3cc;font-size:13px;">That button goes straight to secure Stripe checkout for ${first} - nothing to fill out again. Want to switch between deposit and paying in full? Just register again at <a href="https://ultimatetournaments.com/lights-out?register=1" style="color:#00ccff;">ultimatetournaments.com/lights-out</a>.</p>
+        <p style="margin:0;">See you in the dark.<br/><br/>Johnny<br/>Ultimate Hockey Tournaments</p>
+      `));
+    await db.prepare(`UPDATE lights_out_registrations SET payment_reminder_at = datetime('now'), stripe_session_id = ? WHERE id = ?`)
+      .bind(session.id, r.id).run();
+    sent++;
+  }
+  return { sent, skipped };
+}
+
+lightsOutRoutes.post('/admin/remind-incomplete', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const result = await remindIncompleteCheckouts(c.env);
+  return c.json({ success: true, data: result });
+});
