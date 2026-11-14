@@ -297,7 +297,7 @@ export default function LightsOutPage() {
             <p className="mt-6 text-lg sm:text-xl text-white/60 leading-relaxed max-w-xl mx-auto lg:mx-0">
               The first-ever glow-in-the-dark hockey tournament. The arena goes dark, the ice glows, and only the ones who earned a star get to play.
             </p>
-            <p className={`${rajdhani.className} mt-3 text-[#7fd8ff]/70 text-base font-medium tracking-[0.3em]`}>ST. LOUIS, MO &middot; DATES REVEALED TO INVITEES</p>
+            <p className={`${rajdhani.className} mt-3 text-[#7fd8ff]/70 text-base font-medium tracking-[0.3em]`}>ST. LOUIS, MO &middot; <span className="text-[#39ff14]">JUNE 11-13, 2027</span></p>
 
             <div className="mt-9 flex flex-col sm:flex-row items-center lg:justify-start justify-center gap-4 flex-wrap">
               <button onClick={() => setShowRegister(true)}

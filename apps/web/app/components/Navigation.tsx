@@ -58,6 +58,10 @@ export default function Navigation() {
             <a href="/events" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Events</a>
             <a href="/book-ice" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium whitespace-nowrap">Book Ice</a>
             <a href="/three-stars" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium whitespace-nowrap">Three Stars</a>
+            <a href="/lights-out" className="flex items-center gap-1.5 text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#39ff14] shadow-[0_0_6px_rgba(57,255,20,0.8)]" />
+              Lights Out
+            </a>
             <a href="/contact" className="text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors font-medium">Contact</a>
             <div className="relative"
               onMouseEnter={() => setMoreOpen(true)}
@@ -129,6 +133,10 @@ export default function Navigation() {
             <a href="/events" className="block py-2.5 px-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Events</a>
             <a href="/book-ice" className="block py-2.5 px-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Book Ice</a>
             <a href="/three-stars" className="block py-2.5 px-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Three Stars</a>
+            <a href="/lights-out" className="flex items-center gap-2 py-2.5 px-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#39ff14] shadow-[0_0_6px_rgba(57,255,20,0.8)]" />
+              Lights Out
+            </a>
             <a href="/contact" className="block py-2.5 px-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] rounded-lg transition-colors">Contact</a>
             <div className="border-t border-[#e8e8ed] my-1" />
             <a href="/events?tab=past" className="block py-2 px-3 text-sm text-[#6e6e73] hover:bg-[#f5f5f7] rounded-lg transition-colors">Past Events</a>
