@@ -654,12 +654,14 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
   const sideSelect = (side: 'home' | 'away') => `
     SELECT e.id as event_id, e.name as event_name, e.start_date, g.id as game_id, g.start_time, g.game_type,
       ged.age_group as game_age, ged.division_level as game_level,
-      t.id as team_id, t.name as team_name,
+      t.id as team_id, t.name as team_name, vr.name as rink_name, v.name as venue_name,
       er.id as reg_id, red.age_group as reg_age, red.division_level as reg_level
     FROM games g
     JOIN events e ON e.id = g.event_id
     JOIN event_divisions ged ON ged.id = g.event_division_id
     JOIN teams t ON t.id = g.${side}_team_id
+    LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+    LEFT JOIN venues v ON v.id = vr.venue_id
     LEFT JOIN event_registrations er ON er.event_id = g.event_id AND er.team_id = t.id AND er.status = 'approved'
     LEFT JOIN event_divisions red ON red.id = er.event_division_id
     WHERE ${EVENT_FILTER}`;
@@ -667,8 +669,16 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
   const [sidesQ, missingQ, regsQ] = await Promise.all([
     db.prepare(`${sideSelect('home')} UNION ALL ${sideSelect('away')}`).all(),
     db.prepare(`
-      SELECT e.id as event_id, e.name as event_name, e.start_date, g.start_time
+      SELECT e.id as event_id, e.name as event_name, e.start_date, g.start_time,
+        ged.age_group as game_age, ged.division_level as game_level,
+        vr.name as rink_name, v.name as venue_name,
+        ht.name as home_name, at2.name as away_name
       FROM games g JOIN events e ON e.id = g.event_id
+      JOIN event_divisions ged ON ged.id = g.event_division_id
+      LEFT JOIN venue_rinks vr ON vr.id = g.rink_id
+      LEFT JOIN venues v ON v.id = vr.venue_id
+      LEFT JOIN teams ht ON ht.id = g.home_team_id
+      LEFT JOIN teams at2 ON at2.id = g.away_team_id
       WHERE ${EVENT_FILTER} AND g.game_type = 'pool' AND (g.home_team_id IS NULL OR g.away_team_id IS NULL)
     `).all(),
     db.prepare(`
@@ -687,36 +697,53 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
     ev.issues.push(issue);
     byEvent.set(event_id, ev);
   };
-  const fmt = (t: string) => t ? t.replace('T', ' ').slice(0, 16) : '';
+  // "Fri 11/20 6:00 PM · Rink 1 (Breaker Ice Arena)" — enough to walk straight
+  // to the game in the Schedule Builder and fix it
+  const fmtGame = (startTime: string, rink?: string | null, venue?: string | null) => {
+    if (!startTime) return '';
+    const d = new Date(startTime.replace(' ', 'T'));
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+    let h = d.getHours();
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    const when = `${wd} ${d.getMonth() + 1}/${d.getDate()} ${h}:${String(d.getMinutes()).padStart(2, '0')} ${ap}`;
+    const where = rink ? ` · ${rink}${venue ? ` (${venue})` : ''}` : '';
+    return when + where;
+  };
 
   // 1. Team's games are in a different division than its registration — the
-  //    wrong-roster bug. Dedupe per team+division so one bad pool = one line.
+  //    wrong-roster bug. One line per team, listing every game to fix.
   // 2. Team in the schedule with no approved registration.
-  const seen = new Set<string>();
+  const wrongDiv = new Map<string, { r: any; severity: 'red' | 'amber'; games: string[] }>();
+  const noReg = new Map<string, { r: any; games: string[] }>();
   for (const r of sides) {
     if (r.reg_id) {
       const ageBad = r.reg_age && r.game_age && r.reg_age !== r.game_age;
       const levelBad = !ageBad && r.reg_level && r.game_level && r.reg_level !== r.game_level;
       if (ageBad || levelBad) {
-        const key = `div|${r.event_id}|${r.team_id}|${r.game_age}|${r.game_level}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          add(r.event_id, r.event_name, r.start_date, {
-            severity: ageBad ? 'red' : 'amber', type: 'wrong_division',
-            message: `${r.team_name} is registered in ${[r.reg_age, r.reg_level].filter(Boolean).join(' ')} but its games are in ${[r.game_age, r.game_level].filter(Boolean).join(' ')} (check the team links on those games)`,
-          });
-        }
+        const key = `${r.event_id}|${r.team_id}|${r.game_age}|${r.game_level}`;
+        const entry = wrongDiv.get(key) || { r, severity: ageBad ? 'red' as const : 'amber' as const, games: [] };
+        entry.games.push(fmtGame(r.start_time, r.rink_name, r.venue_name));
+        wrongDiv.set(key, entry);
       }
     } else {
-      const key = `noreg|${r.event_id}|${r.team_id}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        add(r.event_id, r.event_name, r.start_date, {
-          severity: 'amber', type: 'not_registered',
-          message: `${r.team_name} is in the schedule but has no approved registration`,
-        });
-      }
+      const key = `${r.event_id}|${r.team_id}`;
+      const entry = noReg.get(key) || { r, games: [] };
+      entry.games.push(fmtGame(r.start_time, r.rink_name, r.venue_name));
+      noReg.set(key, entry);
     }
+  }
+  for (const { r, severity, games } of wrongDiv.values()) {
+    add(r.event_id, r.event_name, r.start_date, {
+      severity, type: 'wrong_division',
+      message: `${r.team_name} is registered in ${[r.reg_age, r.reg_level].filter(Boolean).join(' ')} but its games are in ${[r.game_age, r.game_level].filter(Boolean).join(' ')} — check the team link on: ${games.sort().join('; ')}`,
+    });
+  }
+  for (const { r, games } of noReg.values()) {
+    add(r.event_id, r.event_name, r.start_date, {
+      severity: 'amber', type: 'not_registered',
+      message: `${r.team_name} has no approved registration but plays: ${games.sort().join('; ')}`,
+    });
   }
 
   // 3. Same team on both sides of a game; 4. two games too close together
@@ -728,24 +755,25 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
     if (list.length === 2 && list[0].team_id === list[1].team_id) {
       add(list[0].event_id, list[0].event_name, list[0].start_date, {
         severity: 'red', type: 'self_game',
-        message: `${list[0].team_name} is listed as both teams in the ${fmt(list[0].start_time)} game`,
+        message: `${list[0].team_name} is listed as both teams in the ${fmtGame(list[0].start_time, list[0].rink_name, list[0].venue_name)} game`,
       });
     }
   }
-  const teamTimes = new Map<string, { r: any; times: Set<string> }>();
+  const teamTimes = new Map<string, { r: any; times: Map<string, any> }>();
   for (const r of sides) {
     const key = `${r.event_id}|${r.team_id}`;
-    const t = teamTimes.get(key) || { r, times: new Set<string>() };
-    t.times.add(r.start_time); teamTimes.set(key, t);
+    const t = teamTimes.get(key) || { r, times: new Map<string, any>() };
+    t.times.set(r.start_time, r); teamTimes.set(key, t);
   }
   for (const { r, times } of teamTimes.values()) {
-    const ts = [...times].sort().map(t => new Date(t.replace(' ', 'T') + 'Z').getTime());
+    const ts = [...times.keys()].sort();
     for (let i = 1; i < ts.length; i++) {
-      const gapMin = (ts[i] - ts[i - 1]) / 60000;
+      const gapMin = (new Date(ts[i].replace(' ', 'T')).getTime() - new Date(ts[i - 1].replace(' ', 'T')).getTime()) / 60000;
       if (gapMin < 75) {
+        const a = times.get(ts[i - 1]); const b = times.get(ts[i]);
         add(r.event_id, r.event_name, r.start_date, {
           severity: gapMin < 50 ? 'red' : 'amber', type: 'tight_turnaround',
-          message: `${r.team_name} has two games only ${Math.round(gapMin)} minutes apart`,
+          message: `${r.team_name} plays ${fmtGame(ts[i - 1], a.rink_name, a.venue_name)} and then ${fmtGame(ts[i], b.rink_name, b.venue_name)} — only ${Math.round(gapMin)} minutes apart`,
         });
       }
     }
@@ -753,9 +781,10 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
 
   // 5. Pool games missing a team
   for (const r of (missingQ.results || []) as any[]) {
+    const have = r.home_name || r.away_name;
     add(r.event_id, r.event_name, r.start_date, {
       severity: 'amber', type: 'missing_team',
-      message: `Pool game at ${fmt(r.start_time)} is missing a team`,
+      message: `${[r.game_age, r.game_level].filter(Boolean).join(' ')} pool game ${fmtGame(r.start_time, r.rink_name, r.venue_name)} is missing a team${have ? ` (${r.home_name ? 'away' : 'home'} side open, other team is ${have})` : ' (both sides open)'}`,
     });
   }
 
