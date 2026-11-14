@@ -649,8 +649,92 @@ financialRoutes.get('/outstanding/detail', authMiddleware, requireRole('admin', 
       AND ${OWED_EXPR} > 0
     ORDER BY e.start_date ASC, er.team_name ASC
   `).all<any>();
-  const data = (rows.results || []).map((r: any) => restricted ? { ...r, email: null, phone: null } : r);
+  // Reminder history rides along so the list can show who was already nudged
+  let reminders: Record<string, any[]> = {};
+  try {
+    const rem = (await c.env.DB.prepare(
+      'SELECT registration_id, email, sent_at FROM payment_reminders ORDER BY sent_at DESC'
+    ).all<any>()).results || [];
+    for (const r of rem) (reminders[r.registration_id] = reminders[r.registration_id] || []).push({ email: restricted ? null : r.email, sent_at: r.sent_at });
+  } catch {} // table appears on first send
+  const data = (rows.results || []).map((r: any) => ({
+    ...(restricted ? { ...r, email: null, phone: null } : r),
+    reminders: reminders[r.id] || [],
+  }));
   return c.json({ success: true, data });
+});
+
+// One-tap payment reminder from the Teams That Owe list. Operational email
+// (not marketing): amount due + pay link, logged to payment_reminders.
+financialRoutes.post('/outstanding/remind/:regId', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const regId = c.req.param('regId');
+  const user = (c as any).get('user');
+  if (await isDataRestricted(c)) return c.json({ success: false, error: 'Not available for this account' }, 403);
+
+  const r = await db.prepare(`
+    SELECT er.id, er.team_name, e.name as event_name, e.start_date, e.end_date,
+      LOWER(COALESCE(NULLIF(er.email1, ''), er.coach_email)) as email,
+      MAX(0,
+        COALESCE(NULLIF(ed.price_cents, 0), er.payment_amount_cents, 0)
+        - COALESCE(er.discount_cents, 0)
+        - MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)
+      ) as owed_cents
+    FROM event_registrations er
+    JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.id = ? AND er.status = 'approved'
+  `).bind(regId).first<any>();
+  if (!r) return c.json({ success: false, error: 'Registration not found' }, 404);
+  if (!r.email) return c.json({ success: false, error: 'No contact email on this registration' }, 400);
+  if (!r.owed_cents || r.owed_cents <= 0) return c.json({ success: false, error: 'This team has no balance due' }, 400);
+
+  const owed = `$${(r.owed_cents / 100).toLocaleString(undefined, { maximumFractionDigits: 2 }).replace(/\.00$/, '')}`;
+  const payUrl = `https://ultimatetournaments.com/pay?reg=${r.id}`;
+  const dates = r.start_date ? new Date(r.start_date.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : '';
+  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f7fa;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 20px;font-family:Arial,Helvetica,sans-serif;">
+    <div style="text-align:center;margin-bottom:22px;">
+      <img src="https://uht.chad-157.workers.dev/api/assets/brand/uht-logo.png" alt="Ultimate Hockey Tournaments" width="160" style="max-width:55%;height:auto;" />
+    </div>
+    <div style="background:#ffffff;border:1px solid #e3e9f0;border-radius:14px;padding:28px 24px;color:#1d1d1f;font-size:14px;line-height:1.65;">
+      <h2 style="margin:0 0 14px;color:#003e79;font-size:19px;">Payment Reminder</h2>
+      <p style="margin:0 0 14px;">Hi ${r.team_name},</p>
+      <p style="margin:0 0 14px;">This is a friendly reminder that your registration for <b>${r.event_name}</b>${dates ? ` (starting ${dates})` : ''} has a remaining balance of <b style="color:#003e79;">${owed}</b>.</p>
+      <div style="text-align:center;margin:22px 0;">
+        <a href="${payUrl}" style="display:inline-block;background:#003e79;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 34px;border-radius:10px;font-size:15px;">Pay Balance Online</a>
+      </div>
+      <p style="margin:0 0 6px;color:#6e6e73;font-size:13px;">If you have already mailed a check or have questions about your balance, just reply to this email and we will get you squared away.</p>
+    </div>
+    <p style="text-align:center;color:#9aa4b0;font-size:11px;margin-top:18px;">Ultimate Hockey Tournaments</p>
+  </div></body></html>`;
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${(c.env as any).RESEND_API}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Ultimate Tournaments <registration@ultimatetournaments.com>',
+      to: [r.email],
+      reply_to: 'johnny@ultimatetournaments.com',
+      subject: `Payment reminder - ${r.event_name} - ${owed} due`,
+      html,
+    }),
+  });
+  if (!resp.ok) return c.json({ success: false, error: 'Email send failed - try again' }, 502);
+
+  await db.prepare(`CREATE TABLE IF NOT EXISTS payment_reminders (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    registration_id TEXT NOT NULL,
+    event_id TEXT,
+    email TEXT,
+    amount_cents INTEGER,
+    sent_by TEXT,
+    sent_at TEXT DEFAULT (datetime('now'))
+  )`).run();
+  await db.prepare('INSERT INTO payment_reminders (registration_id, email, amount_cents, sent_by) VALUES (?, ?, ?, ?)')
+    .bind(r.id, r.email, r.owed_cents, user?.id || null).run();
+
+  return c.json({ success: true, data: { email: r.email, amount_cents: r.owed_cents, sent_at: new Date().toISOString().slice(0, 19).replace('T', ' ') } });
 });
 
 // Payment-method breakdown for the admin overview: Stripe card money from

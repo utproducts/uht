@@ -16,6 +16,30 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
   // Events start collapsed - totals first, detail on tap. A search opens
   // everything so matches are never hidden behind a closed group.
   const [openEvents, setOpenEvents] = useState<Record<string, boolean>>({});
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [openHistory, setOpenHistory] = useState<Record<string, boolean>>({});
+
+  const sendReminder = (r: any) => {
+    if (sendingId) return;
+    const amt = `$${Math.round(r.owed_cents / 100).toLocaleString()}`;
+    if (!window.confirm(`Send a payment reminder for ${amt} to ${r.email}? It includes a pay-online link for ${r.team_name}.`)) return;
+    setSendingId(r.id);
+    const API = 'https://uht.chad-157.workers.dev/api';
+    const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    fetch(`${API}/financials/outstanding/remind/${r.id}`, { method: 'POST', headers: devHeaders })
+      .then(res => res.json())
+      .then(j => {
+        if (j.success) {
+          setRows(prev => (prev || []).map(row => row.id === r.id
+            ? { ...row, reminders: [{ email: j.data.email, sent_at: j.data.sent_at }, ...(row.reminders || [])] }
+            : row));
+        } else {
+          window.alert(j.error || 'Could not send the reminder.');
+        }
+      })
+      .catch(() => window.alert('Could not send the reminder.'))
+      .finally(() => setSendingId(null));
+  };
 
   useEffect(() => {
     const API = 'https://uht.chad-157.workers.dev/api';
@@ -78,16 +102,48 @@ function OwedTeamsModal({ onClose }: { onClose: () => void }) {
                   <p className="text-[11px] font-bold text-amber-700 shrink-0 ml-2">{fmt$(list.reduce((s: number, r: any) => s + r.owed_cents, 0))} <span className="text-[#86868b] font-normal ml-1">{open ? '▴' : '▾'}</span></p>
                 </button>
                 {open && list.map((r: any) => (
-                  <div key={r.id} className="flex items-start justify-between gap-3 px-3 py-2 border-b border-[#f0f0f3] last:border-0">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#1d1d1f] leading-tight truncate">{r.team_name}</p>
-                      <p className="text-[11px] text-[#86868b] truncate">
-                        {[r.age_group, r.division_level].filter(Boolean).join(' ')}
-                        {r.paid_cents > 0 ? ` · paid ${fmt$(r.paid_cents)} of ${fmt$(r.price_cents - r.discount_cents)}` : ` · nothing paid yet`}
-                        {r.email ? <> · <a href={`mailto:${r.email}`} className="text-[#0077b0] hover:underline">{r.email}</a></> : ''}
-                      </p>
+                  <div key={r.id} className="border-b border-[#f0f0f3] last:border-0">
+                    <div className="flex items-start justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[#1d1d1f] leading-tight truncate">{r.team_name}</p>
+                        <p className="text-[11px] text-[#86868b] truncate">
+                          {[r.age_group, r.division_level].filter(Boolean).join(' ')}
+                          {r.paid_cents > 0 ? ` · paid ${fmt$(r.paid_cents)} of ${fmt$(r.price_cents - r.discount_cents)}` : ` · nothing paid yet`}
+                          {r.email ? <> · <a href={`mailto:${r.email}`} className="text-[#0077b0] hover:underline">{r.email}</a></> : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <p className="text-sm font-bold text-amber-700">{fmt$(r.owed_cents)}</p>
+                        {(r.reminders || []).length > 0 && (
+                          <button onClick={() => setOpenHistory(prev => ({ ...prev, [r.id]: !prev[r.id] }))}
+                            title="Reminder history"
+                            className={`relative w-7 h-7 rounded-lg flex items-center justify-center transition ${openHistory[r.id] ? 'bg-[#003e79] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:bg-[#e8e8ed]'}`}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <span className="absolute -top-1 -right-1 bg-[#0077b0] text-white text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">{r.reminders.length}</span>
+                          </button>
+                        )}
+                        {r.email && (
+                          <button onClick={() => sendReminder(r)} disabled={sendingId === r.id}
+                            title="Send payment reminder email"
+                            className="w-7 h-7 rounded-lg bg-[#f0f7ff] text-[#003e79] hover:bg-[#dcedff] flex items-center justify-center transition disabled:opacity-40">
+                            {sendingId === r.id
+                              ? <span className="w-3.5 h-3.5 rounded-full border-2 border-[#003e79] border-t-transparent animate-spin" />
+                              : <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm font-bold text-amber-700 shrink-0">{fmt$(r.owed_cents)}</p>
+                    {openHistory[r.id] && (r.reminders || []).length > 0 && (
+                      <div className="mx-3 mb-2 bg-[#f5f8fb] border border-[#e3ecf5] rounded-lg px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#6e6e73] mb-1">Reminders sent</p>
+                        {r.reminders.map((rem: any, i: number) => (
+                          <p key={i} className="text-[11px] text-[#3d3d3d]">
+                            {new Date(rem.sent_at.replace(' ', 'T') + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            {rem.email ? ` · ${rem.email}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
