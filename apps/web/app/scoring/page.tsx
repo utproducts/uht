@@ -109,6 +109,18 @@ export default function ScorekeeperPage() {
     setError('');
   };
 
+  // Shared iPads: scorekeeper accounts land here with no way to switch role,
+  // so give them a real sign-out that clears the account and goes to login
+  const signOut = () => {
+    try {
+      sessionStorage.removeItem('uht_sk_pin');
+      localStorage.removeItem('uht_token');
+      localStorage.removeItem('uht_user');
+      localStorage.removeItem('uht_role');
+    } catch {}
+    window.location.href = '/login';
+  };
+
   const triggerShake = () => {
     setShake(true);
     setTimeout(() => setShake(false), 500);
@@ -174,7 +186,10 @@ export default function ScorekeeperPage() {
               <h1 className="text-3xl font-bold text-white">UHT Scorekeeper</h1>
               <p className="text-white/70 mt-1 text-sm">{eventName || 'Select a game to score'}</p>
             </div>
-            <button onClick={switchPin} className="text-white/70 text-xs font-bold underline mt-2">Switch PIN</button>
+            <div className="flex items-center gap-4 mt-2">
+              <button onClick={switchPin} className="text-white/70 text-xs font-bold underline">Switch PIN</button>
+              <button onClick={signOut} className="text-white/70 text-xs font-bold underline">Sign out</button>
+            </div>
           </div>
         </div>
 
@@ -327,9 +342,10 @@ export default function ScorekeeperPage() {
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col">
       {/* Hero Header */}
-      <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-4">
+      <div className="bg-gradient-to-r from-[#003e79] via-[#005599] to-[#00ccff] px-6 py-4 relative">
         <h1 className="text-2xl font-bold text-white text-center">UHT Scorekeeper</h1>
         <p className="text-white/70 text-center mt-0.5 text-xs">Enter your PIN to start scoring</p>
+        <button onClick={signOut} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 text-xs font-bold underline">Sign out</button>
       </div>
 
       {/* Main Content */}
