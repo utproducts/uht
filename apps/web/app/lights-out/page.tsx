@@ -359,6 +359,12 @@ export default function LightsOutPage() {
       window.history.replaceState({}, '', '/lights-out/');
       return;
     }
+    // Email REGISTER NOW buttons land here with ?register=1 - straight to the form
+    if (q.get('register')) {
+      setShowRegister(true);
+      window.history.replaceState({}, '', '/lights-out/');
+      return;
+    }
     const reg = q.get('reg');
     const sid = q.get('session_id');
     if (!reg || !sid) return;

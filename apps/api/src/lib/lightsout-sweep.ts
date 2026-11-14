@@ -34,7 +34,8 @@ function shell(inner: string): string {
 }
 
 const CTA = `<div style="text-align:center;margin:22px 0;">
-  <a href="${PAGE}" style="display:inline-block;background:#003e79;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 34px;border-radius:10px;font-size:15px;">See the Invitational</a>
+  <a href="${PAGE}?register=1" style="display:inline-block;background:#003e79;color:#ffffff;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">REGISTER NOW</a>
+  <p style="margin:10px 0 0;font-size:12px;"><a href="${PAGE}" style="color:#0077b0;">or see the full Invitational page first</a></p>
 </div>`;
 
 const INCLUDES = `<ul style="margin:0 0 14px;padding-left:20px;color:#3c3c43;">
