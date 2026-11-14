@@ -145,7 +145,7 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
           <div className="text-center py-6">
             <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REQUEST RECEIVED</p>
             <p className="text-white text-xl font-black mb-3">You're on the list.</p>
-            <p className="text-white/70 text-sm leading-relaxed mb-6">First spots go to Three Stars winners - but if spots open up, requests are the first place we look. We'll email you either way. Fastest way in: earn a star at any UHT event this season.</p>
+            <p className="text-white/70 text-sm leading-relaxed mb-6">We read every single request - some of the best players on the ice never show up on a scoresheet, and that's exactly why the request list exists. Three Stars winners get the first spots, and we go straight to the request list to fill out the roster. We'll email you either way.</p>
             <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a]">DONE</button>
           </div>
         ) : (

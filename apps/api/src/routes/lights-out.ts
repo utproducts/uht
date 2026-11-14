@@ -96,9 +96,10 @@ lightsOutRoutes.post('/request-invite', zValidator('json', inviteRequestSchema),
     emailShell(`
       <h2 style="margin:0 0 14px;color:#39ff14;font-size:19px;">Request received</h2>
       <p style="margin:0 0 14px;">Hi ${b.parentName.trim()},</p>
-      <p style="margin:0 0 14px;">We have your invite request for <b style="color:#7fd8ff;">${b.playerName.trim()}</b> for the Lights Out Invitational, June 11-13, 2027 in St. Louis.</p>
-      <p style="margin:0 0 14px;">To be straight with you: this is a very limited event and first spots go to our Three Stars winners. Requesting an invite does not guarantee approval - but if spots open beyond the stars, requests are the first place we look. We will email you either way.</p>
-      <p style="margin:0 0 0;">Best thing your player can do in the meantime: earn a star at any UHT event this season - that is an automatic invite.</p>
+      <p style="margin:0 0 14px;">We have your invite request for <b style="color:#7fd8ff;">${b.playerName.trim()}</b> for the Lights Out Invitational, June 11-13, 2027 in St. Louis - thank you for putting their name in.</p>
+      <p style="margin:0 0 14px;">We read every single request. Some of the best players on the ice never show up on a scoresheet - shutdown defensemen, grinders, goalies who steal games - and that is exactly why the request list exists.</p>
+      <p style="margin:0 0 14px;">Here is how it works: Three Stars winners get the first spots, and as the roster comes together we go straight to the request list to fill it out. We will email you either way, so you will never be left guessing.</p>
+      <p style="margin:0 0 0;">And of course, a Three Stars selection at any UHT event this season is an automatic invite - so keep ${b.playerName.trim().split(' ')[0]} skating.</p>
     `));
   await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out INVITE REQUEST: ${b.playerName.trim()} (${b.teamName.trim()})`,
     emailShell(`
