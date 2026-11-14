@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import type { Env } from '../types';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole, isDataRestricted } from '../middleware/auth';
 
 export const financialRoutes = new Hono<{ Bindings: Env }>();
 
@@ -622,6 +622,35 @@ financialRoutes.get('/by-city', authMiddleware, requireRole('admin'), async (c) 
 financialRoutes.get('/outstanding', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const row = await c.env.DB.prepare(OWED_SQL).first<any>();
   return c.json({ success: true, data: { owed_cents: row?.owed_cents || 0, owing_teams: row?.owing_teams || 0 } });
+});
+
+// The teams behind that number: who owes, how much, for which event — same
+// formula as OWED_SQL, one row per registration still carrying a balance
+financialRoutes.get('/outstanding/detail', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const restricted = await isDataRestricted(c);
+  const OWED_EXPR = `MAX(0,
+    COALESCE(NULLIF(ed.price_cents, 0), er.payment_amount_cents, 0)
+    - COALESCE(er.discount_cents, 0)
+    - MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END)
+  )`;
+  const rows = await c.env.DB.prepare(`
+    SELECT er.id, er.team_name, e.id as event_id, e.name as event_name, e.start_date,
+      ed.age_group, ed.division_level, er.payment_status,
+      COALESCE(NULLIF(ed.price_cents, 0), er.payment_amount_cents, 0) as price_cents,
+      COALESCE(er.discount_cents, 0) as discount_cents,
+      MAX(COALESCE(er.amount_paid_cents,0), COALESCE(er.card_paid_cents,0), CASE WHEN er.payment_status IN ('paid','partial') THEN COALESCE(er.payment_amount_cents,0) ELSE 0 END) as paid_cents,
+      ${OWED_EXPR} as owed_cents,
+      LOWER(COALESCE(NULLIF(er.email1, ''), er.coach_email)) as email, er.phone
+    FROM event_registrations er
+    JOIN events e ON e.id = er.event_id
+    LEFT JOIN event_divisions ed ON ed.id = er.event_division_id
+    WHERE er.status = 'approved' AND er.payment_status NOT IN ('comp', 'paid')
+      AND e.status NOT IN ('cancelled', 'draft')
+      AND ${OWED_EXPR} > 0
+    ORDER BY e.start_date ASC, er.team_name ASC
+  `).all<any>();
+  const data = (rows.results || []).map((r: any) => restricted ? { ...r, email: null, phone: null } : r);
+  return c.json({ success: true, data });
 });
 
 // Payment-method breakdown for the admin overview: Stripe card money from

@@ -6,6 +6,93 @@ import DirectorDash from './DirectorDash';
 import OrgDashboard from './OrgDashboard';
 import RegistrationTrends from './RegistrationTrends';
 
+// Who owes what — the list behind the Expected Revenue tile, with search and
+// a per-event filter so the money chase is a scan, not a spreadsheet
+function OwedTeamsModal({ onClose }: { onClose: () => void }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [q, setQ] = useState('');
+  const [eventFilter, setEventFilter] = useState('all');
+
+  useEffect(() => {
+    const API = 'https://uht.chad-157.workers.dev/api';
+    const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    fetch(`${API}/financials/outstanding/detail`, { headers: devHeaders })
+      .then(r => r.json())
+      .then(j => { if (j.success) setRows(j.data || []); else setFailed(true); })
+      .catch(() => setFailed(true));
+  }, []);
+
+  const events = rows ? Array.from(new Map(rows.map(r => [r.event_id, { id: r.event_id, name: r.event_name, start: r.start_date }])).values()) : [];
+  const filtered = (rows || []).filter(r =>
+    (eventFilter === 'all' || r.event_id === eventFilter) &&
+    (!q || (r.team_name || '').toLowerCase().includes(q.toLowerCase()))
+  );
+  const totalOwed = filtered.reduce((s, r) => s + (r.owed_cents || 0), 0);
+  const byEvent = new Map<string, any[]>();
+  for (const r of filtered) {
+    const list = byEvent.get(r.event_id) || []; list.push(r); byEvent.set(r.event_id, list);
+  }
+  const fmt$ = (c0: number) => `$${(c0 / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e8e8ed] shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-[#1d1d1f]">Teams That Owe</h3>
+              <p className="text-xs text-[#86868b] mt-0.5">{filtered.length} team{filtered.length !== 1 ? 's' : ''} · <span className="font-bold text-amber-700">{fmt$(totalOwed)}</span> outstanding</p>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-bold shrink-0">✕</button>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <input type="text" value={q} onChange={e => setQ(e.target.value)} placeholder="Search teams..."
+              className="flex-1 min-w-0 px-3 py-2 bg-[#f5f5f7] rounded-xl text-sm text-[#1d1d1f] placeholder-[#86868b] outline-none focus:ring-2 focus:ring-[#003e79]/20" />
+            <select value={eventFilter} onChange={e => setEventFilter(e.target.value)}
+              className="px-3 py-2 bg-[#f5f5f7] rounded-xl text-sm text-[#1d1d1f] outline-none max-w-[45%]">
+              <option value="all">All events</option>
+              {events.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-y-auto p-4">
+          {failed ? (
+            <p className="text-sm text-center py-8 text-[#86868b]">Could not load the list. Sign out and back in, then try again.</p>
+          ) : rows === null ? (
+            <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>
+          ) : filtered.length === 0 ? (
+            <p className="text-sm text-center py-8 text-[#86868b]">{rows.length === 0 ? 'Nobody owes anything right now.' : 'No teams match that search.'}</p>
+          ) : (
+            Array.from(byEvent.entries()).map(([evId, list]) => (
+              <div key={evId} className="mb-4">
+                <div className="flex items-center justify-between bg-[#f5f5f7] rounded-lg px-3 py-1.5 mb-1">
+                  <p className="text-[11px] font-bold text-[#1d1d1f] truncate">{list[0].event_name} <span className="font-normal text-[#86868b]">{(list[0].start_date || '').slice(0, 10)}</span></p>
+                  <p className="text-[11px] font-bold text-amber-700 shrink-0 ml-2">{fmt$(list.reduce((s: number, r: any) => s + r.owed_cents, 0))}</p>
+                </div>
+                {list.map((r: any) => (
+                  <div key={r.id} className="flex items-start justify-between gap-3 px-3 py-2 border-b border-[#f0f0f3] last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#1d1d1f] leading-tight truncate">{r.team_name}</p>
+                      <p className="text-[11px] text-[#86868b] truncate">
+                        {[r.age_group, r.division_level].filter(Boolean).join(' ')}
+                        {r.paid_cents > 0 ? ` · paid ${fmt$(r.paid_cents)} of ${fmt$(r.price_cents - r.discount_cents)}` : ` · nothing paid yet`}
+                        {r.email ? <> · <a href={`mailto:${r.email}`} className="text-[#0077b0] hover:underline">{r.email}</a></> : ''}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold text-amber-700 shrink-0">{fmt$(r.owed_cents)}</p>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] min-w-0 overflow-hidden">
@@ -253,6 +340,8 @@ export function AdminDash() {
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
 
+  const [showOwed, setShowOwed] = useState(false);
+
   useEffect(() => {
     const API = 'https://uht.chad-157.workers.dev/api';
     const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
@@ -301,7 +390,10 @@ export function AdminDash() {
         <StatCard label="Upcoming Events" value={stats?.upcomingEvents || 0} sub={`${stats?.totalEvents || 0} total`} />
         <StatCard label="Teams Registered" value={stats?.totalTeams || 0} sub="Across all events" />
         <StatCard label="Total Revenue" value={`$${Math.round((stats?.totalRevenue || 0) / 100).toLocaleString()}`} sub="All events" />
-        <StatCard label="Expected Revenue" value={`$${Math.round((stats?.owedCents || 0) / 100).toLocaleString()}`} sub={`Owed, not yet paid${stats?.owingTeams ? ` · ${stats.owingTeams} teams` : ''}`} />
+        <button onClick={() => setShowOwed(true)} className="block w-full text-left cursor-pointer hover:-translate-y-0.5 transition-transform">
+          <StatCard label="Expected Revenue" value={`$${Math.round((stats?.owedCents || 0) / 100).toLocaleString()}`} sub={`Owed, not yet paid${stats?.owingTeams ? ` · ${stats.owingTeams} teams` : ''} · tap for list`} />
+        </button>
+        {showOwed && <OwedTeamsModal onClose={() => setShowOwed(false)} />}
         {stats?.appUsers !== null && (
           <a href="/admin/app-users" className="block">
             <StatCard label="App Users" value={(stats?.appUsers || 0).toLocaleString()} sub={`${stats?.pushUsers || 0} with push on`} />
