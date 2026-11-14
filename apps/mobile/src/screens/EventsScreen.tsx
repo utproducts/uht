@@ -403,7 +403,7 @@ export default function EventsScreen({ navigation }: { navigation: any }) {
         data={displayedEvents}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={<LightsOutBanner pitch="The arena goes dark. The ice glows. Earn a Three Stars selection at any UHT event and you are in." />}
+        ListHeaderComponent={<LightsOutBanner variant="card" />}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

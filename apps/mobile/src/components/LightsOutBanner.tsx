@@ -1,14 +1,15 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { spacing } from '../constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { spacing, radii, fonts } from '../constants/theme';
 
 // ==================
 // LIGHTS OUT banner - full-bleed glow-in-the-dark promo. Used atop the app's
 // Find Events screen and the Three Stars tab. Cancels spacing.lg list padding
 // so it runs edge to edge.
 // ==================
-export default function LightsOutBanner({ pitch }: { pitch?: string }) {
+export default function LightsOutBanner({ pitch, variant = 'hero' }: { pitch?: string; variant?: 'hero' | 'card' }) {
   const pulse = useRef(new Animated.Value(0)).current;
   const float = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -21,6 +22,46 @@ export default function LightsOutBanner({ pitch }: { pitch?: string }) {
       Animated.timing(float, { toValue: 0, duration: 3200, useNativeDriver: true }),
     ])).start();
   }, [pulse, float]);
+
+  if (variant === 'card') {
+    // Compact: shaped like a regular event card, dressed in the dark glow
+    return (
+      <TouchableOpacity activeOpacity={0.85}
+        onPress={() => Linking.openURL('https://ultimatetournaments.com/lights-out')}>
+        <LinearGradient colors={['#04091a', '#0a1c3d', '#04091a']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={loStyles.card}>
+          <View style={[loStyles.orb, { width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(57,255,20,0.10)', top: -50, right: -40 }]} />
+          <View style={loStyles.cardRow}>
+            <Animated.Image
+              source={{ uri: 'https://ultimatetournaments.com/lights-out-logo.png' }}
+              style={[loStyles.cardLogo, { transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }] }]}
+              resizeMode="contain"
+            />
+            <View style={loStyles.cardInfo}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Text style={loStyles.cardName} numberOfLines={2} maxFontSizeMultiplier={1.2}>
+                  <Text style={loStyles.titleGlow}>Lights Out</Text> Invitational
+                </Text>
+                <View style={loStyles.cardPill}>
+                  <Animated.View style={[loStyles.badgeDot, { width: 5, height: 5, opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }]} />
+                  <Text style={loStyles.cardPillText} maxFontSizeMultiplier={1.1}>INVITE ONLY</Text>
+                </View>
+              </View>
+              <Text style={loStyles.cardDates} maxFontSizeMultiplier={1.2}>June 11-13, 2027</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.55)" />
+                <Text style={loStyles.cardLocation} maxFontSizeMultiplier={1.2}>St. Louis, MO</Text>
+              </View>
+              <Text style={loStyles.cardLimited} maxFontSizeMultiplier={1.2}>A $200 deposit holds your spot</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#39ff14" />
+          </View>
+          <LinearGradient colors={['transparent', '#39ff14', '#00ccff', 'transparent']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={loStyles.iceLine} />
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
 
   return (
     <TouchableOpacity activeOpacity={0.92}
@@ -63,6 +104,32 @@ export default function LightsOutBanner({ pitch }: { pitch?: string }) {
 }
 
 const loStyles = StyleSheet.create({
+  card: {
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(57,255,20,0.35)',
+    overflow: 'hidden',
+    shadowColor: '#39ff14',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardRow: { flexDirection: 'row', alignItems: 'center' },
+  cardLogo: { width: 62, height: 62 },
+  cardInfo: { flex: 1, marginLeft: spacing.md },
+  cardName: { fontSize: 16, color: '#ffffff', ...fonts.bold, flexShrink: 1 },
+  cardPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 7, paddingVertical: 2.5, borderRadius: 999,
+    borderWidth: 1, borderColor: 'rgba(57,255,20,0.45)', backgroundColor: 'rgba(57,255,20,0.08)',
+  },
+  cardPillText: { color: '#39ff14', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  cardDates: { color: '#7fd8ff', fontSize: 13, fontWeight: '700', marginTop: 3 },
+  cardLocation: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
+  cardLimited: { color: '#ffb84d', fontSize: 11, fontWeight: '700', marginTop: 4 },
   banner: {
     // cancel the list's padding so the banner runs edge to edge
     marginHorizontal: -spacing.lg,
