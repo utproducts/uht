@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
-import { authMiddleware, requireRole, optionalAuth } from '../middleware/auth';
+import { authMiddleware, requireRole, optionalAuth, isDataRestricted } from '../middleware/auth';
 
 export const analyticsRoutes = new Hono<{ Bindings: Env }>();
 
@@ -531,6 +531,125 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
   return c.json({
     success: true,
     data: { seasons, approvedThisSeason: approvedTotal },
+  });
+});
+
+// ==================
+// ADMIN: Month drill-down — day-by-day team registrations for one calendar
+// month, this season (live tables) beside last season (legacy_team_contacts,
+// the Airtable import), so staff can eyeball who registered when.
+// ==================
+analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const month = parseInt(c.req.param('month') || '', 10);
+  if (!month || month < 1 || month > 12) {
+    return c.json({ success: false, error: 'month must be 1-12' }, 400);
+  }
+  const db = c.env.DB;
+  const restricted = await isDataRestricted(c);
+
+  // Seasons run June -> May; place this calendar month in the current season
+  const now = new Date();
+  const seasonStartYear = now.getUTCMonth() + 1 >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+  const thisYear = month >= 6 ? seasonStartYear : seasonStartYear + 1;
+  const lastYear = thisYear - 1;
+  const range = (y: number): [string, string] => {
+    const mm = String(month).padStart(2, '0');
+    const end = month === 12 ? `${y + 1}-01-01` : `${y}-${String(month + 1).padStart(2, '0')}-01`;
+    return [`${y}-${mm}-01`, end];
+  };
+  const [curFrom, curTo] = range(thisYear);
+  const [prevFrom, prevTo] = range(lastYear);
+
+  const [erRows, rRows, legacyRows] = await Promise.all([
+    db.prepare(`
+      SELECT substr(er.created_at, 1, 10) as day, er.team_name, er.age_group, er.division,
+             er.status, LOWER(COALESCE(NULLIF(er.email1, ''), er.coach_email)) as email,
+             e.name as event_name
+      FROM event_registrations er JOIN events e ON e.id = er.event_id
+      WHERE er.created_at >= ? AND er.created_at < ?
+        AND er.status NOT IN ('denied', 'rejected', 'withdrawn', 'awaiting_payment')
+        AND COALESCE(e.is_test, 0) = 0
+      ORDER BY er.created_at
+    `).bind(curFrom, curTo).all(),
+    db.prepare(`
+      SELECT substr(r.created_at, 1, 10) as day, t.name as team_name, ed.age_group,
+             ed.division_level as division, r.status, NULL as email, e.name as event_name
+      FROM registrations r
+      JOIN events e ON e.id = r.event_id
+      LEFT JOIN teams t ON t.id = r.team_id
+      LEFT JOIN event_divisions ed ON ed.id = r.event_division_id
+      WHERE r.created_at >= ? AND r.created_at < ?
+        AND r.status NOT IN ('rejected', 'withdrawn')
+        AND COALESCE(e.is_test, 0) = 0
+      ORDER BY r.created_at
+    `).bind(curFrom, curTo).all(),
+    db.prepare(`
+      SELECT substr(source_created_at, 1, 10) as day, team_name, event_name, LOWER(email) as email
+      FROM legacy_team_contacts
+      WHERE source_created_at >= ? AND source_created_at < ?
+      ORDER BY source_created_at
+    `).bind(prevFrom, prevTo).all(),
+  ]);
+
+  // This season: one row per registration, grouped by day
+  const curByDay = new Map<string, any[]>();
+  for (const r of [...(erRows.results || []), ...(rRows.results || [])] as any[]) {
+    const list = curByDay.get(r.day) || [];
+    list.push({
+      team_name: r.team_name || 'Unknown team',
+      event_name: r.event_name,
+      division: [r.age_group, r.division].filter(Boolean).join(' '),
+      status: r.status,
+      ...(restricted ? {} : { email: r.email || null }),
+    });
+    curByDay.set(r.day, list);
+  }
+
+  // Last season: legacy rows are one per CONTACT — collapse to team+event
+  const legacyTeams = new Map<string, { day: string; team_name: string; event_name: string; emails: Set<string> }>();
+  for (const r of (legacyRows.results || []) as any[]) {
+    if (!r.team_name) continue;
+    const key = `${r.team_name.toLowerCase()}|${(r.event_name || '').toLowerCase()}`;
+    const t = legacyTeams.get(key) || { day: r.day, team_name: r.team_name, event_name: r.event_name, emails: new Set<string>() };
+    if (r.email) t.emails.add(r.email);
+    if (r.day < t.day) t.day = r.day;
+    legacyTeams.set(key, t);
+  }
+  const prevByDay = new Map<string, any[]>();
+  for (const t of legacyTeams.values()) {
+    const list = prevByDay.get(t.day) || [];
+    list.push({
+      team_name: t.team_name,
+      event_name: t.event_name,
+      ...(restricted ? {} : { email: [...t.emails][0] || null }),
+    });
+    prevByDay.set(t.day, list);
+  }
+
+  const toDays = (m: Map<string, any[]>, bulkFlag: boolean) =>
+    [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, teams]) => ({
+      day,
+      teams,
+      // Airtable bulk-import days (200+ teams landing at once) are not real
+      // registration dates — flag so the UI can say so
+      ...(bulkFlag && teams.length >= 40 ? { bulk_import: true } : {}),
+    }));
+
+  const curDays = toDays(curByDay, false);
+  const prevDays = toDays(prevByDay, true);
+
+  return c.json({
+    success: true,
+    data: {
+      month,
+      this_year: thisYear,
+      last_year: lastYear,
+      this_season: { days: curDays, total: curDays.reduce((n, d) => n + d.teams.length, 0) },
+      last_season: {
+        days: prevDays,
+        total: prevDays.reduce((n, d) => n + d.teams.length, 0),
+      },
+    },
   });
 });
 

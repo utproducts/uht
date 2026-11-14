@@ -32,10 +32,39 @@ const RED_TEXT = '#b3204d';
 const NEUTRAL_TEXT = '#1d1d1f';
 const MUTED = '#86868b';
 
+type MonthDetail = {
+  month: number;
+  this_year: number;
+  last_year: number;
+  this_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; status?: string }[] }[]; total: number };
+  last_season: { days: { day: string; bulk_import?: boolean; teams: { team_name: string; event_name: string; email?: string | null }[] }[]; total: number };
+};
+
+function fmtDay(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 export default function RegistrationTrends() {
   const [seasons, setSeasons] = useState<SeasonRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [authFailed, setAuthFailed] = useState(false);
+  const [detailMonth, setDetailMonth] = useState<number | null>(null);
+  const [detail, setDetail] = useState<MonthDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openMonth = (m: number) => {
+    setDetailMonth(m);
+    setDetail(null);
+    setDetailLoading(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
+    fetch(`${API}/api/analytics/reports/month-detail/${m}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(json => { if (json.success) setDetail(json.data); })
+      .catch(() => {})
+      .finally(() => setDetailLoading(false));
+  };
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
@@ -132,7 +161,8 @@ export default function RegistrationTrends() {
           const pendingM = value ? value - approvedM : 0;
           const isNow = m === currentMonthNum;
           return (
-            <div key={m} className="rounded-xl border px-3 py-2.5"
+            <button key={m} onClick={() => openMonth(m)}
+              className="rounded-xl border px-3 py-2.5 text-left transition hover:shadow-md hover:-translate-y-px cursor-pointer"
               style={{ background: st.bg === 'transparent' ? '#fff' : st.bg, borderColor: isNow ? '#003e79' : '#ededf0' }}>
               <div className="flex items-center justify-between gap-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wide truncate" style={{ color: isNow ? '#003e79' : MUTED }}>
@@ -147,10 +177,84 @@ export default function RegistrationTrends() {
                 {lastValue === null ? 'last yr —' : `last yr ${lastValue.toLocaleString()}`}
               </p>
               {pendingM > 0 && <p className="text-[10px] font-semibold text-amber-600">{pendingM} pending</p>}
-            </div>
+            </button>
           );
         })}
       </div>
+      <p className="text-[11px] mt-3" style={{ color: MUTED }}>Click any month to see the teams that registered each day, this season and last.</p>
+
+      {/* Day-by-day drill-down */}
+      {detailMonth !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" onClick={() => setDetailMonth(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div onClick={e => e.stopPropagation()}
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e8e8ed] shrink-0">
+              <div>
+                <h3 className="font-bold text-[#1d1d1f]">{MONTH_NAMES[detailMonth]} — who registered, day by day</h3>
+                {detail && (
+                  <p className="text-xs mt-0.5" style={{ color: MUTED }}>
+                    {detail.this_year}: {detail.this_season.total} team{detail.this_season.total !== 1 ? 's' : ''} · {detail.last_year}: {detail.last_season.total} team{detail.last_season.total !== 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setDetailMonth(null)}
+                className="w-8 h-8 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#6e6e73] font-bold shrink-0">✕</button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              {detailLoading ? (
+                <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>
+              ) : !detail ? (
+                <p className="text-sm text-center py-10" style={{ color: MUTED }}>Could not load the month detail. Try again, or sign out and back in.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* This season */}
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-[#003e79] mb-2">{MONTH_NAMES[detailMonth]} {detail.this_year} (this season)</p>
+                    {detail.this_season.days.length === 0 ? (
+                      <p className="text-sm py-4" style={{ color: MUTED }}>No registrations yet this {MONTH_NAMES[detailMonth]}.</p>
+                    ) : detail.this_season.days.map(d => (
+                      <div key={d.day} className="mb-3">
+                        <p className="text-[11px] font-bold text-[#1d1d1f] bg-[#f5f5f7] rounded-md px-2 py-1 mb-1">{fmtDay(d.day)} · {d.teams.length} team{d.teams.length !== 1 ? 's' : ''}</p>
+                        {d.teams.map((t, i) => (
+                          <div key={i} className="px-2 py-1.5 border-b border-[#f0f0f3] last:border-0">
+                            <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
+                            <p className="text-[11px]" style={{ color: MUTED }}>{t.event_name}{t.division ? ` · ${t.division}` : ''}{t.status && t.status !== 'approved' ? ` · ${t.status}` : ''}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Last season */}
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-[#6e6e73] mb-2">{MONTH_NAMES[detailMonth]} {detail.last_year} (last season)</p>
+                    {detail.last_season.days.length === 0 ? (
+                      <p className="text-sm py-4" style={{ color: MUTED }}>No data on file for {MONTH_NAMES[detailMonth]} {detail.last_year}.</p>
+                    ) : detail.last_season.days.map(d => (
+                      <div key={d.day} className="mb-3">
+                        <p className="text-[11px] font-bold text-[#1d1d1f] bg-[#f5f5f7] rounded-md px-2 py-1 mb-1">{fmtDay(d.day)} · {d.teams.length} team{d.teams.length !== 1 ? 's' : ''}</p>
+                        {d.bulk_import && (
+                          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-1">
+                            These teams were bulk-imported from our old tracker on this date — their real sign-up dates were earlier in the season.
+                          </p>
+                        )}
+                        {d.teams.map((t, i) => (
+                          <div key={i} className="px-2 py-1.5 border-b border-[#f0f0f3] last:border-0">
+                            <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
+                            <p className="text-[11px] truncate" style={{ color: MUTED }}>
+                              {t.event_name}{t.email ? <> · <a href={`mailto:${t.email}`} className="text-[#0077b0] hover:underline">{t.email}</a></> : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
