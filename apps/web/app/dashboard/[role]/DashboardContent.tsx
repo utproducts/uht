@@ -454,7 +454,7 @@ export function AdminDash() {
       fetch(`${API}/users/admin/app-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/financials/outstanding`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/financials/payment-methods`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API}/analytics/reports/lights-out-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
+      fetch(`${API}/analytics/reports/lights-out-stats`, { headers: devHeaders, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
     ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson, payJson, loJson]) => {
       setPaymentMethods(payJson?.success ? (payJson.data || []) : []);
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));
@@ -506,7 +506,7 @@ export function AdminDash() {
           </a>
         )}
         {stats?.loViews !== null && (
-          <a href="/lights-out" target="_blank" rel="noreferrer" className="block">
+          <a href="/admin/lights-out" className="block">
             <div className="rounded-2xl p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] min-w-0 overflow-hidden bg-[#04091a] border border-[#39ff14]/40">
               <p className="text-sm mb-1 truncate text-[#39ff14] font-semibold">Lights Out Views</p>
               <p className="text-2xl font-bold text-white whitespace-nowrap [font-size:clamp(16px,1.6vw,24px)]">{(stats?.loViews || 0).toLocaleString()}</p>
