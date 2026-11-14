@@ -141,6 +141,12 @@ export default function LightsOutAdminPage() {
                   )}
                   <p className="text-xs text-[#6e6e73] mt-0.5">{r.parent_name} · {r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                   <p className="text-[11px] text-[#86868b] mt-1">Requested {String(r.created_at || '').slice(0, 16).replace('T', ' ')}</p>
+                  {(!!r.paid_at || ['approved', 'pending'].includes(String(r.status))) && (
+                    <a href={`https://uht.chad-157.workers.dev/api/lights-out/share/${r.id}.png`} target="_blank" rel="noreferrer"
+                      className="inline-block text-xs text-[#0077b0] font-semibold underline underline-offset-2 mt-1">
+                      View social graphic
+                    </a>
+                  )}
                 </div>
                 <div className="flex gap-2 shrink-0">
                   {String(r.status).startsWith('invite_') ? (

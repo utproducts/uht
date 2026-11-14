@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import type { Env } from '../types';
 import { authMiddleware, requireRole } from '../middleware/auth';
+import { ImageResponse } from 'workers-og';
 
 /*
   LIGHTS OUT INVITATIONAL - invite-request registration.
@@ -319,6 +320,10 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
           <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${row.player_name.toUpperCase()} IS IN.</p>
           <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
           <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
+          <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere:</p>
+          <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 14px;">
+            <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially invited to the Lights Out Invitational" />
+          </a>
           <p style="margin:0;color:#7fd8ff;">Tell no one. Or tell everyone. Either way - the lights go out soon.</p>
         `));
     }
@@ -401,4 +406,79 @@ export async function remindIncompleteCheckouts(env: Env): Promise<{ sent: numbe
 lightsOutRoutes.post('/admin/remind-incomplete', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const result = await remindIncompleteCheckouts(c.env);
   return c.json({ success: true, data: result });
+});
+
+// ==========================================
+// Shareable "I'M IN" social graphic (1080x1080 PNG), personalized per
+// player. Linked from the acceptance email so families can post it, and
+// from the admin list so staff can see each one.
+// ==========================================
+lightsOutRoutes.get('/share/:id', async (c) => {
+  const id = String(c.req.param('id') || '').replace(/\.png$/i, '');
+  const row = await c.env.DB.prepare(
+    `SELECT player_name, team_name, status, paid_at FROM lights_out_registrations WHERE id = ?`
+  ).bind(id).first<any>();
+  // Only players who are actually in (paid or approved) get a graphic
+  if (!row || !(row.paid_at || ['approved', 'pending'].includes(String(row.status)))) {
+    return c.text('Not found', 404);
+  }
+
+  const cache = (caches as any).default;
+  // v2: bump to invalidate cached renders after design changes
+  const keyUrl = new URL(c.req.url);
+  keyUrl.searchParams.set('design', 'v2');
+  const cacheKey = new Request(keyUrl.toString());
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const [bold, semi, logoBuf] = await Promise.all([
+    fetch('https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FsOs.ttf').then(r => r.arrayBuffer()),
+    fetch('https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF8Os.ttf').then(r => r.arrayBuffer()),
+    fetch('https://ultimatetournaments.com/lights-out-logo.png').then(r => r.arrayBuffer()).catch(() => null),
+  ]);
+  let logoB64 = '';
+  if (logoBuf) {
+    const bytes = new Uint8Array(logoBuf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    logoB64 = `data:image/png;base64,${btoa(bin)}`;
+  }
+
+  const name = String(row.player_name || '').toUpperCase();
+  const team = String(row.team_name || '').toUpperCase();
+  const nameSize = name.length > 18 ? 72 : name.length > 12 ? 92 : 108;
+
+  const html = `
+  <div style="display:flex;flex-direction:column;width:1080px;height:1080px;background:#04091a;background-image:radial-gradient(circle at 20% 15%, rgba(0,204,255,.18), transparent 45%),radial-gradient(circle at 80% 85%, rgba(57,255,20,.16), transparent 45%);align-items:center;justify-content:center;font-family:Rajdhani;">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:980px;height:980px;border:3px solid rgba(57,255,20,.55);border-radius:36px;background:rgba(4,9,26,.55);">
+      ${logoB64 ? `<img src="${logoB64}" style="width:300px;height:300px;object-fit:contain;margin-bottom:6px;" />` : ''}
+      <div style="display:flex;font-size:34px;font-weight:600;letter-spacing:16px;color:#7fd8ff;margin-bottom:26px;">OFFICIALLY INVITED</div>
+      <div style="display:flex;font-size:${nameSize}px;font-weight:700;letter-spacing:6px;color:#ffffff;text-shadow:0 0 28px rgba(0,204,255,.9);text-align:center;max-width:900px;">${name}</div>
+      <div style="display:flex;font-size:36px;font-weight:600;letter-spacing:4px;color:rgba(255,255,255,.75);margin-top:14px;text-align:center;max-width:880px;">${team}</div>
+      <div style="display:flex;width:520px;height:3px;background:linear-gradient(90deg, transparent, rgba(57,255,20,.8), transparent);margin:38px 0;"></div>
+      <div style="display:flex;font-size:58px;font-weight:700;letter-spacing:10px;color:#39ff14;text-shadow:0 0 34px rgba(57,255,20,.95);">I AM IN</div>
+      <div style="display:flex;font-size:35px;font-weight:600;letter-spacing:6px;color:#ffffff;margin-top:22px;">JUNE 11-13, 2027 · ST. LOUIS</div>
+      <div style="display:flex;font-size:26px;font-weight:600;letter-spacing:4px;color:rgba(127,216,255,.85);margin-top:16px;">THE FIRST GLOW-IN-THE-DARK HOCKEY TOURNAMENT</div>
+      <div style="display:flex;font-size:24px;font-weight:600;letter-spacing:3px;color:rgba(255,255,255,.45);margin-top:30px;">ULTIMATETOURNAMENTS.COM/LIGHTS-OUT</div>
+    </div>
+  </div>`;
+
+  const img = new ImageResponse(html, {
+    width: 1080,
+    height: 1080,
+    fonts: [
+      { name: 'Rajdhani', data: bold, weight: 700 },
+      { name: 'Rajdhani', data: semi, weight: 600 },
+    ],
+  });
+  const body = await img.arrayBuffer();
+  const resp = new Response(body, {
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+  c.executionCtx.waitUntil(cache.put(cacheKey, resp.clone()));
+  return resp;
 });
