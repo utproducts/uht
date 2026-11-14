@@ -641,6 +641,34 @@ export default function EventsPage() {
 
       {/* ── Content ── */}
       <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-10">
+        {/* ── FEATURED: Lights Out Invitational — pinned above every tab/filter ── */}
+        <a href="/lights-out" className="group relative block overflow-hidden rounded-3xl bg-[#001d3d] mb-8 border border-[#39ff14]/25 shadow-[0_8px_40px_-10px_rgba(0,62,121,0.4)] hover:shadow-[0_8px_50px_-8px_rgba(57,255,20,0.35)] transition-shadow">
+          <div className="absolute -top-28 -right-20 w-[420px] h-[420px] rounded-full bg-[#39ff14]/10 blur-3xl" />
+          <div className="absolute -bottom-28 -left-20 w-[380px] h-[380px] rounded-full bg-[#00ccff]/15 blur-3xl" />
+          <div className="relative flex flex-col md:flex-row items-center gap-6 md:gap-10 px-7 sm:px-10 py-8">
+            <img src="/lights-out-logo.png" alt="Lights Out Invitational"
+              className="w-[170px] sm:w-[200px] shrink-0 group-hover:scale-[1.03] transition-transform"
+              style={{ filter: 'drop-shadow(0 0 20px rgba(0,204,255,.35))' }} />
+            <div className="text-center md:text-left flex-1 min-w-0">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/5 border border-[#39ff14]/40 mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#39ff14] animate-pulse" />
+                <span className="text-[11px] font-bold tracking-[0.3em] text-[#39ff14]">FEATURED · INVITE ONLY</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight">
+                <span className="bg-gradient-to-r from-[#39ff14] via-[#8aff5e] to-[#00ccff] bg-clip-text text-transparent">Lights Out</span> Invitational
+              </h2>
+              <p className="mt-1 text-[#7fd8ff] font-bold tracking-[0.18em] text-sm uppercase">June 11-13, 2027 · St. Louis, MO</p>
+              <p className="mt-2.5 text-white/65 text-[15px] leading-relaxed max-w-xl mx-auto md:mx-0">
+                The arena goes dark, the ice glows. The first glow-in-the-dark tournament ever played -
+                and the only way in is a Three Stars selection at a UHT event this season.
+              </p>
+            </div>
+            <span className="shrink-0 px-7 py-3 rounded-full text-[15px] font-bold bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_28px_rgba(57,255,20,.35)] group-hover:brightness-110 transition">
+              See the Invitational
+            </span>
+          </div>
+        </a>
+
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 6 }).map((_, i) => (
