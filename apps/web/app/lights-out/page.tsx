@@ -169,7 +169,7 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
                 <input className={inputCls} type="email" placeholder="Email *" value={f.email} onChange={(e) => set('email', e.target.value)} />
                 <input className={inputCls} placeholder="Phone" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
               </div>
-              <textarea className={`${inputCls} min-h-[80px]`} placeholder="Why should your player be considered?" value={f.reason} onChange={(e) => set('reason', e.target.value)} />
+              <textarea className={`${inputCls} min-h-[80px]`} maxLength={2500} placeholder="Why should your player be considered?" value={f.reason} onChange={(e) => set('reason', e.target.value)} />
               {error && <p className="text-[#ff6b81] text-xs">{error}</p>}
               <button onClick={submit} disabled={busy}
                 className={`${rajdhani.className} w-full py-3.5 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] hover:brightness-110 transition disabled:opacity-50`}>

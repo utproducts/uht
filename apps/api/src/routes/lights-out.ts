@@ -79,7 +79,7 @@ const inviteRequestSchema = z.object({
   parentName: z.string().min(2).max(80),
   email: z.string().email(),
   phone: z.string().max(30).optional(),
-  reason: z.string().max(600).optional(),
+  reason: z.string().max(2500).optional(),
 });
 
 lightsOutRoutes.post('/request-invite', zValidator('json', inviteRequestSchema), async (c) => {
