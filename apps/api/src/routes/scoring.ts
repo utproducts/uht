@@ -23,7 +23,12 @@ function keepAlive(c: any, p: Promise<any>) {
 // Claimed-events scope for PIN directors (admins exempt): returns SQL filter
 async function directorClaimFilter(db: any, user: any, alias = 'e'): Promise<{ sql: string; binds: any[] }> {
   if ((user.roles || []).includes('admin')) return { sql: '', binds: [] };
-  const claims = (await db.prepare('SELECT event_id FROM event_directors WHERE user_id = ?').bind(user.id).all()).results || [];
+  // Claims on completed events don't count — access ends the day after end_date
+  const claims = (await db.prepare(`
+    SELECT ed.event_id FROM event_directors ed
+    JOIN events e2 ON e2.id = ed.event_id
+    WHERE ed.user_id = ? AND date(COALESCE(e2.end_date, e2.start_date), '+1 day') >= date('now')
+  `).bind(user.id).all()).results || [];
   // No claims = no events. Director is self-addable in the app, so an
   // unclaimed director must see nothing until they enter an event PIN.
   if (claims.length === 0) return { sql: ' AND 1 = 0', binds: [] };

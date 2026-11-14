@@ -49,9 +49,11 @@ directorRoutes.post('/claim', authMiddleware, async (c) => {
 // Which events has this user claimed with a PIN? (empty + non-admin = show the PIN gate)
 directorRoutes.get('/claims', authMiddleware, async (c) => {
   const user = c.get('user');
+  // Completed events drop off: director access ends the day after end_date
   const rows = await c.env.DB.prepare(`
     SELECT ed.event_id, e.name as event_name FROM event_directors ed
     JOIN events e ON e.id = ed.event_id WHERE ed.user_id = ?
+      AND date(COALESCE(e.end_date, e.start_date), '+1 day') >= date('now')
   `).bind(user.id).all<any>();
   return c.json({ success: true, data: rows.results || [] });
 });
@@ -104,8 +106,16 @@ async function validateDirectorAccess(
   userId: string,
   eventId: string
 ): Promise<boolean> {
+  // A claim only counts while the event is running (through the day after
+  // end_date) — completed events are closed to directors
   const result = await db
-    .prepare('SELECT id FROM event_directors WHERE event_id = ? AND user_id = ? LIMIT 1')
+    .prepare(`
+      SELECT ed.id FROM event_directors ed
+      JOIN events e ON e.id = ed.event_id
+      WHERE ed.event_id = ? AND ed.user_id = ?
+        AND date(COALESCE(e.end_date, e.start_date), '+1 day') >= date('now')
+      LIMIT 1
+    `)
     .bind(eventId, userId)
     .first();
   return !!result;
@@ -281,6 +291,7 @@ directorRoutes.get('/my-events', authMiddleware, requireRole('director'), async 
          JOIN events e ON e.id = edr.event_id
          LEFT JOIN venues v ON v.id = e.venue_id
          WHERE edr.user_id = ?
+           AND date(COALESCE(e.end_date, e.start_date), '+1 day') >= date('now')
          ORDER BY e.start_date DESC`
       )
       .bind(user.id)
