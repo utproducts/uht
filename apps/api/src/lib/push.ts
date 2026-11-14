@@ -318,7 +318,7 @@ export async function notifyThreeStarsPush(db: any, gameId: string) {
   if (tokens.length === 0) return;
 
   const title = '⭐ Three Stars of the Game';
-  const body = `${g.home_name} vs ${g.away_name} - ${line}`;
+  const body = `${g.home_name} vs ${g.away_name} - ${line}. All three just earned an invite to the exclusive Lights Out Invitational - tap to see the stars.`;
   const pushData = { type: 'three_stars', game_id: g.id, event_id: g.event_id };
   const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
   await logNotification(db, {
