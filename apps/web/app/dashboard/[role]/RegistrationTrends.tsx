@@ -51,10 +51,14 @@ export default function RegistrationTrends() {
   const [detailMonth, setDetailMonth] = useState<number | null>(null);
   const [detail, setDetail] = useState<MonthDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailSeason, setDetailSeason] = useState<'this' | 'last'>('this');
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const openMonth = (m: number) => {
     setDetailMonth(m);
     setDetail(null);
+    setDetailSeason('this');
+    setSelectedDay(null);
     setDetailLoading(true);
     const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
     fetch(`${API}/api/analytics/reports/month-detail/${m}`, {
@@ -207,44 +211,92 @@ export default function RegistrationTrends() {
               ) : !detail ? (
                 <p className="text-sm text-center py-10" style={{ color: MUTED }}>Could not load the month detail. Try again, or sign out and back in.</p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* This season */}
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#003e79] mb-2">{MONTH_NAMES[detailMonth]} {detail.this_year} (this season)</p>
-                    {detail.this_season.days.length === 0 ? (
-                      <p className="text-sm py-4" style={{ color: MUTED }}>No registrations yet this {MONTH_NAMES[detailMonth]}.</p>
-                    ) : detail.this_season.days.map(d => (
-                      <div key={d.day} className="mb-3">
-                        <p className="text-[11px] font-bold text-[#1d1d1f] bg-[#f5f5f7] rounded-md px-2 py-1 mb-1">{fmtDay(d.day)} · {d.teams.length} team{d.teams.length !== 1 ? 's' : ''}</p>
-                        {d.teams.map((t, i) => (
-                          <div key={i} className="px-2 py-1.5 border-b border-[#f0f0f3] last:border-0">
-                            <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
-                            <p className="text-[11px]" style={{ color: MUTED }}>{t.event_name}{t.division ? ` · ${t.division}` : ''}{t.status && t.status !== 'approved' ? ` · ${t.status}` : ''}</p>
-                          </div>
+                (() => {
+                  const season = detailSeason === 'this' ? detail.this_season : detail.last_season;
+                  const year = detailSeason === 'this' ? detail.this_year : detail.last_year;
+                  const byDay = new Map(season.days.map(d => [d.day, d.teams]));
+                  const daysInMonth = new Date(year, detailMonth, 0).getDate();
+                  const firstWeekday = new Date(year, detailMonth - 1, 1).getDay();
+                  const pad2 = (n: number) => String(n).padStart(2, '0');
+                  const dayIso = (d: number) => `${year}-${pad2(detailMonth)}-${pad2(d)}`;
+                  const sel = selectedDay && byDay.has(selectedDay) ? selectedDay : null;
+                  const selTeams = sel ? byDay.get(sel)! : [];
+                  const maxCount = Math.max(1, ...season.days.map(d => d.teams.length));
+                  return (
+                    <div className="max-w-xl mx-auto">
+                      {/* Season toggle */}
+                      <div className="flex gap-1.5 mb-4 bg-[#f5f5f7] rounded-xl p-1">
+                        {([
+                          { key: 'this' as const, label: `${detail.this_year} · this season`, total: detail.this_season.total },
+                          { key: 'last' as const, label: `${detail.last_year} · last season`, total: detail.last_season.total },
+                        ]).map(s => (
+                          <button key={s.key} onClick={() => { setDetailSeason(s.key); setSelectedDay(null); }}
+                            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${detailSeason === s.key ? 'bg-[#003e79] text-white shadow' : 'text-[#6e6e73]'}`}>
+                            {s.label}
+                            <span className={`ml-1.5 text-[10px] font-semibold ${detailSeason === s.key ? 'text-[#9fd1ff]' : 'text-[#86868b]'}`}>{s.total}</span>
+                          </button>
                         ))}
                       </div>
-                    ))}
-                  </div>
-                  {/* Last season */}
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#6e6e73] mb-2">{MONTH_NAMES[detailMonth]} {detail.last_year} (last season)</p>
-                    {detail.last_season.days.length === 0 ? (
-                      <p className="text-sm py-4" style={{ color: MUTED }}>No data on file for {MONTH_NAMES[detailMonth]} {detail.last_year}.</p>
-                    ) : detail.last_season.days.map(d => (
-                      <div key={d.day} className="mb-3">
-                        <p className="text-[11px] font-bold text-[#1d1d1f] bg-[#f5f5f7] rounded-md px-2 py-1 mb-1">{fmtDay(d.day)} · {d.teams.length} team{d.teams.length !== 1 ? 's' : ''}</p>
-                        {d.teams.map((t, i) => (
-                          <div key={i} className="px-2 py-1.5 border-b border-[#f0f0f3] last:border-0">
-                            <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
-                            <p className="text-[11px] truncate" style={{ color: MUTED }}>
-                              {t.event_name}{t.division ? ` · ${t.division}` : ''}{t.email ? <> · <a href={`mailto:${t.email}`} className="text-[#0077b0] hover:underline">{t.email}</a></> : ''}
-                            </p>
+
+                      {season.days.length === 0 ? (
+                        <p className="text-sm text-center py-8" style={{ color: MUTED }}>
+                          {detailSeason === 'this' ? `No registrations yet this ${MONTH_NAMES[detailMonth]}.` : `No data on file for ${MONTH_NAMES[detailMonth]} ${year}.`}
+                        </p>
+                      ) : (
+                        <>
+                          {/* Calendar grid */}
+                          <div className="grid grid-cols-7 gap-1 mb-1">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((w, i) => (
+                              <p key={i} className="text-center text-[10px] font-bold uppercase" style={{ color: MUTED }}>{w}</p>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                          <div className="grid grid-cols-7 gap-1 mb-4">
+                            {Array.from({ length: firstWeekday }).map((_, i) => <div key={`e${i}`} />)}
+                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                              const d = i + 1;
+                              const iso = dayIso(d);
+                              const count = byDay.get(iso)?.length || 0;
+                              const isSel = sel === iso;
+                              return (
+                                <button key={iso} onClick={() => count > 0 && setSelectedDay(isSel ? null : iso)}
+                                  disabled={count === 0}
+                                  className={`rounded-lg border aspect-square flex flex-col items-center justify-center transition ${
+                                    isSel ? 'bg-[#003e79] border-[#003e79]' : count > 0 ? 'bg-[#f0f7ff] border-[#d5e8fa] hover:border-[#003e79] cursor-pointer' : 'bg-white border-[#f0f0f3]'
+                                  }`}>
+                                  <span className={`text-[9px] leading-none font-medium ${isSel ? 'text-[#9fd1ff]' : 'text-[#a8a8ad]'}`}>{d}</span>
+                                  <span className={`text-sm font-bold leading-tight ${isSel ? 'text-white' : count > 0 ? 'text-[#003e79]' : 'text-[#d8d8dd]'}`}
+                                    style={count > 0 && !isSel ? { opacity: 0.55 + 0.45 * (count / maxCount) } : undefined}>
+                                    {count > 0 ? count : '·'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Selected day teams */}
+                          {sel ? (
+                            <div>
+                              <p className="text-[11px] font-bold text-[#1d1d1f] bg-[#f5f5f7] rounded-md px-2 py-1.5 mb-1">
+                                {fmtDay(sel)} · {selTeams.length} team{selTeams.length !== 1 ? 's' : ''}
+                              </p>
+                              {selTeams.map((t: any, i: number) => (
+                                <div key={i} className="px-2 py-1.5 border-b border-[#f0f0f3] last:border-0">
+                                  <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
+                                  <p className="text-[11px] truncate" style={{ color: MUTED }}>
+                                    {t.event_name}{t.division ? ` · ${t.division}` : ''}{t.status && t.status !== 'approved' ? ` · ${t.status}` : ''}
+                                    {t.email ? <> · <a href={`mailto:${t.email}`} className="text-[#0077b0] hover:underline">{t.email}</a></> : ''}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-center py-3" style={{ color: MUTED }}>Tap a day to see the teams that registered.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()
               )}
             </div>
           </div>
