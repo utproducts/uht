@@ -536,8 +536,9 @@ analyticsRoutes.get('/reports/season-comparison', authMiddleware, requireRole('a
 
 // ==================
 // ADMIN: Month drill-down — day-by-day team registrations for one calendar
-// month, this season (live tables) beside last season (legacy_team_contacts,
-// the Airtable import), so staff can eyeball who registered when.
+// month, this season (live tables) beside last season (legacy_registrations,
+// pulled from the old Airtable tracker, dated by Approved At in Central time),
+// so staff can eyeball who registered when.
 // ==================
 analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const month = parseInt(c.req.param('month') || '', 10);
@@ -584,10 +585,10 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
       ORDER BY r.created_at
     `).bind(curFrom, curTo).all(),
     db.prepare(`
-      SELECT substr(source_created_at, 1, 10) as day, team_name, event_name, LOWER(email) as email
-      FROM legacy_team_contacts
-      WHERE source_created_at >= ? AND source_created_at < ?
-      ORDER BY source_created_at
+      SELECT approved_on as day, team_name, event_name, division, email
+      FROM legacy_registrations
+      WHERE status = 'approved' AND approved_on >= ? AND approved_on < ?
+      ORDER BY approved_on
     `).bind(prevFrom, prevTo).all(),
   ]);
 
@@ -605,38 +606,26 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
     curByDay.set(r.day, list);
   }
 
-  // Last season: legacy rows are one per CONTACT — collapse to team+event
-  const legacyTeams = new Map<string, { day: string; team_name: string; event_name: string; emails: Set<string> }>();
-  for (const r of (legacyRows.results || []) as any[]) {
-    if (!r.team_name) continue;
-    const key = `${r.team_name.toLowerCase()}|${(r.event_name || '').toLowerCase()}`;
-    const t = legacyTeams.get(key) || { day: r.day, team_name: r.team_name, event_name: r.event_name, emails: new Set<string>() };
-    if (r.email) t.emails.add(r.email);
-    if (r.day < t.day) t.day = r.day;
-    legacyTeams.set(key, t);
-  }
+  // Last season: one row per team registration from the old Airtable tracker,
+  // dated by when it was approved (matches the monthly benchmark basis)
   const prevByDay = new Map<string, any[]>();
-  for (const t of legacyTeams.values()) {
-    const list = prevByDay.get(t.day) || [];
+  for (const r of (legacyRows.results || []) as any[]) {
+    if (!r.team_name || !r.day) continue;
+    const list = prevByDay.get(r.day) || [];
     list.push({
-      team_name: t.team_name,
-      event_name: t.event_name,
-      ...(restricted ? {} : { email: [...t.emails][0] || null }),
+      team_name: r.team_name,
+      event_name: r.event_name,
+      division: r.division || undefined,
+      ...(restricted ? {} : { email: r.email || null }),
     });
-    prevByDay.set(t.day, list);
+    prevByDay.set(r.day, list);
   }
 
-  const toDays = (m: Map<string, any[]>, bulkFlag: boolean) =>
-    [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, teams]) => ({
-      day,
-      teams,
-      // Airtable bulk-import days (200+ teams landing at once) are not real
-      // registration dates — flag so the UI can say so
-      ...(bulkFlag && teams.length >= 40 ? { bulk_import: true } : {}),
-    }));
+  const toDays = (m: Map<string, any[]>) =>
+    [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, teams]) => ({ day, teams }));
 
-  const curDays = toDays(curByDay, false);
-  const prevDays = toDays(prevByDay, true);
+  const curDays = toDays(curByDay);
+  const prevDays = toDays(prevByDay);
 
   return c.json({
     success: true,

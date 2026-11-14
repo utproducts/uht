@@ -37,7 +37,7 @@ type MonthDetail = {
   this_year: number;
   last_year: number;
   this_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; status?: string }[] }[]; total: number };
-  last_season: { days: { day: string; bulk_import?: boolean; teams: { team_name: string; event_name: string; email?: string | null }[] }[]; total: number };
+  last_season: { days: { day: string; teams: { team_name: string; event_name: string; division?: string; email?: string | null }[] }[]; total: number };
 };
 
 function fmtDay(iso: string): string {
@@ -233,16 +233,11 @@ export default function RegistrationTrends() {
                     ) : detail.last_season.days.map(d => (
                       <div key={d.day} className="mb-3">
                         <p className="text-[11px] font-bold text-[#1d1d1f] bg-[#f5f5f7] rounded-md px-2 py-1 mb-1">{fmtDay(d.day)} · {d.teams.length} team{d.teams.length !== 1 ? 's' : ''}</p>
-                        {d.bulk_import && (
-                          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mb-1">
-                            These teams were bulk-imported from our old tracker on this date — their real sign-up dates were earlier in the season.
-                          </p>
-                        )}
                         {d.teams.map((t, i) => (
                           <div key={i} className="px-2 py-1.5 border-b border-[#f0f0f3] last:border-0">
                             <p className="text-sm font-medium text-[#1d1d1f] leading-tight">{t.team_name}</p>
                             <p className="text-[11px] truncate" style={{ color: MUTED }}>
-                              {t.event_name}{t.email ? <> · <a href={`mailto:${t.email}`} className="text-[#0077b0] hover:underline">{t.email}</a></> : ''}
+                              {t.event_name}{t.division ? ` · ${t.division}` : ''}{t.email ? <> · <a href={`mailto:${t.email}`} className="text-[#0077b0] hover:underline">{t.email}</a></> : ''}
                             </p>
                           </div>
                         ))}
