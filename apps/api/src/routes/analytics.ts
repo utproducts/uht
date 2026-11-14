@@ -830,13 +830,17 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
 // ADMIN: Lights Out page traffic — the "told you so" tile for the overview
 // ==================
 analyticsRoutes.get('/reports/lights-out-stats', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  // Counter baseline: views before this moment were Chad/Johnny testing the
+  // page pre-launch - the tile starts clean from the dates announcement
+  const LO_COUNT_FROM = '2026-11-14 03:55:00';
   const row = await c.env.DB.prepare(`
     SELECT COUNT(*) as views,
       COUNT(DISTINCT session_id) as visitors,
       SUM(created_at >= datetime('now', '-7 days')) as views_7d
     FROM user_activity_log
     WHERE activity_type = 'page_view' AND page_path LIKE '/lights-out%'
-  `).first<any>();
+      AND created_at >= ?
+  `).bind(LO_COUNT_FROM).first<any>();
   const regs = await c.env.DB.prepare(
     `SELECT COUNT(*) as n, SUM(COALESCE(amount_paid_cents, 0) > 0) as paid FROM lights_out_registrations`
   ).first<any>();
