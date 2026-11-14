@@ -52,7 +52,6 @@ export default function LightsOutBanner({ pitch, variant = 'hero' }: { pitch?: s
                 <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.55)" />
                 <Text style={loStyles.cardLocation} maxFontSizeMultiplier={1.2}>St. Louis, MO</Text>
               </View>
-              <Text style={loStyles.cardLimited} maxFontSizeMultiplier={1.2}>A $200 deposit holds your spot</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#39ff14" />
           </View>

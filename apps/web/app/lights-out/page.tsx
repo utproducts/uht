@@ -163,7 +163,8 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
             <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>INVITE REQUEST</p>
             <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>CLAIM YOUR SPOT</h3>
             <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Tell us where your player earned their Three Star. We verify every registration against the official scoresheets before the invite is confirmed.</p>
-            <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-4`}>$550 PER PLAYER (OR $200 DEPOSIT) &middot; ALL SWAG INCLUDED</p>
+            <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-1`}>$550 PER PLAYER (OR $200 DEPOSIT) &middot; ALL SWAG INCLUDED</p>
+            <p className={`${rajdhani.className} text-[#ffb84d]/85 text-sm font-semibold tracking-[0.12em] mb-4`}>EXTREMELY LIMITED EVENT &middot; A $200 DEPOSIT HOLDS YOUR SPOT</p>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <input className={`${inputCls} col-span-2`} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
