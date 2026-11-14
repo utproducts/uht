@@ -479,6 +479,7 @@ export function AdminDash() {
         loViews: loJson?.success ? (loJson.data?.views || 0) : null,
         loViews7d: loJson?.success ? (loJson.data?.views_7d || 0) : 0,
         loRegs: loJson?.success ? (loJson.data?.registrations || 0) : 0,
+        loReqs: loJson?.success ? (loJson.data?.invite_requests || 0) : 0,
       });
       setLoadingStats(false);
     }).catch(() => setLoadingStats(false));
@@ -509,7 +510,7 @@ export function AdminDash() {
             <div className="rounded-2xl p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] min-w-0 overflow-hidden bg-[#04091a] border border-[#39ff14]/40">
               <p className="text-sm mb-1 truncate text-[#39ff14] font-semibold">Lights Out Views</p>
               <p className="text-2xl font-bold text-white whitespace-nowrap [font-size:clamp(16px,1.6vw,24px)]">{(stats?.loViews || 0).toLocaleString()}</p>
-              <p className="text-xs mt-1 truncate text-[#7fd8ff]">{stats?.loViews7d || 0} this week · {stats?.loRegs || 0} registered</p>
+              <p className="text-xs mt-1 truncate text-[#7fd8ff]">{stats?.loViews7d || 0} this week · {stats?.loRegs || 0} registered · {stats?.loReqs || 0} requested</p>
             </div>
           </a>
         )}

@@ -42,7 +42,7 @@ export default function LightsOutAdminPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'denied' | 'requests'>('all');
+  const [filter, setFilter] = useState<'all' | 'registered' | 'pending' | 'approved' | 'denied' | 'requests'>('all');
 
   const load = async () => {
     try {
@@ -67,12 +67,19 @@ export default function LightsOutAdminPage() {
     setBusy(null);
   };
 
-  const counts = { all: rows.length, pending: 0, approved: 0, denied: 0, requests: 0 } as Record<string, number>;
+  // Registered = came through the registration flow (invite requests are their own bucket)
+  const counts = { all: rows.length, registered: 0, pending: 0, approved: 0, denied: 0, requests: 0 } as Record<string, number>;
   for (const r of rows) {
     counts[r.status] = (counts[r.status] || 0) + 1;
     if (String(r.status).startsWith('invite_')) counts.requests++;
+    else counts.registered++;
   }
-  const visible = rows.filter(r => filter === 'all' || (filter === 'requests' ? String(r.status).startsWith('invite_') : r.status === filter));
+  const visible = rows.filter(r => {
+    if (filter === 'all') return true;
+    if (filter === 'requests') return String(r.status).startsWith('invite_');
+    if (filter === 'registered') return !String(r.status).startsWith('invite_');
+    return r.status === filter;
+  });
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-6">
@@ -83,7 +90,7 @@ export default function LightsOutAdminPage() {
       </p>
 
       <div className="flex flex-wrap gap-2 mb-5">
-        {(['all', 'pending', 'approved', 'denied', 'requests'] as const).map(fk => (
+        {(['all', 'registered', 'requests', 'pending', 'approved', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
             {fk === 'all' ? 'All' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})

@@ -841,8 +841,13 @@ analyticsRoutes.get('/reports/lights-out-stats', authMiddleware, requireRole('ad
     WHERE activity_type = 'page_view' AND page_path LIKE '/lights-out%'
       AND created_at >= ?
   `).bind(LO_COUNT_FROM).first<any>();
+  // Registered = actually paid; invite requests are their own bucket, and
+  // abandoned checkouts count as neither
   const regs = await c.env.DB.prepare(
-    `SELECT COUNT(*) as n, SUM(COALESCE(amount_paid_cents, 0) > 0) as paid FROM lights_out_registrations`
+    `SELECT
+       SUM(status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0) as paid,
+       SUM(status LIKE 'invite_%') as requested
+     FROM lights_out_registrations`
   ).first<any>();
   return c.json({
     success: true,
@@ -850,8 +855,9 @@ analyticsRoutes.get('/reports/lights-out-stats', authMiddleware, requireRole('ad
       views: row?.views || 0,
       visitors: row?.visitors || 0,
       views_7d: row?.views_7d || 0,
-      registrations: regs?.n || 0,
+      registrations: regs?.paid || 0,
       paid_registrations: regs?.paid || 0,
+      invite_requests: regs?.requested || 0,
     },
   });
 });
