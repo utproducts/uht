@@ -278,7 +278,7 @@ function LightsOutBanner() {
           <Text style={loStyles.ctaText} maxFontSizeMultiplier={1.2}>SEE THE INVITATIONAL</Text>
         </LinearGradient>
         <Text style={loStyles.limited} maxFontSizeMultiplier={1.2}>
-          EXTREMELY LIMITED EVENT · SPOTS ARE NOT HELD FOR UNPAID REGISTRATIONS
+          EXTREMELY LIMITED EVENT · A $200 DEPOSIT HOLDS YOUR SPOT
         </Text>
 
         {/* glowing ice line across the bottom edge */}
