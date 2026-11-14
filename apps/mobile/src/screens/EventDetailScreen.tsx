@@ -277,6 +277,9 @@ function LightsOutBanner() {
         <LinearGradient colors={['#39ff14', '#00ccff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={loStyles.ctaWrap}>
           <Text style={loStyles.ctaText} maxFontSizeMultiplier={1.2}>SEE THE INVITATIONAL</Text>
         </LinearGradient>
+        <Text style={loStyles.limited} maxFontSizeMultiplier={1.2}>
+          EXTREMELY LIMITED EVENT · SPOTS ARE NOT HELD FOR UNPAID REGISTRATIONS
+        </Text>
 
         {/* glowing ice line across the bottom edge */}
         <LinearGradient colors={['transparent', '#39ff14', '#00ccff', 'transparent']}
@@ -326,6 +329,11 @@ const loStyles = StyleSheet.create({
     shadowColor: '#39ff14', shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 8,
   },
   ctaText: { color: '#04091a', fontSize: 14, fontWeight: '900', letterSpacing: 1.5 },
+  limited: {
+    marginTop: 12, color: '#ffb84d', fontSize: 10.5, fontWeight: '800',
+    letterSpacing: 1.2, textAlign: 'center', maxWidth: 330,
+    textShadowColor: 'rgba(255,184,77,0.45)', textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 },
+  },
   iceLine: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, opacity: 0.9 },
 });
 

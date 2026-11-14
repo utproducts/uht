@@ -310,6 +310,7 @@ export default function LightsOutPage() {
               </a>
             </div>
             <p className={`${rajdhani.className} mt-5 text-[#7fd8ff]/55 text-sm font-medium tracking-[0.25em]`}>$550 PER PLAYER &middot; THREE STARS WINNERS ONLY &middot; EVERY INVITE IS VERIFIED</p>
+            <p className={`${rajdhani.className} mt-2 text-[#ffb84d]/80 text-sm font-semibold tracking-[0.25em]`}>EXTREMELY LIMITED EVENT &middot; SPOTS ARE NOT HELD FOR UNPAID REGISTRATIONS</p>
           </div>
 
           <div className="order-1 lg:order-2 flex justify-center">
