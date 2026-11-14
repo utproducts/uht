@@ -827,6 +827,32 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
 });
 
 // ==================
+// ADMIN: Lights Out page traffic — the "told you so" tile for the overview
+// ==================
+analyticsRoutes.get('/reports/lights-out-stats', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const row = await c.env.DB.prepare(`
+    SELECT COUNT(*) as views,
+      COUNT(DISTINCT session_id) as visitors,
+      SUM(created_at >= datetime('now', '-7 days')) as views_7d
+    FROM user_activity_log
+    WHERE activity_type = 'page_view' AND page_path LIKE '/lights-out%'
+  `).first<any>();
+  const regs = await c.env.DB.prepare(
+    `SELECT COUNT(*) as n, SUM(COALESCE(amount_paid_cents, 0) > 0) as paid FROM lights_out_registrations`
+  ).first<any>();
+  return c.json({
+    success: true,
+    data: {
+      views: row?.views || 0,
+      visitors: row?.visitors || 0,
+      views_7d: row?.views_7d || 0,
+      registrations: regs?.n || 0,
+      paid_registrations: regs?.paid || 0,
+    },
+  });
+});
+
+// ==================
 // ADMIN: User activity detail (for clicking into a specific user)
 // ==================
 analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRole('admin', 'director'), async (c) => {

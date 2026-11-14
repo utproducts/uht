@@ -454,7 +454,8 @@ export function AdminDash() {
       fetch(`${API}/users/admin/app-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/financials/outstanding`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
       fetch(`${API}/financials/payment-methods`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-    ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson, payJson]) => {
+      fetch(`${API}/analytics/reports/lights-out-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
+    ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson, payJson, loJson]) => {
       setPaymentMethods(payJson?.success ? (payJson.data || []) : []);
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));
       const upcoming = noTest(upJson.success ? upJson.data : []);
@@ -475,6 +476,9 @@ export function AdminDash() {
         owedCents: owedJson?.success ? (owedJson.data?.owed_cents || 0) : 0,
         owingTeams: owedJson?.success ? (owedJson.data?.owing_teams || 0) : 0,
         pushUsers: appJson?.success ? (appJson.data?.push_users || 0) : 0,
+        loViews: loJson?.success ? (loJson.data?.views || 0) : null,
+        loViews7d: loJson?.success ? (loJson.data?.views_7d || 0) : 0,
+        loRegs: loJson?.success ? (loJson.data?.registrations || 0) : 0,
       });
       setLoadingStats(false);
     }).catch(() => setLoadingStats(false));
@@ -498,6 +502,15 @@ export function AdminDash() {
         {stats?.appUsers !== null && (
           <a href="/admin/app-users" className="block">
             <StatCard label="App Users" value={(stats?.appUsers || 0).toLocaleString()} sub={`${stats?.pushUsers || 0} with push on`} />
+          </a>
+        )}
+        {stats?.loViews !== null && (
+          <a href="/lights-out" target="_blank" rel="noreferrer" className="block">
+            <div className="rounded-2xl p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] min-w-0 overflow-hidden bg-[#04091a] border border-[#39ff14]/40">
+              <p className="text-sm mb-1 truncate text-[#39ff14] font-semibold">Lights Out Views</p>
+              <p className="text-2xl font-bold text-white whitespace-nowrap [font-size:clamp(16px,1.6vw,24px)]">{(stats?.loViews || 0).toLocaleString()}</p>
+              <p className="text-xs mt-1 truncate text-[#7fd8ff]">{stats?.loViews7d || 0} this week · {stats?.loRegs || 0} registered</p>
+            </div>
           </a>
         )}
         <div className={`bg-white rounded-2xl border p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] ${pendingCount > 0 ? 'border-amber-300 ring-1 ring-amber-200' : 'border-[#e8e8ed]'}`}>
