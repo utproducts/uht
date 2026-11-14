@@ -315,18 +315,41 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
     }
 
     if (status === 'approved' && row.status !== 'approved') {
-      await sendEmail(c.env, row.email, `${row.player_name} is IN - Lights Out Invitational`,
-        emailShell(`
-          <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${row.player_name.toUpperCase()} IS IN.</p>
-          <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
-          <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
-          <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere. Tag <b style="color:#39ff14;">@ultimatetournaments</b> when you do - we share our favorites.</p>
-          <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 14px;">
-            <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially invited to the Lights Out Invitational" />
-          </a>
-          <p style="margin:0;color:#7fd8ff;">Tell no one. Or tell everyone. Either way - the lights go out soon.</p>
-        `));
+      const m = approvedEmail(row, id);
+      await sendEmail(c.env, row.email, m.subject, m.html);
     }
+    return c.json({ success: true });
+  });
+
+// The acceptance email a family gets when staff clicks Approve - shared by
+// the real approval and the admin test-send below.
+function approvedEmail(row: any, id: string): { subject: string; html: string } {
+  return {
+    subject: `${row.player_name} is IN - Lights Out Invitational`,
+    html: emailShell(`
+      <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${String(row.player_name).toUpperCase()} IS IN.</p>
+      <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
+      <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
+      <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere. Tag <b style="color:#39ff14;">@ultimatetournaments</b> when you do - we share our favorites.</p>
+      <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 14px;">
+        <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially invited to the Lights Out Invitational" />
+      </a>
+      <p style="margin:0;color:#7fd8ff;">Tell no one. Or tell everyone. Either way - the lights go out soon.</p>
+    `),
+  };
+}
+
+// Admin: send yourself a copy of the acceptance email for any eligible row
+lightsOutRoutes.post('/admin/test-approved-email', authMiddleware, requireRole('admin', 'director'),
+  zValidator('json', z.object({ registrationId: z.string().min(1), to: z.string().email() })), async (c) => {
+    const { registrationId, to } = c.req.valid('json');
+    const row = await c.env.DB.prepare(
+      `SELECT r.*, e.name as star_event_name FROM lights_out_registrations r
+       LEFT JOIN events e ON e.id = r.star_event_id WHERE r.id = ?`
+    ).bind(registrationId).first<any>();
+    if (!row) return c.json({ success: false, error: 'Registration not found' }, 404);
+    const m = approvedEmail(row, registrationId);
+    await sendEmail(c.env, to, `[TEST] ${m.subject}`, m.html);
     return c.json({ success: true });
   });
 
