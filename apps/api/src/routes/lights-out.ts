@@ -65,6 +65,49 @@ const registerSchema = z.object({
   payType: z.enum(['full', 'deposit']).default('full'),
 });
 
+// Invite requests from players WITHOUT a Three Stars selection — stored for
+// staff review, no payment. First spots always go to star earners.
+const inviteRequestSchema = z.object({
+  playerName: z.string().min(2).max(80),
+  teamName: z.string().min(2).max(120),
+  birthYear: z.string().max(8).optional(),
+  position: z.string().max(20).optional(),
+  parentName: z.string().min(2).max(80),
+  email: z.string().email(),
+  phone: z.string().max(30).optional(),
+  reason: z.string().max(600).optional(),
+});
+
+lightsOutRoutes.post('/request-invite', zValidator('json', inviteRequestSchema), async (c) => {
+  const b = c.req.valid('json');
+  const db = c.env.DB;
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO lights_out_registrations (id, player_name, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified, notes)
+    VALUES (?, ?, ?, 'invite-request', ?, ?, ?, ?, ?, 'invite_requested', 0, ?)
+  `).bind(id, b.playerName.trim(), b.teamName.trim(), b.birthYear || null, b.position || null,
+    b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null,
+    b.reason ? `Invite request: ${b.reason.trim()}` : 'Invite request (no star)').run();
+
+  await sendEmail(c.env, b.email.trim(), 'We got your Lights Out invite request',
+    emailShell(`
+      <h2 style="margin:0 0 14px;color:#39ff14;font-size:19px;">Request received</h2>
+      <p style="margin:0 0 14px;">Hi ${b.parentName.trim()},</p>
+      <p style="margin:0 0 14px;">We have your invite request for <b style="color:#7fd8ff;">${b.playerName.trim()}</b> for the Lights Out Invitational, June 11-13, 2027 in St. Louis.</p>
+      <p style="margin:0 0 14px;">To be straight with you: this is a very limited event and first spots go to our Three Stars winners. Requesting an invite does not guarantee approval - but if spots open beyond the stars, requests are the first place we look. We will email you either way.</p>
+      <p style="margin:0 0 0;">Best thing your player can do in the meantime: earn a star at any UHT event this season - that is an automatic invite.</p>
+    `));
+  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out INVITE REQUEST: ${b.playerName.trim()} (${b.teamName.trim()})`,
+    emailShell(`
+      <p style="margin:0 0 6px;">Player: <b>${b.playerName.trim()}</b> (${b.birthYear || 'birth year n/a'}, ${b.position || 'position n/a'})</p>
+      <p style="margin:0 0 6px;">Team: ${b.teamName.trim()}</p>
+      <p style="margin:0 0 6px;">Parent: ${b.parentName.trim()} - ${b.email.trim()} ${b.phone ? '- ' + b.phone : ''}</p>
+      ${b.reason ? `<p style="margin:0 0 6px;">Why: ${b.reason.trim()}</p>` : ''}
+      <p style="margin:10px 0 0;color:#7fd8ff;">No star on record - review in the admin Lights Out requests list.</p>
+    `));
+  return c.json({ success: true, data: { id } });
+});
+
 lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
   const b = c.req.valid('json');
   const db = c.env.DB;

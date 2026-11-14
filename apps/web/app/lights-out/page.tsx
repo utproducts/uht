@@ -95,6 +95,94 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
   );
 }
 
+// For families WITHOUT a star: no payment, just a reviewed request. First
+// spots always go to Three Stars winners - the form says so plainly.
+function RequestInviteModal({ onClose }: { onClose: () => void }) {
+  const [f, setF] = useState({ playerName: '', teamName: '', birthYear: '', position: '', parentName: '', email: '', phone: '', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }));
+  const inputCls = 'w-full rounded-xl px-4 py-2.5 text-sm text-white bg-[#0a1228] border border-[#1d3a56] focus:border-[#00ccff] focus:outline-none placeholder:text-white/30';
+
+  const submit = async () => {
+    setError('');
+    if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)) {
+      setError('Please fill in the player, team, parent name, and a valid email.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/request-invite`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...f, playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim() }),
+      });
+      const j = await res.json();
+      if (j.success) { setDone(true); setBusy(false); return; }
+      setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
+    } catch {
+      setError('Something went wrong - please try again.');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.86)' }} onClick={onClose}>
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8" style={{ background: '#070d20', border: '1px solid rgba(0,204,255,.4)', boxShadow: '0 0 60px rgba(0,204,255,.25)' }} onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={onClose} aria-label="Close"
+          className="absolute top-3.5 right-3.5 w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white transition z-10"
+          style={{ background: 'rgba(10,18,40,.9)', border: '1px solid rgba(0,204,255,.4)' }}>
+          <svg style={{ width: 18, height: 18 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+        {done ? (
+          <div className="text-center py-6">
+            <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REQUEST RECEIVED</p>
+            <p className="text-white text-xl font-black mb-3">You're on the list.</p>
+            <p className="text-white/70 text-sm leading-relaxed mb-6">First spots go to Three Stars winners - but if spots open up, requests are the first place we look. We'll email you either way. Fastest way in: earn a star at any UHT event this season.</p>
+            <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a]">DONE</button>
+          </div>
+        ) : (
+          <>
+            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#00ccff] mb-1`}>NO STAR YET?</p>
+            <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>REQUEST AN INVITE</h3>
+            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Think your player belongs on glowing ice? Tell us who they are and why.</p>
+            <p className={`${rajdhani.className} text-[#ffb84d]/85 text-sm font-semibold tracking-[0.1em] mb-4`}>REQUESTING DOES NOT MEAN APPROVAL - THIS IS A VERY LIMITED EVENT AND FIRST SPOTS GO TO OUR THREE STARS WINNERS</p>
+            <div className="space-y-3">
+              <input className={inputCls} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
+              <input className={inputCls} placeholder="Team name *" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
+              <div className="grid grid-cols-2 gap-3">
+                <input className={inputCls} placeholder="Birth year" value={f.birthYear} onChange={(e) => set('birthYear', e.target.value)} />
+                <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
+                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Position</option>
+                  {['Forward', 'Defense', 'Goalie'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
+                </select>
+              </div>
+              <input className={inputCls} placeholder="Parent / guardian name *" value={f.parentName} onChange={(e) => set('parentName', e.target.value)} />
+              <div className="grid grid-cols-2 gap-3">
+                <input className={inputCls} type="email" placeholder="Email *" value={f.email} onChange={(e) => set('email', e.target.value)} />
+                <input className={inputCls} placeholder="Phone" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
+              </div>
+              <textarea className={`${inputCls} min-h-[80px]`} placeholder="Why should your player be considered?" value={f.reason} onChange={(e) => set('reason', e.target.value)} />
+              {error && <p className="text-[#ff6b81] text-xs">{error}</p>}
+              <button onClick={submit} disabled={busy}
+                className={`${rajdhani.className} w-full py-3.5 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] hover:brightness-110 transition disabled:opacity-50`}>
+                {busy ? 'SENDING…' : 'SUBMIT REQUEST'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RegisterModal({ onClose }: { onClose: () => void }) {
   const [events, setEvents] = useState<any[]>([]);
   const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
@@ -220,6 +308,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
 
 export default function LightsOutPage() {
   const [showRegister, setShowRegister] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
   const [paidState, setPaidState] = useState<null | 'verifying' | 'paid' | 'failed'>(null);
 
@@ -383,10 +472,15 @@ export default function LightsOutPage() {
           <p className="text-white/70 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
             Want in? There is only one door: <b className="text-[#00ccff]">win a Three Star at a UHT event.</b> Every game, every tournament, three more invites are earned.
           </p>
+          <p className="text-white/70 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
+            No star yet but think your player belongs on glowing ice? You can <b className="text-[#39ff14]">request an invite</b> below. Requesting does not mean approval - this is a very limited event and first spots go to our Three Stars winners - but if spots open up, requests are the first place we look.
+          </p>
           <div className={`${rajdhani.className} mt-7 flex flex-col sm:flex-row items-center justify-center gap-3`}>
             <button onClick={() => setShowRegister(true)}
               className="px-9 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.4)] hover:brightness-110 transition">REGISTER NOW</button>
             <a href="/events" className="px-8 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] shadow-[0_0_30px_rgba(0,204,255,.4)] hover:brightness-110 transition">SEE UPCOMING UHT EVENTS</a>
+            <button onClick={() => setShowRequest(true)}
+              className="px-8 py-3 rounded-full text-base font-semibold tracking-[0.12em] border border-[#39ff14]/50 text-[#39ff14] hover:bg-[#39ff14]/10 transition">REQUEST AN INVITE</button>
             <a href="/three-stars" className="px-8 py-3 rounded-full text-base font-semibold tracking-[0.12em] border border-white/25 text-white/85 hover:border-[#00ccff] hover:text-white transition">MEET THE THREE STARS</a>
           </div>
         </div>
@@ -395,6 +489,7 @@ export default function LightsOutPage() {
       </div>
 
       {showRegister && <RegisterModal onClose={() => setShowRegister(false)} />}
+      {showRequest && <RequestInviteModal onClose={() => setShowRequest(false)} />}
       {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
       {paidState && (
         <div className="fixed inset-0 z-[3400] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.9)' }} onClick={() => paidState !== 'verifying' && setPaidState(null)}>

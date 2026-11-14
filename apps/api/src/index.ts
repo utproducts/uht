@@ -1292,6 +1292,14 @@ export default {
         if (r.e1 || r.e2 || r.e3) console.log(`Reengagement sweep: e1=${r.e1} e2=${r.e2} e3=${r.e3}`);
       }).catch((e: any) => console.error('Reengagement sweep error:', e)));
     }
+    // Lights Out marketing waves + announcement activation — 14:00 UTC hour
+    // (8am CT); the sweep is idempotent per target row and per campaign, so
+    // every tick in the hour is safe
+    if (new Date().getUTCHours() === 14) {
+      ctx.waitUntil(import('./lib/lightsout-sweep').then(m => m.runLightsOutSweep(env)).then((r: any) => {
+        if (r.sent || r.activated) console.log(`Lights Out sweep: sent=${r.sent} activated=${r.activated}`);
+      }).catch((e: any) => console.error('Lights Out sweep error:', e)));
+    }
     // Coupon reminders (unused post-registration $100 codes) — 17:00 UTC
     // window (11am CST); same idempotent daily-cohort pattern as above
     if (new Date().getUTCHours() === 17) {
