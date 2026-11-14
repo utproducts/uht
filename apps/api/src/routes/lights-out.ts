@@ -320,7 +320,7 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
           <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${row.player_name.toUpperCase()} IS IN.</p>
           <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
           <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
-          <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere:</p>
+          <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere. Tag <b style="color:#39ff14;">@ultimatetournaments</b> when you do - we share our favorites.</p>
           <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 14px;">
             <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially invited to the Lights Out Invitational" />
           </a>
