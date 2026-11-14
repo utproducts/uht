@@ -2999,7 +2999,7 @@ function BracketDayView({
 type HealthIssue = { severity: 'red' | 'amber'; type: string; message: string };
 type HealthEvent = { event_id: string; event_name: string; start_date: string; issues: HealthIssue[] };
 
-function ScheduleHealthCard() {
+function ScheduleHealthCard({ onOpenEvent }: { onOpenEvent: (eventId: string) => void }) {
   const [health, setHealth] = useState<{ events: HealthEvent[]; games_checked: number } | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -3036,7 +3036,13 @@ function ScheduleHealthCard() {
         <div className="px-4 pb-3 space-y-2.5">
           {health.events.map(ev => (
             <div key={ev.event_id} className="bg-white/70 rounded-lg px-3 py-2">
-              <p className="text-xs font-bold text-[#1d1d1f]">{ev.event_name} <span className="font-normal text-[#86868b]">{ev.start_date?.slice(0, 10)}</span></p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-[#1d1d1f]">{ev.event_name} <span className="font-normal text-[#86868b]">{ev.start_date?.slice(0, 10)}</span></p>
+                <button onClick={() => onOpenEvent(ev.event_id)}
+                  className="text-[11px] font-bold text-[#003e79] bg-[#f0f7ff] hover:bg-[#dcedff] rounded-full px-2.5 py-1 shrink-0">
+                  Open event →
+                </button>
+              </div>
               {ev.issues.map((iss, i) => (
                 <p key={i} className="text-xs mt-1 flex items-start gap-1.5">
                   <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${iss.severity === 'red' ? 'bg-red-500' : 'bg-amber-500'}`} />
@@ -4007,7 +4013,7 @@ export default function AdminSchedulePage() {
         </div>
 
         {/* Automatic schedule-data scan */}
-        <ScheduleHealthCard />
+        <ScheduleHealthCard onOpenEvent={(id) => { const ev = events.find(e => e.id === id); if (ev) setSelectedEvent(ev); }} />
 
         {/* Event Cards Grid */}
         {pagedEvents.length > 0 ? (
