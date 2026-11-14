@@ -172,14 +172,14 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
               </div>
               <input className={inputCls} placeholder="Team name *" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
               <select className={inputCls} value={f.starEventId} onChange={(e) => set('starEventId', e.target.value)} style={{ color: f.starEventId ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                <option value="">Event where the star was earned *</option>
-                {events.map((ev) => <option key={ev.id} value={ev.id} style={{ color: '#111' }}>{ev.name}</option>)}
+                <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Event where the star was earned *</option>
+                {events.map((ev) => <option key={ev.id} value={ev.id} style={{ color: '#111', backgroundColor: '#fff' }}>{ev.name}</option>)}
               </select>
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Birth year" value={f.birthYear} onChange={(e) => set('birthYear', e.target.value)} />
                 <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                  <option value="">Position</option>
-                  {['Forward', 'Defense', 'Goalie'].map((p) => <option key={p} value={p} style={{ color: '#111' }}>{p}</option>)}
+                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Position</option>
+                  {['Forward', 'Defense', 'Goalie'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
                 </select>
               </div>
               <input className={inputCls} placeholder="Parent / guardian name *" value={f.parentName} onChange={(e) => set('parentName', e.target.value)} />
