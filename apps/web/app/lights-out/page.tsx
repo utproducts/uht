@@ -409,6 +409,10 @@ export default function LightsOutPage() {
                 REGISTER NOW
                 <svg className="inline-block w-5 h-5 ml-2 -mt-0.5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
               </button>
+              <button onClick={() => setShowRequest(true)}
+                className={`${rajdhani.className} px-8 py-4 rounded-full text-lg font-semibold tracking-[0.12em] bg-white/5 backdrop-blur-sm text-[#39ff14] border border-[#39ff14]/45 hover:bg-[#39ff14]/10 transition-all`}>
+                REQUEST AN INVITE
+              </button>
               <a href="/three-stars" className={`${rajdhani.className} px-8 py-4 rounded-full text-lg font-semibold tracking-[0.12em] bg-white/5 backdrop-blur-sm text-white/85 border border-white/20 hover:bg-white/10 hover:border-[#00ccff]/50 transition-all`}>
                 MEET THE THREE STARS
               </a>
