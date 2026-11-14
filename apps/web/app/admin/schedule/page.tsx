@@ -2992,6 +2992,66 @@ function BracketDayView({
 }
 
 // ==========================================
+// SCHEDULE HEALTH — automatic scan of current/upcoming events for bad team
+// links (wrong-division games, orphaned approved teams, missing teams, tight
+// turnarounds). Born from the Northwoods 2026 check-in incident.
+// ==========================================
+type HealthIssue = { severity: 'red' | 'amber'; type: string; message: string };
+type HealthEvent = { event_id: string; event_name: string; start_date: string; issues: HealthIssue[] };
+
+function ScheduleHealthCard() {
+  const [health, setHealth] = useState<{ events: HealthEvent[]; games_checked: number } | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    authFetch(`${API_BASE}/analytics/reports/schedule-health`)
+      .then(r => r.json())
+      .then(json => { if (json.success) setHealth(json.data); })
+      .catch(() => {});
+  }, []);
+
+  if (!health) return null;
+  const redCount = health.events.reduce((n, ev) => n + ev.issues.filter(i => i.severity === 'red').length, 0);
+  const amberCount = health.events.reduce((n, ev) => n + ev.issues.filter(i => i.severity === 'amber').length, 0);
+
+  if (health.events.length === 0) {
+    return (
+      <div className="flex items-center gap-2 mb-5 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+        <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <p className="text-xs font-semibold text-emerald-800">Schedule health: all clear — {health.games_checked} games across current and upcoming events checked for wrong team links, missing teams, and conflicts.</p>
+      </div>
+    );
+  }
+  return (
+    <div className={`mb-5 border rounded-xl overflow-hidden ${redCount > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left">
+        <div className="flex items-center gap-2 min-w-0">
+          <svg className={`w-4 h-4 shrink-0 ${redCount > 0 ? 'text-red-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+          <p className={`text-xs font-bold ${redCount > 0 ? 'text-red-800' : 'text-amber-800'}`}>
+            Schedule health: {redCount > 0 ? `${redCount} issue${redCount !== 1 ? 's' : ''} to fix` : ''}{redCount > 0 && amberCount > 0 ? ' · ' : ''}{amberCount > 0 ? `${amberCount} to review` : ''} across {health.events.length} event{health.events.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <span className={`text-xs shrink-0 ${redCount > 0 ? 'text-red-700' : 'text-amber-700'}`}>{open ? 'Hide ▴' : 'Show ▾'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 space-y-2.5">
+          {health.events.map(ev => (
+            <div key={ev.event_id} className="bg-white/70 rounded-lg px-3 py-2">
+              <p className="text-xs font-bold text-[#1d1d1f]">{ev.event_name} <span className="font-normal text-[#86868b]">{ev.start_date?.slice(0, 10)}</span></p>
+              {ev.issues.map((iss, i) => (
+                <p key={i} className="text-xs mt-1 flex items-start gap-1.5">
+                  <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${iss.severity === 'red' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                  <span className="text-[#3d3d3d]">{iss.message}</span>
+                </p>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
 // MAIN COMPONENT
 // ==========================================
 export default function AdminSchedulePage() {
@@ -3945,6 +4005,9 @@ export default function AdminSchedulePage() {
             ))}
           </div>
         </div>
+
+        {/* Automatic schedule-data scan */}
+        <ScheduleHealthCard />
 
         {/* Event Cards Grid */}
         {pagedEvents.length > 0 ? (

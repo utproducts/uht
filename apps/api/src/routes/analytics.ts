@@ -643,6 +643,148 @@ analyticsRoutes.get('/reports/month-detail/:month', authMiddleware, requireRole(
 });
 
 // ==================
+// ADMIN: Schedule health — scans current/upcoming events for schedule-data
+// problems like the Northwoods 2026 one (games linked to the wrong team with
+// a same-name coach, so check-in popped the wrong roster). Red = fix before
+// game day; amber = look at it.
+// ==================
+analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  const EVENT_FILTER = `COALESCE(e.is_test,0)=0 AND e.status NOT IN ('cancelled','draft') AND date(COALESCE(e.end_date,e.start_date)) >= date('now')`;
+  const sideSelect = (side: 'home' | 'away') => `
+    SELECT e.id as event_id, e.name as event_name, e.start_date, g.id as game_id, g.start_time, g.game_type,
+      ged.age_group as game_age, ged.division_level as game_level,
+      t.id as team_id, t.name as team_name,
+      er.id as reg_id, red.age_group as reg_age, red.division_level as reg_level
+    FROM games g
+    JOIN events e ON e.id = g.event_id
+    JOIN event_divisions ged ON ged.id = g.event_division_id
+    JOIN teams t ON t.id = g.${side}_team_id
+    LEFT JOIN event_registrations er ON er.event_id = g.event_id AND er.team_id = t.id AND er.status = 'approved'
+    LEFT JOIN event_divisions red ON red.id = er.event_division_id
+    WHERE ${EVENT_FILTER}`;
+
+  const [sidesQ, missingQ, regsQ] = await Promise.all([
+    db.prepare(`${sideSelect('home')} UNION ALL ${sideSelect('away')}`).all(),
+    db.prepare(`
+      SELECT e.id as event_id, e.name as event_name, e.start_date, g.start_time
+      FROM games g JOIN events e ON e.id = g.event_id
+      WHERE ${EVENT_FILTER} AND g.game_type = 'pool' AND (g.home_team_id IS NULL OR g.away_team_id IS NULL)
+    `).all(),
+    db.prepare(`
+      SELECT e.id as event_id, e.name as event_name, e.start_date, er.team_id, er.team_name,
+        (SELECT COUNT(*) FROM games g2 WHERE g2.event_division_id = er.event_division_id) as division_games
+      FROM event_registrations er JOIN events e ON e.id = er.event_id
+      WHERE ${EVENT_FILTER} AND er.status = 'approved' AND er.team_id IS NOT NULL AND er.event_division_id IS NOT NULL
+    `).all(),
+  ]);
+
+  const sides = (sidesQ.results || []) as any[];
+  type Issue = { severity: 'red' | 'amber'; type: string; message: string };
+  const byEvent = new Map<string, { event_name: string; start_date: string; issues: Issue[] }>();
+  const add = (event_id: string, event_name: string, start_date: string, issue: Issue) => {
+    const ev = byEvent.get(event_id) || { event_name, start_date, issues: [] };
+    ev.issues.push(issue);
+    byEvent.set(event_id, ev);
+  };
+  const fmt = (t: string) => t ? t.replace('T', ' ').slice(0, 16) : '';
+
+  // 1. Team's games are in a different division than its registration — the
+  //    wrong-roster bug. Dedupe per team+division so one bad pool = one line.
+  // 2. Team in the schedule with no approved registration.
+  const seen = new Set<string>();
+  for (const r of sides) {
+    if (r.reg_id) {
+      const ageBad = r.reg_age && r.game_age && r.reg_age !== r.game_age;
+      const levelBad = !ageBad && r.reg_level && r.game_level && r.reg_level !== r.game_level;
+      if (ageBad || levelBad) {
+        const key = `div|${r.event_id}|${r.team_id}|${r.game_age}|${r.game_level}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          add(r.event_id, r.event_name, r.start_date, {
+            severity: ageBad ? 'red' : 'amber', type: 'wrong_division',
+            message: `${r.team_name} is registered in ${[r.reg_age, r.reg_level].filter(Boolean).join(' ')} but its games are in ${[r.game_age, r.game_level].filter(Boolean).join(' ')} (check the team links on those games)`,
+          });
+        }
+      }
+    } else {
+      const key = `noreg|${r.event_id}|${r.team_id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        add(r.event_id, r.event_name, r.start_date, {
+          severity: 'amber', type: 'not_registered',
+          message: `${r.team_name} is in the schedule but has no approved registration`,
+        });
+      }
+    }
+  }
+
+  // 3. Same team on both sides of a game; 4. two games too close together
+  const byGame = new Map<string, any[]>();
+  for (const r of sides) {
+    const list = byGame.get(r.game_id) || []; list.push(r); byGame.set(r.game_id, list);
+  }
+  for (const list of byGame.values()) {
+    if (list.length === 2 && list[0].team_id === list[1].team_id) {
+      add(list[0].event_id, list[0].event_name, list[0].start_date, {
+        severity: 'red', type: 'self_game',
+        message: `${list[0].team_name} is listed as both teams in the ${fmt(list[0].start_time)} game`,
+      });
+    }
+  }
+  const teamTimes = new Map<string, { r: any; times: Set<string> }>();
+  for (const r of sides) {
+    const key = `${r.event_id}|${r.team_id}`;
+    const t = teamTimes.get(key) || { r, times: new Set<string>() };
+    t.times.add(r.start_time); teamTimes.set(key, t);
+  }
+  for (const { r, times } of teamTimes.values()) {
+    const ts = [...times].sort().map(t => new Date(t.replace(' ', 'T') + 'Z').getTime());
+    for (let i = 1; i < ts.length; i++) {
+      const gapMin = (ts[i] - ts[i - 1]) / 60000;
+      if (gapMin < 75) {
+        add(r.event_id, r.event_name, r.start_date, {
+          severity: gapMin < 50 ? 'red' : 'amber', type: 'tight_turnaround',
+          message: `${r.team_name} has two games only ${Math.round(gapMin)} minutes apart`,
+        });
+      }
+    }
+  }
+
+  // 5. Pool games missing a team
+  for (const r of (missingQ.results || []) as any[]) {
+    add(r.event_id, r.event_name, r.start_date, {
+      severity: 'amber', type: 'missing_team',
+      message: `Pool game at ${fmt(r.start_time)} is missing a team`,
+    });
+  }
+
+  // 6. Approved team with zero games while its division is scheduled — how
+  //    the Northwoods mislink looked from the orphaned team's side
+  const scheduledTeams = new Set(sides.map(r => `${r.event_id}|${r.team_id}`));
+  for (const r of (regsQ.results || []) as any[]) {
+    if (r.division_games > 0 && !scheduledTeams.has(`${r.event_id}|${r.team_id}`)) {
+      add(r.event_id, r.event_name, r.start_date, {
+        severity: 'red', type: 'zero_games',
+        message: `${r.team_name} is approved and its division has games, but the team is not in any of them`,
+      });
+    }
+  }
+
+  const events = [...byEvent.entries()]
+    .map(([event_id, ev]) => ({
+      event_id, event_name: ev.event_name, start_date: ev.start_date,
+      issues: ev.issues.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'red' ? -1 : 1)),
+    }))
+    .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+
+  return c.json({
+    success: true,
+    data: { events, games_checked: byGame.size + ((missingQ.results || []) as any[]).length },
+  });
+});
+
+// ==================
 // ADMIN: User activity detail (for clicking into a specific user)
 // ==================
 analyticsRoutes.get('/reports/user/:userId/activity', authMiddleware, requireRole('admin', 'director'), async (c) => {
