@@ -56,14 +56,17 @@ const registerSchema = z.object({
   playerName: z.string().min(2).max(80),
   jerseyNumber: z.string().max(10).optional(),
   teamName: z.string().min(2).max(120),
-  starEventId: z.string().min(8),
+  // One door or the other: the event where the star was earned, or an
+  // approved invite code from a reviewed request
+  starEventId: z.string().min(8).optional(),
+  inviteCode: z.string().min(4).max(20).optional(),
   birthYear: z.string().max(8).optional(),
   position: z.string().max(20).optional(),
   parentName: z.string().min(2).max(80),
   email: z.string().email(),
   phone: z.string().max(30).optional(),
   payType: z.enum(['full', 'deposit']).default('full'),
-});
+}).refine(b => b.starEventId || b.inviteCode, { message: 'Pick the event where the star was earned, or enter your invite code.' });
 
 // Invite requests from players WITHOUT a Three Stars selection — stored for
 // staff review, no payment. First spots always go to star earners.
@@ -112,36 +115,57 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
   const b = c.req.valid('json');
   const db = c.env.DB;
 
-  const ev = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(b.starEventId).first<any>();
-  if (!ev) return c.json({ success: false, error: 'Unknown event' }, 400);
-
-  const dup = await db.prepare(
-    `SELECT id, status FROM lights_out_registrations WHERE LOWER(player_name) = LOWER(?) AND star_event_id = ? AND status != 'denied'`
-  ).bind(b.playerName.trim(), b.starEventId).first<any>();
-  if (dup && dup.status !== 'pending_payment') {
-    return c.json({ success: false, error: 'This player is already registered. Check your email, or reach out and we will help.' }, 409);
-  }
-  // An abandoned checkout should never block the family from trying again
-  if (dup) await db.prepare('DELETE FROM lights_out_registrations WHERE id = ?').bind(dup.id).run();
-
-  // Check the star claim against the scoresheets (last-name match is enough
-  // for the admin signal; parents sometimes enter a nickname first name)
-  const parts = b.playerName.trim().split(/\s+/);
-  const lastName = parts[parts.length - 1];
-  const starHit = await db.prepare(`
-    SELECT 1 as x FROM game_three_stars ts JOIN games g ON g.id = ts.game_id
-    WHERE g.event_id = ? AND (LOWER(ts.player_name) = LOWER(?) OR LOWER(ts.player_name) LIKE LOWER(?))
-    LIMIT 1
-  `).bind(b.starEventId, b.playerName.trim(), `% ${lastName}`).first<any>();
-
-  const id = crypto.randomUUID().replace(/-/g, '');
+  let id: string;
+  let starHit: any = null;
   const isDeposit = b.payType === 'deposit';
   const chargeCents = isDeposit ? LIGHTS_OUT_DEPOSIT_CENTS : LIGHTS_OUT_PRICE_CENTS;
-  await db.prepare(`
-    INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified, payment_plan)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)
-  `).bind(id, b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
-    b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0, b.payType).run();
+
+  if (b.inviteCode && !b.starEventId) {
+    // Approved-invite path: the code was issued by staff on a reviewed
+    // request. Reuse that row so the approval trail stays intact.
+    const inv = await db.prepare(
+      `SELECT id, status, paid_at FROM lights_out_registrations WHERE UPPER(invite_code) = UPPER(?)`
+    ).bind(b.inviteCode.trim()).first<any>();
+    if (!inv) return c.json({ success: false, error: 'That invite code is not valid. Check the code in your approval email, or reply to it and we will help.' }, 400);
+    if (inv.paid_at) return c.json({ success: false, error: 'This invite code has already been used. Reach out if that does not sound right.' }, 409);
+    id = inv.id;
+    await db.prepare(`
+      UPDATE lights_out_registrations
+      SET player_name = ?, jersey_number = ?, team_name = ?, birth_year = ?, position = ?,
+          parent_name = ?, email = ?, phone = ?, status = 'pending_payment', payment_plan = ?
+      WHERE id = ?
+    `).bind(b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.birthYear || null,
+      b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, b.payType, id).run();
+  } else {
+    const ev = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(b.starEventId).first<any>();
+    if (!ev) return c.json({ success: false, error: 'Unknown event' }, 400);
+
+    const dup = await db.prepare(
+      `SELECT id, status FROM lights_out_registrations WHERE LOWER(player_name) = LOWER(?) AND star_event_id = ? AND status != 'denied'`
+    ).bind(b.playerName.trim(), b.starEventId).first<any>();
+    if (dup && dup.status !== 'pending_payment') {
+      return c.json({ success: false, error: 'This player is already registered. Check your email, or reach out and we will help.' }, 409);
+    }
+    // An abandoned checkout should never block the family from trying again
+    if (dup) await db.prepare('DELETE FROM lights_out_registrations WHERE id = ?').bind(dup.id).run();
+
+    // Check the star claim against the scoresheets (last-name match is enough
+    // for the admin signal; parents sometimes enter a nickname first name)
+    const parts = b.playerName.trim().split(/\s+/);
+    const lastName = parts[parts.length - 1];
+    starHit = await db.prepare(`
+      SELECT 1 as x FROM game_three_stars ts JOIN games g ON g.id = ts.game_id
+      WHERE g.event_id = ? AND (LOWER(ts.player_name) = LOWER(?) OR LOWER(ts.player_name) LIKE LOWER(?))
+      LIMIT 1
+    `).bind(b.starEventId, b.playerName.trim(), `% ${lastName}`).first<any>();
+
+    id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`
+      INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified, payment_plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)
+    `).bind(id, b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
+      b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0, b.payType).run();
+  }
 
   // $550 in full or a $200 non-refundable deposit, through Stripe Checkout
   const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -244,10 +268,11 @@ lightsOutRoutes.get('/admin/requests', authMiddleware, requireRole('admin', 'dir
 });
 
 lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin', 'director'),
-  zValidator('json', z.object({ status: z.enum(['approved', 'denied', 'pending']) })), async (c) => {
+  zValidator('json', z.object({ status: z.enum(['approved', 'denied', 'pending', 'invite_approved', 'invite_denied']) })), async (c) => {
     const id = c.req.param('id');
     const { status } = c.req.valid('json');
     const db = c.env.DB;
+    try { await db.prepare('ALTER TABLE lights_out_registrations ADD COLUMN invite_code TEXT').run(); } catch {}
     const row = await db.prepare(`
       SELECT lr.*, e.name as star_event_name FROM lights_out_registrations lr
       LEFT JOIN events e ON e.id = lr.star_event_id WHERE lr.id = ?
@@ -258,12 +283,38 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
     await db.prepare(`UPDATE lights_out_registrations SET status = ?, reviewed_at = datetime('now'), reviewed_by = ? WHERE id = ?`)
       .bind(status, user?.email || user?.id || 'admin', id).run();
 
+    // Approving a no-star INVITE REQUEST issues a single-use code and sends
+    // the congratulations email with it; the code unlocks the register form
+    if (status === 'invite_approved' && row.status !== 'invite_approved') {
+      let code = row.invite_code;
+      if (!code) {
+        const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        for (let tries = 0; tries < 10 && !row.invite_code; tries++) {
+          code = 'GLOW-' + Array.from({ length: 5 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+          const clash = await db.prepare('SELECT 1 as x FROM lights_out_registrations WHERE invite_code = ?').bind(code).first<any>();
+          if (!clash) break;
+        }
+        await db.prepare('UPDATE lights_out_registrations SET invite_code = ? WHERE id = ?').bind(code, id).run();
+      }
+      await sendEmail(c.env, row.email, `${row.player_name} is invited - Lights Out Invitational`,
+        emailShell(`
+          <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONGRATULATIONS. ${String(row.player_name).toUpperCase()} IS INVITED.</p>
+          <p style="margin:0 0 14px;">Your invite request made the cut. ${row.player_name} is officially invited to the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis. Dark arena, glowing ice, and every player keeps the custom glow jerseys, collector stick, and glow puck.</p>
+          <p style="margin:0 0 10px;">Your single-use invite code:</p>
+          <p style="margin:0 0 14px;text-align:center;"><span style="display:inline-block;background:#04091a;border:1px solid rgba(57,255,20,.5);border-radius:10px;padding:12px 26px;font-size:22px;font-weight:bold;letter-spacing:4px;color:#39ff14;">${code}</span></p>
+          <p style="margin:0 0 14px;">To lock the spot: go to <a href="https://ultimatetournaments.com/lights-out" style="color:#00ccff;">ultimatetournaments.com/lights-out</a>, tap <b>Register Now</b>, choose <b>"I have an invite code"</b>, and enter the code above. $550 per player, or a $200 non-refundable deposit holds the spot.</p>
+          <p style="margin:0;color:#ffb84d;font-size:13px;font-weight:bold;">This is an extremely limited event - the code does not hold a spot until payment is made.</p>
+        `));
+      await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out invite code issued: ${row.player_name} (${code})`,
+        emailShell(`<p style="margin:0;">Code <b style="color:#39ff14;">${code}</b> sent to ${row.parent_name} (${row.email}) for ${row.player_name} - ${row.team_name}.</p>`));
+    }
+
     if (status === 'approved' && row.status !== 'approved') {
       await sendEmail(c.env, row.email, `${row.player_name} is IN - Lights Out Invitational`,
         emailShell(`
           <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${row.player_name.toUpperCase()} IS IN.</p>
           <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
-          <p style="margin:0 0 14px;">What happens next: we will send dates, rink details, and ${row.player_name}'s team placement (built by age and position) as soon as they are locked. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
+          <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
           <p style="margin:0;color:#7fd8ff;">Tell no one. Or tell everyone. Either way - the lights go out soon.</p>
         `));
     }

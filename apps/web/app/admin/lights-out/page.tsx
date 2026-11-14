@@ -24,19 +24,25 @@ const STATUS_STYLES: Record<string, string> = {
   pending_payment: 'bg-gray-50 text-gray-500 border-gray-200',
   approved: 'bg-green-50 text-green-700 border-green-200',
   denied: 'bg-red-50 text-red-600 border-red-200',
+  invite_requested: 'bg-[#f0f7ff] text-[#0077b0] border-[#bfe0f5]',
+  invite_approved: 'bg-green-50 text-green-700 border-green-200',
+  invite_denied: 'bg-red-50 text-red-600 border-red-200',
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: 'PAID - AWAITING APPROVAL',
   pending_payment: 'CHECKOUT NOT COMPLETED',
   approved: 'APPROVED',
   denied: 'DENIED',
+  invite_requested: 'INVITE REQUEST - NO STAR',
+  invite_approved: 'CODE SENT - AWAITING REGISTRATION',
+  invite_denied: 'REQUEST DENIED',
 };
 
 export default function LightsOutAdminPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'denied'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'denied' | 'requests'>('all');
 
   const load = async () => {
     try {
@@ -61,9 +67,12 @@ export default function LightsOutAdminPage() {
     setBusy(null);
   };
 
-  const counts = { all: rows.length, pending: 0, approved: 0, denied: 0 } as Record<string, number>;
-  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
-  const visible = rows.filter(r => filter === 'all' || r.status === filter);
+  const counts = { all: rows.length, pending: 0, approved: 0, denied: 0, requests: 0 } as Record<string, number>;
+  for (const r of rows) {
+    counts[r.status] = (counts[r.status] || 0) + 1;
+    if (String(r.status).startsWith('invite_')) counts.requests++;
+  }
+  const visible = rows.filter(r => filter === 'all' || (filter === 'requests' ? String(r.status).startsWith('invite_') : r.status === filter));
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-6">
@@ -74,7 +83,7 @@ export default function LightsOutAdminPage() {
       </p>
 
       <div className="flex flex-wrap gap-2 mb-5">
-        {(['all', 'pending', 'approved', 'denied'] as const).map(fk => (
+        {(['all', 'pending', 'approved', 'denied', 'requests'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
             {fk === 'all' ? 'All' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
@@ -112,11 +121,32 @@ export default function LightsOutAdminPage() {
                     </span>
                   </div>
                   <p className="text-sm text-[#3d3d3d] mt-1">{r.team_name}{r.birth_year ? ` · ${r.birth_year}` : ''}{r.position ? ` · ${r.position}` : ''}</p>
-                  <p className="text-xs text-[#6e6e73] mt-1">Star earned at: <b>{r.star_event_name || r.star_event_id}</b></p>
+                  {r.star_event_id === 'invite-request'
+                    ? <p className="text-xs text-[#0077b0] mt-1 font-semibold">No star - requested an invite{r.invite_code ? <> · code <b className="tracking-widest">{r.invite_code}</b></> : ''}</p>
+                    : <p className="text-xs text-[#6e6e73] mt-1">Star earned at: <b>{r.star_event_name || r.star_event_id}</b></p>}
+                  {r.notes && String(r.notes).startsWith('Invite request') && (
+                    <p className="text-xs text-[#3d3d3d] mt-1 italic">{String(r.notes).replace('Invite request: ', '').replace('Invite request (no star)', '')}</p>
+                  )}
                   <p className="text-xs text-[#6e6e73] mt-0.5">{r.parent_name} · {r.email}{r.phone ? ` · ${r.phone}` : ''}</p>
                   <p className="text-[11px] text-[#86868b] mt-1">Requested {String(r.created_at || '').slice(0, 16).replace('T', ' ')}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
+                  {String(r.status).startsWith('invite_') ? (
+                    <>
+                      {r.status !== 'invite_approved' && (
+                        <button onClick={() => setStatus(r.id, 'invite_approved')} disabled={busy === r.id}
+                          className="px-4 py-2 rounded-xl bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition disabled:opacity-50">
+                          Approve + Send Code
+                        </button>
+                      )}
+                      {r.status !== 'invite_denied' && (
+                        <button onClick={() => setStatus(r.id, 'invite_denied')} disabled={busy === r.id}
+                          className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition disabled:opacity-50">
+                          Deny
+                        </button>
+                      )}
+                    </>
+                  ) : (<>
                   {r.status !== 'approved' && (
                     <button onClick={() => setStatus(r.id, 'approved')} disabled={busy === r.id}
                       className="px-4 py-2 rounded-xl bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition disabled:opacity-50">
@@ -135,6 +165,7 @@ export default function LightsOutAdminPage() {
                       Back to Pending
                     </button>
                   )}
+                  </>)}
                 </div>
               </div>
             </div>

@@ -185,7 +185,7 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
 
 function RegisterModal({ onClose }: { onClose: () => void }) {
   const [events, setEvents] = useState<any[]>([]);
-  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
+  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -205,15 +205,24 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     setError('');
-    if (!f.playerName.trim() || !f.teamName.trim() || !f.starEventId || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)) {
-      setError('Please fill in the player, team, event, parent name, and a valid email.');
+    const usingCode = f.starEventId === '__code';
+    if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)
+      || (!usingCode && !f.starEventId) || (usingCode && f.inviteCode.trim().length < 4)) {
+      setError(usingCode
+        ? 'Please fill in the player, team, parent name, a valid email, and your invite code.'
+        : 'Please fill in the player, team, event, parent name, and a valid email.');
       return;
     }
     setBusy(true);
     try {
       const res = await fetch(`${API}/register`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...f, playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim() }),
+        body: JSON.stringify({
+          ...f,
+          starEventId: f.starEventId === '__code' ? undefined : f.starEventId,
+          inviteCode: f.starEventId === '__code' ? f.inviteCode.trim().toUpperCase() : undefined,
+          playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim(),
+        }),
       });
       const j = await res.json();
       if (j.success && j.data?.checkoutUrl) {
@@ -262,7 +271,12 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
               <select className={inputCls} value={f.starEventId} onChange={(e) => set('starEventId', e.target.value)} style={{ color: f.starEventId ? '#fff' : 'rgba(255,255,255,.35)' }}>
                 <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Event where the star was earned *</option>
                 {events.map((ev) => <option key={ev.id} value={ev.id} style={{ color: '#111', backgroundColor: '#fff' }}>{ev.name}</option>)}
+                <option value="__code" style={{ color: '#111', backgroundColor: '#fff' }}>I have an invite code</option>
               </select>
+              {f.starEventId === '__code' && (
+                <input className={inputCls} placeholder="Invite code (from your approval email) *" value={f.inviteCode}
+                  onChange={(e) => set('inviteCode', e.target.value.toUpperCase())} style={{ letterSpacing: '2px' }} />
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} placeholder="Birth year" value={f.birthYear} onChange={(e) => set('birthYear', e.target.value)} />
                 <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
