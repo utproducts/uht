@@ -446,15 +446,30 @@ export function AdminDash() {
   useEffect(() => {
     const API = 'https://uht.chad-157.workers.dev/api';
     const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
+    // Retry once on failure: worker deploys cause a few seconds of edge
+    // errors, and one blip should not blank half the dashboard
+    const getJson = async (url: string) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await fetch(url, { headers: devHeaders, cache: 'no-store' });
+          const j = await r.json();
+          if (r.ok || attempt === 1) return j;
+        } catch {
+          if (attempt === 1) return {};
+        }
+        if (attempt === 0) await new Promise(res => setTimeout(res, 2500));
+      }
+      return {};
+    };
     Promise.all([
-      fetch(`${API}/events/admin/list?filter=upcoming`, { headers: devHeaders }).then(r => r.json()),
-      fetch(`${API}/events/admin/list?filter=all`, { headers: devHeaders }).then(r => r.json()),
-      fetch(`${API}/analytics/reports/pending-registrations`, { headers: devHeaders }).then(r => r.json()),
-      fetch(`${API}/analytics/reports/division-totals`, { headers: devHeaders }).then(r => r.json()),
-      fetch(`${API}/users/admin/app-stats`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API}/financials/outstanding`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API}/financials/payment-methods`, { headers: devHeaders }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API}/analytics/reports/lights-out-stats`, { headers: devHeaders, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+      getJson(`${API}/events/admin/list?filter=upcoming`),
+      getJson(`${API}/events/admin/list?filter=all`),
+      getJson(`${API}/analytics/reports/pending-registrations`),
+      getJson(`${API}/analytics/reports/division-totals`),
+      getJson(`${API}/users/admin/app-stats`),
+      getJson(`${API}/financials/outstanding`),
+      getJson(`${API}/financials/payment-methods`),
+      getJson(`${API}/analytics/reports/lights-out-stats`),
     ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson, payJson, loJson]) => {
       setPaymentMethods(payJson?.success ? (payJson.data || []) : []);
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));

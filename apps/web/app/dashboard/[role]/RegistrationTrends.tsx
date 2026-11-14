@@ -76,20 +76,25 @@ export default function RegistrationTrends() {
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
-    fetch(`${API}/api/analytics/reports/season-comparison`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => {
-        if (r.status === 401 || r.status === 403) setAuthFailed(true);
-        return r.json();
-      })
-      .then(json => {
-        if (json.success) {
-          setSeasons(json.data.seasons || []);
+    // Retry once after a pause: a worker deploy causes a few seconds of
+    // 500s at the edge, and the dashboard should ride that out invisibly
+    const load = async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await fetch(`${API}/api/analytics/reports/season-comparison`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            cache: 'no-store',
+          });
+          if (r.status === 401 || r.status === 403) { setAuthFailed(true); return; }
+          const json = await r.json();
+          if (json.success) { setSeasons(json.data.seasons || []); return; }
+        } catch {
+          if (attempt === 1) { setAuthFailed(true); return; }
         }
-      })
-      .catch(() => setAuthFailed(true))
-      .finally(() => setLoading(false));
+        if (attempt === 0) await new Promise(res => setTimeout(res, 2500));
+      }
+    };
+    load().finally(() => setLoading(false));
   }, []);
 
   if (loading) {
