@@ -183,9 +183,10 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function RegisterModal({ onClose, onRequestInstead }: { onClose: () => void; onRequestInstead: () => void }) {
+function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: () => void; onRequestInstead: () => void; initialCode?: string }) {
+  const [mode, setMode] = useState<'star' | 'code'>(initialCode ? 'code' : 'star');
   const [events, setEvents] = useState<any[]>([]);
-  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
+  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: initialCode || '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -205,7 +206,7 @@ function RegisterModal({ onClose, onRequestInstead }: { onClose: () => void; onR
 
   const submit = async () => {
     setError('');
-    const usingCode = f.starEventId === '__code';
+    const usingCode = mode === 'code';
     if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)
       || (!usingCode && !f.starEventId) || (usingCode && f.inviteCode.trim().length < 4)) {
       setError(usingCode
@@ -219,8 +220,8 @@ function RegisterModal({ onClose, onRequestInstead }: { onClose: () => void; onR
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...f,
-          starEventId: f.starEventId === '__code' ? undefined : f.starEventId,
-          inviteCode: f.starEventId === '__code' ? f.inviteCode.trim().toUpperCase() : undefined,
+          starEventId: mode === 'code' ? undefined : f.starEventId,
+          inviteCode: mode === 'code' ? f.inviteCode.trim().toUpperCase() : undefined,
           playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim(),
         }),
       });
@@ -263,17 +264,29 @@ function RegisterModal({ onClose, onRequestInstead }: { onClose: () => void; onR
             <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-1`}>$550 PER PLAYER (OR $200 DEPOSIT) &middot; ALL SWAG INCLUDED</p>
             <p className={`${rajdhani.className} text-[#ffb84d]/85 text-sm font-semibold tracking-[0.12em] mb-4`}>EXTREMELY LIMITED EVENT &middot; A $200 DEPOSIT HOLDS YOUR SPOT</p>
             <div className="space-y-3">
+              {/* How are you invited? */}
+              <div className="grid grid-cols-2 gap-2">
+                {([['star', 'EARNED A THREE STAR'], ['code', 'I HAVE AN INVITE CODE']] as const).map(([val, label]) => (
+                  <button key={val} type="button" onClick={() => setMode(val)}
+                    className={`${rajdhani.className} rounded-xl px-3 py-2.5 text-[13px] font-bold tracking-[0.1em] transition-all`}
+                    style={mode === val
+                      ? { background: 'rgba(0,204,255,.12)', border: '2px solid rgba(0,204,255,.75)', color: '#00ccff', boxShadow: '0 0 18px rgba(0,204,255,.2)' }
+                      : { background: 'rgba(10,18,40,.6)', border: '2px solid rgba(29,58,86,.9)', color: 'rgba(255,255,255,.55)' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-3 gap-3">
                 <input className={`${inputCls} col-span-2`} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
                 <input className={inputCls} placeholder="Jersey #" value={f.jerseyNumber} onChange={(e) => set('jerseyNumber', e.target.value)} />
               </div>
               <input className={inputCls} placeholder="Team name *" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
-              <select className={inputCls} value={f.starEventId} onChange={(e) => set('starEventId', e.target.value)} style={{ color: f.starEventId ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Event where the star was earned *</option>
-                {events.map((ev) => <option key={ev.id} value={ev.id} style={{ color: '#111', backgroundColor: '#fff' }}>{ev.name}</option>)}
-                <option value="__code" style={{ color: '#111', backgroundColor: '#fff' }}>I have an invite code</option>
-              </select>
-              {f.starEventId === '__code' && (
+              {mode === 'star' ? (
+                <select className={inputCls} value={f.starEventId} onChange={(e) => set('starEventId', e.target.value)} style={{ color: f.starEventId ? '#fff' : 'rgba(255,255,255,.35)' }}>
+                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Event where the star was earned *</option>
+                  {events.map((ev) => <option key={ev.id} value={ev.id} style={{ color: '#111', backgroundColor: '#fff' }}>{ev.name}</option>)}
+                </select>
+              ) : (
                 <input className={inputCls} placeholder="Invite code (from your approval email) *" value={f.inviteCode}
                   onChange={(e) => set('inviteCode', e.target.value.toUpperCase())} style={{ letterSpacing: '2px' }} />
               )}
@@ -332,10 +345,20 @@ export default function LightsOutPage() {
   const [showRequest, setShowRequest] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
   const [paidState, setPaidState] = useState<null | 'verifying' | 'paid' | 'failed'>(null);
+  const [inviteParam, setInviteParam] = useState('');
 
   // Back from Stripe: confirm the session actually paid, then celebrate
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
+    // Approval emails link here with ?invite=GLOW-XXXXX - open the form with
+    // the code already in place so families never hunt for where it goes
+    const code = q.get('invite');
+    if (code) {
+      setInviteParam(code.toUpperCase());
+      setShowRegister(true);
+      window.history.replaceState({}, '', '/lights-out/');
+      return;
+    }
     const reg = q.get('reg');
     const sid = q.get('session_id');
     if (!reg || !sid) return;
@@ -513,7 +536,7 @@ export default function LightsOutPage() {
         <p className="text-center text-[11px] text-white/35 pb-10">Ultimate Hockey Tournaments &middot; Lights Out Invitational &middot; St. Louis, MO</p>
       </div>
 
-      {showRegister && <RegisterModal onClose={() => setShowRegister(false)} onRequestInstead={() => { setShowRegister(false); setShowRequest(true); }} />}
+      {showRegister && <RegisterModal onClose={() => setShowRegister(false)} onRequestInstead={() => { setShowRegister(false); setShowRequest(true); }} initialCode={inviteParam || undefined} />}
       {showRequest && <RequestInviteModal onClose={() => setShowRequest(false)} />}
       {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
       {paidState && (

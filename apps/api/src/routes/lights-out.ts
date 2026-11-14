@@ -303,7 +303,10 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
           <p style="margin:0 0 14px;">Your invite request made the cut. ${row.player_name} is officially invited to the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis. Dark arena, glowing ice, and every player keeps the custom glow jerseys, collector stick, and glow puck.</p>
           <p style="margin:0 0 10px;">Your single-use invite code:</p>
           <p style="margin:0 0 14px;text-align:center;"><span style="display:inline-block;background:#04091a;border:1px solid rgba(57,255,20,.5);border-radius:10px;padding:12px 26px;font-size:22px;font-weight:bold;letter-spacing:4px;color:#39ff14;">${code}</span></p>
-          <p style="margin:0 0 14px;">To lock the spot: go to <a href="https://ultimatetournaments.com/lights-out" style="color:#00ccff;">ultimatetournaments.com/lights-out</a>, tap <b>Register Now</b>, choose <b>"I have an invite code"</b>, and enter the code above. $550 per player, or a $200 non-refundable deposit holds the spot.</p>
+          <p style="margin:0 0 16px;text-align:center;">
+            <a href="https://ultimatetournaments.com/lights-out?invite=${encodeURIComponent(code)}" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">REGISTER WITH THIS CODE</a>
+          </p>
+          <p style="margin:0 0 14px;">That button opens the registration form with your code already entered - just add ${row.player_name}'s details and pay. $550 per player, or a $200 non-refundable deposit holds the spot. (Entering it by hand? Tap Register Now on the Lights Out page and choose "I have an invite code.")</p>
           <p style="margin:0;color:#ffb84d;font-size:13px;font-weight:bold;">This is an extremely limited event - the code does not hold a spot until payment is made.</p>
         `));
       await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out invite code issued: ${row.player_name} (${code})`,
