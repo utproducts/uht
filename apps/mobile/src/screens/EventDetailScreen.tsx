@@ -1599,7 +1599,7 @@ export default function EventDetailScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.navy} colors={[colors.navy]} />}
         ListHeaderComponent={
           <>
-            <LightsOutBanner />
+            <LightsOutBanner variant="card" />
             <TouchableOpacity style={styles.starsRulesCard} activeOpacity={0.8}
               onPress={() => Linking.openURL('https://ultimatetournaments.com/three-stars')}>
               <Ionicons name="star" size={18} color="#b8860b" />
