@@ -431,6 +431,23 @@ export default function DirectorGamesScreen({ navigation }: any) {
                   {(editGame.venue_name || editGame.rink_name) ? `\n${[editGame.venue_name, editGame.rink_name].filter(Boolean).join(' - ')}` : ''}
                 </Text>
 
+                {/* Full console: goals, penalties, shots, lineups - works on
+                    final games too for after-the-fact corrections */}
+                <TouchableOpacity
+                  style={styles.sheetBtn}
+                  onPress={() => {
+                    const gid = editGame.id;
+                    setEditGame(null);
+                    navigation.navigate('ScoringConsole', { gameId: gid });
+                  }}
+                >
+                  <Ionicons name="document-text-outline" size={18} color="#fff" />
+                  <Text style={styles.sheetBtnText} maxFontSizeMultiplier={1.2}>Open Full Scoresheet</Text>
+                </TouchableOpacity>
+                <Text style={styles.sheetBtnHint} maxFontSizeMultiplier={1.3}>
+                  Add or fix goals, penalties, and shots on goal - even after the game is final.
+                </Text>
+
                 {/* Home Score */}
                 <View style={styles.editScoreRow}>
                   <Text style={styles.editTeamName} numberOfLines={1}>{editGame.home_team_name || 'Home'}</Text>
@@ -766,6 +783,28 @@ const styles = StyleSheet.create({
     color: '#888',
     marginBottom: spacing.lg,
     textAlign: 'center',
+  },
+  sheetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.navy,
+    borderRadius: radii.lg,
+    paddingVertical: 13,
+    marginBottom: spacing.xs,
+  },
+  sheetBtnText: {
+    fontSize: 15,
+    fontFamily: fonts.bold,
+    color: '#fff',
+  },
+  sheetBtnHint: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: spacing.lg,
   },
 
   // Edit score rows

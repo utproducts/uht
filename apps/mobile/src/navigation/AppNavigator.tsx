@@ -72,6 +72,7 @@ function MenuStackNavigator() {
       <MenuStack.Screen name="AdminRegistrations" component={AdminRegistrationsScreen} options={{ animation: 'slide_from_right' }} />
       <MenuStack.Screen name="ScoreGame" component={ScoreGameScreen} options={{ animation: 'slide_from_right' }} />
       <MenuStack.Screen name="DirectorGames" component={DirectorGamesScreen} options={{ animation: 'slide_from_right' }} />
+      <MenuStack.Screen name="ScoringConsole" component={ScoringConsoleScreen} options={{ animation: 'slide_from_right' }} />
       <MenuStack.Screen name="Shop" component={ShopScreen} options={{ animation: 'slide_from_right' }} />
     </MenuStack.Navigator>
   );

@@ -7,6 +7,17 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 
 const API_BASE = 'https://uht.chad-157.workers.dev/api';
 
+// Staff entry (directors/admins arriving from the app or while signed in on
+// the website): no PIN in the URL - writes authenticate with the signed-in
+// account's token instead. The API's game-write gate accepts either.
+const staffToken = () => { try { return localStorage.getItem('uht_token') || ''; } catch { return ''; } };
+const authHeaders = (pin?: string | null): Record<string, string> => {
+  const p = (pin || '').trim();
+  if (p) return { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': p };
+  const t = staffToken();
+  return t ? { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` } : { 'Content-Type': 'application/json' };
+};
+
 // USA Hockey penalty codes — grouped by severity
 const PENALTIES_MINOR = [
   { code: 'TRIP', name: 'Tripping', min: 2 },
@@ -105,6 +116,8 @@ function ScoringPageInner() {
   const searchParams = useSearchParams();
   const gameId = searchParams.get('gameId');
   const pin = searchParams.get('pin');
+  // Keypad PIN or a signed-in staff account - either unlocks writes
+  const canWrite = () => !!pin || !!staffToken();
 
   const [game, setGame] = useState<GameData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,6 +127,8 @@ function ScoringPageInner() {
   const [showLog, setShowLog] = useState(false);
   // Scoresheet period filter (GameSheet-style header tabs)
   const [viewPeriod, setViewPeriod] = useState<number | 'all'>('all');
+  // Shots modal period override (null = the game's current/last period)
+  const [shotsPeriod, setShotsPeriod] = useState<number | null>(null);
   // Goal/penalty line being edited
   const [editEvent, setEditEvent] = useState<GameEvent | null>(null);
   // Announcer script popup (the megaphone)
@@ -340,7 +355,7 @@ function ScoringPageInner() {
     }
   }
 
-  const headers = () => ({ 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin || '' });
+  const headers = () => authHeaders(pin);
 
   // ===== OFFLINE OUTBOX =====
   // Rink wifi dies mid-game. Every event carries a clientEventId (server
@@ -406,7 +421,7 @@ function ScoringPageInner() {
   }, [gameId, pin]);
 
   const postEvent = async (payload: any) => {
-    if (!gameId || !pin || posting) return;
+    if (!gameId || !canWrite() || posting) return;
     const stamped = { ...payload, clientEventId: (crypto as any).randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}` };
     setPosting(true);
 
@@ -487,7 +502,7 @@ function ScoringPageInner() {
   };
 
   const postShots = (teamId: string, period2: number, shotCount: number) => {
-    if (!gameId || !pin) return;
+    if (!gameId || !canWrite()) return;
     const key = `${teamId}|${period2}`;
     setShotsLocal(teamId, period2, shotCount);
     shotsPending.current[key] = shotCount;
@@ -511,17 +526,17 @@ function ScoringPageInner() {
   };
 
   const deleteEvent = async (eventId: string) => {
-    if (!gameId || !pin) return;
+    if (!gameId || !canWrite()) return;
     try {
       await fetch(`${API_BASE}/scoring/games/${gameId}/events/${eventId}`, {
-        method: 'DELETE', headers: { 'X-Scorekeeper-Pin': pin },
+        method: 'DELETE', headers: authHeaders(pin),
       });
       await fetchGame();
     } catch { /* */ }
   };
 
   const loadLineups = async () => {
-    if (!gameId || !pin) return;
+    if (!gameId || !canWrite()) return;
     setPosting(true);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/lineups/load`, {
@@ -536,7 +551,7 @@ function ScoringPageInner() {
   // Lineups load themselves the moment rosters are known - scorekeepers should
   // never have to know what a lineup is (server side is INSERT OR IGNORE)
   useEffect(() => {
-    if (!gameId || !pin || !rosterLoaded || lineupsLoaded) return;
+    if (!gameId || !canWrite() || !rosterLoaded || lineupsLoaded) return;
     if (homePlayers.length === 0 && awayPlayers.length === 0) return;
     fetch(`${API_BASE}/scoring/games/${gameId}/lineups/load`, { method: 'POST', headers: headers() })
       .then(r => r.json())
@@ -564,7 +579,7 @@ function ScoringPageInner() {
   };
 
   const saveEventEdit = async (fields: any) => {
-    if (!gameId || !pin || !editEvent) return;
+    if (!gameId || !canWrite() || !editEvent) return;
     setPosting(true);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/events/${editEvent.id}`, {
@@ -889,7 +904,7 @@ function ScoringPageInner() {
                 className="py-5 rounded-2xl bg-amber-500 text-white text-base font-black active:bg-amber-600 disabled:opacity-50">
                 PENALTY
               </button>
-              <button onClick={() => setModal('shots')} disabled={posting}
+              <button onClick={() => { setShotsPeriod(null); setModal('shots'); }} disabled={posting}
                 className="py-5 rounded-2xl bg-[#003e79] text-white text-base font-black active:bg-[#002d5a] disabled:opacity-50">
                 SHOTS
               </button>
@@ -942,6 +957,24 @@ function ScoringPageInner() {
         {isFinal && (
           <div className="space-y-3">
             <div className="text-center py-5 bg-[#003e79] text-white rounded-2xl text-xl font-black">FINAL</div>
+            {/* Post-final amendments: scorekeepers and directors can add a
+                missed goal, penalty, or shot count after the game ends -
+                existing lines stay tappable below for edits/removal */}
+            <div className="grid grid-cols-3 gap-3">
+              <button onClick={openGoal} disabled={posting}
+                className="py-4 rounded-2xl bg-emerald-600 text-white text-sm font-black active:bg-emerald-700 disabled:opacity-50">
+                ADD GOAL
+              </button>
+              <button onClick={openPenalty} disabled={posting}
+                className="py-4 rounded-2xl bg-amber-500 text-white text-sm font-black active:bg-amber-600 disabled:opacity-50">
+                ADD PENALTY
+              </button>
+              <button onClick={() => { setShotsPeriod(null); setModal('shots'); }} disabled={posting}
+                className="py-4 rounded-2xl bg-[#003e79] text-white text-sm font-black active:bg-[#002d5a] disabled:opacity-50">
+                SHOTS
+              </button>
+            </div>
+            <p className="text-center text-[11px] text-[#6e6e73] font-semibold">Forgot something? Add it here, or tap any line on the sheet below to fix or remove it.</p>
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setModal('three-stars')}
                 className="py-4 rounded-2xl bg-amber-500 text-white text-sm font-bold active:bg-amber-600">
@@ -957,7 +990,7 @@ function ScoringPageInner() {
                 className="py-3 rounded-2xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">
                 Add Note
               </button>
-              <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
+              <a href={`/scores/game?gameId=${gameId}${pin ? `&pin=${pin}` : ''}`} target="_blank"
                 className="py-3 rounded-2xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7] text-center">
                 View Sheet
               </a>
@@ -1362,24 +1395,38 @@ function ScoringPageInner() {
       )}
 
       {/* ==================== SHOTS MODAL ==================== */}
-      {modal === 'shots' && (
+      {modal === 'shots' && (() => {
+        const maxP = Math.max(3, period || 0, ...((game.events || []) as any[]).map((e: any) => e.period || 0));
+        const sp = Math.min(Math.max(shotsPeriod ?? (period || 1), 1), maxP);
+        const pds: number[] = []; for (let i = 1; i <= maxP; i++) pds.push(i);
+        return (
         <FullScreenModal title="SHOT COUNT" onClose={() => setModal(null)}>
-          <p className="text-xs font-bold text-[#86868b] uppercase tracking-widest text-center mb-4">Period {period}</p>
+          <div className="flex justify-center mb-4">
+            <div className="inline-flex bg-[#f5f5f7] rounded-full p-1">
+              {pds.map(p2 => (
+                <button key={p2} onClick={() => setShotsPeriod(p2)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${sp === p2 ? 'bg-[#003e79] text-white' : 'text-[#6e6e73]'}`}>
+                  {p2 > 3 ? (p2 === 4 ? 'OT' : `OT${p2 - 3}`) : `P${p2}`}
+                </button>
+              ))}
+            </div>
+          </div>
           {[{ name: game.home_team_name, id: game.home_team_id }, { name: game.away_team_name, id: game.away_team_id }].map(team => (
             <div key={team.id} className="w-full bg-[#fafafa] rounded-2xl p-6 mb-4">
               <p className="text-center font-bold text-[#1d1d1f] mb-4">{team.name}</p>
               <div className="flex items-center justify-center gap-6">
-                <button onClick={() => { const cur = shotsMap[team.id]?.[period] || 0; if (cur > 0) postShots(team.id, period, cur - 1); }}
+                <button onClick={() => { const cur = shotsMap[team.id]?.[sp] || 0; if (cur > 0) postShots(team.id, sp, cur - 1); }}
                   className="w-14 h-14 rounded-full bg-red-500 text-white text-2xl font-black flex items-center justify-center active:bg-red-600">−</button>
-                <span className="text-5xl font-black text-[#003e79] w-20 text-center tabular-nums">{shotsMap[team.id]?.[period] || 0}</span>
-                <button onClick={() => { const cur = shotsMap[team.id]?.[period] || 0; postShots(team.id, period, cur + 1); }}
+                <span className="text-5xl font-black text-[#003e79] w-20 text-center tabular-nums">{shotsMap[team.id]?.[sp] || 0}</span>
+                <button onClick={() => { const cur = shotsMap[team.id]?.[sp] || 0; postShots(team.id, sp, cur + 1); }}
                   className="w-14 h-14 rounded-full bg-emerald-600 text-white text-2xl font-black flex items-center justify-center active:bg-emerald-700">+</button>
               </div>
             </div>
           ))}
           <button onClick={() => setModal(null)} className="w-full py-4 rounded-full bg-[#003e79] text-white text-lg font-bold active:bg-[#002d5a]">Done</button>
         </FullScreenModal>
-      )}
+        );
+      })()}
 
       {/* ==================== MORE MENU ==================== */}
       {modal === 'menu' && (
@@ -1391,7 +1438,7 @@ function ScoringPageInner() {
             <MenuBtn label="Add Note" desc="Timeout, injury, or note" onClick={() => setModal('notes')} />
             <MenuBtn label="Officials" desc="Record game officials" onClick={() => setModal('officials')} />
             <MenuBtn label="View Roster" desc={`${homePlayers.length + awayPlayers.length} players`} onClick={() => setModal('roster')} />
-            <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
+            <a href={`/scores/game?gameId=${gameId}${pin ? `&pin=${pin}` : ''}`} target="_blank"
               className="block w-full py-4 px-4 rounded-2xl bg-[#f5f5f7] text-left active:bg-[#e8e8ed]">
               <p className="text-sm font-bold text-[#1d1d1f]">View Score Sheet</p>
               <p className="text-xs text-[#86868b]">Public game sheet view</p>
@@ -1884,7 +1931,7 @@ function OfficialsModal({ gameId, pin, onClose, onFlash }: { gameId: string; pin
     try {
       await fetch(`${API_BASE}/scoring/games/${gameId}/officials`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin },
+        headers: authHeaders(pin),
         body: JSON.stringify({ officials }),
       });
       onFlash('green');
@@ -1943,7 +1990,7 @@ function DetailsSection({ game, gameId, pin, onFlash, warnings, onFix, onDismiss
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/scoring/games/${gameId}/scorekeeper-info`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin },
+        method: 'PUT', headers: authHeaders(pin),
         body: JSON.stringify({ scorekeeperName: skName, scorekeeperPhone: skPhone }),
       });
       const j = await res.json();
@@ -2029,7 +2076,7 @@ function LineupSection({ label, teamName, side, gameId, pin, onChanged, onFlash 
   const signoff = side?.signoff;
   const playing = players.filter((p: any) => (p.status || 'playing') === 'playing').length;
 
-  const hdrs = { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin };
+  const hdrs = authHeaders(pin);
 
   const setStatus = async (p: any, next: string) => {
     setBusyId(p.id);
@@ -2236,7 +2283,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
   const officials = lineupState?.officials || [];
   const signoffs: any[] = lineupState?.officialsSignoffs
     || (lineupState?.officialsSignoff ? [{ id: 'legacy', ...lineupState.officialsSignoff, signed_at: lineupState.officialsSignoff.at }] : []);
-  const hdrs = { 'Content-Type': 'application/json', 'X-Scorekeeper-Pin': pin };
+  const hdrs = authHeaders(pin);
 
   const addOfficial = async () => {
     if (refName.trim().length < 2) return;
@@ -2337,7 +2384,7 @@ function PostGameSection({ gameId, pin, lineupState, onChanged, setModal, isFina
         </button>
       </div>
 
-      <a href={`/scores/game?gameId=${gameId}&pin=${pin}`} target="_blank"
+      <a href={`/scores/game?gameId=${gameId}${pin ? `&pin=${pin}` : ''}`} target="_blank"
         className="block text-center py-3 rounded-xl bg-[#e8e8ed] text-[#3d3d3d] text-sm font-bold active:bg-[#d2d2d7]">
         View Full Scoresheet
       </a>
