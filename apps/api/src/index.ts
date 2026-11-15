@@ -1300,6 +1300,14 @@ export default {
         if (r.sent || r.activated) console.log(`Lights Out sweep: sent=${r.sent} activated=${r.activated}`);
       }).catch((e: any) => console.error('Lights Out sweep error:', e)));
     }
+    // Monday photo last call: families get through Monday night to upload
+    // weekend photos, mosaic goes out Tuesday — 16:00 UTC hour (10am CT),
+    // Mondays only (the sweep itself checks the day), once per event
+    if (new Date().getUTCHours() === 16) {
+      ctx.waitUntil(import('./lib/photo-lastcall').then(m => m.runPhotoLastCallSweep(env.DB)).then((r: any) => {
+        if (r.sent) console.log(`Photo last-call sweep: events=${r.events} sent=${r.sent}`);
+      }).catch((e: any) => console.error('Photo last-call sweep error:', e)));
+    }
     // Coupon reminders (unused post-registration $100 codes) — 17:00 UTC
     // window (11am CST); same idempotent daily-cohort pattern as above
     if (new Date().getUTCHours() === 17) {
