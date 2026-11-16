@@ -94,6 +94,52 @@ export default function LightsOutAdminPage() {
         approving sends the confirmation email to the family.
       </p>
 
+      {/* Age-group rollup: big number = paid registrations, sub-line splits
+          by birth year and shows open invite requests. Divisions use the
+          current (2026-27) season - what each kid is right now. */}
+      {loaded && rows.length > 0 && (() => {
+        const divisionOf = (by: any): string => {
+          const y = parseInt(String(by || '').trim(), 10);
+          if (!y || y < 2004 || y > 2023) return 'Unknown';
+          if (y >= 2018) return 'Mite';
+          if (y >= 2016) return 'Squirt';
+          if (y >= 2014) return 'Pee Wee';
+          if (y >= 2012) return 'Bantam';
+          return 'Midget';
+        };
+        const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
+        const agg: Record<string, { paid: number; req: number; years: Record<string, number> }> = {};
+        for (const r of rows) {
+          if (!isPaid(r) && !isReq(r)) continue; // abandoned checkouts don't count
+          const d = divisionOf(r.birth_year);
+          const a = (agg[d] = agg[d] || { paid: 0, req: 0, years: {} });
+          if (isPaid(r)) {
+            a.paid++;
+            const yk = String(r.birth_year || '?').trim();
+            a.years[yk] = (a.years[yk] || 0) + 1;
+          } else a.req++;
+        }
+        const shown = ORDER.filter(d => agg[d]);
+        if (shown.length === 0) return null;
+        return (
+          <div className="mb-5">
+            <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Registered by age group</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {shown.map(d => (
+                <div key={d} className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+                  <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">{d}</p>
+                  <p className="text-2xl font-black text-[#003e79] leading-tight">{agg[d].paid}</p>
+                  <p className="text-[11px] text-[#86868b] font-semibold leading-snug">
+                    {Object.entries(agg[d].years).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([y, n]) => `${y}: ${n}`).join(' · ') || 'none paid yet'}
+                    {agg[d].req ? `${Object.keys(agg[d].years).length ? ' · ' : ''}+${agg[d].req} requested` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="flex flex-wrap gap-2 mb-5">
         {(['all', 'registered', 'requests', 'incomplete', 'pending', 'approved', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
