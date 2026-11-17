@@ -108,15 +108,24 @@ export default function LightsOutAdminPage() {
           return 'Midget';
         };
         const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
-        const agg: Record<string, { paid: number; req: number; years: Record<string, number> }> = {};
+        const posOf = (p: any): string => {
+          const s = String(p || '').trim().toUpperCase();
+          if (s.startsWith('F')) return 'F';
+          if (s.startsWith('D')) return 'D';
+          if (s.startsWith('G')) return 'G';
+          return '?';
+        };
+        const agg: Record<string, { paid: number; req: number; years: Record<string, number>; pos: Record<string, number> }> = {};
         for (const r of rows) {
           if (!isPaid(r) && !isReq(r)) continue; // abandoned checkouts don't count
           const d = divisionOf(r.birth_year);
-          const a = (agg[d] = agg[d] || { paid: 0, req: 0, years: {} });
+          const a = (agg[d] = agg[d] || { paid: 0, req: 0, years: {}, pos: {} });
           if (isPaid(r)) {
             a.paid++;
             const yk = String(r.birth_year || '?').trim();
             a.years[yk] = (a.years[yk] || 0) + 1;
+            const pk = posOf(r.position);
+            a.pos[pk] = (a.pos[pk] || 0) + 1;
           } else a.req++;
         }
         const shown = ORDER.filter(d => agg[d]);
@@ -133,6 +142,14 @@ export default function LightsOutAdminPage() {
                     {Object.entries(agg[d].years).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([y, n]) => `${y}: ${n}`).join(' · ') || 'none paid yet'}
                     {agg[d].req ? `${Object.keys(agg[d].years).length ? ' · ' : ''}+${agg[d].req} requested` : ''}
                   </p>
+                  {agg[d].paid > 0 && (
+                    <p className="text-[11px] text-[#0a6ebd] font-bold leading-snug mt-0.5">
+                      {(['F', 'D', 'G', '?'] as const)
+                        .filter(k => agg[d].pos[k])
+                        .map(k => `${k === 'F' ? 'Fwd' : k === 'D' ? 'Def' : k === 'G' ? 'Goalie' : 'N/A'} ${agg[d].pos[k]}`)
+                        .join(' · ')}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
