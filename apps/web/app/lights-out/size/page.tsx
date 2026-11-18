@@ -126,12 +126,11 @@ function SizePicker() {
               </p>
               <p className="text-xs mt-3" style={{ color: '#7fd8ff' }}>
                 The swag will be waiting at check-in, right before opening ceremonies on June 11th.
-                Need a change later? Just open this link again.
+                Sizes are final once submitted - the order goes in as entered.
               </p>
-              <button onClick={() => setState('ready')}
-                className="mt-4 text-xs font-bold underline" style={{ color: '#7fd8ff' }}>
-                Change sizes
-              </button>
+              <p className="text-xs mt-2" style={{ color: '#55637a' }}>
+                Spot a mistake? Email <a href="mailto:info@ultimatetournaments.com" style={{ color: '#7fd8ff' }}>info@ultimatetournaments.com</a> right away.
+              </p>
             </div>
           )}
           {(state === 'ready' || state === 'saving') && (
@@ -139,7 +138,7 @@ function SizePicker() {
               <p className="text-xs font-bold tracking-widest text-center mb-1" style={{ color: '#7fd8ff' }}>SWAG SIZES</p>
               <h1 className="text-xl font-bold text-white text-center mb-1">{playerName}</h1>
               <p className="text-xs text-center mb-5" style={{ color: '#7fd8ff' }}>
-                Pick what {firstName} will wear in June 2027 - when in doubt, size up. You can change these any time before the event.
+                Pick what {firstName} will wear in June 2027 - when in doubt, size up. Double check before you save: once sizes are submitted, the order goes in.
               </p>
               <div className="mb-5">
                 <p className="text-xs font-bold tracking-widest mb-2" style={{ color: '#39ff14' }}>ON THE JERSEY</p>
