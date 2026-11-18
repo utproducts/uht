@@ -2214,6 +2214,21 @@ eventRoutes.patch('/admin/registration/:regId', authMiddleware, requireRole('adm
       }
       setClauses.push('event_division_id = ?');
       params.push(div.id);
+      // Persist the level where admins actually see it. Without this, picking
+      // a level the event has no division for fell back to the bare age-group
+      // division and the save looked like it did nothing. The team file is
+      // the source of truth across tournaments, so the level lands there too.
+      if (!useNormalized) {
+        await db.prepare("UPDATE event_registrations SET division = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(lvl || null, regId).run().catch(() => {});
+      }
+      if (data.division_level !== undefined) {
+        const regTeam = await db.prepare(`SELECT team_id FROM ${tbl} WHERE id = ?`).bind(regId).first<any>();
+        if (regTeam?.team_id) {
+          await db.prepare("UPDATE teams SET division_level = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(lvl || null, regTeam.team_id).run().catch(() => {});
+        }
+      }
     }
   }
 
