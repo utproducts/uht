@@ -446,58 +446,60 @@ export function AdminDash() {
   useEffect(() => {
     const API = 'https://uht.chad-157.workers.dev/api';
     const devHeaders: Record<string, string> = { 'X-Dev-Bypass': 'true', ...(typeof window !== 'undefined' && localStorage.getItem('uht_token') ? { Authorization: `Bearer ${localStorage.getItem('uht_token')}` } : {}) };
-    // Retry once on failure: worker deploys cause a few seconds of edge
-    // errors, and one blip should not blank half the dashboard
+    // Up to 3 tries with growing pauses: worker deploys cause a few seconds
+    // of edge errors and D1 rate-limits bursts, so one blip should not blank
+    // a card. A 12s timeout keeps a hung request from spinning forever.
     const getJson = async (url: string) => {
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const r = await fetch(url, { headers: devHeaders, cache: 'no-store' });
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 12000);
+          const r = await fetch(url, { headers: devHeaders, cache: 'no-store', signal: ctrl.signal });
+          clearTimeout(timer);
           const j = await r.json();
-          if (r.ok || attempt === 1) return j;
+          if (r.ok || attempt === 2) return j;
         } catch {
-          if (attempt === 1) return {};
+          if (attempt === 2) return {};
         }
-        if (attempt === 0) await new Promise(res => setTimeout(res, 2500));
+        await new Promise(res => setTimeout(res, 1500 * (attempt + 1)));
       }
       return {};
     };
-    Promise.all([
-      getJson(`${API}/events/admin/list?filter=upcoming`),
-      getJson(`${API}/events/admin/list?filter=all`),
-      getJson(`${API}/analytics/reports/pending-registrations`),
-      getJson(`${API}/analytics/reports/division-totals`),
-      getJson(`${API}/users/admin/app-stats`),
-      getJson(`${API}/financials/outstanding`),
-      getJson(`${API}/financials/payment-methods`),
-      getJson(`${API}/analytics/reports/lights-out-stats`),
-    ]).then(([upJson, allJson, pendJson, divJson, appJson, owedJson, payJson, loJson]) => {
-      setPaymentMethods(payJson?.success ? (payJson.data || []) : []);
+    const mergeStats = (patch: Record<string, any>) => setStats((s: any) => ({ ...(s || {}), ...patch }));
+    // Each call fills in its own cards as it lands - the page never waits
+    // for the slowest of 8 requests. One events call instead of two:
+    // "upcoming" is derived client-side.
+    getJson(`${API}/events/admin/list?filter=all`).then(allJson => {
       const noTest = (list: any[]) => (list || []).filter((e: any) => !e.is_test && !String(e.name || '').startsWith('claude-test'));
-      const upcoming = noTest(upJson.success ? upJson.data : []);
       const all = noTest(allJson.success ? allJson.data : []);
+      const today = new Date().toISOString().split('T')[0];
+      const upcoming = all.filter((e: any) => String(e.end_date || '') >= today);
       setEvents(upcoming);
-      setPendingCount(pendJson.success ? (pendJson.data?.length || 0) : 0);
-      setDivisionTotals(divJson.success ? (divJson.data || []) : []);
-
-      const totalTeams = all.reduce((s: number, e: any) => s + (e.registration_count || 0), 0);
-      const totalRevenue = all.reduce((s: number, e: any) => s + (e.total_revenue_cents || 0), 0);
-
-      setStats({
+      mergeStats({
         upcomingEvents: upcoming.length,
         totalEvents: all.length,
-        totalTeams,
-        totalRevenue,
-        appUsers: appJson?.success ? (appJson.data?.app_accounts || 0) : null,
-        owedCents: owedJson?.success ? (owedJson.data?.owed_cents || 0) : 0,
-        owingTeams: owedJson?.success ? (owedJson.data?.owing_teams || 0) : 0,
-        pushUsers: appJson?.success ? (appJson.data?.push_users || 0) : 0,
-        loViews: loJson?.success ? (loJson.data?.views || 0) : null,
-        loViews7d: loJson?.success ? (loJson.data?.views_7d || 0) : 0,
-        loRegs: loJson?.success ? (loJson.data?.registrations || 0) : 0,
-        loReqs: loJson?.success ? (loJson.data?.invite_requests || 0) : 0,
+        totalTeams: all.reduce((s: number, e: any) => s + (e.registration_count || 0), 0),
+        totalRevenue: all.reduce((s: number, e: any) => s + (e.total_revenue_cents || 0), 0),
       });
-      setLoadingStats(false);
-    }).catch(() => setLoadingStats(false));
+    }).finally(() => setLoadingStats(false));
+    getJson(`${API}/analytics/reports/pending-registrations`).then(pendJson => {
+      setPendingCount(pendJson.success ? (pendJson.data?.length || 0) : 0);
+    });
+    getJson(`${API}/analytics/reports/division-totals`).then(divJson => {
+      setDivisionTotals(divJson.success ? (divJson.data || []) : []);
+    });
+    getJson(`${API}/users/admin/app-stats`).then(appJson => {
+      if (appJson?.success) mergeStats({ appUsers: appJson.data?.app_accounts || 0, pushUsers: appJson.data?.push_users || 0 });
+    });
+    getJson(`${API}/financials/outstanding`).then(owedJson => {
+      if (owedJson?.success) mergeStats({ owedCents: owedJson.data?.owed_cents || 0, owingTeams: owedJson.data?.owing_teams || 0 });
+    });
+    getJson(`${API}/financials/payment-methods`).then(payJson => {
+      setPaymentMethods(payJson?.success ? (payJson.data || []) : []);
+    });
+    getJson(`${API}/analytics/reports/lights-out-stats`).then(loJson => {
+      if (loJson?.success) mergeStats({ loViews: loJson.data?.views || 0, loViews7d: loJson.data?.views_7d || 0, loRegs: loJson.data?.registrations || 0, loReqs: loJson.data?.invite_requests || 0 });
+    });
   }, []);
 
   if (loadingStats) {
@@ -515,12 +517,12 @@ export function AdminDash() {
           <StatCard label="Expected Revenue" value={`$${Math.round((stats?.owedCents || 0) / 100).toLocaleString()}`} sub={`Owed, not yet paid${stats?.owingTeams ? ` · ${stats.owingTeams} teams` : ''} · tap for list`} />
         </button>
         {showOwed && <OwedTeamsModal onClose={() => setShowOwed(false)} />}
-        {stats?.appUsers !== null && (
+        {stats?.appUsers != null && (
           <a href="/admin/app-users" className="block">
             <StatCard label="App Users" value={(stats?.appUsers || 0).toLocaleString()} sub={`${stats?.pushUsers || 0} with push on`} />
           </a>
         )}
-        {stats?.loViews !== null && (
+        {stats?.loViews != null && (
           <a href="/admin/lights-out" className="block">
             <div className="rounded-2xl p-5 shadow-[0_1px_10px_-4px_rgba(0,0,0,0.06)] min-w-0 overflow-hidden bg-[#04091a] border border-[#39ff14]/40">
               <p className="text-sm mb-1 truncate text-[#39ff14] font-semibold">Lights Out Views</p>

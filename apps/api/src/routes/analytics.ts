@@ -830,14 +830,19 @@ analyticsRoutes.get('/reports/schedule-health', authMiddleware, requireRole('adm
 // ADMIN: Lights Out page traffic — the "told you so" tile for the overview
 // ==================
 analyticsRoutes.get('/reports/lights-out-stats', authMiddleware, requireRole('admin', 'director'), async (c) => {
-  // Cumulative since tracking began (Nov 3) - Chad wants running totals
-  const row = await c.env.DB.prepare(`
+  // Cumulative since tracking began (Nov 3) - Chad wants running totals.
+  // INDEXED BY forces the tiny partial index (migration 0041): the planner
+  // won't pick it on its own for a LIKE filter, and without it this scans
+  // 235k+ rows on every dashboard load - enough to trip D1 rate limiting.
+  const viewsSql = (hint: string) => `
     SELECT COUNT(*) as views,
       COUNT(DISTINCT session_id) as visitors,
       SUM(created_at >= datetime('now', '-7 days')) as views_7d
-    FROM user_activity_log
+    FROM user_activity_log ${hint}
     WHERE activity_type = 'page_view' AND page_path LIKE '/lights-out%'
-  `).first<any>();
+  `;
+  const row = await c.env.DB.prepare(viewsSql('INDEXED BY idx_activity_lightsout')).first<any>()
+    .catch(() => c.env.DB.prepare(viewsSql('')).first<any>()); // index missing (fresh/local DB)
   // Registered = actually paid; invite requests are their own bucket, and
   // abandoned checkouts count as neither
   const regs = await c.env.DB.prepare(

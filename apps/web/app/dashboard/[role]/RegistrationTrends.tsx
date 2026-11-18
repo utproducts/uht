@@ -74,28 +74,37 @@ export default function RegistrationTrends() {
       .finally(() => setDetailLoading(false));
   };
 
-  useEffect(() => {
+  const loadSeasons = () => {
+    setLoading(true);
+    setAuthFailed(false);
     const token = typeof window !== 'undefined' ? localStorage.getItem('uht_token') : null;
-    // Retry once after a pause: a worker deploy causes a few seconds of
-    // 500s at the edge, and the dashboard should ride that out invisibly
+    // Up to 3 tries with growing pauses: worker deploys cause brief edge
+    // errors and D1 rate-limits bursts. A 12s timeout keeps a hung request
+    // from spinning forever.
     const load = async () => {
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 12000);
           const r = await fetch(`${API}/api/analytics/reports/season-comparison`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             cache: 'no-store',
+            signal: ctrl.signal,
           });
+          clearTimeout(timer);
           if (r.status === 401 || r.status === 403) { setAuthFailed(true); return; }
           const json = await r.json();
           if (json.success) { setSeasons(json.data.seasons || []); return; }
         } catch {
-          if (attempt === 1) { setAuthFailed(true); return; }
+          if (attempt === 2) return;
         }
-        if (attempt === 0) await new Promise(res => setTimeout(res, 2500));
+        await new Promise(res => setTimeout(res, 1500 * (attempt + 1)));
       }
     };
     load().finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadSeasons(); }, []);
 
   if (loading) {
     return <div className="bg-white rounded-2xl border border-[#e8e8ed] p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#003e79]" /></div>;
@@ -108,8 +117,14 @@ export default function RegistrationTrends() {
         <p className="text-xs text-[#86868b] mt-1.5">
           {authFailed
             ? 'Your session has expired, so the season comparison could not load. Sign out and back in to bring it back.'
-            : 'The season comparison could not load. Pull to refresh, or sign out and back in.'}
+            : 'The season comparison could not load.'}
         </p>
+        {!authFailed && (
+          <button onClick={loadSeasons}
+            className="mt-3 px-4 py-1.5 rounded-full text-xs font-bold bg-[#003e79] text-white hover:bg-[#00315f] transition">
+            Try again
+          </button>
+        )}
       </div>
     );
   }
