@@ -329,7 +329,7 @@ function approvedEmail(row: any, id: string): { subject: string; html: string } 
     html: emailShell(`
       <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${String(row.player_name).toUpperCase()} IS IN.</p>
       <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
-      <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included.</p>
+      <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included - ${row.player_name} will pick it all up at check-in, right before our opening ceremonies on June 11th.</p>
       <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere. Tag <b style="color:#39ff14;">@ultimatetournaments</b> when you do - we share our favorites.</p>
       <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 14px;">
         <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially invited to the Lights Out Invitational" />
@@ -475,7 +475,7 @@ lightsOutRoutes.get('/share/:id', async (c) => {
   <div style="display:flex;flex-direction:column;width:1080px;height:1080px;background:#04091a;background-image:radial-gradient(circle at 20% 15%, rgba(0,204,255,.18), transparent 45%),radial-gradient(circle at 80% 85%, rgba(57,255,20,.16), transparent 45%);align-items:center;justify-content:center;font-family:Rajdhani;">
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:980px;height:980px;border:3px solid rgba(57,255,20,.55);border-radius:36px;background:rgba(4,9,26,.55);">
       ${logoB64 ? `<img src="${logoB64}" style="width:300px;height:300px;object-fit:contain;margin-bottom:6px;" />` : ''}
-      <div style="display:flex;font-size:34px;font-weight:600;letter-spacing:16px;color:#7fd8ff;margin-bottom:26px;">OFFICIALLY INVITED</div>
+      <div style="display:flex;font-size:34px;font-weight:600;letter-spacing:14px;color:#7fd8ff;margin-bottom:26px;">OFFICIALLY REGISTERED</div>
       <div style="display:flex;font-size:${nameSize}px;font-weight:700;letter-spacing:6px;color:#ffffff;text-shadow:0 0 28px rgba(0,204,255,.9);text-align:center;max-width:900px;">${name}</div>
       <div style="display:flex;font-size:36px;font-weight:600;letter-spacing:4px;color:rgba(255,255,255,.75);margin-top:14px;text-align:center;max-width:880px;">${team}</div>
       <div style="display:flex;width:520px;height:3px;background:linear-gradient(90deg, transparent, rgba(57,255,20,.8), transparent);margin:38px 0;"></div>
