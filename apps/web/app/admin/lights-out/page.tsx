@@ -53,7 +53,7 @@ export default function LightsOutAdminPage() {
     setSizesBusy(true);
     setSizesMsg('');
     try {
-      const res = await fetch(`${API}/admin/test-sizes-email`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ to }) });
+      const res = await fetch(`${API}/admin/test-sizes-email`, { method: 'POST', headers: hdrs({ 'Content-Type': 'application/json' }), body: JSON.stringify({ to }) });
       const j = await res.json();
       setSizesMsg(j.success ? `Test sent to ${to} (sample player: ${j.data?.sample_player}). Check your inbox, click everything.` : (j.error || 'Test failed.'));
     } catch { setSizesMsg('Test failed - try again.'); }
