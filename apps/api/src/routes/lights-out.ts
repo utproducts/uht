@@ -447,33 +447,38 @@ lightsOutRoutes.get('/share/:id', async (c) => {
   }
 
   const cache = (caches as any).default;
-  // v2: bump to invalidate cached renders after design changes
+  // v3: bump to invalidate cached renders after design changes
   const keyUrl = new URL(c.req.url);
-  keyUrl.searchParams.set('design', 'v2');
+  keyUrl.searchParams.set('design', 'v3');
   const cacheKey = new Request(keyUrl.toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
-  const [bold, semi, logoBuf] = await Promise.all([
+  const [bold, semi, logoBuf, arenaBuf] = await Promise.all([
     fetch('https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FsOs.ttf').then(r => r.arrayBuffer()),
     fetch('https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF8Os.ttf').then(r => r.arrayBuffer()),
     fetch('https://ultimatetournaments.com/lights-out-logo.png').then(r => r.arrayBuffer()).catch(() => null),
+    fetch('https://ultimatetournaments.com/lights-out-arena.jpg').then(r => r.arrayBuffer()).catch(() => null),
   ]);
-  let logoB64 = '';
-  if (logoBuf) {
-    const bytes = new Uint8Array(logoBuf);
+  const toB64 = (buf: ArrayBuffer | null, mime: string): string => {
+    if (!buf) return '';
+    const bytes = new Uint8Array(buf);
     let bin = '';
     for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
-    logoB64 = `data:image/png;base64,${btoa(bin)}`;
-  }
+    return `data:${mime};base64,${btoa(bin)}`;
+  };
+  const logoB64 = toB64(logoBuf, 'image/png');
+  const arenaB64 = toB64(arenaBuf, 'image/jpeg');
 
   const name = String(row.player_name || '').toUpperCase();
   const team = String(row.team_name || '').toUpperCase();
   const nameSize = name.length > 18 ? 72 : name.length > 12 ? 92 : 108;
 
   const html = `
-  <div style="display:flex;flex-direction:column;width:1080px;height:1080px;background:#04091a;background-image:radial-gradient(circle at 20% 15%, rgba(0,204,255,.18), transparent 45%),radial-gradient(circle at 80% 85%, rgba(57,255,20,.16), transparent 45%);align-items:center;justify-content:center;font-family:Rajdhani;">
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:980px;height:980px;border:3px solid rgba(57,255,20,.55);border-radius:36px;background:rgba(4,9,26,.55);">
+  <div style="position:relative;display:flex;flex-direction:column;width:1080px;height:1080px;background:#04091a;align-items:center;justify-content:center;font-family:Rajdhani;">
+    ${arenaB64 ? `<img src="${arenaB64}" width="1080" height="1080" style="position:absolute;top:0;left:0;width:1080px;height:1080px;object-fit:cover;" />` : ''}
+    <div style="position:absolute;top:0;left:0;display:flex;width:1080px;height:1080px;background:rgba(4,9,26,.62);background-image:radial-gradient(circle at 20% 15%, rgba(0,204,255,.18), transparent 45%),radial-gradient(circle at 80% 85%, rgba(57,255,20,.16), transparent 45%);"></div>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:980px;height:980px;border:3px solid rgba(57,255,20,.55);border-radius:36px;background:rgba(4,9,26,.72);">
       ${logoB64 ? `<img src="${logoB64}" style="width:300px;height:300px;object-fit:contain;margin-bottom:6px;" />` : ''}
       <div style="display:flex;font-size:34px;font-weight:600;letter-spacing:14px;color:#7fd8ff;margin-bottom:26px;">OFFICIALLY REGISTERED</div>
       <div style="display:flex;font-size:${nameSize}px;font-weight:700;letter-spacing:6px;color:#ffffff;text-shadow:0 0 28px rgba(0,204,255,.9);text-align:center;max-width:900px;">${name}</div>
