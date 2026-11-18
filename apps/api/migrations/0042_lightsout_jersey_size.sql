@@ -9,3 +9,5 @@ ALTER TABLE lights_out_registrations ADD COLUMN balance_session_id TEXT;
 -- Personalization for the glow jerseys: requested number + name on the back.
 ALTER TABLE lights_out_registrations ADD COLUMN jersey_number_request TEXT;
 ALTER TABLE lights_out_registrations ADD COLUMN jersey_name TEXT;
+-- One-shot guard for the swag sizes email blast (admin button).
+ALTER TABLE lights_out_registrations ADD COLUMN sizes_email_sent_at TEXT;

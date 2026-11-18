@@ -479,6 +479,83 @@ lightsOutRoutes.get('/balance-confirm', async (c) => {
   return c.redirect(sizeUrl, 302);
 });
 
+// ==========================================
+// Swag sizes email: asks the family for jersey/tee sizes + number and name
+// for the back, with their personal size link, the player's social graphic,
+// and the balance button for deposit payers. Sent from the admin panel -
+// test to yourself first, then one click for every paid family.
+// ==========================================
+function sizesEmail(row: any, id: string): { subject: string; html: string } {
+  const first = String(row.player_name || '').trim().split(/\s+/)[0] || 'your player';
+  const paidCents = row.amount_paid_cents || 0;
+  const balance = Math.max(0, FULL_PRICE_CENTS - paidCents);
+  return {
+    subject: `${first}'s glow gear needs a size - Lights Out Invitational`,
+    html: emailShell(`
+      <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">${first.toUpperCase()}'S GLOW GEAR NEEDS A SIZE</p>
+      <p style="margin:0 0 14px;">The custom glow jerseys, glow tee, puck, tape, and UHT hockey bag are being made for every player - and we need ${first}'s sizes to get the order right. It takes about 30 seconds.</p>
+      <p style="margin:0 0 16px;">While you are there, tell us the <b style="color:#7fd8ff;">number and last name</b> you want on the back of ${first}'s jerseys. Number requests are first come, first served within each team, so the sooner the better.</p>
+      <div style="text-align:center;margin:0 0 18px;">
+        <a href="https://ultimatetournaments.com/lights-out/size?id=${id}" style="display:inline-block;background:linear-gradient(90deg,#39ff14,#00ccff);color:#04091a;text-decoration:none;font-weight:bold;padding:13px 34px;border-radius:999px;font-size:15px;">PICK ${first.toUpperCase()}'S SIZES</a>
+      </div>
+      <p style="margin:0 0 18px;color:#7fd8ff;font-size:13px;text-align:center;">Everything will be waiting at check-in, right before our opening ceremonies on June 11th.</p>
+      <p style="margin:0 0 10px;">And in case you missed it - this is ${first}'s official graphic. Press and hold (or right click) to save it, then post it anywhere and tag <b style="color:#39ff14;">@ultimatetournaments</b>. We share our favorites.</p>
+      <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 ${balance > 0 ? '18px' : '4px'};">
+        <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially registered for the Lights Out Invitational" />
+      </a>
+      ${balance > 0 ? `
+      <div style="border-top:1px solid rgba(0,204,255,.25);padding-top:16px;">
+        <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${(balance / 100).toFixed(0)}.</b> Your deposit holds ${first}'s spot - the rest is due before the event, whenever works for you.</p>
+        <div style="text-align:center;margin:0 0 4px;">
+          <a href="https://uht.chad-157.workers.dev/api/lights-out/balance/${id}" style="display:inline-block;background:transparent;border:2px solid #ffb84d;color:#ffb84d;text-decoration:none;font-weight:bold;padding:10px 28px;border-radius:999px;font-size:14px;">PAY THE BALANCE</a>
+        </div>
+      </div>` : ''}
+    `),
+  };
+}
+
+// Admin: test copy of the sizes email to any address, using the most recent
+// paid registration so every link (size page, graphic, balance) is real
+lightsOutRoutes.post('/admin/test-sizes-email', authMiddleware, requireRole('admin', 'director'),
+  zValidator('json', z.object({ to: z.string().email() })), async (c) => {
+    const { to } = c.req.valid('json');
+    const row = await c.env.DB.prepare(`
+      SELECT * FROM lights_out_registrations
+      WHERE status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0
+      ORDER BY CASE WHEN COALESCE(amount_paid_cents, 0) < 55000 THEN 0 ELSE 1 END, created_at DESC LIMIT 1
+    `).first<any>();
+    if (!row) return c.json({ success: false, error: 'No paid registrations yet' }, 404);
+    const m = sizesEmail(row, row.id);
+    await sendEmail(c.env, to, `[TEST] ${m.subject}`, m.html);
+    return c.json({ success: true, data: { sample_player: row.player_name } });
+  });
+
+// Admin: the real blast - every paid family that has not had one yet.
+// sizes_email_sent_at makes the button safe to click twice.
+lightsOutRoutes.post('/admin/send-sizes-emails', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const rows = await c.env.DB.prepare(`
+    SELECT * FROM lights_out_registrations
+    WHERE status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0
+      AND sizes_email_sent_at IS NULL AND email LIKE '%_@_%'
+    ORDER BY created_at LIMIT 200
+  `).all<any>();
+  let sent = 0;
+  const failed: string[] = [];
+  for (const row of (rows.results || []) as any[]) {
+    try {
+      const m = sizesEmail(row, row.id);
+      await sendEmail(c.env, row.email, m.subject, m.html);
+      await c.env.DB.prepare("UPDATE lights_out_registrations SET sizes_email_sent_at = datetime('now') WHERE id = ?")
+        .bind(row.id).run();
+      sent++;
+    } catch (e) {
+      failed.push(String(row.player_name || row.id));
+      console.error('sizes email failed for', row.id, e);
+    }
+  }
+  return c.json({ success: true, data: { sent, failed } });
+});
+
 // Admin: send yourself a copy of the acceptance email for any eligible row
 lightsOutRoutes.post('/admin/test-approved-email', authMiddleware, requireRole('admin', 'director'),
   zValidator('json', z.object({ registrationId: z.string().min(1), to: z.string().email() })), async (c) => {

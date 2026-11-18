@@ -43,6 +43,35 @@ export default function LightsOutAdminPage() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests'>('all');
+  const [testEmail, setTestEmail] = useState('');
+  const [sizesMsg, setSizesMsg] = useState('');
+  const [sizesBusy, setSizesBusy] = useState(false);
+
+  const sendSizesTest = async () => {
+    const to = testEmail.trim();
+    if (!to.includes('@')) { setSizesMsg('Enter the email to send the test to.'); return; }
+    setSizesBusy(true);
+    setSizesMsg('');
+    try {
+      const res = await fetch(`${API}/admin/test-sizes-email`, { method: 'POST', headers: hdrs(), body: JSON.stringify({ to }) });
+      const j = await res.json();
+      setSizesMsg(j.success ? `Test sent to ${to} (sample player: ${j.data?.sample_player}). Check your inbox, click everything.` : (j.error || 'Test failed.'));
+    } catch { setSizesMsg('Test failed - try again.'); }
+    setSizesBusy(false);
+  };
+
+  const sendSizesBlast = async (count: number) => {
+    if (!window.confirm(`Send the sizes email to ${count} famil${count === 1 ? 'y' : 'ies'} that have not gotten one yet? Each gets their own link, and nobody is ever emailed twice.`)) return;
+    setSizesBusy(true);
+    setSizesMsg('');
+    try {
+      const res = await fetch(`${API}/admin/send-sizes-emails`, { method: 'POST', headers: hdrs() });
+      const j = await res.json();
+      setSizesMsg(j.success ? `Sent ${j.data?.sent} emails${j.data?.failed?.length ? ` - FAILED for: ${j.data.failed.join(', ')}` : '.'}` : (j.error || 'Send failed.'));
+      load();
+    } catch { setSizesMsg('Send failed - try again.'); }
+    setSizesBusy(false);
+  };
 
   const load = async () => {
     try {
@@ -178,6 +207,31 @@ export default function LightsOutAdminPage() {
             <p className="text-sm text-[#1d1d1f]"><span className="font-bold text-[#003e79]">Jerseys</span> · {line(js)}</p>
             <p className="text-sm text-[#1d1d1f] mt-0.5"><span className="font-bold text-[#003e79]">Tees</span> · {line(ts)}</p>
             {missing > 0 && <p className="text-xs font-semibold text-amber-600 mt-1">{missing} player{missing !== 1 ? 's' : ''} still missing a size</p>}
+            {(() => {
+              const unsent = paid.filter((r: any) => !r.sizes_email_sent_at).length;
+              return (
+                <div className="border-t border-[#f0f0f2] mt-3 pt-3">
+                  <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Sizes email</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)}
+                      placeholder="you@email.com"
+                      className="border border-[#e0e0e5] rounded-lg px-3 py-1.5 text-sm w-52 focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                    <button onClick={sendSizesTest} disabled={sizesBusy}
+                      className="px-4 py-1.5 rounded-full text-sm font-semibold border border-[#003e79] text-[#003e79] hover:bg-[#f0f7ff] disabled:opacity-50">
+                      Send me a test
+                    </button>
+                    <button onClick={() => sendSizesBlast(unsent)} disabled={sizesBusy || unsent === 0}
+                      className="px-4 py-1.5 rounded-full text-sm font-semibold bg-[#003e79] text-white hover:bg-[#00315f] disabled:opacity-50">
+                      {unsent === 0 ? 'All families emailed' : `Approve + email ${unsent} famil${unsent === 1 ? 'y' : 'ies'}`}
+                    </button>
+                  </div>
+                  {sizesMsg && <p className="text-xs font-semibold text-[#0a6ebd] mt-2">{sizesMsg}</p>}
+                  <p className="text-[11px] text-[#86868b] mt-1.5">
+                    The test uses a real player so every link works - the size form, the social graphic, and the balance button. The real send skips anyone already emailed.
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
