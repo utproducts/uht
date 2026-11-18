@@ -151,10 +151,17 @@ export default function LightsOutAdminPage() {
         approving sends the confirmation email to the family.
       </p>
 
-      {/* Age-group rollup: big number = paid registrations, sub-line splits
-          by birth year and shows open invite requests. Divisions use the
-          current (2026-27) season - what each kid is right now. */}
+      {/* Money strip + division rollup. Collected sums every paid Lights Out
+          registration; Still Owed is what the deposit families have left on
+          the $550 full price. Divisions use the current (2026-27) season -
+          what each kid is right now. */}
       {loaded && rows.length > 0 && (() => {
+        const paidRows = rows.filter((r: any) => isPaid(r));
+        const collected = paidRows.reduce((s: number, r: any) => s + (r.amount_paid_cents || 0), 0);
+        const owed = paidRows.reduce((s: number, r: any) => s + Math.max(0, 55000 - (r.amount_paid_cents || 0)), 0);
+        const onDeposit = paidRows.filter((r: any) => (r.amount_paid_cents || 0) < 55000).length;
+        const money = (cents: number) => '$' + Math.round(cents / 100).toLocaleString();
+
         const divisionOf = (by: any): string => {
           const y = parseInt(String(by || '').trim(), 10);
           if (!y || y < 2004 || y > 2023) return 'Unknown';
@@ -165,6 +172,7 @@ export default function LightsOutAdminPage() {
           return 'Midget';
         };
         const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
+        const YEARS_LABEL: Record<string, string> = { Mite: '2018+', Squirt: '2016-17', 'Pee Wee': '2014-15', Bantam: '2012-13', Midget: '2011 & older' };
         const posOf = (p: any): string => {
           const s = String(p || '').trim().toUpperCase();
           if (s.startsWith('F')) return 'F';
@@ -190,37 +198,80 @@ export default function LightsOutAdminPage() {
         // page routes new goalies to the free waitlist automatically.
         const GOALIE_CAPS: Record<string, number> = { Mite: 6, Squirt: 8, 'Pee Wee': 8, Bantam: 6 };
         const shown = ORDER.filter(d => agg[d]);
-        if (shown.length === 0) return null;
         return (
           <div className="mb-5">
-            <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Registered by age group</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {shown.map(d => (
-                <div key={d} className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
-                  <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">{d}</p>
-                  <p className="text-2xl font-black text-[#003e79] leading-tight">{agg[d].paid}</p>
-                  <p className="text-[11px] text-[#86868b] font-semibold leading-snug">
-                    {Object.entries(agg[d].years).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([y, n]) => `${y}: ${n}`).join(' · ') || 'none paid yet'}
-                    {agg[d].req ? `${Object.keys(agg[d].years).length ? ' · ' : ''}+${agg[d].req} requested` : ''}
-                  </p>
-                  {agg[d].paid > 0 && (
-                    <p className="text-[11px] text-[#0a6ebd] font-bold leading-snug mt-0.5">
-                      {(['F', 'D', 'G', '?'] as const)
-                        .filter(k => agg[d].pos[k])
-                        .map(k => k === 'G' && GOALIE_CAPS[d]
-                          ? `Goalie ${agg[d].pos[k]}/${GOALIE_CAPS[d]}`
-                          : `${k === 'F' ? 'Fwd' : k === 'D' ? 'Def' : k === 'G' ? 'Goalie' : 'N/A'} ${agg[d].pos[k]}`)
-                        .join(' · ')}
-                    </p>
-                  )}
-                  {!!GOALIE_CAPS[d] && ((agg[d].pos['G'] || 0) >= GOALIE_CAPS[d] || agg[d].wait > 0) && (
-                    <p className="text-[11px] text-orange-600 font-bold leading-snug mt-0.5">
-                      {(agg[d].pos['G'] || 0) >= GOALIE_CAPS[d] ? 'GOALIE WAITLIST ON' : 'GOALIE SPOTS OPEN'}{agg[d].wait ? ` - ${agg[d].wait} waiting` : ''}
-                    </p>
-                  )}
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-3 mb-4 sm:max-w-md">
+              <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+                <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Collected</p>
+                <p className="text-2xl font-black text-green-700 leading-tight">{money(collected)}</p>
+                <p className="text-[11px] text-[#86868b] font-semibold leading-snug">{paidRows.length} paid registration{paidRows.length === 1 ? '' : 's'}</p>
+              </div>
+              <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+                <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Still owed</p>
+                <p className="text-2xl font-black text-amber-600 leading-tight">{money(owed)}</p>
+                <p className="text-[11px] text-[#86868b] font-semibold leading-snug">{owed > 0 ? `${onDeposit} on deposit of the $550 full price` : 'everyone is paid in full'}</p>
+              </div>
             </div>
+            {shown.length > 0 && (
+              <>
+                <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Divisions</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {shown.map(d => {
+                    const a = agg[d];
+                    const g = a.pos['G'] || 0;
+                    const cap = GOALIE_CAPS[d];
+                    const goalieFull = !!cap && g >= cap;
+                    return (
+                      <div key={d} className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">{d}</p>
+                          {!!YEARS_LABEL[d] && <p className="text-[10px] text-[#a1a1a6] font-semibold whitespace-nowrap">{YEARS_LABEL[d]}</p>}
+                        </div>
+                        <p className="text-2xl font-black text-[#003e79] leading-tight">
+                          {a.paid}<span className="text-[11px] font-bold text-[#86868b] ml-1.5">paid</span>
+                        </p>
+                        <div className="flex gap-3 mt-1.5">
+                          <div>
+                            <p className="text-[9px] font-bold text-[#a1a1a6] uppercase tracking-wide">Fwd</p>
+                            <p className="text-sm font-bold text-[#1d1d1f] leading-tight">{a.pos['F'] || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold text-[#a1a1a6] uppercase tracking-wide">Def</p>
+                            <p className="text-sm font-bold text-[#1d1d1f] leading-tight">{a.pos['D'] || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold text-[#a1a1a6] uppercase tracking-wide">Goalie</p>
+                            <p className={`text-sm font-bold leading-tight ${goalieFull ? 'text-orange-600' : 'text-[#1d1d1f]'}`}>{g}{cap ? `/${cap}` : ''}</p>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-[#a1a1a6] font-semibold leading-snug mt-1.5">
+                          {Object.entries(a.years).sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([y, n]) => `${y}: ${n}`).join(' · ') || 'none paid yet'}
+                        </p>
+                        {(a.req > 0 || a.wait > 0 || goalieFull) && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {goalieFull && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                                Goalies full{a.wait ? ` · ${a.wait} waiting` : ''}
+                              </span>
+                            )}
+                            {!goalieFull && a.wait > 0 && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                                {a.wait} on goalie waitlist
+                              </span>
+                            )}
+                            {a.req > 0 && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                {a.req} requested
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         );
       })()}
