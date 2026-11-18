@@ -49,7 +49,7 @@ function pct(part: number, whole: number): string {
   return Math.round((part / whole) * 100) + '%';
 }
 
-type CalItem = { type: 'city' | 'e1' | 'e2' | 'e3' | 'coupon'; label: string; count: number; campaignId?: string; status?: string; opened?: number };
+type CalItem = { type: 'city' | 'e1' | 'e2' | 'e3' | 'coupon' | 'campaign' | 'lo'; label: string; count: number; campaignId?: string; status?: string; opened?: number };
 
 function buildCalendar(data: any): { day: string; items: CalItem[] }[] {
   const items = new Map<string, CalItem[]>();
@@ -96,8 +96,25 @@ function buildCalendar(data: any): { day: string; items: CalItem[] }[] {
     coupons -= 75;
     cd = plus(cd, 1);
   }
+  // One-off campaigns, scheduled and sent (e.g. the Lights Out announcement)
+  for (const cp of (data.scheduledCampaigns || [])) {
+    const day = String(cp.scheduled_at || cp.sent_at || '').slice(0, 10);
+    add(day, { type: 'campaign', label: cp.name, count: cp.total_sent || 0, campaignId: cp.id, status: cp.status, opened: cp.total_opened });
+  }
+  // History: drip batches and Lights Out waves that already went out, so the
+  // calendar doubles as the permanent sending record
+  for (const d2 of (data.daily || [])) {
+    const t = d2.campaign_id === 'reengage2026e1' ? 'e1' : d2.campaign_id === 'reengage2026e2' ? 'e2' : 'e3';
+    const lbl = t === 'e1' ? 'Comeback email 1 - check-in' : t === 'e2' ? 'Comeback email 2 - $100 offer' : 'Comeback email 3 - last chance';
+    add(d2.day, { type: t as CalItem['type'], label: lbl, count: d2.sent, campaignId: d2.campaign_id, status: 'sent', opened: d2.opened });
+  }
+  for (const r of (data.couponSentDays || [])) {
+    add(r.day, { type: 'coupon', label: 'Coupon reminder - unused $100 credit', count: r.n, campaignId: 'couponrem2026', status: 'sent' });
+  }
+  for (const r of (data.lightsOutWaveDays || [])) {
+    add(r.day, { type: 'lo', label: 'Lights Out follower wave', count: r.n, status: 'sent' });
+  }
   return Array.from(items.entries())
-    .filter(([day]) => day >= today || (data.cityDrip || []).some((c: any) => (c.scheduled_at || '').slice(0, 10) === day))
     .sort((a, b) => a[0] < b[0] ? -1 : 1)
     .map(([day, list]) => ({ day, items: list }));
 }
@@ -108,6 +125,19 @@ const CAL_STYLE: Record<string, string> = {
   e2: 'bg-green-100 text-green-800',
   e3: 'bg-amber-100 text-amber-800',
   coupon: 'bg-cyan-100 text-cyan-900',
+  campaign: 'bg-[#e5f3ff] text-[#003e79] border border-[#b8dcf5]',
+  lo: 'bg-[#04091a] text-[#39ff14]',
+};
+
+// Dot colors for the month grid (match the chip palette above)
+const CAL_DOT: Record<string, string> = {
+  city: '#003e79',
+  e1: '#3b82f6',
+  e2: '#16a34a',
+  e3: '#d97706',
+  coupon: '#0891b2',
+  campaign: '#0077b0',
+  lo: '#39ff14',
 };
 
 export default function MarketingPage() {
@@ -117,6 +147,11 @@ export default function MarketingPage() {
   const [preview, setPreview] = useState<{ title: string; count: number; html: string; subject: string; when: string } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [iframeH, setIframeH] = useState(0);
+  const [calMonth, setCalMonth] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
+  const [selectedDay, setSelectedDay] = useState<string>(() => {
+    const n = new Date(); const p = (x: number) => String(x).padStart(2, '0');
+    return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
+  });
 
   // Lock the page behind the preview modal (iOS scrolls the background otherwise)
   useEffect(() => {
@@ -220,37 +255,111 @@ export default function MarketingPage() {
         </div>
       </div>
 
-      {/* Send calendar — what goes out each day */}
-      <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 mb-6">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-          <h2 className="text-sm font-semibold text-[#1d1d1f]">Send calendar</h2>
-          <span className="text-xs text-[#86868b]">City emails go to {Number(data?.cityDripAudience || 0).toLocaleString()} people (live count, grows as new folks join)</span>
-        </div>
-        <p className="text-xs text-[#86868b] mb-4">Everything scheduled to go out, day by day - click a city email to read it</p>
-        <div className="space-y-3">
-          {buildCalendar(data).map(({ day, items }) => (
-            <div key={day} className="flex gap-3 items-start">
-              <div className="w-24 shrink-0 pt-1.5">
-                <p className="text-xs font-bold text-[#1d1d1f]">{dayName(day)}</p>
-              </div>
-              <div className="flex flex-wrap gap-2 min-w-0">
-                {items.map((it, i) => (
-                  <button key={i}
-                    onClick={() => openPreview(it, day)}
-                    disabled={!it.campaignId}
-                    className={`text-left px-3 py-1.5 rounded-lg text-xs font-semibold ${CAL_STYLE[it.type]} ${it.campaignId ? 'cursor-pointer hover:opacity-85' : 'cursor-default'}`}>
-                    {it.label}
-                    <span className="font-normal opacity-80"> - {Number(it.count || 0).toLocaleString()} {it.type === 'city' ? 'people' : 'teams'}</span>
-                    {it.status === 'sent' && <span className="font-normal opacity-80"> (sent, {it.opened} opens)</span>}
-                    {it.status === 'sending' && <span className="font-normal opacity-80"> (sending now)</span>}
-                  </button>
-                ))}
-              </div>
+      {/* Send calendar - month grid; click a day for its sends. Past months
+          stay populated so this doubles as the permanent sending record. */}
+      {(() => {
+        const byDay = new Map(buildCalendar(data).map(({ day, items }) => [day, items]));
+        const pad2 = (n: number) => String(n).padStart(2, '0');
+        const now = new Date();
+        const todayIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+        const { y, m } = calMonth;
+        const monthLabel = new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const firstWeekday = new Date(y, m, 1).getDay();
+        const daysInMonth = new Date(y, m + 1, 0).getDate();
+        const iso = (d: number) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+        const nav = (dir: number) => setCalMonth(prev => { const d = new Date(prev.y, prev.m + dir, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
+        const goToday = () => { setCalMonth({ y: now.getFullYear(), m: now.getMonth() }); setSelectedDay(todayIso); };
+        const selItems = byDay.get(selectedDay) || [];
+        const unit = (t: string) => (t === 'city' || t === 'campaign' || t === 'lo') ? 'people' : 'teams';
+        return (
+          <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5 mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+              <h2 className="text-sm font-semibold text-[#1d1d1f]">Send calendar</h2>
+              <span className="text-xs text-[#86868b]">City emails go to {Number(data?.cityDripAudience || 0).toLocaleString()} people (live count, grows as new folks join)</span>
             </div>
-          ))}
-          {buildCalendar(data).length === 0 && <p className="text-sm text-[#86868b]">Nothing scheduled</p>}
-        </div>
-      </div>
+            <p className="text-xs text-[#86868b] mb-3">Tap a day to see everything going out (or that already went out) - tap an email to read it</p>
+
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-2">
+              <button onClick={() => nav(-1)} className="w-8 h-8 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#003e79] font-bold">&lsaquo;</button>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-[#1d1d1f]">{monthLabel}</p>
+                {(y !== now.getFullYear() || m !== now.getMonth()) && (
+                  <button onClick={goToday} className="text-[11px] font-bold text-[#0077b0] hover:underline">Today</button>
+                )}
+              </div>
+              <button onClick={() => nav(1)} className="w-8 h-8 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#003e79] font-bold">&rsaquo;</button>
+            </div>
+
+            {/* Weekday header + month grid */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((w, i) => (
+                <p key={i} className="text-center text-[10px] font-bold uppercase text-[#86868b]">{w}</p>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1 mb-4">
+              {Array.from({ length: firstWeekday }).map((_, i) => <div key={`e${i}`} />)}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const d = i + 1;
+                const dayIso = iso(d);
+                const dayItems = byDay.get(dayIso) || [];
+                const isToday = dayIso === todayIso;
+                const isSel = dayIso === selectedDay;
+                const types = Array.from(new Set(dayItems.map(it => it.type)));
+                return (
+                  <button key={dayIso} onClick={() => setSelectedDay(dayIso)}
+                    className={`rounded-lg border min-h-[52px] p-1 flex flex-col items-center justify-start transition ${
+                      isSel ? 'bg-[#003e79] border-[#003e79]'
+                        : isToday ? 'bg-[#f0f7ff] border-[#003e79] ring-1 ring-[#003e79]'
+                        : dayItems.length > 0 ? 'bg-[#f0f7ff] border-[#d5e8fa] hover:border-[#003e79] cursor-pointer'
+                        : 'bg-white border-[#f0f0f3] hover:border-[#d5e8fa]'
+                    }`}>
+                    <span className={`text-[11px] leading-none font-bold ${isSel ? 'text-white' : isToday ? 'text-[#003e79]' : dayItems.length > 0 ? 'text-[#1d1d1f]' : 'text-[#a8a8ad]'}`}>{d}</span>
+                    {isToday && !isSel && <span className="text-[8px] font-bold text-[#003e79] uppercase leading-tight">today</span>}
+                    {dayItems.length > 0 && (
+                      <span className="flex flex-wrap justify-center gap-0.5 mt-1">
+                        {types.slice(0, 4).map(t => (
+                          <span key={t} className="w-1.5 h-1.5 rounded-full" style={{ background: isSel ? '#9fd1ff' : CAL_DOT[t] }} />
+                        ))}
+                      </span>
+                    )}
+                    {dayItems.length > 0 && (
+                      <span className={`text-[9px] font-semibold leading-tight ${isSel ? 'text-[#9fd1ff]' : 'text-[#6e6e73]'}`}>
+                        {dayItems.length} send{dayItems.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected day detail */}
+            <div className="border-t border-[#f0f0f2] pt-3">
+              <p className="text-xs font-bold text-[#1d1d1f] mb-2">
+                {dayName(selectedDay)}{selectedDay === todayIso ? ' - today' : ''}
+              </p>
+              {selItems.length === 0 ? (
+                <p className="text-sm text-[#86868b]">Nothing scheduled this day</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {selItems.map((it, i) => (
+                    <button key={i}
+                      onClick={() => openPreview(it, selectedDay)}
+                      disabled={!it.campaignId}
+                      className={`text-left px-3 py-1.5 rounded-lg text-xs font-semibold ${CAL_STYLE[it.type]} ${it.campaignId ? 'cursor-pointer hover:opacity-85' : 'cursor-default'}`}>
+                      {it.label}
+                      {Number(it.count) > 0 && <span className="font-normal opacity-80"> - {Number(it.count).toLocaleString()} {unit(it.type)}</span>}
+                      {it.status === 'scheduled' && <span className="font-normal opacity-80"> (scheduled)</span>}
+                      {it.status === 'sent' && <span className="font-normal opacity-80"> (sent{it.opened ? `, ${it.opened} opens` : ''})</span>}
+                      {it.status === 'sending' && <span className="font-normal opacity-80"> (sending now)</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Template preview modal */}
       {(preview || previewLoading) && (

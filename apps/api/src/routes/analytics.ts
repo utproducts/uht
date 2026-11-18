@@ -1033,6 +1033,28 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
     db.prepare("SELECT id, name, total_sent, total_delivered, total_opened, total_clicked FROM email_campaigns WHERE id = 'couponrem2026'").first().catch(() => null),
   ]);
 
+  // Send-calendar extras. Chad wants the calendar to be the permanent sending
+  // record - every one-off campaign ever, plus the daily history of the drip
+  // lanes and Lights Out waves - so next year he can see what went out when.
+  const [oneOffs, couponSent, loWaves] = await Promise.all([
+    db.prepare(`
+      SELECT id, name, subject, status, scheduled_at, sent_at, total_sent, total_opened
+      FROM email_campaigns
+      WHERE COALESCE(template_type, '') != 'city_drip'
+        AND id NOT IN ('reengage2026e1','reengage2026e2','reengage2026e3','couponrem2026')
+        AND status IN ('scheduled','sending','sent')
+      ORDER BY COALESCE(scheduled_at, sent_at)
+    `).all(),
+    db.prepare(`
+      SELECT date(sent_at) as day, COUNT(*) as n FROM coupon_reminder_targets
+      WHERE sent_at IS NOT NULL GROUP BY day
+    `).all().catch(() => ({ results: [] })),
+    db.prepare(`
+      SELECT date(sent_at) as day, COUNT(*) as n FROM lightsout_targets
+      WHERE sent_at IS NOT NULL GROUP BY day
+    `).all().catch(() => ({ results: [] })),
+  ]);
+
   return c.json({
     success: true,
     data: {
@@ -1049,6 +1071,9 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       reengagePendingE1: (pendingE1 as any)?.n || 0,
       couponPending: (couponPending as any)?.n || 0,
       couponCampaign: couponCampaign || null,
+      scheduledCampaigns: oneOffs.results || [],
+      couponSentDays: (couponSent as any).results || [],
+      lightsOutWaveDays: (loWaves as any).results || [],
     },
   });
 });
