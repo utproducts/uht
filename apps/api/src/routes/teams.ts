@@ -1847,11 +1847,14 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
   const data = c.req.valid('json');
   const db = c.env.DB;
 
-  // Duplicate prevention, scoped to the SAME user only: five support cases in
-  // three weeks came from one person creating their own team twice (double-tap
-  // or "did it save?" retries), which split roster and registrations across
-  // copies. Different users sharing a team name stays allowed — that was why
-  // the old global check got disabled for launch.
+  // Duplicate prevention, two tiers:
+  // 1. Same user re-creating their own team (double-tap / "did it save?"
+  //    retries) is always blocked - five support cases in three weeks.
+  // 2. ANY active team with the same name triggers the duplicate_team flow
+  //    (join-instead screen in both apps, with Create Anyway sending
+  //    skipDuplicateCheck). Re-enabled 2026-11-17 after the Yellowjackets
+  //    and STL Rockets cases: a registrar and a manager each created the
+  //    same team, splitting roster and registrations across copies.
   try {
     const creator = c.get('user');
     const dup = await db.prepare(
@@ -1863,6 +1866,24 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
         error: `You already have a team named "${data.name.trim()}" - it's on your My Teams page. Use that team instead of creating it again. If you meant to create a different team, change the name slightly (for example add the coach's name).`,
         existingTeamId: dup.id,
       }, 409);
+    }
+    if (!data.skipDuplicateCheck) {
+      const dup2 = await db.prepare(
+        `SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code, t.head_coach_name,
+           (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id) as player_count
+         FROM teams t WHERE t.is_active = 1 AND LOWER(TRIM(t.name)) = LOWER(TRIM(?)) LIMIT 1`
+      ).bind(data.name).first<any>();
+      if (dup2) {
+        return c.json({
+          success: false,
+          error: 'duplicate_team',
+          existingTeam: {
+            id: dup2.id, name: dup2.name, ageGroup: dup2.age_group,
+            city: dup2.city, state: dup2.state, inviteCode: dup2.invite_code,
+            headCoachName: dup2.head_coach_name, playerCount: dup2.player_count,
+          },
+        }, 409);
+      }
     }
   } catch { /* never block creation on a failed dup check */ }
 
