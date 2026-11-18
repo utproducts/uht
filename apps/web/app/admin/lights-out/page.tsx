@@ -157,6 +157,31 @@ export default function LightsOutAdminPage() {
         );
       })()}
 
+      {/* Swag order: jersey + tee size totals across paid registrations, so
+          ordering is one glance - plus who still has not picked */}
+      {loaded && (() => {
+        const paid = rows.filter((r: any) => isPaid(r));
+        if (paid.length === 0) return null;
+        const count = (key: 'jersey_size' | 'tee_size') => {
+          const m: Record<string, number> = {};
+          for (const r of paid) { const v = (r as any)[key]; if (v) m[v] = (m[v] || 0) + 1; }
+          return m;
+        };
+        const ORDER2 = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
+        const js = count('jersey_size'); const ts = count('tee_size');
+        const missing = paid.filter((r: any) => !r.jersey_size || !r.tee_size).length;
+        const line = (m: Record<string, number>) =>
+          ORDER2.filter(sz => m[sz]).map(sz => `${sz}: ${m[sz]}`).join(' · ') || 'none picked yet';
+        return (
+          <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm mb-5">
+            <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-1.5">Swag order ({paid.length} players)</p>
+            <p className="text-sm text-[#1d1d1f]"><span className="font-bold text-[#003e79]">Jerseys</span> · {line(js)}</p>
+            <p className="text-sm text-[#1d1d1f] mt-0.5"><span className="font-bold text-[#003e79]">Tees</span> · {line(ts)}</p>
+            {missing > 0 && <p className="text-xs font-semibold text-amber-600 mt-1">{missing} player{missing !== 1 ? 's' : ''} still missing a size</p>}
+          </div>
+        );
+      })()}
+
       <div className="flex flex-wrap gap-2 mb-5">
         {(['all', 'registered', 'requests', 'incomplete', 'pending', 'approved', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
@@ -196,6 +221,12 @@ export default function LightsOutAdminPage() {
                     </span>
                   </div>
                   <p className="text-sm text-[#3d3d3d] mt-1">{r.team_name}{r.birth_year ? ` · ${r.birth_year}` : ''}{r.position ? ` · ${r.position}` : ''}</p>
+                  {(r.jersey_size || r.tee_size || r.jersey_number_request || r.jersey_name) && (
+                    <p className="text-xs font-semibold text-[#0a6ebd] mt-0.5">
+                      {(r.jersey_name || r.jersey_number_request) ? `${r.jersey_name || '(no name)'}${r.jersey_number_request ? ` #${r.jersey_number_request}` : ''} · ` : ''}
+                      {r.jersey_size ? `Jersey ${r.jersey_size}` : 'Jersey size missing'}{' · '}{r.tee_size ? `Tee ${r.tee_size}` : 'Tee size missing'}
+                    </p>
+                  )}
                   {r.star_event_id === 'invite-request'
                     ? <p className="text-xs text-[#0077b0] mt-1 font-semibold">No star - requested an invite{r.invite_code ? <> · code <b className="tracking-widest">{r.invite_code}</b></> : ''}</p>
                     : <p className="text-xs text-[#6e6e73] mt-1">Star earned at: <b>{r.star_event_name || r.star_event_id}</b></p>}

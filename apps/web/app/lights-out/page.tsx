@@ -186,7 +186,7 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
 function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: () => void; onRequestInstead: () => void; initialCode?: string }) {
   const [mode, setMode] = useState<'star' | 'code'>(initialCode ? 'code' : 'star');
   const [events, setEvents] = useState<any[]>([]);
-  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: initialCode || '', birthYear: '', position: '', parentName: '', email: '', phone: '', payType: 'full' });
+  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: initialCode || '', birthYear: '', position: '', jerseySize: '', teeSize: '', parentName: '', email: '', phone: '', payType: 'full' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -302,6 +302,17 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
                 <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
                   <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Position</option>
                   {['Forward', 'Defense', 'Goalie'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
+                </select>
+              </div>
+              {/* Swag sizes - collected up front so the order sheet fills itself */}
+              <div className="grid grid-cols-2 gap-3">
+                <select className={inputCls} value={f.jerseySize} onChange={(e) => set('jerseySize', e.target.value)} style={{ color: f.jerseySize ? '#fff' : 'rgba(255,255,255,.35)' }}>
+                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Jersey size</option>
+                  {['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
+                </select>
+                <select className={inputCls} value={f.teeSize} onChange={(e) => set('teeSize', e.target.value)} style={{ color: f.teeSize ? '#fff' : 'rgba(255,255,255,.35)' }}>
+                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Tee size</option>
+                  {['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
                 </select>
               </div>
               <input className={inputCls} placeholder="Parent / guardian name *" value={f.parentName} onChange={(e) => set('parentName', e.target.value)} />

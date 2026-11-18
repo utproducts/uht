@@ -63,6 +63,8 @@ const registerSchema = z.object({
   inviteCode: z.string().min(4).max(20).optional(),
   birthYear: z.string().max(8).optional(),
   position: z.string().max(20).optional(),
+  jerseySize: z.string().max(20).optional(),
+  teeSize: z.string().max(20).optional(),
   parentName: z.string().min(2).max(80),
   email: z.string().email(),
   phone: z.string().max(30).optional(),
@@ -163,10 +165,10 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
 
     id = crypto.randomUUID().replace(/-/g, '');
     await db.prepare(`
-      INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified, payment_plan)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)
+      INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, jersey_size, tee_size, parent_name, email, phone, status, star_verified, payment_plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)
     `).bind(id, b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
-      b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0, b.payType).run();
+      b.position || null, b.jerseySize || null, b.teeSize || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0, b.payType).run();
   }
 
   // $550 in full or a $200 non-refundable deposit, through Stripe Checkout
@@ -330,6 +332,14 @@ function approvedEmail(row: any, id: string): { subject: string; html: string } 
       <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${String(row.player_name).toUpperCase()} IS IN.</p>
       <p style="margin:0 0 14px;">The star checks out. ${row.player_name} earned a Three Stars selection at ${row.star_event_name || 'a UHT event'}, and that means one thing: an official invite to the first-ever <b style="color:#7fd8ff;">glow-in-the-dark hockey tournament</b> in St. Louis.</p>
       <p style="margin:0 0 14px;">Mark the calendar: <b style="color:#39ff14;">June 11-13, 2027</b> in St. Louis. We will send rink details and ${row.player_name}'s team placement (built by age and position) as the event gets closer. The custom glow jerseys, glow puck, glow tape, glow tee, and UHT hockey bag are all included - ${row.player_name} will pick it all up at check-in, right before our opening ceremonies on June 11th.</p>
+      <div style="text-align:center;margin:0 0 16px;">
+        <a href="https://ultimatetournaments.com/lights-out/size?id=${id}" style="display:inline-block;background:linear-gradient(90deg,#39ff14,#00ccff);color:#04091a;text-decoration:none;font-weight:bold;padding:12px 30px;border-radius:999px;font-size:14px;">PICK ${String(row.player_name).split(' ')[0].toUpperCase()}'S JERSEY + TEE SIZES</a>
+      </div>
+      ${(row.amount_paid_cents || 0) < 55000 ? `
+      <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${((55000 - (row.amount_paid_cents || 0)) / 100).toFixed(0)}.</b> Your $200 deposit holds the spot - the rest is due before the event, whenever works for you.</p>
+      <div style="text-align:center;margin:0 0 16px;">
+        <a href="https://uht.chad-157.workers.dev/api/lights-out/balance/${id}" style="display:inline-block;background:transparent;border:2px solid #ffb84d;color:#ffb84d;text-decoration:none;font-weight:bold;padding:10px 28px;border-radius:999px;font-size:14px;">PAY THE BALANCE</a>
+      </div>` : ''}
       <p style="margin:0 0 10px;">We made this for ${row.player_name} - press and hold (or right click) to save it, then post it anywhere. Tag <b style="color:#39ff14;">@ultimatetournaments</b> when you do - we share our favorites.</p>
       <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 14px;">
         <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially invited to the Lights Out Invitational" />
@@ -338,6 +348,136 @@ function approvedEmail(row: any, id: string): { subject: string; html: string } 
     `),
   };
 }
+
+// ==========================================
+// Jersey size: parents pick the size for their player's glow jerseys via
+// the link in the acceptance email. Stored on the registration row so the
+// admin panel can total sizes for the swag order.
+// ==========================================
+const JERSEY_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL'];
+const TEE_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
+const FULL_PRICE_CENTS = 55000;
+
+lightsOutRoutes.get('/size/:id', async (c) => {
+  const id = String(c.req.param('id') || '');
+  const row = await c.env.DB.prepare(
+    `SELECT player_name, jersey_size, tee_size, jersey_number, jersey_number_request, jersey_name, status, paid_at, amount_paid_cents FROM lights_out_registrations WHERE id = ?`
+  ).bind(id).first<any>();
+  if (!row || ['invite_requested', 'invite_denied', 'denied'].includes(String(row.status))) {
+    return c.json({ success: false, error: 'Registration not found' }, 404);
+  }
+  const balanceCents = row.paid_at ? Math.max(0, FULL_PRICE_CENTS - (row.amount_paid_cents || 0)) : 0;
+  // Sensible defaults: the number they wore when they earned the star, and
+  // the player's last name - parents can change both before saving
+  const nameParts = String(row.player_name || '').trim().split(/\s+/);
+  return c.json({ success: true, data: {
+    player_name: row.player_name,
+    jersey_size: row.jersey_size || null,
+    tee_size: row.tee_size || null,
+    jersey_number: row.jersey_number_request || row.jersey_number || '',
+    jersey_name: row.jersey_name || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') ,
+    jersey_sizes: JERSEY_SIZES,
+    tee_sizes: TEE_SIZES,
+    balance_cents: balanceCents,
+  } });
+});
+
+lightsOutRoutes.post('/size/:id', zValidator('json', z.object({
+  jerseySize: z.string().optional(),
+  teeSize: z.string().optional(),
+  jerseyNumber: z.string().max(3).optional(),
+  jerseyName: z.string().max(20).optional(),
+})), async (c) => {
+  const id = String(c.req.param('id') || '');
+  const { jerseySize, teeSize, jerseyNumber, jerseyName } = c.req.valid('json');
+  if (!jerseySize && !teeSize && jerseyNumber === undefined && jerseyName === undefined) {
+    return c.json({ success: false, error: 'Nothing to save.' }, 400);
+  }
+  if (jerseySize && !JERSEY_SIZES.includes(jerseySize)) return c.json({ success: false, error: 'Pick a jersey size from the list.' }, 400);
+  if (teeSize && !TEE_SIZES.includes(teeSize)) return c.json({ success: false, error: 'Pick a tee size from the list.' }, 400);
+  const num = (jerseyNumber || '').trim();
+  if (num && !/^\d{1,2}$/.test(num)) return c.json({ success: false, error: 'Jersey number should be 1 or 2 digits.' }, 400);
+  const jname = (jerseyName || '').trim().toUpperCase();
+  if (jname && !/^[A-Z][A-Z .'-]{0,19}$/.test(jname)) return c.json({ success: false, error: 'Jersey name can only use letters.' }, 400);
+  const r = await c.env.DB.prepare(
+    `UPDATE lights_out_registrations SET
+       jersey_size = COALESCE(?, jersey_size),
+       tee_size = COALESCE(?, tee_size),
+       jersey_number_request = COALESCE(?, jersey_number_request),
+       jersey_name = COALESCE(?, jersey_name)
+     WHERE id = ? AND status NOT IN ('invite_requested', 'invite_denied', 'denied')`
+  ).bind(jerseySize || null, teeSize || null, num || null, jname || null, id).run();
+  if (!r.meta?.changes) return c.json({ success: false, error: 'Registration not found' }, 404);
+  return c.json({ success: true });
+});
+
+// ==========================================
+// Balance payment: deposit families pay the remaining $350 through a fresh
+// Stripe checkout. GET creates the session and redirects straight to Stripe
+// so the acceptance email can link it directly.
+// ==========================================
+lightsOutRoutes.get('/balance/:id', async (c) => {
+  const id = String(c.req.param('id') || '');
+  const row = await c.env.DB.prepare(
+    `SELECT id, player_name, email, status, paid_at, amount_paid_cents FROM lights_out_registrations WHERE id = ?`
+  ).bind(id).first<any>();
+  if (!row || !row.paid_at || ['invite_requested', 'invite_denied', 'denied'].includes(String(row.status))) {
+    return c.text('Registration not found', 404);
+  }
+  const balance = Math.max(0, FULL_PRICE_CENTS - (row.amount_paid_cents || 0));
+  if (balance <= 0) {
+    return c.redirect(`https://ultimatetournaments.com/lights-out/size?id=${id}&balance=none`, 302);
+  }
+  const stripeResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${c.env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'mode': 'payment',
+      'success_url': `https://uht.chad-157.workers.dev/api/lights-out/balance-confirm?reg=${id}&session_id={CHECKOUT_SESSION_ID}`,
+      'cancel_url': `https://ultimatetournaments.com/lights-out/size?id=${id}`,
+      'customer_email': String(row.email || '').toLowerCase(),
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': String(balance),
+      'line_items[0][price_data][product_data][name]': 'Lights Out Invitational - Remaining Balance',
+      'line_items[0][price_data][product_data][description]': `${row.player_name} - pays the registration in full`,
+      'line_items[0][quantity]': '1',
+      'metadata[lights_out_reg_id]': id,
+      'metadata[lights_out_balance]': '1',
+      'payment_intent_data[metadata][lights_out_reg_id]': id,
+    }).toString(),
+  });
+  const session = await stripeResponse.json() as any;
+  if (!stripeResponse.ok || !session?.url) return c.text('Could not start checkout - please try again.', 500);
+  await c.env.DB.prepare('UPDATE lights_out_registrations SET balance_session_id = ? WHERE id = ?').bind(session.id, id).run();
+  return c.redirect(session.url, 302);
+});
+
+lightsOutRoutes.get('/balance-confirm', async (c) => {
+  const id = String(c.req.query('reg') || '');
+  const sessionId = String(c.req.query('session_id') || '');
+  const row = await c.env.DB.prepare(
+    `SELECT id, balance_session_id FROM lights_out_registrations WHERE id = ?`
+  ).bind(id).first<any>();
+  const sizeUrl = `https://ultimatetournaments.com/lights-out/size?id=${id}`;
+  if (!row || !sessionId || sessionId !== row.balance_session_id) return c.redirect(sizeUrl, 302);
+  const sres = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+    headers: { 'Authorization': `Bearer ${c.env.STRIPE_SECRET_KEY}` },
+  });
+  const session = await sres.json() as any;
+  if (sres.ok && session?.payment_status === 'paid') {
+    // Guard against double-credit on refresh: clear the session id in the same statement
+    await c.env.DB.prepare(`
+      UPDATE lights_out_registrations
+      SET amount_paid_cents = COALESCE(amount_paid_cents, 0) + ?, payment_plan = 'full', balance_session_id = NULL
+      WHERE id = ? AND balance_session_id = ?
+    `).bind(session.amount_total || 0, id, sessionId).run();
+    return c.redirect(sizeUrl + '&balance=paid', 302);
+  }
+  return c.redirect(sizeUrl, 302);
+});
 
 // Admin: send yourself a copy of the acceptance email for any eligible row
 lightsOutRoutes.post('/admin/test-approved-email', authMiddleware, requireRole('admin', 'director'),
