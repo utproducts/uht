@@ -336,7 +336,7 @@ function approvedEmail(row: any, id: string): { subject: string; html: string } 
         <a href="https://ultimatetournaments.com/lights-out/size?id=${id}" style="display:inline-block;background:linear-gradient(90deg,#39ff14,#00ccff);color:#04091a;text-decoration:none;font-weight:bold;padding:12px 30px;border-radius:999px;font-size:14px;">PICK ${String(row.player_name).split(' ')[0].toUpperCase()}'S JERSEY + TEE SIZES</a>
       </div>
       ${(row.amount_paid_cents || 0) < 55000 ? `
-      <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${((55000 - (row.amount_paid_cents || 0)) / 100).toFixed(0)}.</b> Your $200 deposit holds the spot - the rest is due before the event, whenever works for you.</p>
+      <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${((55000 - (row.amount_paid_cents || 0)) / 100).toFixed(0)}.</b> Your $200 deposit got the spot - pay the balance as soon as possible to be fully locked in for June.</p>
       <div style="text-align:center;margin:0 0 16px;">
         <a href="https://uht.chad-157.workers.dev/api/lights-out/balance/${id}" style="display:inline-block;background:transparent;border:2px solid #ffb84d;color:#ffb84d;text-decoration:none;font-weight:bold;padding:10px 28px;border-radius:999px;font-size:14px;">PAY THE BALANCE</a>
       </div>` : ''}
@@ -504,7 +504,7 @@ function sizesEmail(row: any, id: string): { subject: string; html: string } {
       <p style="margin:0 0 18px;color:#7fd8ff;font-size:13px;text-align:center;">Everything will be waiting at check-in, right before our opening ceremonies on June 11th.</p>
       ${balance > 0 ? `
       <div style="border-top:1px solid rgba(0,204,255,.25);padding-top:16px;margin:0 0 18px;">
-        <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${(balance / 100).toFixed(0)}.</b> Your deposit holds ${first}'s spot - the rest is due before the event, whenever works for you.</p>
+        <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${(balance / 100).toFixed(0)}.</b> Your deposit got ${first}'s spot - pay the balance as soon as possible to be fully locked in for June.</p>
         <div style="text-align:center;">
           <a href="https://uht.chad-157.workers.dev/api/lights-out/balance/${id}" style="display:inline-block;background:transparent;border:2px solid #ffb84d;color:#ffb84d;text-decoration:none;font-weight:bold;padding:10px 28px;border-radius:999px;font-size:14px;">PAY THE BALANCE</a>
         </div>

@@ -187,7 +187,7 @@ function SizePicker() {
         {balanceCents > 0 && balanceFlag !== 'paid' && (
           <div className="rounded-2xl border p-5 mt-4 text-center" style={{ background: '#0a1228', borderColor: 'rgba(255,184,77,.45)' }}>
             <p className="text-sm font-bold mb-1" style={{ color: '#ffb84d' }}>Balance due: ${(balanceCents / 100).toFixed(0)}</p>
-            <p className="text-xs mb-3" style={{ color: '#7fd8ff' }}>Your deposit holds the spot - pay the rest whenever works for you, any time before the event.</p>
+            <p className="text-xs mb-3" style={{ color: '#7fd8ff' }}>Your deposit got the spot - pay the balance as soon as possible to be fully locked in for June.</p>
             <a href={`${API}/api/lights-out/balance/${encodeURIComponent(id)}`}
               className="inline-block rounded-full px-7 py-2.5 text-sm font-bold border-2"
               style={{ borderColor: '#ffb84d', color: '#ffb84d' }}>
