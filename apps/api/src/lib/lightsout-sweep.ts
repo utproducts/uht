@@ -78,7 +78,7 @@ function parentEmail(t: any): { subject: string; html: string } {
       <h2 style="margin:0 0 14px;color:#003e79;font-size:19px;">This one is worth a fridge magnet</h2>
       <p style="margin:0 0 14px;">Hi${first},</p>
       <p style="margin:0 0 14px;"><b>${sl}</b> this season - and that means an official invitation to the <b>Lights Out Invitational</b>.</p>
-      <p style="margin:0 0 14px;"><b>June 11-13, 2027</b> in St. Louis, the arena goes dark and the ice glows for the first glow-in-the-dark hockey tournament ever played. It is invite only, and a Three Stars selection at a UHT event is the only way in. Your player earned it on the ice.</p>
+      <p style="margin:0 0 14px;"><b>June 11-13, 2027</b> in St. Louis, the arena goes dark and the ice glows for the first glow-in-the-dark hockey tournament in UHT history. It is invite only, and a Three Stars selection at a UHT event is the only way in. Your player earned it on the ice.</p>
       ${CTA}
       <p style="margin:0 0 8px;">The invitation includes:</p>
       ${INCLUDES}
@@ -96,7 +96,7 @@ function followerEmail(t: any): { subject: string; html: string } {
     html: shell(`
       <h2 style="margin:0 0 14px;color:#003e79;font-size:19px;">The lights are officially going out</h2>
       <p style="margin:0 0 14px;">Hi${first},</p>
-      <p style="margin:0 0 14px;">The <b>Lights Out Invitational</b> is the first glow-in-the-dark hockey tournament ever played - dark arena, glowing ice, neon pucks - and it is invite only. <b>June 11-13, 2027</b> in St. Louis.</p>
+      <p style="margin:0 0 14px;">The <b>Lights Out Invitational</b> is the first glow-in-the-dark hockey tournament in UHT history - dark arena, glowing ice, neon pucks - and it is invite only. <b>June 11-13, 2027</b> in St. Louis.</p>
       <p style="margin:0 0 14px;">You follow <b>${t.team_names || 'a UHT team'}</b> in the UHT app, and players on your team earned Three Stars selections this season. If your player was announced as a star at any UHT game, they are in.</p>
       ${CTA}
       <p style="margin:0 0 14px;color:#3c3c43;">Every player keeps the custom glow home and away jerseys, a Lights Out collector stick, and a glow puck made only for this event. We verify every registration against the official scoresheets.</p>

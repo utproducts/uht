@@ -481,7 +481,7 @@ lightsOutRoutes.get('/share/:id', async (c) => {
       <div style="display:flex;width:520px;height:3px;background:linear-gradient(90deg, transparent, rgba(57,255,20,.8), transparent);margin:38px 0;"></div>
       <div style="display:flex;font-size:58px;font-weight:700;letter-spacing:10px;color:#39ff14;text-shadow:0 0 34px rgba(57,255,20,.95);">I AM IN</div>
       <div style="display:flex;font-size:35px;font-weight:600;letter-spacing:6px;color:#ffffff;margin-top:22px;">JUNE 11-13, 2027 · ST. LOUIS</div>
-      <div style="display:flex;font-size:26px;font-weight:600;letter-spacing:4px;color:rgba(127,216,255,.85);margin-top:16px;">THE FIRST GLOW-IN-THE-DARK HOCKEY TOURNAMENT</div>
+      <div style="display:flex;font-size:26px;font-weight:600;letter-spacing:4px;color:rgba(127,216,255,.85);margin-top:16px;">UHT'S FIRST GLOW-IN-THE-DARK HOCKEY TOURNAMENT</div>
       <div style="display:flex;font-size:24px;font-weight:600;letter-spacing:3px;color:rgba(255,255,255,.45);margin-top:30px;">ULTIMATETOURNAMENTS.COM/LIGHTS-OUT</div>
     </div>
   </div>`;

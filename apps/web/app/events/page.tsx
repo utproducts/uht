@@ -659,7 +659,7 @@ export default function EventsPage() {
               </h2>
               <p className="mt-1 text-[#7fd8ff] font-bold tracking-[0.18em] text-sm uppercase">June 11-13, 2027 · St. Louis, MO</p>
               <p className="mt-2.5 text-white/65 text-[15px] leading-relaxed max-w-xl mx-auto md:mx-0">
-                The arena goes dark, the ice glows. The first glow-in-the-dark tournament ever played -
+                The arena goes dark, the ice glows. The first glow-in-the-dark tournament in UHT history -
                 and the only way in is a Three Stars selection at a UHT event this season.
               </p>
             </div>
