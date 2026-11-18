@@ -354,7 +354,9 @@ function approvedEmail(row: any, id: string): { subject: string; html: string } 
 // the link in the acceptance email. Stored on the registration row so the
 // admin panel can total sizes for the swag order.
 // ==========================================
-const JERSEY_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL'];
+const JERSEY_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
+// Goalie jerseys are a different cut - parents pick 'Goalie Cut <size>'
+const isJerseySize = (v: string) => JERSEY_SIZES.includes(v) || (v.startsWith('Goalie Cut ') && JERSEY_SIZES.includes(v.slice(11)));
 const TEE_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
 const FULL_PRICE_CENTS = 55000;
 
@@ -393,7 +395,7 @@ lightsOutRoutes.post('/size/:id', zValidator('json', z.object({
   if (!jerseySize && !teeSize && jerseyNumber === undefined && jerseyName === undefined) {
     return c.json({ success: false, error: 'Nothing to save.' }, 400);
   }
-  if (jerseySize && !JERSEY_SIZES.includes(jerseySize)) return c.json({ success: false, error: 'Pick a jersey size from the list.' }, 400);
+  if (jerseySize && !isJerseySize(jerseySize)) return c.json({ success: false, error: 'Pick a jersey size from the list.' }, 400);
   if (teeSize && !TEE_SIZES.includes(teeSize)) return c.json({ success: false, error: 'Pick a tee size from the list.' }, 400);
   const num = (jerseyNumber || '').trim();
   if (num && !/^\d{1,2}$/.test(num)) return c.json({ success: false, error: 'Jersey number should be 1 or 2 digits.' }, 400);
@@ -492,8 +494,9 @@ function sizesEmail(row: any, id: string): { subject: string; html: string } {
   return {
     subject: `${first}'s glow gear needs a size - Lights Out Invitational`,
     html: emailShell(`
-      <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">${first.toUpperCase()}'S GLOW GEAR NEEDS A SIZE</p>
-      <p style="margin:0 0 14px;">The custom glow jerseys, glow tee, puck, tape, and UHT hockey bag are being made for every player - and we need ${first}'s sizes to get the order right. It takes about 30 seconds.</p>
+      <p style="margin:0 0 6px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${String(row.player_name).toUpperCase()} IS OFFICIALLY IN.</p>
+      <p style="margin:0 0 14px;">${first} is locked in for the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis. The first glow-in-the-dark hockey tournament in UHT history, and ${first} is part of it.</p>
+      <p style="margin:0 0 14px;">Now the fun part: the custom glow jerseys, glow tee, puck, tape, and UHT hockey bag are being made for every player - and we need <b style="color:#ffffff;">${first}'s sizes</b> to get the order right. It takes about 30 seconds.</p>
       <p style="margin:0 0 16px;">While you are there, tell us the <b style="color:#7fd8ff;">number and last name</b> you want on the back of ${first}'s jerseys. Number requests are first come, first served within each team, so the sooner the better.</p>
       <div style="text-align:center;margin:0 0 18px;">
         <a href="https://ultimatetournaments.com/lights-out/size?id=${id}" style="display:inline-block;background:linear-gradient(90deg,#39ff14,#00ccff);color:#04091a;text-decoration:none;font-weight:bold;padding:13px 34px;border-radius:999px;font-size:15px;">PICK ${first.toUpperCase()}'S SIZES</a>

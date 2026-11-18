@@ -20,6 +20,7 @@ function SizePicker() {
   const [jerseySizes, setJerseySizes] = useState<string[]>([]);
   const [teeSizes, setTeeSizes] = useState<string[]>([]);
   const [jersey, setJersey] = useState('');
+  const [goalieCut, setGoalieCut] = useState(false);
   const [tee, setTee] = useState('');
   const [number, setNumber] = useState('');
   const [jerseyName, setJerseyName] = useState('');
@@ -36,7 +37,9 @@ function SizePicker() {
           setPlayerName(json.data.player_name || '');
           setJerseySizes(json.data.jersey_sizes || []);
           setTeeSizes(json.data.tee_sizes || []);
-          setJersey(json.data.jersey_size || '');
+          const js = String(json.data.jersey_size || '');
+          setGoalieCut(js.startsWith('Goalie Cut '));
+          setJersey(js.startsWith('Goalie Cut ') ? js.slice(11) : js);
           setTee(json.data.tee_size || '');
           setNumber(json.data.jersey_number || '');
           setJerseyName(json.data.jersey_name || '');
@@ -56,7 +59,7 @@ function SizePicker() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          jerseySize: jersey || undefined,
+          jerseySize: jersey ? (goalieCut ? `Goalie Cut ${jersey}` : jersey) : undefined,
           teeSize: tee || undefined,
           jerseyNumber: number.trim() || undefined,
           jerseyName: jerseyName.trim() || undefined,
@@ -119,7 +122,7 @@ function SizePicker() {
               <p className="text-lg font-bold mb-2" style={{ color: '#39ff14' }}>Locked in</p>
               <p className="text-sm text-white">
                 {jerseyName || playerName}{number ? ` #${number}` : ''}
-                {jersey ? ` - Jersey ${jersey}` : ''}{tee ? ` - Tee ${tee}` : ''}
+                {jersey ? ` - Jersey ${goalieCut ? 'Goalie Cut ' : ''}${jersey}` : ''}{tee ? ` - Tee ${tee}` : ''}
               </p>
               <p className="text-xs mt-3" style={{ color: '#7fd8ff' }}>
                 The swag will be waiting at check-in, right before opening ceremonies on June 11th.
@@ -151,6 +154,23 @@ function SizePicker() {
                 </div>
                 <p className="text-[11px] mt-1.5" style={{ color: '#55637a' }}>
                   Number requests are first come, first served within each team - we will get as close as we can.
+                </p>
+              </div>
+              <div className="mb-3">
+                <p className="text-xs font-bold tracking-widest mb-2" style={{ color: '#39ff14' }}>JERSEY CUT</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ v: false, label: 'REGULAR' }, { v: true, label: 'GOALIE CUT' }].map(opt => (
+                    <button key={opt.label} onClick={() => setGoalieCut(opt.v)}
+                      className="rounded-xl py-3 text-sm font-bold border transition"
+                      style={goalieCut === opt.v
+                        ? { background: 'linear-gradient(90deg,#39ff14,#00ccff)', color: '#04091a', borderColor: 'transparent' }
+                        : { background: 'rgba(255,255,255,.04)', color: '#dbe8f5', borderColor: 'rgba(0,204,255,.3)' }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] mt-1.5" style={{ color: goalieCut ? '#39ff14' : '#55637a' }}>
+                  {goalieCut ? 'Goalie cut it is - roomier for pads.' : 'Goalies: pick GOALIE CUT so the jersey fits over pads.'}
                 </p>
               </div>
               {sizeGrid('GLOW JERSEY SIZE', jerseySizes, jersey, setJersey)}

@@ -308,7 +308,7 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
               <div className="grid grid-cols-2 gap-3">
                 <select className={inputCls} value={f.jerseySize} onChange={(e) => set('jerseySize', e.target.value)} style={{ color: f.jerseySize ? '#fff' : 'rgba(255,255,255,.35)' }}>
                   <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Jersey size</option>
-                  {['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
+                  {['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL', 'Goalie Cut Youth S', 'Goalie Cut Youth M', 'Goalie Cut Youth L', 'Goalie Cut Youth XL', 'Goalie Cut Adult S', 'Goalie Cut Adult M', 'Goalie Cut Adult L', 'Goalie Cut Adult XL', 'Goalie Cut Adult XXL'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
                 </select>
                 <select className={inputCls} value={f.teeSize} onChange={(e) => set('teeSize', e.target.value)} style={{ color: f.teeSize ? '#fff' : 'rgba(255,255,255,.35)' }}>
                   <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Tee size</option>

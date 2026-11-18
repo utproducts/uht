@@ -199,8 +199,11 @@ export default function LightsOutAdminPage() {
         const ORDER2 = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
         const js = count('jersey_size'); const ts = count('tee_size');
         const missing = paid.filter((r: any) => !r.jersey_size || !r.tee_size).length;
-        const line = (m: Record<string, number>) =>
-          ORDER2.filter(sz => m[sz]).map(sz => `${sz}: ${m[sz]}`).join(' · ') || 'none picked yet';
+        const line = (m: Record<string, number>) => {
+          const extras = Object.keys(m).filter(sz => !ORDER2.includes(sz)).sort();
+          const parts = [...ORDER2.filter(sz => m[sz]), ...extras].map(sz => `${sz}: ${m[sz]}`);
+          return parts.join(' · ') || 'none picked yet';
+        };
         return (
           <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm mb-5">
             <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-1.5">Swag order ({paid.length} players)</p>
