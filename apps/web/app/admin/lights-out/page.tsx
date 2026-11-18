@@ -223,10 +223,16 @@ export default function LightsOutAdminPage() {
                       className="px-4 py-1.5 rounded-full text-sm font-semibold border border-[#003e79] text-[#003e79] hover:bg-[#f0f7ff] disabled:opacity-50">
                       Send me a test
                     </button>
-                    <button onClick={() => sendSizesBlast(unsent)} disabled={sizesBusy || unsent === 0}
-                      className="px-4 py-1.5 rounded-full text-sm font-semibold bg-[#003e79] text-white hover:bg-[#00315f] disabled:opacity-50">
-                      {unsent === 0 ? 'All families emailed' : `Approve + email ${unsent} famil${unsent === 1 ? 'y' : 'ies'}`}
-                    </button>
+                    {unsent === 0 ? (
+                      <span className="px-4 py-1.5 rounded-full text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Approved - all families emailed
+                      </span>
+                    ) : (
+                      <button onClick={() => sendSizesBlast(unsent)} disabled={sizesBusy}
+                        className="px-4 py-1.5 rounded-full text-sm font-semibold bg-[#003e79] text-white hover:bg-[#00315f] disabled:opacity-50">
+                        {`Approve + email ${unsent} famil${unsent === 1 ? 'y' : 'ies'}`}
+                      </button>
+                    )}
                   </div>
                   {sizesMsg && <p className="text-xs font-semibold text-[#0a6ebd] mt-2">{sizesMsg}</p>}
                   <p className="text-[11px] text-[#86868b] mt-1.5">

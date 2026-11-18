@@ -547,7 +547,14 @@ lightsOutRoutes.post('/admin/send-sizes-emails', authMiddleware, requireRole('ad
   for (const row of (rows.results || []) as any[]) {
     try {
       const m = sizesEmail(row, row.id);
-      await sendEmail(c.env, row.email, m.subject, m.html);
+      // Direct send so a Resend rejection (rate limit etc.) is NOT marked
+      // sent - the swallow-errors wrapper is for fire-and-forget emails only
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${(c.env as any).RESEND_API}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: FROM, to: [row.email], subject: m.subject, html: m.html }),
+      });
+      if (!res.ok) throw new Error(`resend ${res.status}`);
       await c.env.DB.prepare("UPDATE lights_out_registrations SET sizes_email_sent_at = datetime('now') WHERE id = ?")
         .bind(row.id).run();
       sent++;
@@ -555,8 +562,51 @@ lightsOutRoutes.post('/admin/send-sizes-emails', authMiddleware, requireRole('ad
       failed.push(String(row.player_name || row.id));
       console.error('sizes email failed for', row.id, e);
     }
+    // Stay under Resend's rate limit (2/sec)
+    await new Promise(r => setTimeout(r, 600));
   }
   return c.json({ success: true, data: { sent, failed } });
+});
+
+// Admin: did Resend actually get the sizes blast? Compares the provider's
+// recent-send log against our sent flags. ?fix=1 re-arms anyone missing.
+lightsOutRoutes.get('/admin/sizes-email-audit', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const marked = await c.env.DB.prepare(`
+    SELECT id, player_name, email, sizes_email_sent_at FROM lights_out_registrations
+    WHERE status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0 AND sizes_email_sent_at IS NOT NULL
+  `).all<any>();
+  // Resend list API: newest first, page through until we are past the blast window
+  const got = new Set<string>();
+  let cursor = '';
+  for (let page = 0; page < 8; page++) {
+    const r = await fetch(`https://api.resend.com/emails?limit=100${cursor ? `&after=${cursor}` : ''}`, {
+      headers: { Authorization: `Bearer ${(c.env as any).RESEND_API}` },
+    });
+    if (!r.ok) return c.json({ success: false, error: `Resend list failed (${r.status})` }, 502);
+    const j = await r.json() as any;
+    const list = j?.data || [];
+    for (const e of list) {
+      if (String(e.subject || '').includes('glow gear needs a size')) {
+        for (const t of (Array.isArray(e.to) ? e.to : [e.to])) got.add(String(t).toLowerCase());
+      }
+    }
+    if (!list.length || !j?.has_more) break;
+    cursor = list[list.length - 1]?.id || '';
+    if (!cursor) break;
+  }
+  const missing = (marked.results || []).filter((m: any) => !got.has(String(m.email).toLowerCase()));
+  if (c.req.query('fix') === '1' && missing.length) {
+    for (const m of missing as any[]) {
+      await c.env.DB.prepare('UPDATE lights_out_registrations SET sizes_email_sent_at = NULL WHERE id = ?').bind(m.id).run();
+    }
+  }
+  return c.json({ success: true, data: {
+    marked_sent: (marked.results || []).length,
+    confirmed_at_resend: got.size,
+    missing: missing.map((m: any) => ({ player: m.player_name, email: m.email })),
+    fixed: c.req.query('fix') === '1' ? missing.length : 0,
+  } });
 });
 
 // Admin: send yourself a copy of the acceptance email for any eligible row
