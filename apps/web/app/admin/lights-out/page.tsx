@@ -42,7 +42,7 @@ export default function LightsOutAdminPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent'>('all');
+  const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent' | 'waitlist'>('all');
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [testEmail, setTestEmail] = useState('');
   const [sizesMsg, setSizesMsg] = useState('');
@@ -103,23 +103,26 @@ export default function LightsOutAdminPage() {
   // staff kept losing track of them when they vanished from this tab.
   const isReq = (r: any) => String(r.status).startsWith('invite_');
   const fromRequest = (r: any) => r.star_event_id === 'invite-request';
+  const fromWaitlist = (r: any) => r.star_event_id === 'goalie-waitlist';
   const isPaid = (r: any) => !isReq(r) && (r.amount_paid_cents || 0) > 0;
   // Request lifecycle: Requests = waiting on review. Approving moves them to
   // Code Sent. Registering moves them to Registered. Nothing stays behind,
   // so a zero Requests pill means nothing is being missed.
-  const counts = { all: rows.length, registered: 0, incomplete: 0, pending: 0, approved: 0, denied: 0, requests: 0, code_sent: 0 } as Record<string, number>;
+  const counts = { all: rows.length, registered: 0, incomplete: 0, pending: 0, approved: 0, denied: 0, requests: 0, code_sent: 0, waitlist: 0 } as Record<string, number>;
   for (const r of rows) {
     if (r.status === 'invite_requested') counts.requests++;
     else if (r.status === 'invite_approved') counts.code_sent++;
+    else if (r.status === 'goalie_waitlist') counts.waitlist++;
     else if (r.status === 'denied' || r.status === 'invite_denied') counts.denied++;
     else counts[r.status] = (counts[r.status] || 0) + 1;
     if (isPaid(r)) counts.registered++;
-    else if (!isReq(r)) counts.incomplete++;
+    else if (!isReq(r) && r.status !== 'goalie_waitlist') counts.incomplete++;
   }
   const visible = rows.filter(r => {
     if (filter === 'all') return true;
     if (filter === 'requests') return r.status === 'invite_requested';
     if (filter === 'code_sent') return r.status === 'invite_approved';
+    if (filter === 'waitlist') return r.status === 'goalie_waitlist';
     if (filter === 'denied') return r.status === 'denied' || r.status === 'invite_denied';
     if (filter === 'registered') return isPaid(r);
     if (filter === 'incomplete') return !isReq(r) && !isPaid(r);
@@ -132,6 +135,7 @@ export default function LightsOutAdminPage() {
     const paid = r.amount_paid_cents || 0;
     if (st === 'invite_requested') return { label: 'NEEDS REVIEW', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     if (st === 'invite_approved') return { label: 'CODE SENT - NOT REGISTERED YET', cls: 'bg-[#f0f7ff] text-[#0077b0] border-[#bfe0f5]' };
+    if (st === 'goalie_waitlist') return { label: 'GOALIE WAITLIST', cls: 'bg-orange-50 text-orange-700 border-orange-200' };
     if (st === 'invite_denied' || st === 'denied') return { label: 'DENIED', cls: 'bg-red-50 text-red-600 border-red-200' };
     if (st === 'pending_payment') return { label: 'CHECKOUT ABANDONED', cls: 'bg-gray-50 text-gray-500 border-gray-200' };
     if (st === 'pending') return { label: 'PAID - NEEDS APPROVAL', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
@@ -168,19 +172,23 @@ export default function LightsOutAdminPage() {
           if (s.startsWith('G')) return 'G';
           return '?';
         };
-        const agg: Record<string, { paid: number; req: number; years: Record<string, number>; pos: Record<string, number> }> = {};
+        const agg: Record<string, { paid: number; req: number; wait: number; years: Record<string, number>; pos: Record<string, number> }> = {};
         for (const r of rows) {
-          if (!isPaid(r) && !isReq(r)) continue; // abandoned checkouts don't count
+          if (!isPaid(r) && !isReq(r) && r.status !== 'goalie_waitlist') continue; // abandoned checkouts don't count
           const d = divisionOf(r.birth_year);
-          const a = (agg[d] = agg[d] || { paid: 0, req: 0, years: {}, pos: {} });
+          const a = (agg[d] = agg[d] || { paid: 0, req: 0, wait: 0, years: {}, pos: {} });
           if (isPaid(r)) {
             a.paid++;
             const yk = String(r.birth_year || '?').trim();
             a.years[yk] = (a.years[yk] || 0) + 1;
             const pk = posOf(r.position);
             a.pos[pk] = (a.pos[pk] || 0) + 1;
-          } else a.req++;
+          } else if (r.status === 'goalie_waitlist') a.wait++;
+          else a.req++;
         }
+        // Goalie caps per division (Chad, Nov 2026). At the cap, the public
+        // page routes new goalies to the free waitlist automatically.
+        const GOALIE_CAPS: Record<string, number> = { Mite: 6, Squirt: 8, 'Pee Wee': 8, Bantam: 6 };
         const shown = ORDER.filter(d => agg[d]);
         if (shown.length === 0) return null;
         return (
@@ -199,8 +207,15 @@ export default function LightsOutAdminPage() {
                     <p className="text-[11px] text-[#0a6ebd] font-bold leading-snug mt-0.5">
                       {(['F', 'D', 'G', '?'] as const)
                         .filter(k => agg[d].pos[k])
-                        .map(k => `${k === 'F' ? 'Fwd' : k === 'D' ? 'Def' : k === 'G' ? 'Goalie' : 'N/A'} ${agg[d].pos[k]}`)
+                        .map(k => k === 'G' && GOALIE_CAPS[d]
+                          ? `Goalie ${agg[d].pos[k]}/${GOALIE_CAPS[d]}`
+                          : `${k === 'F' ? 'Fwd' : k === 'D' ? 'Def' : k === 'G' ? 'Goalie' : 'N/A'} ${agg[d].pos[k]}`)
                         .join(' · ')}
+                    </p>
+                  )}
+                  {!!GOALIE_CAPS[d] && ((agg[d].pos['G'] || 0) >= GOALIE_CAPS[d] || agg[d].wait > 0) && (
+                    <p className="text-[11px] text-orange-600 font-bold leading-snug mt-0.5">
+                      {(agg[d].pos['G'] || 0) >= GOALIE_CAPS[d] ? 'GOALIE WAITLIST ON' : 'GOALIE SPOTS OPEN'}{agg[d].wait ? ` - ${agg[d].wait} waiting` : ''}
                     </p>
                   )}
                 </div>
@@ -301,10 +316,10 @@ export default function LightsOutAdminPage() {
       })()}
 
       <div className="flex flex-wrap gap-2 mb-5">
-        {(['all', 'registered', 'pending', 'requests', 'code_sent', 'incomplete', 'denied'] as const).map(fk => (
+        {(['all', 'registered', 'pending', 'requests', 'code_sent', 'waitlist', 'incomplete', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
-            {fk === 'all' ? 'All' : fk === 'code_sent' ? 'Code Sent' : fk === 'pending' ? 'Needs Approval' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
+            {fk === 'all' ? 'All' : fk === 'code_sent' ? 'Code Sent' : fk === 'waitlist' ? 'Goalie Waitlist' : fk === 'pending' ? 'Needs Approval' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
           </button>
         ))}
       </div>
@@ -358,12 +373,14 @@ export default function LightsOutAdminPage() {
                       : st === 'pending' ? <Ic.Clock title="Paid - needs your approval" />
                       : st === 'invite_approved' ? <Ic.Mail title="Code sent - not registered yet" />
                       : st === 'invite_requested' ? <Ic.Clock title="Invite request - needs review" />
+                      : st === 'goalie_waitlist' ? <Ic.Clock title="Goalie waitlist - waiting for a spot to open" />
                       : (st === 'denied' || st === 'invite_denied') ? <Ic.X title="Denied" />
                       : <Ic.Dash title="Not in" />}
                   </td>
                   <td className="px-2 py-2.5 text-center">
                     {r.star_verified ? <Ic.Check title="Star verified on a scoresheet" />
-                      : fromRequest(r) && r.invite_code ? <Ic.Key title={`Invite code ${r.invite_code}`} />
+                      : (fromRequest(r) || fromWaitlist(r)) && r.invite_code ? <Ic.Key title={`Invite code ${r.invite_code}`} />
+                      : fromWaitlist(r) ? <Ic.Circle title="Goalie waitlist - no code yet" />
                       : fromRequest(r) ? <Ic.Circle title="Invite request - no code yet" />
                       : <Ic.Alert title="Star not found on scoresheets" />}
                   </td>
@@ -394,7 +411,17 @@ export default function LightsOutAdminPage() {
                         Deny
                       </button>
                     </>)}
-                    {!['pending', 'invite_requested'].includes(st) && (
+                    {st === 'goalie_waitlist' && (<>
+                      <button onClick={() => setStatus(r.id, 'invite_approved')} disabled={busy === r.id}
+                        className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-[11px] font-bold hover:bg-green-700 transition disabled:opacity-50 mr-1.5">
+                        Spot Opened + Send Code
+                      </button>
+                      <button onClick={() => setStatus(r.id, 'invite_denied')} disabled={busy === r.id}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-50 transition disabled:opacity-50">
+                        Remove
+                      </button>
+                    </>)}
+                    {!['pending', 'invite_requested', 'goalie_waitlist'].includes(st) && (
                       <button onClick={() => setOpenRow(isOpen ? null : r.id)}
                         className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-[#6e6e73] bg-[#f5f5f7] hover:bg-[#e8e8ed] hover:text-[#1d1d1f] transition">
                         {isOpen ? 'Close' : 'Details'}
@@ -414,7 +441,9 @@ export default function LightsOutAdminPage() {
                             On the jersey: {(r.jersey_name || '(no name)')}{r.jersey_number_request ? ` #${r.jersey_number_request}` : ''} · {r.jersey_size ? `Jersey ${r.jersey_size}` : 'Jersey size missing'} · {r.tee_size ? `Tee ${r.tee_size}` : 'Tee size missing'}
                           </p>
                         ) : ((r.amount_paid_cents || 0) > 0 && <p className="text-xs font-semibold text-amber-600">Sizes not submitted yet</p>)}
-                        {fromRequest(r)
+                        {fromWaitlist(r)
+                          ? <p className="text-xs text-orange-700 font-semibold">Joined the goalie waitlist{r.invite_code ? <> · code <b className="tracking-widest">{r.invite_code}</b></> : ''}{isIn ? ' · now registered' : ''}</p>
+                          : fromRequest(r)
                           ? <p className="text-xs text-[#0077b0] font-semibold">Came in as an invite request{r.invite_code ? <> · code <b className="tracking-widest">{r.invite_code}</b></> : ''}{isIn ? ' · now registered' : ''}</p>
                           : <p className="text-xs text-[#6e6e73]">Star earned at: <b>{r.star_event_name || r.star_event_id}</b></p>}
                         {r.notes && String(r.notes).startsWith('Invite request') && (
@@ -453,10 +482,13 @@ export default function LightsOutAdminPage() {
                           </button>
                         )}
                         {st === 'invite_denied' && (
-                          <button onClick={() => setStatus(r.id, 'invite_requested')} disabled={busy === r.id}
+                          <button onClick={() => setStatus(r.id, fromWaitlist(r) ? 'goalie_waitlist' : 'invite_requested')} disabled={busy === r.id}
                             className="px-3 py-1.5 rounded-lg bg-white border border-[#e8e8ed] text-[#6e6e73] text-[11px] font-bold hover:border-[#003e79]/40 transition disabled:opacity-50">
-                            Back to review
+                            {fromWaitlist(r) ? 'Back to waitlist' : 'Back to review'}
                           </button>
+                        )}
+                        {st === 'invite_approved' && fromWaitlist(r) && (
+                          <span className="text-[11px] text-[#86868b] self-center">Code sent off the goalie waitlist</span>
                         )}
                       </div>
                     </div>

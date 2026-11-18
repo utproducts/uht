@@ -190,6 +190,10 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  // Division goalie spots at cap: the API refuses checkout and we flip the
+  // modal into free-waitlist mode instead
+  const [waitOffer, setWaitOffer] = useState(false);
+  const [waitDone, setWaitDone] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/events`).then(r => r.json()).then(j => { if (j.success) setEvents(j.data || []); }).catch(() => {});
@@ -201,7 +205,10 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const set = (k: string, v: string) => setF(prev => ({ ...prev, [k]: v }));
+  const set = (k: string, v: string) => {
+    setF(prev => ({ ...prev, [k]: v }));
+    if (k === 'position' || k === 'birthYear') setWaitOffer(false);
+  };
   const inputCls = 'w-full rounded-xl px-4 py-2.5 text-sm text-white bg-[#0a1228] border border-[#1d3a56] focus:border-[#00ccff] focus:outline-none placeholder:text-white/30';
 
   const submit = async () => {
@@ -230,6 +237,35 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
         window.location.href = j.data.checkoutUrl; // off to Stripe - $550 per player
         return;
       }
+      if (j.goalieWaitlist) {
+        setWaitOffer(true);
+        setBusy(false);
+        return;
+      }
+      setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
+    } catch {
+      setError('Something went wrong - please try again.');
+    }
+    setBusy(false);
+  };
+
+  const joinWaitlist = async () => {
+    setError('');
+    if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)) {
+      setError('Please fill in the player, team, parent name, and a valid email to join the waitlist.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/goalie-waitlist`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerName: f.playerName.trim(), teamName: f.teamName.trim(), birthYear: f.birthYear.trim() || undefined,
+          position: 'Goalie', parentName: f.parentName.trim(), email: f.email.trim(), phone: f.phone || undefined,
+        }),
+      });
+      const j = await res.json();
+      if (j.success) { setWaitDone(true); setBusy(false); return; }
       setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
     } catch {
       setError('Something went wrong - please try again.');
@@ -249,7 +285,14 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
         >
           <svg className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        {done ? (
+        {waitDone ? (
+          <div className="text-center py-6">
+            <p className="text-[12px] font-black tracking-[0.35em] text-[#ffb84d] mb-4">ON THE GOALIE WAITLIST</p>
+            <p className="text-white text-xl font-black mb-3">{f.playerName.split(' ')[0] || 'Your goalie'} is on the list.</p>
+            <p className="text-white/70 text-sm leading-relaxed mb-6">Goalie spots for this age group are sold out. No payment was taken - the moment a spot opens, we email you a single-use invite code, in waitlist order. A confirmation is on its way to your inbox.</p>
+            <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black text-[#04091a]" style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>DONE</button>
+          </div>
+        ) : done ? (
           <div className="text-center py-6">
             <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REGISTRATION RECEIVED</p>
             <p className="text-white text-xl font-black mb-3">We're confirming the star.</p>
@@ -320,6 +363,22 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
                 <input className={inputCls} type="email" placeholder="Email *" value={f.email} onChange={(e) => set('email', e.target.value)} />
                 <input className={inputCls} type="tel" placeholder="Phone" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
               </div>
+              {waitOffer ? (
+                <>
+                  <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,184,77,.08)', border: '1px solid rgba(255,184,77,.55)' }}>
+                    <p className={`${rajdhani.className} text-[#ffb84d] text-sm font-bold tracking-[0.12em] mb-1`}>GOALIE SPOTS ARE SOLD OUT FOR THIS AGE GROUP</p>
+                    <p className="text-white/65 text-[12px] leading-snug">That is how fast this event is moving. Join the free goalie waitlist - no payment - and the moment a spot opens, we email you a single-use invite code. Codes go out in waitlist order.</p>
+                  </div>
+                  {error && <p className="text-[#ff6b6b] text-xs font-semibold">{error}</p>}
+                  <button onClick={joinWaitlist} disabled={busy}
+                    className="w-full py-3.5 rounded-full text-sm font-black text-[#04091a] shadow-[0_0_30px_rgba(255,184,77,.3)] hover:brightness-110 transition disabled:opacity-60"
+                    style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>
+                    {busy ? 'JOINING…' : 'JOIN THE GOALIE WAITLIST - FREE'}
+                  </button>
+                  <p className="text-white/40 text-[11px] text-center">No charge to join the waitlist. Your confirmation email arrives right away.</p>
+                </>
+              ) : (
+                <>
               {/* payment plan stepper */}
               <div className="grid grid-cols-2 gap-3 pt-1">
                 {[
@@ -343,6 +402,8 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
                 {busy ? 'STARTING CHECKOUT…' : f.payType === 'deposit' ? 'REGISTER + PAY $200 DEPOSIT' : 'REGISTER + PAY $550'}
               </button>
               <p className="text-white/40 text-[11px] text-center">Secure payment by Stripe. Invites are confirmed by the UHT team - Three Stars recipients only.</p>
+                </>
+              )}
             </div>
           </>
         )}

@@ -53,6 +53,25 @@ lightsOutRoutes.get('/events', async (c) => {
   return c.json({ success: true, data: rows.results || [] });
 });
 
+// Goalie caps per division (Chad, Nov 2026): Mite 6, Squirt 8 (full at
+// launch), Pee Wee 8, Bantam 6, Midget uncapped. When a division's PAID
+// goalie count reaches its cap, new goalie registrations for those birth
+// years go to a free waitlist instead of checkout. The gate is live-count
+// based, so sending a waitlisted family an invite code - or a refund -
+// reopens checkout automatically. Staff invite codes always pass.
+const GOALIE_CAPS: { div: string; min: number; max: number; cap: number }[] = [
+  { div: 'Mite', min: 2018, max: 2023, cap: 6 },
+  { div: 'Squirt', min: 2016, max: 2017, cap: 8 },
+  { div: 'Pee Wee', min: 2014, max: 2015, cap: 8 },
+  { div: 'Bantam', min: 2012, max: 2013, cap: 6 },
+];
+const goalieCapFor = (birthYear?: string | null, position?: string | null) => {
+  if (String(position || '').trim().toLowerCase() !== 'goalie') return null;
+  const y = parseInt(String(birthYear || '').trim(), 10);
+  if (!y || isNaN(y)) return null;
+  return GOALIE_CAPS.find(g => y >= g.min && y <= g.max) || null;
+};
+
 const registerSchema = z.object({
   playerName: z.string().min(2).max(80),
   jerseyNumber: z.string().max(10).optional(),
@@ -115,6 +134,45 @@ lightsOutRoutes.post('/request-invite', zValidator('json', inviteRequestSchema),
   return c.json({ success: true, data: { id } });
 });
 
+// Goalie waitlist - a division's goalie spots are at cap, so the family
+// joins this free list instead of paying. When a spot opens, staff sends an
+// invite code from the admin panel (goalie_waitlist -> invite_approved) and
+// the code unlocks the normal register form.
+lightsOutRoutes.post('/goalie-waitlist', zValidator('json', inviteRequestSchema), async (c) => {
+  const b = c.req.valid('json');
+  const db = c.env.DB;
+  // One waitlist entry per player + email, quietly idempotent
+  const dup = await db.prepare(
+    `SELECT id FROM lights_out_registrations WHERE status = 'goalie_waitlist' AND LOWER(player_name) = LOWER(?) AND LOWER(email) = LOWER(?)`
+  ).bind(b.playerName.trim(), b.email.trim()).first<any>();
+  if (dup) return c.json({ success: true, data: { id: dup.id, already: true } });
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO lights_out_registrations (id, player_name, team_name, star_event_id, birth_year, position, parent_name, email, phone, status, star_verified, notes)
+    VALUES (?, ?, ?, 'goalie-waitlist', ?, 'Goalie', ?, ?, ?, 'goalie_waitlist', 0, 'Goalie waitlist - division goalie spots at cap')
+  `).bind(id, b.playerName.trim(), b.teamName.trim(), b.birthYear || null,
+    b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null).run();
+
+  const first = b.playerName.trim().split(' ')[0];
+  await sendEmail(c.env, b.email.trim(), `${b.playerName.trim()} is on the Lights Out goalie waitlist`,
+    emailShell(`
+      <h2 style="margin:0 0 14px;color:#39ff14;font-size:19px;">You are on the goalie waitlist</h2>
+      <p style="margin:0 0 14px;">Hi ${b.parentName.trim()},</p>
+      <p style="margin:0 0 14px;">Goalie spots for ${first}'s age group are completely full - that is how fast this event is moving. <b style="color:#7fd8ff;">${b.playerName.trim()}</b> is officially on the goalie waitlist for the Lights Out Invitational, June 11-13, 2027 in St. Louis.</p>
+      <p style="margin:0 0 14px;">No payment was taken and there is nothing else you need to do. The moment a goalie spot opens, we email you a single-use invite code - codes go out in waitlist order, and the spot is claimed when payment is made.</p>
+      <p style="margin:0;">Keep ${first} in the crease. We hope to see those pads under the glow.</p>
+    `));
+  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out GOALIE WAITLIST: ${b.playerName.trim()} (${b.teamName.trim()})`,
+    emailShell(`
+      <p style="margin:0 0 6px;">Player: <b>${b.playerName.trim()}</b> (${b.birthYear || 'birth year n/a'}, Goalie)</p>
+      <p style="margin:0 0 6px;">Team: ${b.teamName.trim()}</p>
+      <p style="margin:0 0 6px;">Parent: ${b.parentName.trim()} - ${b.email.trim()} ${b.phone ? '- ' + b.phone : ''}</p>
+      <p style="margin:10px 0 0;color:#7fd8ff;">Division goalie spots are at cap. When one opens, use Spot Opened + Send Code on the admin Lights Out page (Goalie Waitlist filter).</p>
+    `));
+  return c.json({ success: true, data: { id } });
+});
+
 lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
   const b = c.req.valid('json');
   const db = c.env.DB;
@@ -141,6 +199,23 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
     `).bind(b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.birthYear || null,
       b.position || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, b.payType, id).run();
   } else {
+    // Goalie cap: paid goalies hold the spots. A full division never
+    // reaches Stripe - the frontend flips into waitlist mode instead.
+    const gcap = goalieCapFor(b.birthYear, b.position);
+    if (gcap) {
+      const held = await db.prepare(`
+        SELECT COUNT(*) as n FROM lights_out_registrations
+        WHERE position = 'Goalie' AND status IN ('pending', 'approved')
+          AND CAST(birth_year AS INTEGER) BETWEEN ? AND ?
+      `).bind(gcap.min, gcap.max).first<any>();
+      if ((held?.n || 0) >= gcap.cap) {
+        return c.json({
+          success: false,
+          goalieWaitlist: true,
+          error: `${gcap.div} goalie spots are sold out. Join the free goalie waitlist and we will email you an invite code the moment a spot opens.`,
+        }, 409);
+      }
+    }
     const ev = await db.prepare('SELECT id, name FROM events WHERE id = ?').bind(b.starEventId).first<any>();
     if (!ev) return c.json({ success: false, error: 'Unknown event' }, 400);
 
@@ -191,6 +266,10 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
       'metadata[lights_out_reg_id]': id,
       'metadata[player_name]': b.playerName.trim(),
       'payment_intent_data[metadata][lights_out_reg_id]': id,
+      'payment_intent_data[metadata][player_name]': b.playerName.trim(),
+      // Shows as the payment description in the Stripe dashboard list, so
+      // staff can match a charge to a player at a glance
+      'payment_intent_data[description]': `Lights Out - ${b.playerName.trim()} (${isDeposit ? 'deposit' : 'full'})`,
     }).toString(),
   });
   const session = await stripeResponse.json() as any;
@@ -216,12 +295,18 @@ lightsOutRoutes.get('/register/:id/verify', async (c) => {
   `).bind(id).first<any>();
   if (!row) return c.json({ success: false, error: 'Not found' }, 404);
   if (row.paid_at) return c.json({ success: true, data: { alreadyPaid: true } });
-  if (!sessionId || sessionId !== row.stripe_session_id) return c.json({ success: false, error: 'Session mismatch' }, 400);
+  if (!sessionId) return c.json({ success: false, error: 'Session mismatch' }, 400);
 
   const sres = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
     headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` },
   });
   const session = await sres.json() as any;
+  // A double-submit can leave a newer unpaid session id on the row while
+  // the family pays the first one. The paid session's metadata names the
+  // registration it was created for, so trust that over the stored id.
+  if (sessionId !== row.stripe_session_id && session?.metadata?.lights_out_reg_id !== id) {
+    return c.json({ success: false, error: 'Session mismatch' }, 400);
+  }
   if (!sres.ok || session.payment_status !== 'paid') {
     return c.json({ success: false, error: 'Payment not completed' }, 402);
   }
@@ -272,7 +357,7 @@ lightsOutRoutes.get('/admin/requests', authMiddleware, requireRole('admin', 'dir
 });
 
 lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin', 'director'),
-  zValidator('json', z.object({ status: z.enum(['approved', 'denied', 'pending', 'invite_approved', 'invite_denied']) })), async (c) => {
+  zValidator('json', z.object({ status: z.enum(['approved', 'denied', 'pending', 'invite_approved', 'invite_denied', 'goalie_waitlist']) })), async (c) => {
     const id = c.req.param('id');
     const { status } = c.req.valid('json');
     const db = c.env.DB;
@@ -290,6 +375,7 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
     // Approving a no-star INVITE REQUEST issues a single-use code and sends
     // the congratulations email with it; the code unlocks the register form
     if (status === 'invite_approved' && row.status !== 'invite_approved') {
+      const offWaitlist = row.status === 'goalie_waitlist';
       let code = row.invite_code;
       if (!code) {
         const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -300,10 +386,10 @@ lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin'
         }
         await db.prepare('UPDATE lights_out_registrations SET invite_code = ? WHERE id = ?').bind(code, id).run();
       }
-      await sendEmail(c.env, row.email, `${row.player_name} is invited - Lights Out Invitational`,
+      await sendEmail(c.env, row.email, offWaitlist ? `A goalie spot opened - ${row.player_name} is invited` : `${row.player_name} is invited - Lights Out Invitational`,
         emailShell(`
-          <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">CONGRATULATIONS. ${String(row.player_name).toUpperCase()} IS INVITED.</p>
-          <p style="margin:0 0 14px;">Your invite request made the cut. ${row.player_name} is officially invited to the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis. Dark arena, glowing ice, and every player keeps the custom glow jerseys, collector stick, and glow puck.</p>
+          <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#39ff14;">${offWaitlist ? 'A GOALIE SPOT OPENED.' : 'CONGRATULATIONS.'} ${String(row.player_name).toUpperCase()} IS INVITED.</p>
+          <p style="margin:0 0 14px;">${offWaitlist ? `A goalie spot just opened up, and it goes straight to the waitlist - that means ${row.player_name}.` : 'Your invite request made the cut.'} ${row.player_name} is officially invited to the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis. Dark arena, glowing ice, and every player keeps the custom glow jerseys, collector stick, and glow puck.</p>
           <p style="margin:0 0 10px;">Your single-use invite code:</p>
           <p style="margin:0 0 14px;text-align:center;"><span style="display:inline-block;background:#04091a;border:1px solid rgba(57,255,20,.5);border-radius:10px;padding:12px 26px;font-size:22px;font-weight:bold;letter-spacing:4px;color:#39ff14;">${code}</span></p>
           <p style="margin:0 0 16px;text-align:center;">
@@ -449,6 +535,8 @@ lightsOutRoutes.get('/balance/:id', async (c) => {
       'metadata[lights_out_reg_id]': id,
       'metadata[lights_out_balance]': '1',
       'payment_intent_data[metadata][lights_out_reg_id]': id,
+      'payment_intent_data[description]': `Lights Out BALANCE - ${row.player_name}`,
+      'payment_intent_data[metadata][player_name]': String(row.player_name || ''),
     }).toString(),
   });
   const session = await stripeResponse.json() as any;
@@ -607,6 +695,60 @@ lightsOutRoutes.get('/admin/sizes-email-audit', async (c) => {
     missing: missing.map((m: any) => ({ player: m.player_name, email: m.email })),
     fixed: c.req.query('fix') === '1' ? missing.length : 0,
   } });
+});
+
+// Admin: Stripe lookup for "I paid but you show incomplete" disputes.
+// /admin/stripe-lookup?key=uht-coaches-2026&email=x@y.com - every charge
+// under that billing email; or &pi=pi_... for one payment intent. Each hit
+// includes its Checkout session id, so staff can re-point a registration
+// row at the real paid session and run /register/:id/verify on it.
+lightsOutRoutes.get('/admin/stripe-lookup', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const sk = { headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` } };
+  const sessionFor = async (pi: string) => {
+    if (!pi) return null;
+    const sres = await fetch(`https://api.stripe.com/v1/checkout/sessions?payment_intent=${encodeURIComponent(pi)}&limit=1`, sk);
+    const sj = await sres.json() as any;
+    const sess = sj?.data?.[0];
+    return sess ? { id: sess.id, payment_status: sess.payment_status, metadata: sess.metadata || {} } : null;
+  };
+  const shape = async (ch: any) => ({
+    amount: `$${(ch.amount / 100).toFixed(2)}`,
+    status: ch.status,
+    refunded: ch.refunded,
+    paid: ch.paid,
+    when: new Date(ch.created * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+    description: ch.description || ch.calculated_statement_descriptor || '',
+    metadata: ch.metadata || {},
+    billing_email: ch.billing_details?.email || '',
+    last4: ch.payment_method_details?.card?.last4 || '',
+    payment_intent: ch.payment_intent || '',
+    checkout_session: await sessionFor(ch.payment_intent),
+  });
+
+  const pi = String(c.req.query('pi') || '').trim();
+  if (pi) {
+    const r = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(pi)}`, sk);
+    const j = await r.json() as any;
+    if (!r.ok) return c.json({ success: false, error: j?.error?.message || `Stripe ${r.status}` }, 502);
+    const cres = await fetch(`https://api.stripe.com/v1/charges?payment_intent=${encodeURIComponent(pi)}&limit=1`, sk);
+    const cj = await cres.json() as any;
+    const ch = cj?.data?.[0];
+    return c.json({ success: true, data: {
+      pi, pi_status: j.status, amount: `$${(j.amount / 100).toFixed(2)}`, pi_metadata: j.metadata || {},
+      charge: ch ? await shape(ch) : null,
+    } });
+  }
+
+  const email = String(c.req.query('email') || '').trim().toLowerCase();
+  if (!email.includes('@')) return c.json({ success: false, error: 'Pass ?email= or ?pi=' }, 400);
+  const q = encodeURIComponent(`billing_details.email:'${email}'`);
+  const r = await fetch(`https://api.stripe.com/v1/charges/search?query=${q}&limit=20`, sk);
+  const j = await r.json() as any;
+  if (!r.ok) return c.json({ success: false, error: j?.error?.message || `Stripe ${r.status}` }, 502);
+  const charges = [] as any[];
+  for (const ch of (j.data || [])) charges.push(await shape(ch));
+  return c.json({ success: true, data: { email, found: charges.length, charges } });
 });
 
 // Admin: send yourself a copy of the acceptance email for any eligible row
