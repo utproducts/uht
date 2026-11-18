@@ -1868,21 +1868,59 @@ teamRoutes.post('/', authMiddleware, zValidator('json', createTeamSchema), async
       }, 409);
     }
     if (!data.skipDuplicateCheck) {
+      const dupPayload = (t: any) => c.json({
+        success: false,
+        error: 'duplicate_team',
+        existingTeam: {
+          id: t.id, name: t.name, ageGroup: t.age_group,
+          city: t.city, state: t.state, inviteCode: t.invite_code,
+          headCoachName: t.head_coach_name, playerCount: t.player_count,
+        },
+      }, 409);
       const dup2 = await db.prepare(
         `SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code, t.head_coach_name,
            (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id) as player_count
          FROM teams t WHERE t.is_active = 1 AND LOWER(TRIM(t.name)) = LOWER(TRIM(?)) LIMIT 1`
       ).bind(data.name).first<any>();
-      if (dup2) {
-        return c.json({
-          success: false,
-          error: 'duplicate_team',
-          existingTeam: {
-            id: dup2.id, name: dup2.name, ageGroup: dup2.age_group,
-            city: dup2.city, state: dup2.state, inviteCode: dup2.invite_code,
-            headCoachName: dup2.head_coach_name, playerCount: dup2.player_count,
-          },
-        }, 409);
+      if (dup2) return dupPayload(dup2);
+      // Fuzzy pass within the same organization: real duplicates arrive with
+      // the coach's name spelled differently ("Trueitt" vs "Truiett") or an
+      // extra word ("PRIME Pee Wee" vs "Pee Wee"), which exact matching
+      // misses. Letters-only edit distance <= 2 (digits must agree, so
+      // "Renegades 1" vs "Renegades 2" stays allowed) or one name's words
+      // being a superset of the other's flags it; Create Anyway still works.
+      if (data.organizationId) {
+        const orgTeams = await db.prepare(
+          `SELECT t.id, t.name, t.age_group, t.city, t.state, t.invite_code, t.head_coach_name,
+             (SELECT COUNT(*) FROM team_players tp WHERE tp.team_id = t.id) as player_count
+           FROM teams t WHERE t.is_active = 1 AND t.organization_id = ?`
+        ).bind(data.organizationId).all<any>();
+        const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+        const digits = (s: string) => (s.match(/\d+/g) || []).join(',');
+        const tokens = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean));
+        const editLe2 = (a: string, b: string): boolean => {
+          if (Math.abs(a.length - b.length) > 2) return false;
+          let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+          for (let i = 1; i <= a.length; i++) {
+            const cur = [i];
+            let rowMin = i;
+            for (let j = 1; j <= b.length; j++) {
+              cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+              if (cur[j] < rowMin) rowMin = cur[j];
+            }
+            if (rowMin > 2) return false;
+            prev = cur;
+          }
+          return prev[b.length] <= 2;
+        };
+        const aL = letters(data.name), aD = digits(data.name), aT = tokens(data.name);
+        for (const t of (orgTeams.results || []) as any[]) {
+          const bL = letters(t.name), bT = tokens(t.name);
+          const close = aD === digits(t.name) && aL.length >= 10 && editLe2(aL, bL);
+          const subset = (s1: Set<string>, s2: Set<string>) =>
+            s1.size >= 5 && s1.size <= s2.size && Array.from(s1).every(x => s2.has(x));
+          if (close || subset(aT, bT) || subset(bT, aT)) return dupPayload(t);
+        }
       }
     }
   } catch { /* never block creation on a failed dup check */ }
