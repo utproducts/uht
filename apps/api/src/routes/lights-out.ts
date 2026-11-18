@@ -167,7 +167,7 @@ lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) 
     await db.prepare(`
       INSERT INTO lights_out_registrations (id, player_name, jersey_number, team_name, star_event_id, birth_year, position, jersey_size, tee_size, parent_name, email, phone, status, star_verified, payment_plan)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)
-    `).bind(id, b.playerName.trim(), b.jerseyNumber || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
+    `).bind(id, b.playerName.trim(), (b.jerseyNumber || '').replace(/[^0-9]/g, '').slice(0, 2) || null, b.teamName.trim(), b.starEventId, b.birthYear || null,
       b.position || null, b.jerseySize || null, b.teeSize || null, b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null, starHit ? 1 : 0, b.payType).run();
   }
 
@@ -376,7 +376,7 @@ lightsOutRoutes.get('/size/:id', async (c) => {
     player_name: row.player_name,
     jersey_size: row.jersey_size || null,
     tee_size: row.tee_size || null,
-    jersey_number: row.jersey_number_request || row.jersey_number || '',
+    jersey_number: (() => { const n = String(row.jersey_number_request || row.jersey_number || '').trim(); return /^\d{1,2}$/.test(n) ? n : ''; })(),
     jersey_name: row.jersey_name || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') ,
     jersey_sizes: JERSEY_SIZES,
     tee_sizes: TEE_SIZES,

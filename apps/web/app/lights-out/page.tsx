@@ -278,7 +278,7 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <input className={`${inputCls} col-span-2`} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
-                <input className={inputCls} placeholder="Jersey #" value={f.jerseyNumber} onChange={(e) => set('jerseyNumber', e.target.value)} />
+                <input className={inputCls} placeholder="Jersey #" inputMode="numeric" value={f.jerseyNumber} onChange={(e) => set('jerseyNumber', e.target.value.replace(/[^0-9]/g, '').slice(0, 2))} />
               </div>
               <input className={inputCls} placeholder="Team name *" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
               {mode === 'star' ? (
