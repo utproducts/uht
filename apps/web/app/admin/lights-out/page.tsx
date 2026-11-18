@@ -191,6 +191,8 @@ export default function LightsOutAdminPage() {
       {loaded && (() => {
         const paid = rows.filter((r: any) => isPaid(r));
         if (paid.length === 0) return null;
+        const unsent = paid.filter((r: any) => !r.sizes_email_sent_at).length;
+        const allEmailed = unsent === 0;
         const count = (key: 'jersey_size' | 'tee_size') => {
           const m: Record<string, number> = {};
           for (const r of paid) { const v = (r as any)[key]; if (v) m[v] = (m[v] || 0) + 1; }
@@ -199,21 +201,54 @@ export default function LightsOutAdminPage() {
         const ORDER2 = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
         const js = count('jersey_size'); const ts = count('tee_size');
         const missing = paid.filter((r: any) => !r.jersey_size || !r.tee_size).length;
+        const exportSwag = () => {
+          const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+          const header = ['Player', 'Name on Jersey', 'Number', 'Cut', 'Jersey Size', 'Tee Size', 'Team', 'Birth Year', 'Parent Email'];
+          const lines = [header.join(',')];
+          for (const r of [...paid].sort((a: any, b: any) => String(a.player_name).localeCompare(String(b.player_name)))) {
+            const raw = String(r.jersey_size || '');
+            const goalie = raw.startsWith('Goalie Cut ');
+            lines.push([
+              r.player_name,
+              r.jersey_name || String(r.player_name || '').trim().split(/\s+/).slice(-1)[0] || '',
+              r.jersey_number_request || r.jersey_number || '',
+              goalie ? 'Goalie Cut' : (raw ? 'Regular' : ''),
+              goalie ? raw.slice(11) : raw,
+              r.tee_size || '',
+              r.team_name || '',
+              r.birth_year || '',
+              r.email || '',
+            ].map(esc).join(','));
+          }
+          const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `lights-out-swag-order-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        };
         const line = (m: Record<string, number>) => {
           const extras = Object.keys(m).filter(sz => !ORDER2.includes(sz)).sort();
           const parts = [...ORDER2.filter(sz => m[sz]), ...extras].map(sz => `${sz}: ${m[sz]}`);
           return parts.join(' · ') || 'none picked yet';
         };
         return (
-          <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm mb-5">
-            <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-1.5">Swag order ({paid.length} players)</p>
+          <div className={`border rounded-2xl px-4 py-3 shadow-sm mb-5 ${allEmailed ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-[#e8e8ed]'}`}>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1.5">
+              <p className={`text-[11px] font-bold uppercase tracking-widest ${allEmailed ? 'text-emerald-700' : 'text-[#86868b]'}`}>
+                Swag order ({paid.length} players){allEmailed ? ' - approved, all families emailed' : ''}
+              </p>
+              <button onClick={exportSwag}
+                className="px-3 py-1 rounded-full text-xs font-bold border border-[#003e79] text-[#003e79] bg-white hover:bg-[#f0f7ff]">
+                Export swag order
+              </button>
+            </div>
             <p className="text-sm text-[#1d1d1f]"><span className="font-bold text-[#003e79]">Jerseys</span> · {line(js)}</p>
             <p className="text-sm text-[#1d1d1f] mt-0.5"><span className="font-bold text-[#003e79]">Tees</span> · {line(ts)}</p>
             {missing > 0 && <p className="text-xs font-semibold text-amber-600 mt-1">{missing} player{missing !== 1 ? 's' : ''} still missing a size</p>}
             {(() => {
-              const unsent = paid.filter((r: any) => !r.sizes_email_sent_at).length;
               return (
-                <div className="border-t border-[#f0f0f2] mt-3 pt-3">
+                <div className={`mt-3 pt-3 border-t ${allEmailed ? 'border-emerald-200' : 'border-[#f0f0f2]'}`}>
                   <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Sizes email</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)}
@@ -223,11 +258,7 @@ export default function LightsOutAdminPage() {
                       className="px-4 py-1.5 rounded-full text-sm font-semibold border border-[#003e79] text-[#003e79] hover:bg-[#f0f7ff] disabled:opacity-50">
                       Send me a test
                     </button>
-                    {unsent === 0 ? (
-                      <span className="px-4 py-1.5 rounded-full text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        Approved - all families emailed
-                      </span>
-                    ) : (
+                    {unsent > 0 && (
                       <button onClick={() => sendSizesBlast(unsent)} disabled={sizesBusy}
                         className="px-4 py-1.5 rounded-full text-sm font-semibold bg-[#003e79] text-white hover:bg-[#00315f] disabled:opacity-50">
                         {`Approve + email ${unsent} famil${unsent === 1 ? 'y' : 'ies'}`}
