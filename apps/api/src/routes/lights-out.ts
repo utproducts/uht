@@ -496,23 +496,23 @@ function sizesEmail(row: any, id: string): { subject: string; html: string } {
     html: emailShell(`
       <p style="margin:0 0 6px;font-size:19px;font-weight:bold;color:#39ff14;">CONFIRMED. ${String(row.player_name).toUpperCase()} IS OFFICIALLY IN.</p>
       <p style="margin:0 0 14px;">${first} is locked in for the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis. The first glow-in-the-dark hockey tournament in UHT history, and ${first} is part of it.</p>
-      <p style="margin:0 0 14px;">Now the fun part: the custom glow jerseys, glow tee, puck, tape, and UHT hockey bag are being made for every player - and we need <b style="color:#ffffff;">${first}'s sizes</b> to get the order right. It takes about 30 seconds.</p>
+      <p style="margin:0 0 14px;">Now that ${first} is in, we need sizes so we can start working on ${first}'s <b style="color:#7fd8ff;">custom glow jersey</b>. It takes about 30 seconds.</p>
       <p style="margin:0 0 16px;">While you are there, tell us the <b style="color:#7fd8ff;">number and last name</b> you want on the back of ${first}'s jerseys. Number requests are first come, first served within each team, so the sooner the better.</p>
       <div style="text-align:center;margin:0 0 18px;">
         <a href="https://ultimatetournaments.com/lights-out/size?id=${id}" style="display:inline-block;background:linear-gradient(90deg,#39ff14,#00ccff);color:#04091a;text-decoration:none;font-weight:bold;padding:13px 34px;border-radius:999px;font-size:15px;">PICK ${first.toUpperCase()}'S SIZES</a>
       </div>
       <p style="margin:0 0 18px;color:#7fd8ff;font-size:13px;text-align:center;">Everything will be waiting at check-in, right before our opening ceremonies on June 11th.</p>
-      <p style="margin:0 0 10px;">And in case you missed it - this is ${first}'s official graphic. Press and hold (or right click) to save it, then post it anywhere and tag <b style="color:#39ff14;">@ultimatetournaments</b>. We share our favorites.</p>
-      <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 ${balance > 0 ? '18px' : '4px'};">
-        <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially registered for the Lights Out Invitational" />
-      </a>
       ${balance > 0 ? `
-      <div style="border-top:1px solid rgba(0,204,255,.25);padding-top:16px;">
+      <div style="border-top:1px solid rgba(0,204,255,.25);padding-top:16px;margin:0 0 18px;">
         <p style="margin:0 0 10px;color:#ffb84d;"><b>Balance due: $${(balance / 100).toFixed(0)}.</b> Your deposit holds ${first}'s spot - the rest is due before the event, whenever works for you.</p>
-        <div style="text-align:center;margin:0 0 4px;">
+        <div style="text-align:center;">
           <a href="https://uht.chad-157.workers.dev/api/lights-out/balance/${id}" style="display:inline-block;background:transparent;border:2px solid #ffb84d;color:#ffb84d;text-decoration:none;font-weight:bold;padding:10px 28px;border-radius:999px;font-size:14px;">PAY THE BALANCE</a>
         </div>
       </div>` : ''}
+      <p style="margin:0 0 10px;">And in case you missed it - this is ${first}'s official graphic. Press and hold (or right click) to save it, then post it anywhere and tag <b style="color:#39ff14;">@ultimatetournaments</b>. We share our favorites.</p>
+      <a href="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" style="display:block;margin:0 0 4px;">
+        <img src="https://uht.chad-157.workers.dev/api/lights-out/share/${id}.png" width="100%" style="max-width:512px;border-radius:14px;display:block;margin:0 auto;" alt="${row.player_name} is officially registered for the Lights Out Invitational" />
+      </a>
     `),
   };
 }
