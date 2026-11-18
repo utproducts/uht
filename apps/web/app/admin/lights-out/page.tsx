@@ -283,13 +283,22 @@ export default function LightsOutAdminPage() {
         if (paid.length === 0) return null;
         const unsent = paid.filter((r: any) => !r.sizes_email_sent_at).length;
         const allEmailed = unsent === 0;
-        const count = (key: 'jersey_size' | 'tee_size') => {
-          const m: Record<string, number> = {};
-          for (const r of paid) { const v = (r as any)[key]; if (v) m[v] = (m[v] || 0) + 1; }
-          return m;
-        };
+        // Size matrix: jerseys split into regular vs goalie cut (stored as
+        // "Goalie Cut Youth L"), tees straight from tee_size
         const ORDER2 = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
-        const js = count('jersey_size'); const ts = count('tee_size');
+        const reg: Record<string, number> = {}; const gk: Record<string, number> = {}; const ts: Record<string, number> = {};
+        for (const r of paid) {
+          const j = String((r as any).jersey_size || '');
+          if (j.startsWith('Goalie Cut ')) gk[j.slice(11)] = (gk[j.slice(11)] || 0) + 1;
+          else if (j) reg[j] = (reg[j] || 0) + 1;
+          const t = (r as any).tee_size; if (t) ts[t] = (ts[t] || 0) + 1;
+        }
+        const sizesPresent = [
+          ...ORDER2.filter(sz => reg[sz] || gk[sz] || ts[sz]),
+          ...Object.keys({ ...reg, ...gk, ...ts }).filter(sz => !ORDER2.includes(sz)).sort(),
+        ];
+        const hasGoalie = Object.keys(gk).length > 0;
+        const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
         const missing = paid.filter((r: any) => !r.jersey_size || !r.tee_size).length;
         const exportSwag = () => {
           const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -317,11 +326,6 @@ export default function LightsOutAdminPage() {
           a.click();
           URL.revokeObjectURL(a.href);
         };
-        const line = (m: Record<string, number>) => {
-          const extras = Object.keys(m).filter(sz => !ORDER2.includes(sz)).sort();
-          const parts = [...ORDER2.filter(sz => m[sz]), ...extras].map(sz => `${sz}: ${m[sz]}`);
-          return parts.join(' · ') || 'none picked yet';
-        };
         return (
           <div className={`border rounded-2xl px-4 py-3 shadow-sm mb-5 ${allEmailed ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-[#e8e8ed]'}`}>
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1.5">
@@ -333,9 +337,39 @@ export default function LightsOutAdminPage() {
                 Export swag order
               </button>
             </div>
-            <p className="text-sm text-[#1d1d1f]"><span className="font-bold text-[#003e79]">Jerseys</span> · {line(js)}</p>
-            <p className="text-sm text-[#1d1d1f] mt-0.5"><span className="font-bold text-[#003e79]">Tees</span> · {line(ts)}</p>
-            {missing > 0 && <p className="text-xs font-semibold text-amber-600 mt-1">{missing} player{missing !== 1 ? 's' : ''} still missing a size</p>}
+            {sizesPresent.length === 0 ? (
+              <p className="text-sm text-[#86868b]">No sizes picked yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <thead>
+                    <tr>
+                      <th className="text-left pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Size</th>
+                      <th className="text-right pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Jerseys</th>
+                      {hasGoalie && <th className="text-right pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide whitespace-nowrap">Goalie cut</th>}
+                      <th className="text-right py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Tees</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sizesPresent.map(sz => (
+                      <tr key={sz} className="border-t border-[#f0f0f2]">
+                        <td className="pr-8 py-1 font-semibold text-[#1d1d1f] whitespace-nowrap">{sz}</td>
+                        <td className="pr-8 py-1 text-right font-bold text-[#003e79]">{reg[sz] || <span className="font-normal text-[#d2d2d7]">-</span>}</td>
+                        {hasGoalie && <td className="pr-8 py-1 text-right font-bold text-[#003e79]">{gk[sz] || <span className="font-normal text-[#d2d2d7]">-</span>}</td>}
+                        <td className="py-1 text-right font-bold text-[#003e79]">{ts[sz] || <span className="font-normal text-[#d2d2d7]">-</span>}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-[#e8e8ed]">
+                      <td className="pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Total</td>
+                      <td className="pr-8 py-1 text-right font-black text-[#003e79]">{sum(reg)}</td>
+                      {hasGoalie && <td className="pr-8 py-1 text-right font-black text-[#003e79]">{sum(gk)}</td>}
+                      <td className="py-1 text-right font-black text-[#003e79]">{sum(ts)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {missing > 0 && <p className="text-xs font-semibold text-amber-600 mt-1.5">{missing} player{missing !== 1 ? 's' : ''} still missing a size</p>}
             {(() => {
               return (
                 <div className={`mt-3 pt-3 border-t ${allEmailed ? 'border-emerald-200' : 'border-[#f0f0f2]'}`}>
