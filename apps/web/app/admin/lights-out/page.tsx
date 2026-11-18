@@ -42,7 +42,7 @@ export default function LightsOutAdminPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests'>('all');
+  const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent'>('all');
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [testEmail, setTestEmail] = useState('');
   const [sizesMsg, setSizesMsg] = useState('');
@@ -104,16 +104,23 @@ export default function LightsOutAdminPage() {
   const isReq = (r: any) => String(r.status).startsWith('invite_');
   const fromRequest = (r: any) => r.star_event_id === 'invite-request';
   const isPaid = (r: any) => !isReq(r) && (r.amount_paid_cents || 0) > 0;
-  const counts = { all: rows.length, registered: 0, incomplete: 0, pending: 0, approved: 0, denied: 0, requests: 0 } as Record<string, number>;
+  // Request lifecycle: Requests = waiting on review. Approving moves them to
+  // Code Sent. Registering moves them to Registered. Nothing stays behind,
+  // so a zero Requests pill means nothing is being missed.
+  const counts = { all: rows.length, registered: 0, incomplete: 0, pending: 0, approved: 0, denied: 0, requests: 0, code_sent: 0 } as Record<string, number>;
   for (const r of rows) {
-    counts[r.status] = (counts[r.status] || 0) + 1;
-    if (isReq(r) || fromRequest(r)) counts.requests++;
+    if (r.status === 'invite_requested') counts.requests++;
+    else if (r.status === 'invite_approved') counts.code_sent++;
+    else if (r.status === 'denied' || r.status === 'invite_denied') counts.denied++;
+    else counts[r.status] = (counts[r.status] || 0) + 1;
     if (isPaid(r)) counts.registered++;
     else if (!isReq(r)) counts.incomplete++;
   }
   const visible = rows.filter(r => {
     if (filter === 'all') return true;
-    if (filter === 'requests') return isReq(r) || fromRequest(r);
+    if (filter === 'requests') return r.status === 'invite_requested';
+    if (filter === 'code_sent') return r.status === 'invite_approved';
+    if (filter === 'denied') return r.status === 'denied' || r.status === 'invite_denied';
     if (filter === 'registered') return isPaid(r);
     if (filter === 'incomplete') return !isReq(r) && !isPaid(r);
     return r.status === filter;
@@ -294,10 +301,10 @@ export default function LightsOutAdminPage() {
       })()}
 
       <div className="flex flex-wrap gap-2 mb-5">
-        {(['all', 'registered', 'requests', 'incomplete', 'pending', 'approved', 'denied'] as const).map(fk => (
+        {(['all', 'registered', 'pending', 'requests', 'code_sent', 'incomplete', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
-            {fk === 'all' ? 'All' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
+            {fk === 'all' ? 'All' : fk === 'code_sent' ? 'Code Sent' : fk === 'pending' ? 'Needs Approval' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
           </button>
         ))}
       </div>
@@ -356,7 +363,8 @@ export default function LightsOutAdminPage() {
                   </td>
                   <td className="px-2 py-2.5 text-center">
                     {r.star_verified ? <Ic.Check title="Star verified on a scoresheet" />
-                      : fromRequest(r) ? <Ic.Circle title="Came in as an invite request - no star" />
+                      : fromRequest(r) && r.invite_code ? <Ic.Key title={`Invite code ${r.invite_code}`} />
+                      : fromRequest(r) ? <Ic.Circle title="Invite request - no code yet" />
                       : <Ic.Alert title="Star not found on scoresheets" />}
                   </td>
                   <td className="px-2 py-2.5 text-center">
@@ -387,7 +395,10 @@ export default function LightsOutAdminPage() {
                       </button>
                     </>)}
                     {!['pending', 'invite_requested'].includes(st) && (
-                      <span className="text-[11px] font-bold text-[#86868b]">{isOpen ? 'Close' : 'Details'}</span>
+                      <button onClick={() => setOpenRow(isOpen ? null : r.id)}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-[#6e6e73] bg-[#f5f5f7] hover:bg-[#e8e8ed] hover:text-[#1d1d1f] transition">
+                        {isOpen ? 'Close' : 'Details'}
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -485,6 +496,9 @@ const Ic = {
   Mail: ({ title }: { title: string }) => (
     <span title={title}><svg className={`${icCls} text-[#0077b0]`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg></span>
   ),
+  Key: ({ title }: { title: string }) => (
+    <span title={title}><svg className={`${icCls} text-[#0077b0]`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4" /><path d="M11 12L20 3" /><path d="M16 7l3 3" /></svg></span>
+  ),
   Circle: ({ title }: { title: string }) => (
     <span title={title}><svg className={`${icCls} text-[#0077b0]`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}><circle cx="12" cy="12" r="7" /></svg></span>
   ),
@@ -497,7 +511,8 @@ const Ic = {
       <span className="flex items-center gap-1"><Ic.Clock title="" /> waiting</span>
       <span className="flex items-center gap-1"><Ic.Dollar title="" /> balance due</span>
       <span className="flex items-center gap-1"><Ic.Alert title="" /> star not found</span>
-      <span className="flex items-center gap-1"><Ic.Circle title="" /> invite request</span>
+      <span className="flex items-center gap-1"><Ic.Key title="" /> invite code (hover to see it)</span>
+      <span className="flex items-center gap-1"><Ic.Circle title="" /> request, no code yet</span>
       <span className="flex items-center gap-1"><Ic.Mail title="" /> code sent</span>
       <span className="flex items-center gap-1"><Ic.X title="" /> no</span>
       <span>- hover any icon for details, click a row to expand</span>
