@@ -96,10 +96,13 @@ function buildCalendar(data: any): { day: string; items: CalItem[] }[] {
     coupons -= 75;
     cd = plus(cd, 1);
   }
-  // One-off campaigns, scheduled and sent (e.g. the Lights Out announcement)
+  // One-off campaigns, scheduled and sent (e.g. the Lights Out announcement).
+  // A scheduled "everyone" blast shows the live audience estimate, not 0.
   for (const cp of (data.scheduledCampaigns || [])) {
     const day = String(cp.scheduled_at || cp.sent_at || '').slice(0, 10);
-    add(day, { type: 'campaign', label: cp.name, count: cp.total_sent || 0, campaignId: cp.id, status: cp.status, opened: cp.total_opened });
+    const isEveryone = String(cp.audience_filter || '').includes('"everyone"');
+    const count = cp.total_sent || (cp.status !== 'sent' && isEveryone ? (data.everyoneAudience || 0) : 0);
+    add(day, { type: 'campaign', label: cp.name, count, campaignId: cp.id, status: cp.status, opened: cp.total_opened });
   }
   // History: drip batches and Lights Out waves that already went out, so the
   // calendar doubles as the permanent sending record

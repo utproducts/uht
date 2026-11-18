@@ -1038,7 +1038,7 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
   // lanes and Lights Out waves - so next year he can see what went out when.
   const [oneOffs, couponSent, loWaves] = await Promise.all([
     db.prepare(`
-      SELECT id, name, subject, status, scheduled_at, sent_at, total_sent, total_opened
+      SELECT id, name, subject, status, scheduled_at, sent_at, total_sent, total_opened, audience_filter
       FROM email_campaigns
       WHERE COALESCE(template_type, '') != 'city_drip'
         AND id NOT IN ('reengage2026e1','reengage2026e2','reengage2026e3','couponrem2026')
@@ -1054,6 +1054,18 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       WHERE sent_at IS NOT NULL GROUP BY day
     `).all().catch(() => ({ results: [] })),
   ]);
+
+  // Live audience estimate for scheduled "everyone" campaigns, so the
+  // calendar never shows a scheduled blast going to "0 people"
+  const everyoneAudience = (oneOffs.results || []).some((cp: any) =>
+    cp.status !== 'sent' && String(cp.audience_filter || '').includes('"everyone"'))
+    ? ((await db.prepare(`
+        SELECT COUNT(*) n FROM (
+          SELECT LOWER(email) email FROM users WHERE is_active = 1 AND email IS NOT NULL AND email != '' AND email NOT LIKE '%@system.internal'
+          UNION SELECT LOWER(email) FROM contacts WHERE email IS NOT NULL AND email != '' AND is_subscribed_email = 1
+          UNION SELECT LOWER(email) FROM email_list_contacts WHERE is_active = 1 AND email IS NOT NULL AND email != ''
+        )`).first<any>())?.n || 0)
+    : 0;
 
   return c.json({
     success: true,
@@ -1074,6 +1086,7 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       scheduledCampaigns: oneOffs.results || [],
       couponSentDays: (couponSent as any).results || [],
       lightsOutWaveDays: (loWaves as any).results || [],
+      everyoneAudience,
     },
   });
 });
