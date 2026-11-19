@@ -751,6 +751,77 @@ lightsOutRoutes.get('/admin/stripe-lookup', async (c) => {
   return c.json({ success: true, data: { email, found: charges.length, charges } });
 });
 
+// Admin: one-time urgency reminder to every Code Sent family (Chad, Nov
+// 2026): ~100 codes are out and only 35 spots remain, first come first
+// serve. Key-authed. ?test=you@x.com sends one sample (first unsent row's
+// data) without marking anything; ?dry=1 counts; otherwise sends a batch
+// (default 20, 650ms apart for Resend's 2/sec limit) and stamps
+// code_reminder_sent_at so re-calls never double-send. Call until
+// remaining is 0.
+lightsOutRoutes.post('/admin/code-reminder', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const db = c.env.DB;
+  try { await db.prepare('ALTER TABLE lights_out_registrations ADD COLUMN code_reminder_sent_at TEXT').run(); } catch {}
+
+  const reminderEmail = (row: any) => {
+    const first = String(row.player_name || '').trim().split(/\s+/)[0] || 'your player';
+    return {
+      subject: `Only 35 spots left - ${row.player_name}'s Lights Out code is still unused`,
+      html: emailShell(`
+        <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#ffb84d;">ONLY 35 SPOTS LEFT. ALMOST 100 CODES ARE OUT.</p>
+        <p style="margin:0 0 14px;">Hi ${row.parent_name},</p>
+        <p style="margin:0 0 14px;"><b style="color:#7fd8ff;">${row.player_name}</b> is holding an invite code to the <b style="color:#7fd8ff;">Lights Out Invitational</b> - June 11-13, 2027 in St. Louis - but the code has not been used yet. A code does not hold a spot. Payment does.</p>
+        <p style="margin:0 0 14px;">Here is exactly where things stand: almost 100 families are holding invite codes right now, and only <b style="color:#ffb84d;">35 spots remain</b> before the event is completely sold out. Spots are filled first come, first serve. Once the last 35 are claimed, registration closes and unused codes will not work.</p>
+        <p style="margin:0 0 10px;">${first}'s single-use invite code:</p>
+        <p style="margin:0 0 14px;text-align:center;"><span style="display:inline-block;background:#04091a;border:1px solid rgba(57,255,20,.5);border-radius:10px;padding:12px 26px;font-size:22px;font-weight:bold;letter-spacing:4px;color:#39ff14;">${row.invite_code}</span></p>
+        <p style="margin:0 0 16px;text-align:center;">
+          <a href="https://ultimatetournaments.com/lights-out?invite=${encodeURIComponent(row.invite_code)}" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">CLAIM ${first.toUpperCase()}'S SPOT NOW</a>
+        </p>
+        <p style="margin:0 0 14px;">$550 per player, or a $200 non-refundable deposit locks the spot today. The button opens the registration form with the code already entered.</p>
+        <p style="margin:0;color:#ffb84d;font-size:13px;font-weight:bold;">If you want ${first} under the glow in June, now is the time - we would hate for you to miss it by a day.</p>
+      `),
+    };
+  };
+
+  const pending = () => db.prepare(`
+    SELECT id, player_name, parent_name, email, invite_code FROM lights_out_registrations
+    WHERE status = 'invite_approved' AND invite_code IS NOT NULL AND invite_code != ''
+      AND email IS NOT NULL AND email != '' AND code_reminder_sent_at IS NULL
+    ORDER BY reviewed_at, id
+  `).all<any>();
+
+  const test = String(c.req.query('test') || '').trim();
+  if (test) {
+    const rows = (await pending()).results || [];
+    if (!rows.length) return c.json({ success: false, error: 'No unsent rows to sample' }, 404);
+    const m = reminderEmail(rows[0]);
+    await sendEmail(c.env, test, `[TEST] ${m.subject}`, m.html);
+    return c.json({ success: true, data: { test, sampled: rows[0].player_name, remaining: rows.length } });
+  }
+
+  if (c.req.query('dry')) {
+    const rows = (await pending()).results || [];
+    return c.json({ success: true, data: { remaining: rows.length } });
+  }
+
+  const batch = Math.min(parseInt(c.req.query('batch') || '20', 10) || 20, 40);
+  const rows = ((await pending()).results || []).slice(0, batch);
+  const sent: string[] = [];
+  for (const row of rows) {
+    const m = reminderEmail(row);
+    await sendEmail(c.env, row.email, m.subject, m.html);
+    await db.prepare(`UPDATE lights_out_registrations SET code_reminder_sent_at = datetime('now') WHERE id = ?`).bind(row.id).run();
+    sent.push(row.player_name);
+    await new Promise(res => setTimeout(res, 650));
+  }
+  const left = ((await pending()).results || []).length;
+  if (sent.length > 0 && left === 0) {
+    await sendEmail(c.env, 'johnny@ultimatetournaments.com', 'Lights Out: code reminder sent to every Code Sent family',
+      emailShell(`<p style="margin:0;">The 35-spots-left reminder went out to every family still holding an unused invite code. Each email carried that family's own code and register button.</p>`));
+  }
+  return c.json({ success: true, data: { sent: sent.length, remaining: left } });
+});
+
 // Admin: send yourself a copy of the acceptance email for any eligible row
 lightsOutRoutes.post('/admin/test-approved-email', authMiddleware, requireRole('admin', 'director'),
   zValidator('json', z.object({ registrationId: z.string().min(1), to: z.string().email() })), async (c) => {
