@@ -1109,6 +1109,17 @@ emailRoutes.post('/champion-merch/:eventId/send', authMiddleware, requireRole('a
   return c.json({ success: true, data: { ...(result as any), push_sent: pushSent } });
 });
 
+// Key-authed trigger for the same send, so staff can fire it without a
+// dashboard login (same simple key as the other send endpoints)
+emailRoutes.post('/app-invite/:eventId/send-key', async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  if (body.sendKey !== 'uht-coaches-2026') return c.json({ success: false, error: 'Unauthorized' }, 403);
+  const { sendAppInviteForEvent } = await import('../lib/app-invite');
+  const result = await sendAppInviteForEvent(c.env, c.req.param('eventId'));
+  if ((result as any).error) return c.json({ success: false, error: (result as any).error }, 404);
+  return c.json({ success: true, data: result });
+});
+
 emailRoutes.post('/app-invite/:eventId/send', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const body = await c.req.json().catch(() => ({})) as any;
   const testEmail = typeof body.testEmail === 'string' && body.testEmail.includes('@') ? body.testEmail.trim() : undefined;
