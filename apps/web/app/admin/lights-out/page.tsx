@@ -19,6 +19,18 @@ function hdrs(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
+// Division by birth year, current (2026-27) season - what each kid is now.
+// Shared by the rollup cards and the division filter on the table.
+const divisionOf = (by: any): string => {
+  const y = parseInt(String(by || '').trim(), 10);
+  if (!y || y < 2004 || y > 2023) return 'Unknown';
+  if (y >= 2018) return 'Mite';
+  if (y >= 2016) return 'Squirt';
+  if (y >= 2014) return 'Pee Wee';
+  if (y >= 2012) return 'Bantam';
+  return 'Midget';
+};
+
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
   pending_payment: 'bg-gray-50 text-gray-500 border-gray-200',
@@ -43,6 +55,10 @@ export default function LightsOutAdminPage() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent' | 'waitlist'>('all');
+  // Clicking a division card narrows the whole table to that age group -
+  // the first step toward building teams per division
+  const [divFilter, setDivFilter] = useState<string | null>(null);
+  const [q, setQ] = useState('');
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [editRow, setEditRow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
@@ -155,7 +171,10 @@ export default function LightsOutAdminPage() {
     if (isPaid(r)) counts.registered++;
     else if (!isReq(r) && r.status !== 'goalie_waitlist') counts.incomplete++;
   }
+  const needle = q.trim().toLowerCase();
   const visible = rows.filter(r => {
+    if (divFilter && divisionOf(r.birth_year) !== divFilter) return false;
+    if (needle && !`${r.player_name || ''} ${r.parent_name || ''} ${r.email || ''} ${r.team_name || ''} ${r.invite_code || ''}`.toLowerCase().includes(needle)) return false;
     if (filter === 'all') return true;
     if (filter === 'requests') return r.status === 'invite_requested';
     if (filter === 'code_sent') return r.status === 'invite_approved';
@@ -199,15 +218,6 @@ export default function LightsOutAdminPage() {
         const onDeposit = paidRows.filter((r: any) => (r.amount_paid_cents || 0) < 55000).length;
         const money = (cents: number) => '$' + Math.round(cents / 100).toLocaleString();
 
-        const divisionOf = (by: any): string => {
-          const y = parseInt(String(by || '').trim(), 10);
-          if (!y || y < 2004 || y > 2023) return 'Unknown';
-          if (y >= 2018) return 'Mite';
-          if (y >= 2016) return 'Squirt';
-          if (y >= 2014) return 'Pee Wee';
-          if (y >= 2012) return 'Bantam';
-          return 'Midget';
-        };
         const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
         const YEARS_LABEL: Record<string, string> = { Mite: '2018+', Squirt: '2016-17', 'Pee Wee': '2014-15', Bantam: '2012-13', Midget: '2011 & older' };
         const posOf = (p: any): string => {
@@ -251,7 +261,17 @@ export default function LightsOutAdminPage() {
             </div>
             {shown.length > 0 && (
               <>
-                <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Divisions</p>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest">Divisions</p>
+                  {divFilter ? (
+                    <button onClick={() => setDivFilter(null)}
+                      className="text-[11px] font-bold text-white bg-[#003e79] rounded-full px-2.5 py-0.5 hover:bg-[#00315f] transition">
+                      Showing {divFilter} only · clear
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-[#a1a1a6] font-semibold">click a card to see that age group&apos;s players below</span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {shown.map(d => {
                     const a = agg[d];
@@ -259,7 +279,10 @@ export default function LightsOutAdminPage() {
                     const cap = GOALIE_CAPS[d];
                     const goalieFull = !!cap && g >= cap;
                     return (
-                      <div key={d} className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+                      <div key={d} onClick={() => setDivFilter(divFilter === d ? null : d)}
+                        className={`rounded-2xl px-4 py-3 shadow-sm cursor-pointer transition select-none border ${divFilter === d
+                          ? 'bg-[#f0f7ff] border-[#003e79] ring-1 ring-inset ring-[#003e79]'
+                          : 'bg-white border-[#e8e8ed] hover:border-[#003e79]/50'}`}>
                         <div className="flex items-baseline justify-between gap-2">
                           <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">{d}</p>
                           {!!YEARS_LABEL[d] && <p className="text-[10px] text-[#a1a1a6] font-semibold whitespace-nowrap">{YEARS_LABEL[d]}</p>}
@@ -437,7 +460,17 @@ export default function LightsOutAdminPage() {
         );
       })()}
 
-      <div className="flex flex-wrap gap-2 mb-5">
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="relative">
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search player, parent, team, email, code..."
+            className="border border-[#e0e0e5] rounded-full pl-4 pr-8 py-1.5 text-sm w-72 bg-white focus:ring-2 focus:ring-[#003e79]/20 focus:border-[#003e79]/40 outline-none" />
+          {q && (
+            <button onClick={() => setQ('')} aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#e8e8ed] text-[#6e6e73] text-[11px] font-bold leading-none hover:bg-[#d2d2d7]">
+              ×
+            </button>
+          )}
+        </div>
         {(['all', 'registered', 'pending', 'requests', 'code_sent', 'waitlist', 'incomplete', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
@@ -450,7 +483,7 @@ export default function LightsOutAdminPage() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-10 text-center text-sm text-[#86868b]">
-          {rows.length === 0 ? 'No invite requests yet.' : 'Nothing with that status.'}
+          {rows.length === 0 ? 'No invite requests yet.' : divFilter ? `No ${divFilter} players with that status.` : 'Nothing with that status.'}
         </div>
       ) : (
         <>
