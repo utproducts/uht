@@ -356,6 +356,42 @@ lightsOutRoutes.get('/admin/requests', authMiddleware, requireRole('admin', 'dir
   return c.json({ success: true, data: rows.results || [] });
 });
 
+// Admin: fix a registration's details (misspelled names, wrong birth year,
+// bad email, jersey fixes). Updates only the fields sent; empty string
+// clears a field. Never touches status, payment, or codes, and sends no
+// emails.
+const detailsSchema = z.object({
+  player_name: z.string().trim().min(1).optional(),
+  team_name: z.string().trim().optional(),
+  birth_year: z.string().trim().optional(),
+  position: z.string().trim().optional(),
+  parent_name: z.string().trim().optional(),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().optional(),
+  jersey_name: z.string().trim().optional(),
+  jersey_number_request: z.string().trim().optional(),
+  jersey_size: z.string().trim().optional(),
+  tee_size: z.string().trim().optional(),
+  notes: z.string().optional(),
+});
+lightsOutRoutes.patch('/admin/requests/:id/details', authMiddleware, requireRole('admin', 'director'),
+  zValidator('json', detailsSchema), async (c) => {
+    const id = c.req.param('id');
+    const b = c.req.valid('json') as Record<string, string | undefined>;
+    const db = c.env.DB;
+    const row = await db.prepare('SELECT id FROM lights_out_registrations WHERE id = ?').bind(id).first<any>();
+    if (!row) return c.json({ success: false, error: 'Not found' }, 404);
+    const fields = Object.entries(b).filter(([, v]) => v !== undefined);
+    if (fields.length === 0) return c.json({ success: false, error: 'Nothing to update' }, 400);
+    const sets = fields.map(([k]) => `${k} = ?`).join(', ');
+    const vals = fields.map(([k, v]) => {
+      if (k === 'email') return String(v).toLowerCase();
+      return v === '' ? null : v;
+    });
+    await db.prepare(`UPDATE lights_out_registrations SET ${sets} WHERE id = ?`).bind(...vals, id).run();
+    return c.json({ success: true });
+  });
+
 lightsOutRoutes.patch('/admin/requests/:id', authMiddleware, requireRole('admin', 'director'),
   zValidator('json', z.object({ status: z.enum(['approved', 'denied', 'pending', 'invite_approved', 'invite_denied', 'goalie_waitlist']) })), async (c) => {
     const id = c.req.param('id');

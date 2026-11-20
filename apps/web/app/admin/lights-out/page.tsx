@@ -44,6 +44,10 @@ export default function LightsOutAdminPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent' | 'waitlist'>('all');
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const [editRow, setEditRow] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [editBusy, setEditBusy] = useState(false);
+  const [editMsg, setEditMsg] = useState('');
   const [testEmail, setTestEmail] = useState('');
   const [sizesMsg, setSizesMsg] = useState('');
   const [sizesBusy, setSizesBusy] = useState(false);
@@ -83,6 +87,39 @@ export default function LightsOutAdminPage() {
     setLoaded(true);
   };
   useEffect(() => { load(); }, []);
+
+  // Fix misspelled names / wrong info straight on the registration row.
+  // Saves only the fields, never touches status, payment, or codes.
+  const startEdit = (r: any) => {
+    setEditRow(r.id);
+    setEditMsg('');
+    setEditForm({
+      player_name: r.player_name || '', team_name: r.team_name || '', birth_year: r.birth_year || '',
+      position: r.position || '', parent_name: r.parent_name || '', email: r.email || '', phone: r.phone || '',
+      jersey_name: r.jersey_name || '', jersey_number_request: r.jersey_number_request || '',
+      jersey_size: r.jersey_size || '', tee_size: r.tee_size || '',
+    });
+  };
+  const saveEdit = async (id: string) => {
+    setEditBusy(true);
+    setEditMsg('');
+    const payload: any = { ...editForm };
+    // player name and email cannot be blanked - drop them if emptied
+    if (!String(payload.player_name || '').trim()) delete payload.player_name;
+    if (!String(payload.email || '').trim()) delete payload.email;
+    try {
+      const res = await fetch(`${API}/admin/requests/${id}/details`, {
+        method: 'PATCH', headers: hdrs({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json();
+      if (j.success) {
+        setRows(prev => prev.map(r => r.id === id ? { ...r, ...payload } : r));
+        setEditRow(null);
+      } else setEditMsg(j.error || 'Save failed.');
+    } catch { setEditMsg('Save failed - try again.'); }
+    setEditBusy(false);
+  };
 
   const setStatus = async (id: string, status: string) => {
     setBusy(id);
@@ -517,6 +554,43 @@ export default function LightsOutAdminPage() {
                 {isOpen && (
                 <tr className="border-b border-[#f0f0f3] bg-[#fafbfc]">
                   <td colSpan={7} className="px-5 py-4">
+                    {editRow === r.id ? (
+                      <div className="w-full">
+                        <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Edit registration - {r.player_name}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-3xl">
+                          {([['player_name', 'Player name'], ['birth_year', 'Birth year'], ['team_name', 'Team'], ['parent_name', 'Parent name'], ['email', 'Parent email'], ['phone', 'Phone'], ['jersey_name', 'Name on jersey'], ['jersey_number_request', 'Jersey #'], ['jersey_size', 'Jersey size'], ['tee_size', 'Tee size']] as const).map(([k, label]) => (
+                            <label key={k} className="block">
+                              <span className="block text-[10px] font-bold text-[#86868b] uppercase tracking-wide mb-0.5">{label}</span>
+                              <input value={editForm[k] || ''} onChange={e => setEditForm((f: any) => ({ ...f, [k]: e.target.value }))}
+                                className="w-full border border-[#e0e0e5] rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                            </label>
+                          ))}
+                          <label className="block">
+                            <span className="block text-[10px] font-bold text-[#86868b] uppercase tracking-wide mb-0.5">Position</span>
+                            <select value={editForm.position || ''} onChange={e => setEditForm((f: any) => ({ ...f, position: e.target.value }))}
+                              className="w-full border border-[#e0e0e5] rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-[#003e79]/20 outline-none">
+                              {!['Forward', 'Defense', 'Goalie', ''].includes(editForm.position || '') && <option value={editForm.position}>{editForm.position}</option>}
+                              <option value="">-</option>
+                              <option value="Forward">Forward</option>
+                              <option value="Defense">Defense</option>
+                              <option value="Goalie">Goalie</option>
+                            </select>
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3">
+                          <button onClick={() => saveEdit(r.id)} disabled={editBusy}
+                            className="px-4 py-1.5 rounded-lg bg-[#003e79] text-white text-[11px] font-bold hover:bg-[#00315f] transition disabled:opacity-50">
+                            Save changes
+                          </button>
+                          <button onClick={() => setEditRow(null)} disabled={editBusy}
+                            className="px-3 py-1.5 rounded-lg bg-white border border-[#e8e8ed] text-[#6e6e73] text-[11px] font-bold hover:border-[#003e79]/40 transition disabled:opacity-50">
+                            Cancel
+                          </button>
+                          {editMsg && <span className="text-xs font-semibold text-red-600">{editMsg}</span>}
+                        </div>
+                        <p className="text-[11px] text-[#86868b] mt-2">Saves straight to the registration - no emails go out. Jersey sizes read like &quot;Youth L&quot; or &quot;Adult M&quot; (goalie jerseys: &quot;Goalie Cut Adult M&quot;).</p>
+                      </div>
+                    ) : (
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="space-y-1.5 text-sm min-w-[240px]">
                         <span className={`inline-block text-[11px] font-bold border rounded-full px-2.5 py-0.5 uppercase ${chip.cls}`}>{chip.label}</span>
@@ -544,6 +618,10 @@ export default function LightsOutAdminPage() {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-2 shrink-0">
+                        <button onClick={() => startEdit(r)}
+                          className="px-3 py-1.5 rounded-lg bg-white border border-[#003e79] text-[#003e79] text-[11px] font-bold hover:bg-[#f0f7ff] transition">
+                          Edit details
+                        </button>
                         {st === 'approved' && (<>
                           <button onClick={() => setStatus(r.id, 'denied')} disabled={busy === r.id}
                             className="px-3 py-1.5 rounded-lg bg-white border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-50 transition disabled:opacity-50">
@@ -577,6 +655,7 @@ export default function LightsOutAdminPage() {
                         )}
                       </div>
                     </div>
+                    )}
                   </td>
                 </tr>
                 )}

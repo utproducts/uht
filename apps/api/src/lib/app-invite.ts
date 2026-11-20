@@ -362,3 +362,31 @@ export async function sendLowAdoptionInvites(env: any, eventId: string, opts: {
   if (lastLow) await sendBlastCopy(env, lastLow.subject, lastLow.html, out.sent);
   return out;
 }
+
+/**
+ * Cron sweep: automatic app invite for every event starting within 10 days.
+ * sendAppInviteForEvent is idempotent per coach email (automated_email_log),
+ * so the first pass blasts everyone and later passes only pick up teams
+ * approved after it - no double sends, no manual button needed.
+ */
+export async function runAppInviteSweep(env: any): Promise<{ events: number; sent: number; skipped: number }> {
+  const db = env.DB;
+  const events = await db.prepare(`
+    SELECT id FROM events
+    WHERE status NOT IN ('draft', 'cancelled')
+      AND date(start_date) BETWEEN date('now') AND date('now', '+10 days')
+  `).all();
+  const out = { events: 0, sent: 0, skipped: 0 };
+  for (const ev of ((events as any)?.results || [])) {
+    try {
+      const r: any = await sendAppInviteForEvent(env, ev.id);
+      if (r?.error) continue;
+      out.events++;
+      out.sent += r.sent || 0;
+      out.skipped += r.skipped || 0;
+    } catch (e: any) {
+      console.error(`App invite sweep failed for event ${ev.id}:`, e?.message);
+    }
+  }
+  return out;
+}
