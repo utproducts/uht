@@ -919,6 +919,17 @@ emailRoutes.post('/event-blast/:eventId/send', authMiddleware, requireRole('admi
 });
 
 // App how-to video email (Loom walkthrough) to all coaches/managers of approved teams
+// Key-authed trigger for the same send, so staff can fire it without a
+// dashboard login (same simple key as the other send endpoints)
+emailRoutes.post('/event-app-video/:eventId/send-key', async (c) => {
+  const body = await c.req.json().catch(() => ({})) as any;
+  if (body.sendKey !== 'uht-coaches-2026') return c.json({ success: false, error: 'Unauthorized' }, 403);
+  const { sendEventAppVideo } = await import('../lib/event-app-video');
+  const result = await sendEventAppVideo(c.env, c.req.param('eventId'), { videoUrl: String(body.videoUrl || ''), testEmail: body.testEmail });
+  if ((result as any).error) return c.json({ success: false, error: (result as any).error }, 400);
+  return c.json({ success: true, data: result });
+});
+
 emailRoutes.post('/event-app-video/:eventId/send', authMiddleware, requireRole('admin'), async (c) => {
   const body = await c.req.json().catch(() => ({})) as any;
   const { sendEventAppVideo } = await import('../lib/event-app-video');
