@@ -386,36 +386,34 @@ export default function LightsOutAdminPage() {
         if (paid.length === 0) return null;
         const unsent = paid.filter((r: any) => !r.sizes_email_sent_at).length;
         const allEmailed = unsent === 0;
-        // Size matrix: jerseys split into regular vs goalie cut (stored as
-        // "Goalie Cut Youth L"), tees straight from tee_size
-        const ORDER2 = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
-        const reg: Record<string, number> = {}; const gk: Record<string, number> = {}; const ts: Record<string, number> = {};
+        // Jerseys use the manufacturer's real size codes (player CHILD-36 to
+        // A4XL-60, goalie cut GC-44 to GC-64); tees stay normal apparel sizes
+        const JORDER = ['CHILD-36', 'YXS-38', 'YS-40', 'YM-42', 'YL-44', 'YXL-46', 'AS-48', 'AM-50', 'AL-52', 'AXL-54', 'A2XL-56', 'A3XL-58', 'A4XL-60', 'GC-44', 'GC-46', 'GC-48', 'GC-50', 'GC-52', 'GC-54', 'GC-56', 'GC-58', 'GC-60', 'GC-62', 'GC-64'];
+        const TORDER = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
+        const jc: Record<string, number> = {}; const tc: Record<string, number> = {};
         for (const r of paid) {
           const j = String((r as any).jersey_size || '');
-          if (j.startsWith('Goalie Cut ')) gk[j.slice(11)] = (gk[j.slice(11)] || 0) + 1;
-          else if (j) reg[j] = (reg[j] || 0) + 1;
-          const t = (r as any).tee_size; if (t) ts[t] = (ts[t] || 0) + 1;
+          if (j) jc[j] = (jc[j] || 0) + 1;
+          const t = (r as any).tee_size; if (t) tc[t] = (tc[t] || 0) + 1;
         }
-        const sizesPresent = [
-          ...ORDER2.filter(sz => reg[sz] || gk[sz] || ts[sz]),
-          ...Object.keys({ ...reg, ...gk, ...ts }).filter(sz => !ORDER2.includes(sz)).sort(),
-        ];
-        const hasGoalie = Object.keys(gk).length > 0;
+        const jRows = [...JORDER.filter(sz => jc[sz]), ...Object.keys(jc).filter(sz => !JORDER.includes(sz)).sort()];
+        const tRows = [...TORDER.filter(sz => tc[sz]), ...Object.keys(tc).filter(sz => !TORDER.includes(sz)).sort()];
         const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
         const missing = paid.filter((r: any) => !r.jersey_size || !r.tee_size).length;
+        const repick = paid.filter((r: any) => !r.jersey_size && (r as any).jersey_size_old).length;
         const exportSwag = () => {
           const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
           const header = ['Player', 'Name on Jersey', 'Number', 'Cut', 'Jersey Size', 'Tee Size', 'Team', 'Birth Year', 'Parent Email'];
           const lines = [header.join(',')];
           for (const r of [...paid].sort((a: any, b: any) => String(a.player_name).localeCompare(String(b.player_name)))) {
             const raw = String(r.jersey_size || '');
-            const goalie = raw.startsWith('Goalie Cut ');
+            const goalie = raw.startsWith('GC-') || raw.startsWith('Goalie Cut ');
             lines.push([
               r.player_name,
               r.jersey_name || String(r.player_name || '').trim().split(/\s+/).slice(-1)[0] || '',
               r.jersey_number_request || r.jersey_number || '',
               goalie ? 'Goalie Cut' : (raw ? 'Regular' : ''),
-              goalie ? raw.slice(11) : raw,
+              raw.startsWith('Goalie Cut ') ? raw.slice(11) : raw,
               r.tee_size || '',
               r.team_name || '',
               r.birth_year || '',
@@ -440,38 +438,57 @@ export default function LightsOutAdminPage() {
                 Export swag order
               </button>
             </div>
-            {sizesPresent.length === 0 ? (
-              <p className="text-sm text-[#86868b]">No sizes picked yet.</p>
+            {jRows.length === 0 && tRows.length === 0 ? (
+              <p className="text-sm text-[#86868b]">No sizes picked yet on the new chart.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  <thead>
-                    <tr>
-                      <th className="text-left pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Size</th>
-                      <th className="text-right pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Jerseys</th>
-                      {hasGoalie && <th className="text-right pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide whitespace-nowrap">Goalie cut</th>}
-                      <th className="text-right py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Tees</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sizesPresent.map(sz => (
-                      <tr key={sz} className="border-t border-[#f0f0f2]">
-                        <td className="pr-8 py-1 font-semibold text-[#1d1d1f] whitespace-nowrap">{sz}</td>
-                        <td className="pr-8 py-1 text-right font-bold text-[#003e79]">{reg[sz] || <span className="font-normal text-[#d2d2d7]">-</span>}</td>
-                        {hasGoalie && <td className="pr-8 py-1 text-right font-bold text-[#003e79]">{gk[sz] || <span className="font-normal text-[#d2d2d7]">-</span>}</td>}
-                        <td className="py-1 text-right font-bold text-[#003e79]">{ts[sz] || <span className="font-normal text-[#d2d2d7]">-</span>}</td>
+              <div className="flex flex-wrap gap-8">
+                <div>
+                  <table className="text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <thead>
+                      <tr>
+                        <th className="text-left pr-6 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Jersey size</th>
+                        <th className="text-right py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Qty</th>
                       </tr>
-                    ))}
-                    <tr className="border-t-2 border-[#e8e8ed]">
-                      <td className="pr-8 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Total</td>
-                      <td className="pr-8 py-1 text-right font-black text-[#003e79]">{sum(reg)}</td>
-                      {hasGoalie && <td className="pr-8 py-1 text-right font-black text-[#003e79]">{sum(gk)}</td>}
-                      <td className="py-1 text-right font-black text-[#003e79]">{sum(ts)}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {jRows.map(sz => (
+                        <tr key={sz} className="border-t border-[#f0f0f2]">
+                          <td className="pr-6 py-1 font-semibold text-[#1d1d1f] whitespace-nowrap">{sz}{sz.startsWith('GC-') ? <span className="text-[10px] font-bold text-orange-600 ml-1.5">GOALIE</span> : ''}</td>
+                          <td className="py-1 text-right font-bold text-[#003e79]">{jc[sz]}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-[#e8e8ed]">
+                        <td className="pr-6 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Total</td>
+                        <td className="py-1 text-right font-black text-[#003e79]">{sum(jc)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <table className="text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <thead>
+                      <tr>
+                        <th className="text-left pr-6 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Tee size</th>
+                        <th className="text-right py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tRows.map(sz => (
+                        <tr key={sz} className="border-t border-[#f0f0f2]">
+                          <td className="pr-6 py-1 font-semibold text-[#1d1d1f] whitespace-nowrap">{sz}</td>
+                          <td className="py-1 text-right font-bold text-[#003e79]">{tc[sz]}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-[#e8e8ed]">
+                        <td className="pr-6 py-1 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Total</td>
+                        <td className="py-1 text-right font-black text-[#003e79]">{sum(tc)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
+            {repick > 0 && <p className="text-xs font-semibold text-orange-600 mt-1.5">{repick} player{repick !== 1 ? 's' : ''} still on the old sizing - asked to re-pick on the new chart</p>}
             {missing > 0 && <p className="text-xs font-semibold text-amber-600 mt-1.5">{missing} player{missing !== 1 ? 's' : ''} still missing a size</p>}
             {(() => {
               return (
@@ -721,7 +738,7 @@ export default function LightsOutAdminPage() {
                           </button>
                           {editMsg && <span className="text-xs font-semibold text-red-600">{editMsg}</span>}
                         </div>
-                        <p className="text-[11px] text-[#86868b] mt-2">Saves straight to the registration - no emails go out. Jersey sizes read like &quot;Youth L&quot; or &quot;Adult M&quot; (goalie jerseys: &quot;Goalie Cut Adult M&quot;).</p>
+                        <p className="text-[11px] text-[#86868b] mt-2">Saves straight to the registration - no emails go out. Jersey sizes use the manufacturer codes - &quot;YM-42&quot;, &quot;AL-52&quot;, goalie cut &quot;GC-48&quot;.</p>
                       </div>
                     ) : (
                     <div className="flex flex-wrap items-start justify-between gap-4">

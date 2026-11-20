@@ -498,9 +498,12 @@ function approvedEmail(row: any, id: string): { subject: string; html: string } 
 // the link in the acceptance email. Stored on the registration row so the
 // admin panel can total sizes for the swag order.
 // ==========================================
-const JERSEY_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
-// Goalie jerseys are a different cut - parents pick 'Goalie Cut <size>'
-const isJerseySize = (v: string) => JERSEY_SIZES.includes(v) || (v.startsWith('Goalie Cut ') && JERSEY_SIZES.includes(v.slice(11)));
+// Real manufacturer jersey sizes (supplier chart, Nov 2026). The number is
+// the actual garment size in inches. Player cut and goalie cut are
+// different garments with their own size runs; goalie cut stores as GC-*.
+const PLAYER_JERSEY_SIZES = ['CHILD-36', 'YXS-38', 'YS-40', 'YM-42', 'YL-44', 'YXL-46', 'AS-48', 'AM-50', 'AL-52', 'AXL-54', 'A2XL-56', 'A3XL-58', 'A4XL-60'];
+const GOALIE_JERSEY_SIZES = ['GC-44', 'GC-46', 'GC-48', 'GC-50', 'GC-52', 'GC-54', 'GC-56', 'GC-58', 'GC-60', 'GC-62', 'GC-64'];
+const isJerseySize = (v: string) => PLAYER_JERSEY_SIZES.includes(v) || GOALIE_JERSEY_SIZES.includes(v);
 const TEE_SIZES = ['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'];
 const FULL_PRICE_CENTS = 55000;
 
@@ -522,7 +525,8 @@ lightsOutRoutes.get('/size/:id', async (c) => {
     tee_size: row.tee_size || null,
     jersey_number: (() => { const n = String(row.jersey_number_request || row.jersey_number || '').trim(); return /^\d{1,2}$/.test(n) ? n : ''; })(),
     jersey_name: row.jersey_name || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '') ,
-    jersey_sizes: JERSEY_SIZES,
+    jersey_sizes: PLAYER_JERSEY_SIZES,
+    goalie_jersey_sizes: GOALIE_JERSEY_SIZES,
     tee_sizes: TEE_SIZES,
     balance_cents: balanceCents,
   } });
@@ -753,6 +757,86 @@ lightsOutRoutes.get('/admin/sizes-email-audit', async (c) => {
     missing: missing.map((m: any) => ({ player: m.player_name, email: m.email })),
     fixed: c.req.query('fix') === '1' ? missing.length : 0,
   } });
+});
+
+// Old generic size -> closest real manufacturer size, suggested in the
+// re-pick email so families have a starting point
+const RESIZE_MAP: Record<string, string> = {
+  'Youth S': 'YS-40', 'Youth M': 'YM-42', 'Youth L': 'YL-44', 'Youth XL': 'YXL-46',
+  'Adult S': 'AS-48', 'Adult M': 'AM-50', 'Adult L': 'AL-52', 'Adult XL': 'AXL-54', 'Adult XXL': 'A2XL-56',
+  'Goalie Cut Youth S': 'GC-44', 'Goalie Cut Youth M': 'GC-46', 'Goalie Cut Youth L': 'GC-48', 'Goalie Cut Youth XL': 'GC-50',
+  'Goalie Cut Adult S': 'GC-52', 'Goalie Cut Adult M': 'GC-54', 'Goalie Cut Adult L': 'GC-56', 'Goalie Cut Adult XL': 'GC-58', 'Goalie Cut Adult XXL': 'GC-60',
+};
+
+// Admin: jersey re-pick blast after the switch to real manufacturer sizes
+// (Nov 2026). Targets paid rows whose old pick was snapshotted into
+// jersey_size_old and whose jersey_size is now empty. ?dry=1 counts,
+// ?test=you@x sends a sample, otherwise sends a batch and stamps
+// resize_email_sent_at. Call until remaining is 0.
+lightsOutRoutes.post('/admin/resize-emails', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const db = c.env.DB;
+
+  const resizeEmail = (row: any) => {
+    const first = String(row.player_name || '').trim().split(/\s+/)[0] || 'your player';
+    const oldPick = String(row.jersey_size_old || '');
+    const suggested = RESIZE_MAP[oldPick] || '';
+    const wasGoalie = oldPick.startsWith('Goalie Cut ');
+    return {
+      subject: `Quick re-pick needed - ${row.player_name}'s Lights Out jersey size`,
+      html: emailShell(`
+        <p style="margin:0 0 14px;font-size:19px;font-weight:bold;color:#7fd8ff;">ONE QUICK FIX ON ${String(first).toUpperCase()}'S JERSEY</p>
+        <p style="margin:0 0 14px;">Hi ${row.parent_name},</p>
+        <p style="margin:0 0 14px;">We heard you - the jersey sizing was confusing, and we want ${first}'s glow jersey to fit perfectly. We have switched the size form to the manufacturer's REAL jersey sizes, with actual chest, sleeve, and body measurements for every size${wasGoalie ? ', including the goalie cut sizes' : ''}.</p>
+        <p style="margin:0 0 14px;">You picked <b style="color:#dbe8f5;">${oldPick}</b> before.${suggested ? ` The closest real size is <b style="color:#39ff14;">${suggested}</b> - but please check the measurements on the form before you confirm, that is the whole point.` : ''} Your tee size and jersey name/number are saved and unchanged - this is only the jersey size.</p>
+        <p style="margin:0 0 16px;text-align:center;">
+          <a href="https://ultimatetournaments.com/lights-out/size?id=${encodeURIComponent(row.id)}" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">RE-PICK ${String(first).toUpperCase()}'S JERSEY SIZE</a>
+        </p>
+        <p style="margin:0 0 14px;">Takes about 30 seconds - the size chart with measurements is right on the page. When in doubt, size up.</p>
+        <p style="margin:0;color:#ffb84d;font-size:13px;font-weight:bold;">Sorry for the double ask. We would rather bug you once more than hand ${first} a jersey that does not fit in June.</p>
+      `),
+    };
+  };
+
+  const pending = () => db.prepare(`
+    SELECT id, player_name, parent_name, email, jersey_size_old FROM lights_out_registrations
+    WHERE COALESCE(amount_paid_cents, 0) > 0 AND status NOT LIKE 'invite_%' AND status != 'refunded'
+      AND jersey_size_old IS NOT NULL AND jersey_size_old != ''
+      AND (jersey_size IS NULL OR jersey_size = '')
+      AND email IS NOT NULL AND email != ''
+      AND resize_email_sent_at IS NULL
+    ORDER BY created_at, id
+  `).all<any>();
+
+  const test = String(c.req.query('test') || '').trim();
+  if (test) {
+    const rows = (await pending()).results || [];
+    if (!rows.length) return c.json({ success: false, error: 'No unsent rows to sample' }, 404);
+    const m = resizeEmail(rows[0]);
+    await sendEmail(c.env, test, `[TEST] ${m.subject}`, m.html);
+    return c.json({ success: true, data: { test, sampled: rows[0].player_name, remaining: rows.length } });
+  }
+  if (c.req.query('dry')) {
+    const rows = (await pending()).results || [];
+    return c.json({ success: true, data: { remaining: rows.length } });
+  }
+
+  const batch = Math.min(parseInt(c.req.query('batch') || '20', 10) || 20, 40);
+  const rows = ((await pending()).results || []).slice(0, batch);
+  const sent: string[] = [];
+  for (const row of rows) {
+    const m = resizeEmail(row);
+    await sendEmail(c.env, row.email, m.subject, m.html);
+    await db.prepare(`UPDATE lights_out_registrations SET resize_email_sent_at = datetime('now') WHERE id = ?`).bind(row.id).run();
+    sent.push(row.player_name);
+    await new Promise(res => setTimeout(res, 650));
+  }
+  const left = ((await pending()).results || []).length;
+  if (sent.length > 0 && left === 0) {
+    await sendEmail(c.env, 'johnny@ultimatetournaments.com', 'Lights Out: jersey re-pick email sent to every affected family',
+      emailShell(`<p style="margin:0;">Every family that picked a jersey size under the old generic sizing was asked to re-pick on the new manufacturer chart. The admin swag table counts them as missing a size until they do.</p>`));
+  }
+  return c.json({ success: true, data: { sent: sent.length, remaining: left } });
 });
 
 // Admin: refund a registration. Refunds EVERYTHING the family paid on
