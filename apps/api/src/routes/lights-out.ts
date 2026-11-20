@@ -844,6 +844,26 @@ lightsOutRoutes.get('/admin/stripe-lookup', async (c) => {
     checkout_session: await sessionFor(ch.payment_intent),
   });
 
+  // ?refund=re_... fetches one refund and its charge, to verify a refund
+  // actually went through and where Stripe sent the receipt
+  const refundId = String(c.req.query('refund') || '').trim();
+  if (refundId) {
+    const r = await fetch(`https://api.stripe.com/v1/refunds/${encodeURIComponent(refundId)}`, sk);
+    const j = await r.json() as any;
+    if (!r.ok) return c.json({ success: false, error: j?.error?.message || `Stripe ${r.status}` }, 502);
+    let charge: any = null;
+    if (j.charge) {
+      const cr = await fetch(`https://api.stripe.com/v1/charges/${encodeURIComponent(j.charge)}`, sk);
+      const cj = await cr.json() as any;
+      if (cr.ok) charge = { amount: `$${(cj.amount / 100).toFixed(2)}`, refunded: cj.refunded, amount_refunded: `$${(cj.amount_refunded / 100).toFixed(2)}`, receipt_email: cj.receipt_email || cj.billing_details?.email || '', last4: cj.payment_method_details?.card?.last4 || '', description: cj.description || '' };
+    }
+    return c.json({ success: true, data: {
+      refund: refundId, status: j.status, amount: `$${(j.amount / 100).toFixed(2)}`,
+      created: new Date(j.created * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+      destination: j.destination_details?.type || '', charge,
+    } });
+  }
+
   const pi = String(c.req.query('pi') || '').trim();
   if (pi) {
     const r = await fetch(`https://api.stripe.com/v1/payment_intents/${encodeURIComponent(pi)}`, sk);
