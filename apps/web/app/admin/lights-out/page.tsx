@@ -30,6 +30,13 @@ const divisionOf = (by: any): string => {
   if (y >= 2012) return 'Bantam';
   return 'Midget';
 };
+const posOf = (p: any): string => {
+  const s = String(p || '').trim().toUpperCase();
+  if (s.startsWith('F')) return 'F';
+  if (s.startsWith('D')) return 'D';
+  if (s.startsWith('G')) return 'G';
+  return '?';
+};
 
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -137,6 +144,31 @@ export default function LightsOutAdminPage() {
     setEditBusy(false);
   };
 
+  // Team builder: assign a paid player to an event team. Writes through the
+  // details endpoint; empty string clears the assignment.
+  const assignTeam = async (id: string, team: string | null) => {
+    setBusy(id);
+    try {
+      const res = await fetch(`${API}/admin/requests/${id}/details`, {
+        method: 'PATCH', headers: hdrs({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ assigned_team: team || '' }),
+      });
+      const j = await res.json();
+      if (j.success) setRows(prev => prev.map(r => r.id === id ? { ...r, assigned_team: team } : r));
+    } catch {}
+    setBusy(null);
+  };
+  // Existing team names per division, for the row dropdowns
+  const teamsByDiv: Record<string, string[]> = {};
+  for (const r of rows) {
+    if (r.assigned_team) {
+      const d = divisionOf(r.birth_year);
+      const list = (teamsByDiv[d] = teamsByDiv[d] || []);
+      if (!list.includes(r.assigned_team)) list.push(r.assigned_team);
+    }
+  }
+  for (const d of Object.keys(teamsByDiv)) teamsByDiv[d].sort();
+
   const setStatus = async (id: string, status: string) => {
     setBusy(id);
     try {
@@ -220,13 +252,6 @@ export default function LightsOutAdminPage() {
 
         const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
         const YEARS_LABEL: Record<string, string> = { Mite: '2018+', Squirt: '2016-17', 'Pee Wee': '2014-15', Bantam: '2012-13', Midget: '2011 & older' };
-        const posOf = (p: any): string => {
-          const s = String(p || '').trim().toUpperCase();
-          if (s.startsWith('F')) return 'F';
-          if (s.startsWith('D')) return 'D';
-          if (s.startsWith('G')) return 'G';
-          return '?';
-        };
         const agg: Record<string, { paid: number; req: number; wait: number; years: Record<string, number>; pos: Record<string, number> }> = {};
         for (const r of rows) {
           if (!isPaid(r) && !isReq(r) && r.status !== 'goalie_waitlist') continue; // abandoned checkouts don't count
@@ -479,6 +504,41 @@ export default function LightsOutAdminPage() {
         ))}
       </div>
 
+      {/* Team-building scoreboard: with a division selected, show each
+          team's size and position split plus who is still unassigned */}
+      {divFilter && loaded && (() => {
+        const paidDiv = rows.filter(r => isPaid(r) && divisionOf(r.birth_year) === divFilter);
+        if (paidDiv.length === 0) return null;
+        const g: Record<string, { n: number; F: number; D: number; G: number }> = {};
+        let un = 0;
+        for (const r of paidDiv) {
+          const t = r.assigned_team;
+          if (!t) { un++; continue; }
+          const a = (g[t] = g[t] || { n: 0, F: 0, D: 0, G: 0 });
+          a.n++;
+          const pk = posOf(r.position);
+          if (pk === 'F' || pk === 'D' || pk === 'G') (a as any)[pk]++;
+        }
+        return (
+          <div className="flex flex-wrap items-center gap-2 mb-4 -mt-1">
+            <span className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest">{divFilter} teams</span>
+            {Object.entries(g).sort((a, b) => a[0].localeCompare(b[0])).map(([t, a]) => (
+              <span key={t} className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#f0f7ff] text-[#0a6ebd] border border-[#bfe0f5]">
+                {t}: {a.n}<span className="font-semibold text-[#6e9fc0]"> · F{a.F} D{a.D} G{a.G}</span>
+              </span>
+            ))}
+            {un > 0 && (
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                Unassigned: {un}
+              </span>
+            )}
+            {Object.keys(g).length === 0 && (
+              <span className="text-[11px] text-[#86868b] font-semibold">no teams yet - use the Team dropdown on any paid player to start one</span>
+            )}
+          </div>
+        );
+      })()}
+
       {!loaded ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#003e79]" /></div>
       ) : visible.length === 0 ? (
@@ -498,6 +558,7 @@ export default function LightsOutAdminPage() {
                 <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase text-center">In</th>
                 <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase text-center">Star</th>
                 <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase text-center">Sizes</th>
+                <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase hidden sm:table-cell">Team</th>
                 <th className="px-4 py-2.5 text-[11px] font-bold text-[#86868b] uppercase text-right">Action</th>
               </tr>
             </thead>
@@ -545,6 +606,24 @@ export default function LightsOutAdminPage() {
                         : <Ic.Clock title="Waiting on sizes" />)
                       : <Ic.Dash title="Sizes collected after payment" />}
                   </td>
+                  <td className="px-2 py-2.5 hidden sm:table-cell" onClick={e => e.stopPropagation()}>
+                    {isPaid(r) ? (
+                      <select value={r.assigned_team || ''} disabled={busy === r.id}
+                        onChange={e => {
+                          const v = e.target.value;
+                          if (v === '__new__') {
+                            const name = window.prompt(`New ${divisionOf(r.birth_year)} team name:`);
+                            if (name && name.trim()) assignTeam(r.id, name.trim());
+                            e.target.value = r.assigned_team || '';
+                          } else assignTeam(r.id, v || null);
+                        }}
+                        className={`border rounded-lg px-1.5 py-1 text-[11px] font-bold bg-white max-w-[130px] outline-none ${r.assigned_team ? 'border-[#bfe0f5] text-[#0a6ebd]' : 'border-[#e0e0e5] text-[#86868b]'}`}>
+                        <option value="">No team</option>
+                        {(teamsByDiv[divisionOf(r.birth_year)] || []).map(t => <option key={t} value={t}>{t}</option>)}
+                        <option value="__new__">+ New team...</option>
+                      </select>
+                    ) : <span className="text-[#d2d2d7] text-xs">-</span>}
+                  </td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                     {st === 'pending' && (<>
                       <button onClick={() => setStatus(r.id, 'approved')} disabled={busy === r.id}
@@ -586,7 +665,7 @@ export default function LightsOutAdminPage() {
                 </tr>
                 {isOpen && (
                 <tr className="border-b border-[#f0f0f3] bg-[#fafbfc]">
-                  <td colSpan={7} className="px-5 py-4">
+                  <td colSpan={8} className="px-5 py-4">
                     {editRow === r.id ? (
                       <div className="w-full">
                         <p className="text-[11px] font-bold text-[#86868b] uppercase tracking-widest mb-2">Edit registration - {r.player_name}</p>

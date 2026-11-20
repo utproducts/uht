@@ -37,8 +37,29 @@ function emailShell(inner: string): string {
     <div style="background:#0a1228;border:1px solid rgba(0,204,255,.35);border-radius:16px;padding:28px 24px;color:#dbe8f5;font-size:14px;line-height:1.65;">
       ${inner}
     </div>
-    <p style="text-align:center;color:#55637a;font-size:11px;margin-top:22px;">Ultimate Hockey Tournaments · Lights Out Invitational · St. Louis, MO</p>
+    <p style="text-align:center;color:#55637a;font-size:11px;margin-top:22px;">Ultimate Hockey Tournaments · Lights Out Invitational · St. Louis, MO<br>
+      <a href="https://ultimatetournaments.com/unsubscribe" style="color:#55637a;text-decoration:underline;">Unsubscribe</a></p>
   </div></body></html>`;
+}
+
+// Emails that unsubscribed from UHT mail (contacts.is_subscribed_email = 0
+// or any email_list_contacts row inactive - both are set by the public
+// /unsubscribe flow). Blast-style sends skip them; transactional emails
+// (payment confirmations, codes a family asked for) do not check this.
+async function unsubscribedSet(db: any, emails: any[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  const uniq = [...new Set(emails.map(e => String(e || '').trim().toLowerCase()).filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 50) {
+    const chunk = uniq.slice(i, i + 50);
+    const ph = chunk.map(() => '?').join(',');
+    try {
+      const r1 = await db.prepare(`SELECT LOWER(email) as em FROM contacts WHERE is_subscribed_email = 0 AND LOWER(email) IN (${ph})`).bind(...chunk).all();
+      for (const row of (r1.results || [])) out.add(String(row.em));
+      const r2 = await db.prepare(`SELECT DISTINCT LOWER(email) as em FROM email_list_contacts WHERE is_active = 0 AND LOWER(email) IN (${ph})`).bind(...chunk).all();
+      for (const row of (r2.results || [])) out.add(String(row.em));
+    } catch {}
+  }
+  return out;
 }
 
 // Past events a star could have been earned at (for the claim dropdown)
@@ -372,6 +393,7 @@ const detailsSchema = z.object({
   jersey_number_request: z.string().trim().optional(),
   jersey_size: z.string().trim().optional(),
   tee_size: z.string().trim().optional(),
+  assigned_team: z.string().trim().optional(),
   notes: z.string().optional(),
 });
 lightsOutRoutes.patch('/admin/requests/:id/details', authMiddleware, requireRole('admin', 'director'),
@@ -842,8 +864,16 @@ lightsOutRoutes.post('/admin/code-reminder', async (c) => {
 
   const batch = Math.min(parseInt(c.req.query('batch') || '20', 10) || 20, 40);
   const rows = ((await pending()).results || []).slice(0, batch);
+  const supp = await unsubscribedSet(db, rows.map((r: any) => r.email));
   const sent: string[] = [];
+  let unsubscribed = 0;
   for (const row of rows) {
+    if (supp.has(String(row.email || '').toLowerCase())) {
+      // Marked so the pending query stops offering them - never emailed
+      await db.prepare(`UPDATE lights_out_registrations SET code_reminder_sent_at = 'skipped-unsubscribed' WHERE id = ?`).bind(row.id).run();
+      unsubscribed++;
+      continue;
+    }
     const m = reminderEmail(row);
     await sendEmail(c.env, row.email, m.subject, m.html);
     await db.prepare(`UPDATE lights_out_registrations SET code_reminder_sent_at = datetime('now') WHERE id = ?`).bind(row.id).run();
@@ -855,7 +885,7 @@ lightsOutRoutes.post('/admin/code-reminder', async (c) => {
     await sendEmail(c.env, 'johnny@ultimatetournaments.com', 'Lights Out: code reminder sent to every Code Sent family',
       emailShell(`<p style="margin:0;">The 35-spots-left reminder went out to every family still holding an unused invite code. Each email carried that family's own code and register button.</p>`));
   }
-  return c.json({ success: true, data: { sent: sent.length, remaining: left } });
+  return c.json({ success: true, data: { sent: sent.length, remaining: left, unsubscribed } });
 });
 
 // Admin: send yourself a copy of the acceptance email for any eligible row
@@ -888,7 +918,13 @@ export async function remindIncompleteCheckouts(env: Env): Promise<{ sent: numbe
   `).all()).results || [];
 
   let sent = 0, skipped = 0;
+  const supp = await unsubscribedSet(db, (rows as any[]).map((r: any) => r.email));
   for (const r of rows as any[]) {
+    if (supp.has(String(r.email || '').toLowerCase())) {
+      await db.prepare(`UPDATE lights_out_registrations SET payment_reminder_at = datetime('now') WHERE id = ?`).bind(r.id).run();
+      skipped++;
+      continue;
+    }
     // Same family already completed a registration - no nudge needed
     const alreadyPaid = await db.prepare(
       `SELECT 1 as x FROM lights_out_registrations WHERE email = ? AND paid_at IS NOT NULL LIMIT 1`
