@@ -1642,7 +1642,28 @@ emailRoutes.post('/unsubscribe', async (c) => {
 // HELPER FUNCTIONS
 // ==========================================
 
-function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionId?: string; ageGroup?: string; excludeRegisteredForEvent?: string }) {
+function buildAudienceQuery(filter: { scope: string; eventId?: string; divisionId?: string; ageGroup?: string; excludeRegisteredForEvent?: string; campaignId?: string }) {
+  // Everyone a previous campaign reached who never opened or clicked it -
+  // for "resend to non-openers" runs on the wave engine. Excludes anyone
+  // who has unsubscribed since.
+  if (filter.scope === 'campaign_non_openers' && filter.campaignId) {
+    return {
+      query: `
+        SELECT LOWER(c.email) as email,
+          COALESCE(c.first_name || ' ' || c.last_name, c.email) as name,
+          '' as team_name, '' as age_group, '' as event_name
+        FROM email_sends es
+        JOIN contacts c ON c.id = es.contact_id
+        WHERE es.campaign_id = ?
+          AND es.status IN ('sent', 'delivered')
+          AND es.opened_at IS NULL AND es.clicked_at IS NULL
+          AND c.email IS NOT NULL AND c.email != ''
+          AND COALESCE(c.is_subscribed_email, 1) = 1
+        GROUP BY LOWER(c.email)
+      `,
+      params: [filter.campaignId],
+    };
+  }
   const params: string[] = [];
 
   // "event_participants" → every email that has ever joined a UHT event or
