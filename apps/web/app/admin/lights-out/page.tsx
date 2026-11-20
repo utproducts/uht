@@ -61,7 +61,7 @@ export default function LightsOutAdminPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent' | 'waitlist'>('all');
+  const [filter, setFilter] = useState<'all' | 'registered' | 'incomplete' | 'pending' | 'approved' | 'denied' | 'requests' | 'code_sent' | 'waitlist' | 'refunded'>('all');
   // Clicking a division card narrows the whole table to that age group -
   // the first step toward building teams per division
   const [divFilter, setDivFilter] = useState<string | null>(null);
@@ -144,6 +144,21 @@ export default function LightsOutAdminPage() {
     setEditBusy(false);
   };
 
+  // Refund everything paid on a registration through Stripe and move the
+  // row to the Refunded tab. Confirmed in a dialog - this moves real money.
+  const refundRow = async (r: any) => {
+    const amt = ((r.amount_paid_cents || 0) / 100).toLocaleString();
+    if (!window.confirm(`Refund $${amt} to ${r.parent_name} (${r.email}) for ${r.player_name}?\n\nThe money goes back to their card through Stripe (they get Stripe's receipt automatically) and this registration moves to the Refunded tab. This cannot be undone.`)) return;
+    setBusy(r.id);
+    try {
+      const res = await fetch(`${API}/admin/requests/${r.id}/refund`, { method: 'POST', headers: hdrs() });
+      const j = await res.json();
+      if (j.success) { setOpenRow(null); load(); }
+      else window.alert(j.error || 'Refund failed.');
+    } catch { window.alert('Refund failed - try again.'); }
+    setBusy(null);
+  };
+
   // Team builder: assign a paid player to an event team. Writes through the
   // details endpoint; empty string clears the assignment.
   const assignTeam = async (id: string, team: string | null) => {
@@ -189,11 +204,13 @@ export default function LightsOutAdminPage() {
   const isReq = (r: any) => String(r.status).startsWith('invite_');
   const fromRequest = (r: any) => r.star_event_id === 'invite-request';
   const fromWaitlist = (r: any) => r.star_event_id === 'goalie-waitlist';
-  const isPaid = (r: any) => !isReq(r) && (r.amount_paid_cents || 0) > 0;
+  // Refunded rows keep their paid amount for the record but count nowhere:
+  // not in money totals, divisions, goalie caps, swag, or team building
+  const isPaid = (r: any) => !isReq(r) && (r.amount_paid_cents || 0) > 0 && r.status !== 'refunded';
   // Request lifecycle: Requests = waiting on review. Approving moves them to
   // Code Sent. Registering moves them to Registered. Nothing stays behind,
   // so a zero Requests pill means nothing is being missed.
-  const counts = { all: rows.length, registered: 0, incomplete: 0, pending: 0, approved: 0, denied: 0, requests: 0, code_sent: 0, waitlist: 0 } as Record<string, number>;
+  const counts = { all: rows.length, registered: 0, incomplete: 0, pending: 0, approved: 0, denied: 0, requests: 0, code_sent: 0, waitlist: 0, refunded: 0 } as Record<string, number>;
   for (const r of rows) {
     if (r.status === 'invite_requested') counts.requests++;
     else if (r.status === 'invite_approved') counts.code_sent++;
@@ -201,7 +218,7 @@ export default function LightsOutAdminPage() {
     else if (r.status === 'denied' || r.status === 'invite_denied') counts.denied++;
     else counts[r.status] = (counts[r.status] || 0) + 1;
     if (isPaid(r)) counts.registered++;
-    else if (!isReq(r) && r.status !== 'goalie_waitlist') counts.incomplete++;
+    else if (!isReq(r) && r.status !== 'goalie_waitlist' && r.status !== 'refunded') counts.incomplete++;
   }
   const needle = q.trim().toLowerCase();
   const visible = rows.filter(r => {
@@ -213,7 +230,7 @@ export default function LightsOutAdminPage() {
     if (filter === 'waitlist') return r.status === 'goalie_waitlist';
     if (filter === 'denied') return r.status === 'denied' || r.status === 'invite_denied';
     if (filter === 'registered') return isPaid(r);
-    if (filter === 'incomplete') return !isReq(r) && !isPaid(r);
+    if (filter === 'incomplete') return !isReq(r) && !isPaid(r) && r.status !== 'goalie_waitlist' && r.status !== 'refunded';
     return r.status === filter;
   });
 
@@ -224,6 +241,7 @@ export default function LightsOutAdminPage() {
     if (st === 'invite_requested') return { label: 'NEEDS REVIEW', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     if (st === 'invite_approved') return { label: 'CODE SENT - NOT REGISTERED YET', cls: 'bg-[#f0f7ff] text-[#0077b0] border-[#bfe0f5]' };
     if (st === 'goalie_waitlist') return { label: 'GOALIE WAITLIST', cls: 'bg-orange-50 text-orange-700 border-orange-200' };
+    if (st === 'refunded') return { label: `REFUNDED - $${((paid) / 100).toLocaleString()} RETURNED`, cls: 'bg-gray-100 text-gray-600 border-gray-300' };
     if (st === 'invite_denied' || st === 'denied') return { label: 'DENIED', cls: 'bg-red-50 text-red-600 border-red-200' };
     if (st === 'pending_payment') return { label: 'CHECKOUT ABANDONED', cls: 'bg-gray-50 text-gray-500 border-gray-200' };
     if (st === 'pending') return { label: 'PAID - NEEDS APPROVAL', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
@@ -496,7 +514,7 @@ export default function LightsOutAdminPage() {
             </button>
           )}
         </div>
-        {(['all', 'registered', 'pending', 'requests', 'code_sent', 'waitlist', 'incomplete', 'denied'] as const).map(fk => (
+        {(['all', 'registered', 'pending', 'requests', 'code_sent', 'waitlist', 'incomplete', 'refunded', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
             {fk === 'all' ? 'All' : fk === 'code_sent' ? 'Code Sent' : fk === 'waitlist' ? 'Goalie Waitlist' : fk === 'pending' ? 'Needs Approval' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
@@ -579,7 +597,8 @@ export default function LightsOutAdminPage() {
                   </td>
                   <td className="px-2 py-2.5 text-[#6e6e73] hidden sm:table-cell">{String(r.birth_year || '').trim() || '-'}</td>
                   <td className="px-2 py-2.5 text-center">
-                    {paid >= 55000 ? <Ic.Check title="Paid in full" />
+                    {st === 'refunded' ? <Ic.X title={`Refunded $${(paid / 100).toLocaleString()}`} />
+                      : paid >= 55000 ? <Ic.Check title="Paid in full" />
                       : paid > 0 ? <Ic.Dollar title={`$${((55000 - paid) / 100).toLocaleString()} balance due`} />
                       : st === 'pending_payment' ? <Ic.X title="Checkout abandoned" />
                       : <Ic.Dash title="No payment - invite request" />}
@@ -591,6 +610,7 @@ export default function LightsOutAdminPage() {
                       : st === 'invite_requested' ? <Ic.Clock title="Invite request - needs review" />
                       : st === 'goalie_waitlist' ? <Ic.Clock title="Goalie waitlist - waiting for a spot to open" />
                       : (st === 'denied' || st === 'invite_denied') ? <Ic.X title="Denied" />
+                      : st === 'refunded' ? <Ic.X title="Refunded - no longer in" />
                       : <Ic.Dash title="Not in" />}
                   </td>
                   <td className="px-2 py-2.5 text-center">
@@ -601,7 +621,8 @@ export default function LightsOutAdminPage() {
                       : <Ic.Alert title="Star not found on scoresheets" />}
                   </td>
                   <td className="px-2 py-2.5 text-center">
-                    {paid > 0
+                    {st === 'refunded' ? <Ic.Dash title="Refunded" />
+                      : paid > 0
                       ? (r.jersey_size && r.tee_size ? <Ic.Check title={`Jersey ${r.jersey_size} - Tee ${r.tee_size}`} />
                         : <Ic.Clock title="Waiting on sizes" />)
                       : <Ic.Dash title="Sizes collected after payment" />}
@@ -734,6 +755,12 @@ export default function LightsOutAdminPage() {
                           className="px-3 py-1.5 rounded-lg bg-white border border-[#003e79] text-[#003e79] text-[11px] font-bold hover:bg-[#f0f7ff] transition">
                           Edit details
                         </button>
+                        {(r.amount_paid_cents || 0) > 0 && st !== 'refunded' && (
+                          <button onClick={() => refundRow(r)} disabled={busy === r.id}
+                            className="px-3 py-1.5 rounded-lg bg-white border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-50 transition disabled:opacity-50">
+                            Refund ${((r.amount_paid_cents || 0) / 100).toLocaleString()}
+                          </button>
+                        )}
                         {st === 'approved' && (<>
                           <button onClick={() => setStatus(r.id, 'denied')} disabled={busy === r.id}
                             className="px-3 py-1.5 rounded-lg bg-white border border-red-200 text-red-600 text-[11px] font-bold hover:bg-red-50 transition disabled:opacity-50">

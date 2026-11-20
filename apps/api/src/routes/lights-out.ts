@@ -670,7 +670,7 @@ lightsOutRoutes.post('/admin/test-sizes-email', authMiddleware, requireRole('adm
     const { to } = c.req.valid('json');
     const row = await c.env.DB.prepare(`
       SELECT * FROM lights_out_registrations
-      WHERE status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0
+      WHERE status NOT LIKE 'invite_%' AND status != 'refunded' AND COALESCE(amount_paid_cents, 0) > 0
       ORDER BY CASE WHEN COALESCE(amount_paid_cents, 0) < 55000 THEN 0 ELSE 1 END, created_at DESC LIMIT 1
     `).first<any>();
     if (!row) return c.json({ success: false, error: 'No paid registrations yet' }, 404);
@@ -684,7 +684,7 @@ lightsOutRoutes.post('/admin/test-sizes-email', authMiddleware, requireRole('adm
 lightsOutRoutes.post('/admin/send-sizes-emails', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT * FROM lights_out_registrations
-    WHERE status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0
+    WHERE status NOT LIKE 'invite_%' AND status != 'refunded' AND COALESCE(amount_paid_cents, 0) > 0
       AND sizes_email_sent_at IS NULL AND email LIKE '%_@_%'
     ORDER BY created_at LIMIT 200
   `).all<any>();
@@ -720,7 +720,7 @@ lightsOutRoutes.get('/admin/sizes-email-audit', async (c) => {
   if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
   const marked = await c.env.DB.prepare(`
     SELECT id, player_name, email, sizes_email_sent_at FROM lights_out_registrations
-    WHERE status NOT LIKE 'invite_%' AND COALESCE(amount_paid_cents, 0) > 0 AND sizes_email_sent_at IS NOT NULL
+    WHERE status NOT LIKE 'invite_%' AND status != 'refunded' AND COALESCE(amount_paid_cents, 0) > 0 AND sizes_email_sent_at IS NOT NULL
   `).all<any>();
   // Resend list API: newest first, page through until we are past the blast window
   const got = new Set<string>();
@@ -753,6 +753,66 @@ lightsOutRoutes.get('/admin/sizes-email-audit', async (c) => {
     missing: missing.map((m: any) => ({ player: m.player_name, email: m.email })),
     fixed: c.req.query('fix') === '1' ? missing.length : 0,
   } });
+});
+
+// Admin: refund a registration. Refunds EVERYTHING the family paid on
+// this row through Stripe (the registration payment, plus the balance
+// payment when one exists) and moves the row to 'refunded'. That status
+// frees the goalie-cap spot, drops the row from money totals, swag
+// counts, team building, and the sizes blast - all of which only count
+// non-refunded paid rows. Stripe emails the family its own refund
+// receipt; we send nothing to them.
+lightsOutRoutes.post('/admin/requests/:id/refund', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+  try { await db.prepare('ALTER TABLE lights_out_registrations ADD COLUMN refunded_at TEXT').run(); } catch {}
+  const row = await db.prepare('SELECT * FROM lights_out_registrations WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ success: false, error: 'Not found' }, 404);
+  if (row.status === 'refunded') return c.json({ success: false, error: 'Already refunded' }, 400);
+  if ((row.amount_paid_cents || 0) <= 0) return c.json({ success: false, error: 'Nothing has been paid on this registration' }, 400);
+
+  const sk = { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` };
+  const piFor = async (sessId: string | null): Promise<string | null> => {
+    if (!sessId) return null;
+    const r = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessId}`, { headers: sk });
+    const j = await r.json() as any;
+    return r.ok && j.payment_status === 'paid' ? (j.payment_intent || null) : null;
+  };
+
+  const refunds: string[] = [];
+  let refundedCents = 0;
+  for (const sess of [row.stripe_session_id, row.balance_session_id]) {
+    const pi = await piFor(sess);
+    if (!pi) continue;
+    const rr = await fetch('https://api.stripe.com/v1/refunds', {
+      method: 'POST',
+      headers: { ...sk, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ payment_intent: pi, 'metadata[lights_out_reg_id]': id }).toString(),
+    });
+    const rj = await rr.json() as any;
+    if (rr.ok) {
+      refunds.push(rj.id);
+      refundedCents += rj.amount || 0;
+    } else if (rj?.error?.code === 'charge_already_refunded') {
+      refunds.push(`${pi} already refunded in Stripe`);
+    } else {
+      return c.json({ success: false, error: `Stripe refund failed: ${rj?.error?.message || `HTTP ${rr.status}`}` }, 502);
+    }
+  }
+  if (refunds.length === 0) return c.json({ success: false, error: 'No paid Stripe payment found behind this registration' }, 400);
+
+  const user = (c as any).get('user');
+  await db.prepare(`
+    UPDATE lights_out_registrations
+    SET status = 'refunded', refunded_at = datetime('now'), reviewed_at = datetime('now'), reviewed_by = ?,
+        notes = COALESCE(notes, '') || ' | Refunded $' || printf('%.2f', ? / 100.0) || ' on ' || date('now') || ' (' || ? || ')'
+    WHERE id = ?
+  `).bind(user?.email || user?.id || 'admin', refundedCents, refunds.join(', '), id).run();
+
+  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out REFUND: ${row.player_name} ($${(refundedCents / 100).toFixed(2)})`,
+    emailShell(`<p style="margin:0;">Refunded $${(refundedCents / 100).toFixed(2)} to ${row.parent_name} (${row.email}) for ${row.player_name} - ${row.team_name}. Stripe: ${refunds.join(', ')}. The family gets Stripe's own refund receipt; nothing else was emailed to them.</p>`));
+
+  return c.json({ success: true, data: { refunded_cents: refundedCents, refunds } });
 });
 
 // Admin: Stripe lookup for "I paid but you show incomplete" disputes.
