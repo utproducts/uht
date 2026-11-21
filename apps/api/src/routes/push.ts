@@ -137,6 +137,24 @@ const sendEventSchema = z.object({
   data: z.record(z.unknown()).optional(),
 });
 
+// Key-authed variant of the same send, so staff can fire an event push
+// without a dashboard login (same simple key as the email send endpoints)
+pushRoutes.post('/send-event-key', zValidator('json', sendEventSchema.extend({ sendKey: z.string() })), async (c) => {
+  const db = c.env.DB;
+  const { event_id, title, body, data, sendKey } = c.req.valid('json') as any;
+  if (sendKey !== 'uht-coaches-2026') return c.json({ success: false, error: 'Unauthorized' }, 403);
+  const pushData = { type: 'event_update', event_id, ...(data || {}) };
+  const { tokens, userIds } = await eventAudience(db, event_id);
+  if (tokens.length === 0) return c.json({ success: true, data: { sent: 0 }, message: 'No push tokens found for event followers' });
+  const sent = await sendExpoPushNotifications(tokens, title, body, pushData);
+  await logNotification(db, {
+    type: 'event_update', title, body,
+    audience: 'event_followers', target_id: event_id, sent_count: sent, sent_by: 'system',
+  });
+  await createUserNotifications(db, userIds, title, body, 'event_update', pushData);
+  return c.json({ success: true, data: { sent, users: userIds.length } });
+});
+
 pushRoutes.post('/send-event', authMiddleware, requireRole('admin', 'director'), zValidator('json', sendEventSchema), async (c) => {
   const db = c.env.DB;
   const user = c.get('user') as { id: string };
