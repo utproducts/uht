@@ -836,8 +836,8 @@ scoringRoutes.get('/events/:eventId/schedule', async (c) => {
       ht.logo_url as home_team_logo, at2.logo_url as away_team_logo,
       vr.name as rink_name, COALESCE(v2.name, v.name) as venue_name,
       ed.age_group, ed.division_level,
-      COALESCE(glr_home.name, g.home_locker_room) as home_locker_room,
-      COALESCE(glr_away.name, g.away_locker_room) as away_locker_room
+      COALESCE(g.home_locker_room, glr_home.name) as home_locker_room,
+      COALESCE(g.away_locker_room, glr_away.name) as away_locker_room
     FROM games g
     LEFT JOIN teams ht ON ht.id = g.home_team_id
     LEFT JOIN teams at2 ON at2.id = g.away_team_id

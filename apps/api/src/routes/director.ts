@@ -697,6 +697,25 @@ directorRoutes.put(
         }
       }
 
+      // Game Center, the public schedule and the locker push all read
+      // games.home/away_locker_room - keep those in sync or edits made here
+      // never reach families
+      const colUpdates: string[] = [];
+      const colValues: any[] = [];
+      if (homeLockerRoomId) {
+        const room = await db.prepare('SELECT name FROM locker_rooms WHERE id = ? LIMIT 1').bind(homeLockerRoomId).first<any>();
+        if (room?.name) { colUpdates.push('home_locker_room = ?'); colValues.push(room.name); }
+      }
+      if (awayLockerRoomId) {
+        const room = await db.prepare('SELECT name FROM locker_rooms WHERE id = ? LIMIT 1').bind(awayLockerRoomId).first<any>();
+        if (room?.name) { colUpdates.push('away_locker_room = ?'); colValues.push(room.name); }
+      }
+      if (colUpdates.length > 0) {
+        colUpdates.push("updated_at = datetime('now')");
+        colValues.push(gameId);
+        await db.prepare(`UPDATE games SET ${colUpdates.join(', ')} WHERE id = ?`).bind(...colValues).run();
+      }
+
       return c.json({ success: true, data: { gameId } });
     } catch (err: any) {
       return c.json(

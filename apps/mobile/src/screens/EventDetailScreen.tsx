@@ -21,6 +21,8 @@ import {
   Alert,
   Animated,
 } from 'react-native';
+import { AppState } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import LightsOutBanner from '../components/LightsOutBanner';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -523,6 +525,27 @@ export default function EventDetailScreen({
       loadStandings();
     }
   }
+
+  // Schedule data changes all weekend (locker rooms, delays, scores) - refetch
+  // silently when the screen regains focus, when the app returns to the
+  // foreground, and once a minute while the screen stays open, so a locker
+  // room reassigned after the screen was opened still shows up.
+  const refreshSilently = useCallback(() => {
+    getEventSchedule(eventId).then(d => { if (Array.isArray(d)) setSchedule(d); }).catch(() => {});
+    getEventScores(eventId).then(d => { if (Array.isArray(d)) setScores(d as ScoreGame[]); }).catch(() => {});
+  }, [eventId]);
+
+  const skipFirstFocus = useRef(true);
+  useFocusEffect(useCallback(() => {
+    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
+    refreshSilently();
+  }, [refreshSilently]));
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') refreshSilently(); });
+    const iv = setInterval(refreshSilently, 60000);
+    return () => { sub.remove(); clearInterval(iv); };
+  }, [refreshSilently]);
 
   // ==================
   // Date Helpers
