@@ -1115,6 +1115,181 @@ lightsOutRoutes.post('/admin/code-reminder', async (c) => {
   return c.json({ success: true, data: { sent: sent.length, remaining: left, unsubscribed } });
 });
 
+// Congratulations blast to every REGISTERED (paid) player: selected to the
+// first-ever Lights Out Invitational, which sold out in 7 days. Deposit
+// families get a PAY THE BALANCE button; paid-in-full families get a
+// nothing-left-to-do line. Transactional (they are participants), so no
+// unsubscribe check. Idempotent via congrats_email_sent_at.
+lightsOutRoutes.post('/admin/congrats-emails', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const db = c.env.DB;
+  try { await db.prepare('ALTER TABLE lights_out_registrations ADD COLUMN congrats_email_sent_at TEXT').run(); } catch {}
+
+  const congratsEmail = (row: any) => {
+    const first = String(row.player_name || '').trim().split(/\s+/)[0] || 'your player';
+    const paid = row.amount_paid_cents || 0;
+    const balance = Math.max(0, 55000 - paid);
+    return {
+      subject: `${row.player_name} is IN - Lights Out SOLD OUT in 7 days`,
+      html: emailShell(`
+        <p style="margin:0 0 6px;font-size:13px;font-weight:bold;letter-spacing:3px;color:#39ff14;">CONGRATULATIONS</p>
+        <h2 style="margin:0 0 14px;color:#7fd8ff;font-size:21px;">${first} is officially IN.</h2>
+        <p style="margin:0 0 14px;">Hi ${row.parent_name},</p>
+        <p style="margin:0 0 14px;">Congratulations - <b style="color:#7fd8ff;">${row.player_name}</b> has been selected to the <b style="color:#7fd8ff;">first-ever Lights Out Invitational</b>, June 11-13, 2027 in St. Louis. The arena goes dark, the ice glows, and ${first} will be on it.</p>
+        <p style="margin:0 0 14px;text-align:center;"><span style="display:inline-block;background:#04091a;border:1px solid rgba(255,184,77,.6);border-radius:10px;padding:12px 26px;font-size:17px;font-weight:bold;letter-spacing:2px;color:#ffb84d;">SOLD OUT IN 7 DAYS</span></p>
+        <p style="margin:0 0 14px;">That is not a typo. Every single spot in this event was claimed in <b style="color:#ffb84d;">one week</b> - and ${first} got one of them. You are part of something hockey has never seen before, and the demand proved it.</p>
+        ${balance > 0 ? `
+        <p style="margin:0 0 10px;color:#ffb84d;"><b>One thing left: your $${(balance / 100).toFixed(0)} balance.</b> Your deposit locked the spot - pay the remaining balance below and ${first} is fully locked in for June, nothing else owed.</p>
+        <p style="margin:0 0 16px;text-align:center;">
+          <a href="https://uht.chad-157.workers.dev/api/lights-out/balance/${row.id}" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">PAY THE $${(balance / 100).toFixed(0)} BALANCE</a>
+        </p>` : `
+        <p style="margin:0 0 14px;color:#39ff14;"><b>You are paid in full - there is nothing left to do.</b> The spot, the jerseys, the stick, the puck, the whole haul: locked in.</p>`}
+        <p style="margin:0 0 14px;">What happens next: we build balanced teams by age and position, and everything - teams, schedules, jersey details and event info - comes to you by email and in the UHT app as June gets closer.</p>
+        <p style="margin:0;">Welcome to the glow. This is going to be one for the scrapbook.</p>
+      `),
+    };
+  };
+
+  const pending = () => db.prepare(`
+    SELECT id, player_name, parent_name, email, amount_paid_cents FROM lights_out_registrations
+    WHERE status NOT LIKE 'invite_%' AND status NOT IN ('refunded', 'waitlist', 'goalie_waitlist')
+      AND COALESCE(amount_paid_cents, 0) > 0
+      AND email IS NOT NULL AND email != '' AND congrats_email_sent_at IS NULL
+    ORDER BY created_at, id
+  `).all<any>();
+
+  // Test address comes from ?test= or the JSON body (body keeps personal
+  // addresses out of URLs and logs)
+  const body = await c.req.json().catch(() => ({} as any));
+  const test = String(c.req.query('test') || body?.test || '').trim();
+  if (test) {
+    let rows = (await pending()).results || [];
+    if (!rows.length) {
+      // Blast already finished - sample a sent row so tests still work
+      rows = ((await db.prepare(`
+        SELECT id, player_name, parent_name, email, amount_paid_cents FROM lights_out_registrations
+        WHERE status NOT LIKE 'invite_%' AND status NOT IN ('refunded', 'waitlist', 'goalie_waitlist')
+          AND COALESCE(amount_paid_cents, 0) > 0 ORDER BY created_at, id
+      `).all<any>()).results || []) as any[];
+    }
+    if (!rows.length) return c.json({ success: false, error: 'No rows to sample' }, 404);
+    // Sample one deposit row if present so the balance button is visible
+    const sample = rows.find((r: any) => (r.amount_paid_cents || 0) < 55000) || rows[0];
+    const m = congratsEmail(sample);
+    await sendEmail(c.env, test, `[TEST] ${m.subject}`, m.html);
+    return c.json({ success: true, data: { test, sampled: sample.player_name, paid_cents: sample.amount_paid_cents } });
+  }
+
+  if (c.req.query('dry')) {
+    const rows = (await pending()).results || [];
+    const deposits = rows.filter((r: any) => (r.amount_paid_cents || 0) < 55000).length;
+    return c.json({ success: true, data: { remaining: rows.length, deposits, paid_full: rows.length - deposits } });
+  }
+
+  const batch = Math.min(parseInt(c.req.query('batch') || '20', 10) || 20, 40);
+  const rows = ((await pending()).results || []).slice(0, batch);
+  const sent: string[] = [];
+  for (const row of rows) {
+    const m = congratsEmail(row);
+    await sendEmail(c.env, row.email, m.subject, m.html);
+    await db.prepare(`UPDATE lights_out_registrations SET congrats_email_sent_at = datetime('now') WHERE id = ?`).bind(row.id).run();
+    sent.push(row.player_name);
+    await new Promise(res => setTimeout(res, 650));
+  }
+  const left = ((await pending()).results || []).length;
+  if (sent.length > 0 && left === 0) {
+    await sendEmail(c.env, 'johnny@ultimatetournaments.com', 'Lights Out: congratulations email sent to every registered family',
+      emailShell(`<p style="margin:0;">The sold-out-in-7-days congratulations email went to every paid registration. Deposit families got their own PAY THE BALANCE button; paid-in-full families got the nothing-left-to-do version.</p>`));
+  }
+  return c.json({ success: true, data: { sent: sent.length, remaining: left } });
+});
+
+// Sold-out notice to families who received an invite code but never
+// registered: the event filled in 7 days, codes can no longer claim a spot,
+// and the waitlist (plus the second location in the works) is the next move.
+// Skips anyone whose email already has a paid registration, and skips
+// unsubscribed addresses. Idempotent via soldout_email_sent_at.
+lightsOutRoutes.post('/admin/soldout-emails', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const db = c.env.DB;
+  try { await db.prepare('ALTER TABLE lights_out_registrations ADD COLUMN soldout_email_sent_at TEXT').run(); } catch {}
+
+  const soldoutEmail = (row: any) => {
+    const first = String(row.player_name || '').trim().split(/\s+/)[0] || 'your player';
+    return {
+      subject: `Lights Out officially SOLD OUT in 7 days - ${first}'s next move`,
+      html: emailShell(`
+        <p style="margin:0 0 14px;text-align:center;"><span style="display:inline-block;background:#04091a;border:1px solid rgba(255,184,77,.6);border-radius:10px;padding:12px 26px;font-size:17px;font-weight:bold;letter-spacing:2px;color:#ffb84d;">OFFICIALLY SOLD OUT IN 7 DAYS</span></p>
+        <p style="margin:0 0 14px;">Hi ${row.parent_name},</p>
+        <p style="margin:0 0 14px;">The <b style="color:#7fd8ff;">Lights Out Invitational</b> is officially <b style="color:#ffb84d;">sold out</b> - every single spot claimed in 7 days. ${first}'s invite code was one of the limited few we sent, but with the event full, codes can no longer claim a spot.</p>
+        <p style="margin:0 0 14px;"><b style="color:#7fd8ff;">Here is why this is not the end:</b> we are working on securing a <b style="color:#7fd8ff;">second location</b> for a second Lights Out event right now, and it could be announced in the next 2 weeks.</p>
+        <p style="margin:0 0 14px;">Because ${first} received an invite, we wanted you to hear it from us first: join the waitlist and you get the <b style="color:#39ff14;">first opportunity to register</b> - before we announce anything to the Three Stars winners from our future events, and before the public hears a word. It is free, takes 30 seconds, and puts ${first} at the front of the line.</p>
+        <p style="margin:0 0 16px;text-align:center;">
+          <a href="https://ultimatetournaments.com/lights-out/?register=1" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">JOIN THE WAITLIST - FREE</a>
+        </p>
+        <p style="margin:0;">We would love to get ${first} under the glow. Keep an eye on your inbox - the next announcement could come fast.</p>
+      `),
+    };
+  };
+
+  const pending = () => db.prepare(`
+    SELECT id, player_name, parent_name, email FROM lights_out_registrations r
+    WHERE status = 'invite_approved'
+      AND email IS NOT NULL AND email != '' AND soldout_email_sent_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM lights_out_registrations p
+        WHERE LOWER(p.email) = LOWER(r.email) AND COALESCE(p.amount_paid_cents, 0) > 0 AND p.status != 'refunded'
+      )
+    ORDER BY reviewed_at, id
+  `).all<any>();
+
+  const body = await c.req.json().catch(() => ({} as any));
+  const test = String(c.req.query('test') || body?.test || '').trim();
+  if (test) {
+    let rows = (await pending()).results || [];
+    if (!rows.length) {
+      rows = ((await db.prepare(`
+        SELECT id, player_name, parent_name, email FROM lights_out_registrations
+        WHERE status = 'invite_approved' AND email IS NOT NULL AND email != ''
+        ORDER BY reviewed_at, id
+      `).all<any>()).results || []) as any[];
+    }
+    if (!rows.length) return c.json({ success: false, error: 'No rows to sample' }, 404);
+    const m = soldoutEmail(rows[0]);
+    await sendEmail(c.env, test, `[TEST] ${m.subject}`, m.html);
+    return c.json({ success: true, data: { test, sampled: rows[0].player_name } });
+  }
+
+  if (c.req.query('dry')) {
+    const rows = (await pending()).results || [];
+    return c.json({ success: true, data: { remaining: rows.length } });
+  }
+
+  const batch = Math.min(parseInt(c.req.query('batch') || '20', 10) || 20, 40);
+  const rows = ((await pending()).results || []).slice(0, batch);
+  const supp = await unsubscribedSet(db, rows.map((r: any) => r.email));
+  const sent: string[] = [];
+  let unsubscribed = 0;
+  for (const row of rows) {
+    if (supp.has(String(row.email || '').toLowerCase())) {
+      await db.prepare(`UPDATE lights_out_registrations SET soldout_email_sent_at = 'skipped-unsubscribed' WHERE id = ?`).bind(row.id).run();
+      unsubscribed++;
+      continue;
+    }
+    const m = soldoutEmail(row);
+    await sendEmail(c.env, row.email, m.subject, m.html);
+    await db.prepare(`UPDATE lights_out_registrations SET soldout_email_sent_at = datetime('now') WHERE id = ?`).bind(row.id).run();
+    sent.push(row.player_name);
+    await new Promise(res => setTimeout(res, 650));
+  }
+  const left = ((await pending()).results || []).length;
+  if (sent.length > 0 && left === 0) {
+    await sendEmail(c.env, 'johnny@ultimatetournaments.com', 'Lights Out: sold-out notice sent to every unused-code family',
+      emailShell(`<p style="margin:0;">The sold-out-in-7-days notice went to every family holding an unused invite code (families who registered were excluded). Each email pointed them at the waitlist and the second location in the works.</p>`));
+  }
+  return c.json({ success: true, data: { sent: sent.length, remaining: left, unsubscribed } });
+});
+
 // Admin: send yourself a copy of the acceptance email for any eligible row
 lightsOutRoutes.post('/admin/test-approved-email', authMiddleware, requireRole('admin', 'director'),
   zValidator('json', z.object({ registrationId: z.string().min(1), to: z.string().email() })), async (c) => {
