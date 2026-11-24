@@ -447,6 +447,65 @@ const SWAG_SEED: [string, number][] = [
   ['Bag Tag', 1],
 ];
 
+// Missing-size nudge: every paid player with no jersey size on the new
+// chart gets a reminder with their personal size link. Covers both the
+// re-pick group (old size snapshotted) and never-picked. Transactional.
+// Same-day dedupe via missing_size_email_sent_at so a double click never
+// double-sends, but the button works again on a later day.
+lightsOutRoutes.post('/admin/missing-size-emails', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Nope' }, 403);
+  const db = c.env.DB;
+  try { await db.prepare('ALTER TABLE lights_out_registrations ADD COLUMN missing_size_email_sent_at TEXT').run(); } catch {}
+
+  const pending = () => db.prepare(`
+    SELECT id, player_name, parent_name, email, jersey_size_old FROM lights_out_registrations
+    WHERE status NOT LIKE 'invite_%' AND status NOT IN ('refunded', 'waitlist', 'goalie_waitlist')
+      AND COALESCE(amount_paid_cents, 0) > 0 AND (jersey_size IS NULL OR jersey_size = '')
+      AND email IS NOT NULL AND email != ''
+      AND (missing_size_email_sent_at IS NULL OR date(missing_size_email_sent_at) < date('now'))
+    ORDER BY created_at, id
+  `).all<any>();
+
+  if (c.req.query('dry')) {
+    const rows = (await pending()).results || [];
+    return c.json({ success: true, data: { remaining: rows.length } });
+  }
+
+  const nudgeEmail = (row: any) => {
+    const first = String(row.player_name || '').trim().split(/\s+/)[0] || 'your player';
+    return {
+      subject: `Action needed - ${row.player_name} still needs a jersey size for Lights Out`,
+      html: emailShell(`
+        <h2 style="margin:0 0 14px;color:#39ff14;font-size:19px;">One quick thing for ${first}'s jerseys</h2>
+        <p style="margin:0 0 14px;">Hi ${row.parent_name},</p>
+        <p style="margin:0 0 14px;"><b style="color:#7fd8ff;">${row.player_name}</b> is locked in for the Lights Out Invitational - but we still do not have a <b style="color:#ffb84d;">jersey size</b> on file, and the custom glow jerseys are ordered per player.</p>
+        ${row.jersey_size_old ? `<p style="margin:0 0 14px;">We switched to the manufacturer's real size chart (with exact measurements in inches), so your earlier pick of <b>${row.jersey_size_old}</b> needs a quick re-pick on the new chart - it takes about 30 seconds.</p>` : `<p style="margin:0 0 14px;">Picking takes about 30 seconds - the chart shows exact measurements in inches, so you can match a jersey that fits well today.</p>`}
+        <p style="margin:0 0 16px;text-align:center;">
+          <a href="https://ultimatetournaments.com/lights-out/size?id=${row.id}" style="display:inline-block;background:#39ff14;color:#04091a;text-decoration:none;font-weight:bold;padding:14px 36px;border-radius:10px;font-size:15px;">PICK ${first.toUpperCase()}'S SIZES NOW</a>
+        </p>
+        <p style="margin:0;">The jersey order goes to the manufacturer soon - without a size on file we would have to guess, and nobody wants a guessed jersey. Thank you!</p>
+      `),
+    };
+  };
+
+  const batch = Math.min(parseInt(c.req.query('batch') || '30', 10) || 30, 40);
+  const rows = ((await pending()).results || []).slice(0, batch);
+  let sent = 0;
+  for (const row of rows) {
+    const m = nudgeEmail(row);
+    await sendEmail(c.env, row.email, m.subject, m.html);
+    await db.prepare(`UPDATE lights_out_registrations SET missing_size_email_sent_at = datetime('now') WHERE id = ?`).bind(row.id).run();
+    sent++;
+    await new Promise(res => setTimeout(res, 650));
+  }
+  const left = ((await pending()).results || []).length;
+  if (sent > 0 && left === 0) {
+    await sendEmail(c.env, 'johnny@ultimatetournaments.com', 'Lights Out: missing-size nudge sent to every family without a jersey size',
+      emailShell(`<p style="margin:0;">Every paid family still missing a jersey size got the reminder with their personal size link. The Jerseys tab counter on the admin page counts down as they pick.</p>`));
+  }
+  return c.json({ success: true, data: { sent, remaining: left } });
+});
+
 lightsOutRoutes.get('/admin/swag-items', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const db = c.env.DB;
   let items = (await db.prepare('SELECT * FROM lights_out_swag_items ORDER BY sort_order, name').all<any>()).results || [];

@@ -71,6 +71,9 @@ export default function LightsOutAdminPage() {
   const [swagItems, setSwagItems] = useState<any[]>([]);
   const [swagLoaded, setSwagLoaded] = useState(false);
   const [newItemName, setNewItemName] = useState('');
+  const [jerseyFilter, setJerseyFilter] = useState<'all' | 'picked' | 'goalie' | 'repick' | 'missing'>('all');
+  const [nudgeBusy, setNudgeBusy] = useState(false);
+  const [nudgeMsg, setNudgeMsg] = useState('');
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [editRow, setEditRow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
@@ -191,6 +194,27 @@ export default function LightsOutAdminPage() {
       const j = await res.json();
       if (j.success) setSwagLoaded(false); // refetch with the new row
     } catch {}
+  };
+
+  const sendMissingNudge = async (total: number) => {
+    if (!window.confirm(`Email all ${total} families still missing a jersey size? Each gets their personal size link.`)) return;
+    setNudgeBusy(true);
+    setNudgeMsg('Sending...');
+    try {
+      let sent = 0;
+      for (let i = 0; i < 20; i++) {
+        const res = await fetch(`${API}/admin/missing-size-emails?key=uht-coaches-2026`, { method: 'POST' });
+        const j = await res.json();
+        if (!j.success) { setNudgeMsg(j.error || 'Send failed - try again.'); setNudgeBusy(false); return; }
+        sent += j.data.sent || 0;
+        setNudgeMsg(`Sent ${sent}... ${j.data.remaining} to go`);
+        if (!j.data.remaining || !j.data.sent) break;
+      }
+      setNudgeMsg(`Done - ${sent} reminder${sent === 1 ? '' : 's'} sent. Already-nudged-today families were skipped.`);
+    } catch {
+      setNudgeMsg('Send failed - try again.');
+    }
+    setNudgeBusy(false);
   };
 
   const assignTeam = async (id: string, team: string | null) => {
@@ -947,17 +971,36 @@ export default function LightsOutAdminPage() {
         return (
           <div>
             <div className="flex flex-wrap items-center gap-3 mb-4">
-              {[['Players', sorted.length], ['Sizes picked', withSize], ['Goalie cut', goalies], ['Re-picks pending', repick], ['Missing size', missing]].map(([l, n]) => (
-                <div key={l as string} className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-2 shadow-sm">
+              {([['all', 'Players', sorted.length], ['picked', 'Sizes picked', withSize], ['goalie', 'Goalie cut', goalies], ['repick', 'Re-picks pending', repick], ['missing', 'Missing size', missing]] as const).map(([k, l, n]) => (
+                <button key={k} onClick={() => setJerseyFilter(jerseyFilter === k ? 'all' : k)}
+                  className={`text-left rounded-2xl px-4 py-2 shadow-sm border transition select-none ${jerseyFilter === k
+                    ? 'bg-[#f0f7ff] border-[#003e79] ring-1 ring-inset ring-[#003e79]'
+                    : 'bg-white border-[#e8e8ed] hover:border-[#003e79]/50'}`}>
                   <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-wide">{l}</p>
-                  <p className={`text-xl font-black leading-tight ${l === 'Missing size' && (n as number) > 0 ? 'text-amber-600' : l === 'Re-picks pending' && (n as number) > 0 ? 'text-orange-600' : 'text-[#003e79]'}`}>{n}</p>
-                </div>
+                  <p className={`text-xl font-black leading-tight ${l === 'Missing size' && n > 0 ? 'text-amber-600' : l === 'Re-picks pending' && n > 0 ? 'text-orange-600' : 'text-[#003e79]'}`}>{n}</p>
+                </button>
               ))}
-              <button onClick={exportJerseys}
-                className="ml-auto px-4 py-2 rounded-full text-sm font-bold bg-[#003e79] text-white hover:bg-[#00315f]">
-                Export production sheet
-              </button>
+              <div className="ml-auto flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-2">
+                  {missing > 0 && (
+                    <button onClick={() => sendMissingNudge(missing)} disabled={nudgeBusy}
+                      className="px-4 py-2 rounded-full text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
+                      {nudgeBusy ? 'Sending...' : `Email ${missing} missing-size famil${missing === 1 ? 'y' : 'ies'}`}
+                    </button>
+                  )}
+                  <button onClick={exportJerseys}
+                    className="px-4 py-2 rounded-full text-sm font-bold bg-[#003e79] text-white hover:bg-[#00315f]">
+                    Export production sheet
+                  </button>
+                </div>
+                {nudgeMsg && <p className="text-xs font-semibold text-[#0a6ebd]">{nudgeMsg}</p>}
+              </div>
             </div>
+            {jerseyFilter !== 'all' && (
+              <p className="text-[11px] font-bold text-[#003e79] mb-2">
+                Showing {({ picked: 'players with a size picked', goalie: 'goalie cut jerseys', repick: 're-picks pending', missing: 'players missing a size' } as any)[jerseyFilter]} - click the tile again to clear.
+              </p>
+            )}
             <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-x-auto">
               <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 <thead>
@@ -972,7 +1015,13 @@ export default function LightsOutAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((r: any) => {
+                  {sorted.filter((r: any) => {
+                    if (jerseyFilter === 'picked') return !!r.jersey_size;
+                    if (jerseyFilter === 'goalie') return goalieCut(r);
+                    if (jerseyFilter === 'repick') return !r.jersey_size && !!r.jersey_size_old;
+                    if (jerseyFilter === 'missing') return !r.jersey_size;
+                    return true;
+                  }).map((r: any) => {
                     const num = String(r.jersey_number_request || r.jersey_number || '').trim();
                     const dup = num && dupes[`${divisionOf(r.birth_year)}|${num}`] > 1;
                     return (
