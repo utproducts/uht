@@ -68,6 +68,9 @@ export default function LightsOutAdminPage() {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<'registrations' | 'teams' | 'swag' | 'jerseys' | 'schedule'>('registrations');
   const [teamDiv, setTeamDiv] = useState<string | null>(null);
+  const [swagItems, setSwagItems] = useState<any[]>([]);
+  const [swagLoaded, setSwagLoaded] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [editRow, setEditRow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
@@ -163,6 +166,33 @@ export default function LightsOutAdminPage() {
 
   // Team builder: assign a paid player to an event team. Writes through the
   // details endpoint; empty string clears the assignment.
+  useEffect(() => {
+    if (tab !== 'swag' || swagLoaded) return;
+    fetch(`${API}/admin/swag-items`, { headers: hdrs() })
+      .then(r => r.json())
+      .then(j => { if (j.success) { setSwagItems(j.data || []); setSwagLoaded(true); } })
+      .catch(() => {});
+  }, [tab, swagLoaded]);
+
+  const updateSwagItem = async (id: string, patch: any) => {
+    // Optimistic - the row updates instantly, the server catches up
+    setSwagItems(prev => prev.map(it => it.id === id ? { ...it, ...(patch.qtyPerPlayer !== undefined ? { qty_per_player: patch.qtyPerPlayer } : {}), ...patch } : it));
+    try {
+      await fetch(`${API}/admin/swag-items/${id}`, { method: 'PATCH', headers: hdrs({ 'Content-Type': 'application/json' }), body: JSON.stringify(patch) });
+    } catch {}
+  };
+
+  const addSwagItem = async () => {
+    const name = newItemName.trim();
+    if (name.length < 2) return;
+    setNewItemName('');
+    try {
+      const res = await fetch(`${API}/admin/swag-items`, { method: 'POST', headers: hdrs({ 'Content-Type': 'application/json' }), body: JSON.stringify({ name, qtyPerPlayer: 1 }) });
+      const j = await res.json();
+      if (j.success) setSwagLoaded(false); // refetch with the new row
+    } catch {}
+  };
+
   const assignTeam = async (id: string, team: string | null) => {
     setBusy(id);
     try {
@@ -441,7 +471,84 @@ export default function LightsOutAdminPage() {
           a.click();
           URL.revokeObjectURL(a.href);
         };
+        const SWAG_STATUS: Record<string, { label: string; cls: string }> = {
+          not_ordered: { label: 'Not ordered', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+          ordered: { label: 'Ordered', cls: 'bg-[#f0f7ff] text-[#0a6ebd] border-[#bfe0f5]' },
+          sample: { label: 'Sample received', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+          shipped: { label: 'Shipped', cls: 'bg-green-50 text-green-700 border-green-200' },
+        };
         return (
+          <>
+          <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm mb-5">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#86868b]">
+                Item tracker - totals follow the live paid count ({paid.length} players)
+              </p>
+              <div className="flex items-center gap-2">
+                <input value={newItemName} onChange={e => setNewItemName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addSwagItem(); }}
+                  placeholder="Add an item..."
+                  className="border border-[#e0e0e5] rounded-lg px-3 py-1 text-xs w-40 focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                <button onClick={addSwagItem} disabled={newItemName.trim().length < 2}
+                  className="px-3 py-1 rounded-full text-xs font-bold border border-[#003e79] text-[#003e79] bg-white hover:bg-[#f0f7ff] disabled:opacity-40">Add</button>
+              </div>
+            </div>
+            {!swagLoaded ? (
+              <p className="text-sm text-[#86868b] py-2">Loading items...</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <thead>
+                    <tr className="text-left border-b border-[#e8e8ed]">
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Item</th>
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-center">Per player</th>
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-center">Total to order</th>
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Status</th>
+                      <th className="py-1.5 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Tracking</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {swagItems.map(it => {
+                      const st = SWAG_STATUS[it.status] || SWAG_STATUS.not_ordered;
+                      const isUrl = /^https?:\/\//i.test(String(it.tracking || ''));
+                      return (
+                        <tr key={it.id} className="border-b border-[#f8f8fa] last:border-0">
+                          <td className="py-1.5 pr-4 font-semibold text-[#1d1d1f] whitespace-nowrap">{it.name}</td>
+                          <td className="py-1.5 pr-4 text-center">
+                            <select value={it.qty_per_player} onChange={e => updateSwagItem(it.id, { qtyPerPlayer: parseInt(e.target.value, 10) })}
+                              className="border border-[#e0e0e5] rounded-lg px-1.5 py-0.5 text-xs bg-white">
+                              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                          </td>
+                          <td className="py-1.5 pr-4 text-center font-black text-[#003e79]">{(it.qty_per_player || 1) * paid.length}</td>
+                          <td className="py-1.5 pr-4">
+                            <select value={it.status} onChange={e => updateSwagItem(it.id, { status: e.target.value })}
+                              className={`border rounded-full px-2.5 py-1 text-[11px] font-bold ${st.cls}`}>
+                              <option value="not_ordered">Not ordered</option>
+                              <option value="ordered">Ordered</option>
+                              <option value="sample">Sample received</option>
+                              <option value="shipped">Shipped</option>
+                            </select>
+                          </td>
+                          <td className="py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <input defaultValue={it.tracking || ''} key={`${it.id}-${it.tracking || ''}`}
+                                onBlur={e => { if (e.target.value !== (it.tracking || '')) updateSwagItem(it.id, { tracking: e.target.value }); }}
+                                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                placeholder="Tracking # or link"
+                                className="border border-[#e0e0e5] rounded-lg px-2 py-1 text-xs w-44 focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                              {isUrl && <a href={it.tracking} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-[#0a6ebd] hover:underline whitespace-nowrap">Open</a>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[11px] text-[#86868b] mt-2">Status and tracking save as you change them. Total to order = per-player quantity x {paid.length} paid players, so it moves on its own with refunds or new spots.</p>
+          </div>
           <div className={`border rounded-2xl px-4 py-3 shadow-sm mb-5 ${allEmailed ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-[#e8e8ed]'}`}>
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1.5">
               <p className={`text-[11px] font-bold uppercase tracking-widest ${allEmailed ? 'text-emerald-700' : 'text-[#86868b]'}`}>
@@ -531,6 +638,7 @@ export default function LightsOutAdminPage() {
               );
             })()}
           </div>
+          </>
         );
       })()}
 

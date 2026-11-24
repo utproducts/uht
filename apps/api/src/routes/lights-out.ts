@@ -430,6 +430,71 @@ lightsOutRoutes.get('/register/:id/verify', async (c) => {
 
 // --- Admin ---
 
+// Swag item tracker: every giveaway item with its order status and
+// tracking. Total-to-order is computed live from paid registrations
+// (qty_per_player x paid count), so it tracks sellout/refunds on its own.
+// Seeded once from the invoice's item list; items can be added later.
+const SWAG_SEED: [string, number][] = [
+  ['Custom Glow Jerseys (home + away)', 2],
+  ['Glow T-Shirt', 1],
+  ['UHT Duffle Bag', 1],
+  ['Custom Glow UHT Puck', 1],
+  ['Collector Stick', 1],
+  ['Custom Trading Cards', 1],
+  ['Trading Card Binder', 1],
+  ['Custom Lights Out Ring', 1],
+  ['Lights Out Blanket', 1],
+  ['Bag Tag', 1],
+];
+
+lightsOutRoutes.get('/admin/swag-items', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  let items = (await db.prepare('SELECT * FROM lights_out_swag_items ORDER BY sort_order, name').all<any>()).results || [];
+  if (items.length === 0) {
+    let i = 0;
+    for (const [name, qty] of SWAG_SEED) {
+      await db.prepare(`INSERT INTO lights_out_swag_items (id, name, qty_per_player, sort_order, updated_at) VALUES (?, ?, ?, ?, datetime('now'))`)
+        .bind(crypto.randomUUID().replace(/-/g, ''), name, qty, i++).run();
+    }
+    items = (await db.prepare('SELECT * FROM lights_out_swag_items ORDER BY sort_order, name').all<any>()).results || [];
+  }
+  return c.json({ success: true, data: items });
+});
+
+lightsOutRoutes.post('/admin/swag-items', authMiddleware, requireRole('admin', 'director'),
+  zValidator('json', z.object({ name: z.string().min(2).max(120), qtyPerPlayer: z.number().int().min(1).max(10).default(1) })), async (c) => {
+    const { name, qtyPerPlayer } = c.req.valid('json');
+    const db = c.env.DB;
+    const max = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) as m FROM lights_out_swag_items').first<any>();
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await db.prepare(`INSERT INTO lights_out_swag_items (id, name, qty_per_player, sort_order, updated_at) VALUES (?, ?, ?, ?, datetime('now'))`)
+      .bind(id, name.trim(), qtyPerPlayer, (max?.m ?? -1) + 1).run();
+    return c.json({ success: true, data: { id } });
+  });
+
+lightsOutRoutes.patch('/admin/swag-items/:id', authMiddleware, requireRole('admin', 'director'),
+  zValidator('json', z.object({
+    status: z.enum(['not_ordered', 'ordered', 'sample', 'shipped']).optional(),
+    tracking: z.string().max(500).optional(),
+    notes: z.string().max(1000).optional(),
+    name: z.string().min(2).max(120).optional(),
+    qtyPerPlayer: z.number().int().min(1).max(10).optional(),
+  })), async (c) => {
+    const b = c.req.valid('json');
+    const db = c.env.DB;
+    const sets: string[] = []; const vals: any[] = [];
+    if (b.status !== undefined) { sets.push('status = ?'); vals.push(b.status); }
+    if (b.tracking !== undefined) { sets.push('tracking = ?'); vals.push(b.tracking.trim() || null); }
+    if (b.notes !== undefined) { sets.push('notes = ?'); vals.push(b.notes.trim() || null); }
+    if (b.name !== undefined) { sets.push('name = ?'); vals.push(b.name.trim()); }
+    if (b.qtyPerPlayer !== undefined) { sets.push('qty_per_player = ?'); vals.push(b.qtyPerPlayer); }
+    if (sets.length === 0) return c.json({ success: false, error: 'Nothing to update' }, 400);
+    sets.push(`updated_at = datetime('now')`);
+    vals.push(c.req.param('id'));
+    await db.prepare(`UPDATE lights_out_swag_items SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+    return c.json({ success: true });
+  });
+
 lightsOutRoutes.get('/admin/requests', authMiddleware, requireRole('admin', 'director'), async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT lr.*, e.name as star_event_name
