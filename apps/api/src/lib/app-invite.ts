@@ -374,6 +374,7 @@ export async function runAppInviteSweep(env: any): Promise<{ events: number; sen
   const events = await db.prepare(`
     SELECT id FROM events
     WHERE status NOT IN ('draft', 'cancelled')
+      AND schedule_published = 1
       AND date(start_date) BETWEEN date('now') AND date('now', '+10 days')
   `).all();
   const out = { events: 0, sent: 0, skipped: 0 };
