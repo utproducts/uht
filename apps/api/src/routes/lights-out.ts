@@ -538,6 +538,8 @@ lightsOutRoutes.patch('/admin/swag-items/:id', authMiddleware, requireRole('admi
     notes: z.string().max(1000).optional(),
     name: z.string().min(2).max(120).optional(),
     qtyPerPlayer: z.number().int().min(1).max(10).optional(),
+    orderQty: z.number().int().min(0).max(100000).optional(),
+    unitCostCents: z.number().int().min(0).max(100000000).nullable().optional(),
   })), async (c) => {
     const b = c.req.valid('json');
     const db = c.env.DB;
@@ -547,6 +549,8 @@ lightsOutRoutes.patch('/admin/swag-items/:id', authMiddleware, requireRole('admi
     if (b.notes !== undefined) { sets.push('notes = ?'); vals.push(b.notes.trim() || null); }
     if (b.name !== undefined) { sets.push('name = ?'); vals.push(b.name.trim()); }
     if (b.qtyPerPlayer !== undefined) { sets.push('qty_per_player = ?'); vals.push(b.qtyPerPlayer); }
+    if (b.orderQty !== undefined) { sets.push('order_qty = ?'); vals.push(b.orderQty); }
+    if (b.unitCostCents !== undefined) { sets.push('unit_cost_cents = ?'); vals.push(b.unitCostCents); }
     if (sets.length === 0) return c.json({ success: false, error: 'Nothing to update' }, 400);
     sets.push(`updated_at = datetime('now')`);
     vals.push(c.req.param('id'));

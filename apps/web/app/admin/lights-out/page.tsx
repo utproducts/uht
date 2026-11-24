@@ -463,7 +463,7 @@ export default function LightsOutAdminPage() {
           <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm mb-5">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
               <p className="text-[11px] font-bold uppercase tracking-widest text-[#86868b]">
-                Item tracker - totals follow the live paid count ({paid.length} players)
+                Item tracker - ordering 225 per item ({paid.length} players registered)
               </p>
               <div className="flex items-center gap-2">
                 <input value={newItemName} onChange={e => setNewItemName(e.target.value)}
@@ -482,8 +482,9 @@ export default function LightsOutAdminPage() {
                   <thead>
                     <tr className="text-left border-b border-[#e8e8ed]">
                       <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Item</th>
-                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-center">Per player</th>
-                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-center">Total to order</th>
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-center">Order qty</th>
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-right">Item cost</th>
+                      <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide text-right">Total cost</th>
                       <th className="py-1.5 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Status</th>
                       <th className="py-1.5 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Tracking</th>
                     </tr>
@@ -492,16 +493,30 @@ export default function LightsOutAdminPage() {
                     {swagItems.map(it => {
                       const st = SWAG_STATUS[it.status] || SWAG_STATUS.not_ordered;
                       const isUrl = /^https?:\/\//i.test(String(it.tracking || ''));
+                      const qty = it.order_qty ?? (it.qty_per_player || 1) * 225;
+                      const lineCents = it.unit_cost_cents != null ? qty * it.unit_cost_cents : null;
                       return (
                         <tr key={it.id} className="border-b border-[#f8f8fa] last:border-0">
                           <td className="py-1.5 pr-4 font-semibold text-[#1d1d1f] whitespace-nowrap">{it.name}</td>
                           <td className="py-1.5 pr-4 text-center">
-                            <select value={it.qty_per_player} onChange={e => updateSwagItem(it.id, { qtyPerPlayer: parseInt(e.target.value, 10) })}
-                              className="border border-[#e0e0e5] rounded-lg px-1.5 py-0.5 text-xs bg-white">
-                              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
-                            </select>
+                            <input type="number" min={0} defaultValue={qty} key={`q-${it.id}-${it.order_qty ?? ''}`}
+                              onBlur={e => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v !== qty) updateSwagItem(it.id, { orderQty: v }); }}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              className="border border-[#e0e0e5] rounded-lg px-2 py-1 text-xs w-20 text-center font-bold text-[#003e79] focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
                           </td>
-                          <td className="py-1.5 pr-4 text-center font-black text-[#003e79]">{(it.qty_per_player || 1) * paid.length}</td>
+                          <td className="py-1.5 pr-4 text-right">
+                            <div className="inline-flex items-center gap-0.5">
+                              <span className="text-xs text-[#86868b] font-semibold">$</span>
+                              <input type="number" min={0} step="0.01" defaultValue={it.unit_cost_cents != null ? (it.unit_cost_cents / 100).toFixed(2) : ''} key={`c-${it.id}-${it.unit_cost_cents ?? ''}`}
+                                placeholder="0.00"
+                                onBlur={e => { const raw = e.target.value.trim(); const cents = raw === '' ? null : Math.round(parseFloat(raw) * 100); if (raw === '' ? it.unit_cost_cents != null : (!isNaN(cents as number) && cents !== it.unit_cost_cents)) updateSwagItem(it.id, { unitCostCents: cents }); }}
+                                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                className="border border-[#e0e0e5] rounded-lg px-2 py-1 text-xs w-20 text-right focus:ring-2 focus:ring-[#003e79]/20 outline-none" />
+                            </div>
+                          </td>
+                          <td className="py-1.5 pr-4 text-right font-black text-[#003e79] whitespace-nowrap">
+                            {lineCents != null ? '$' + (lineCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-[#c7c7cc] font-semibold">-</span>}
+                          </td>
                           <td className="py-1.5 pr-4">
                             <select value={it.status} onChange={e => updateSwagItem(it.id, { status: e.target.value })}
                               className={`border rounded-full px-2.5 py-1 text-[11px] font-bold ${st.cls}`}>
@@ -524,11 +539,21 @@ export default function LightsOutAdminPage() {
                         </tr>
                       );
                     })}
+                    <tr className="border-t-2 border-[#e8e8ed]">
+                      <td className="py-2 pr-4 text-[10px] font-bold text-[#86868b] uppercase tracking-wide">Total</td>
+                      <td className="py-2 pr-4 text-center font-black text-[#003e79]">{swagItems.reduce((t, it) => t + (it.order_qty ?? (it.qty_per_player || 1) * 225), 0).toLocaleString()}</td>
+                      <td className="py-2 pr-4"></td>
+                      <td className="py-2 pr-4 text-right font-black text-[#003e79] whitespace-nowrap">
+                        {(() => { const c2 = swagItems.reduce((t, it) => t + (it.unit_cost_cents != null ? (it.order_qty ?? (it.qty_per_player || 1) * 225) * it.unit_cost_cents : 0), 0); return c2 > 0 ? '$' + (c2 / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'; })()}
+                      </td>
+                      <td className="py-2 pr-4"></td>
+                      <td className="py-2"></td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
             )}
-            <p className="text-[11px] text-[#86868b] mt-2">Status and tracking save as you change them. Total to order = per-player quantity x {paid.length} paid players, so it moves on its own with refunds or new spots.</p>
+            <p className="text-[11px] text-[#86868b] mt-2">Everything saves as you change it. Order quantities default to 225 per item (450 for the two jerseys) - type any number to override. Enter each item&apos;s cost and the line and grand totals fill in.</p>
           </div>
           </>
         );
