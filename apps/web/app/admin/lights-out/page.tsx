@@ -214,23 +214,23 @@ export default function LightsOutAdminPage() {
   for (const r of rows) {
     if (r.status === 'invite_requested') counts.requests++;
     else if (r.status === 'invite_approved') counts.code_sent++;
-    else if (r.status === 'goalie_waitlist') counts.waitlist++;
+    else if (r.status === 'goalie_waitlist' || r.status === 'waitlist') counts.waitlist++;
     else if (r.status === 'denied' || r.status === 'invite_denied') counts.denied++;
     else counts[r.status] = (counts[r.status] || 0) + 1;
     if (isPaid(r)) counts.registered++;
-    else if (!isReq(r) && r.status !== 'goalie_waitlist' && r.status !== 'refunded') counts.incomplete++;
+    else if (!isReq(r) && r.status !== 'goalie_waitlist' && r.status !== 'waitlist' && r.status !== 'refunded') counts.incomplete++;
   }
   const needle = q.trim().toLowerCase();
   const visible = rows.filter(r => {
-    if (divFilter && divisionOf(r.birth_year) !== divFilter) return false;
+    if (divFilter && (r.age_level || divisionOf(r.birth_year)) !== divFilter) return false;
     if (needle && !`${r.player_name || ''} ${r.parent_name || ''} ${r.email || ''} ${r.team_name || ''} ${r.invite_code || ''}`.toLowerCase().includes(needle)) return false;
     if (filter === 'all') return true;
     if (filter === 'requests') return r.status === 'invite_requested';
     if (filter === 'code_sent') return r.status === 'invite_approved';
-    if (filter === 'waitlist') return r.status === 'goalie_waitlist';
+    if (filter === 'waitlist') return r.status === 'goalie_waitlist' || r.status === 'waitlist';
     if (filter === 'denied') return r.status === 'denied' || r.status === 'invite_denied';
     if (filter === 'registered') return isPaid(r);
-    if (filter === 'incomplete') return !isReq(r) && !isPaid(r) && r.status !== 'goalie_waitlist' && r.status !== 'refunded';
+    if (filter === 'incomplete') return !isReq(r) && !isPaid(r) && r.status !== 'goalie_waitlist' && r.status !== 'waitlist' && r.status !== 'refunded';
     return r.status === filter;
   });
 
@@ -241,6 +241,7 @@ export default function LightsOutAdminPage() {
     if (st === 'invite_requested') return { label: 'NEEDS REVIEW', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
     if (st === 'invite_approved') return { label: 'CODE SENT - NOT REGISTERED YET', cls: 'bg-[#f0f7ff] text-[#0077b0] border-[#bfe0f5]' };
     if (st === 'goalie_waitlist') return { label: 'GOALIE WAITLIST', cls: 'bg-orange-50 text-orange-700 border-orange-200' };
+    if (st === 'waitlist') return { label: `SOLD-OUT WAITLIST${r.age_level ? ' - ' + String(r.age_level).toUpperCase() : ''}`, cls: 'bg-orange-50 text-orange-700 border-orange-200' };
     if (st === 'refunded') return { label: `REFUNDED - $${((paid) / 100).toLocaleString()} RETURNED`, cls: 'bg-gray-100 text-gray-600 border-gray-300' };
     if (st === 'invite_denied' || st === 'denied') return { label: 'DENIED', cls: 'bg-red-50 text-red-600 border-red-200' };
     if (st === 'pending_payment') return { label: 'CHECKOUT ABANDONED', cls: 'bg-gray-50 text-gray-500 border-gray-200' };
@@ -272,8 +273,8 @@ export default function LightsOutAdminPage() {
         const YEARS_LABEL: Record<string, string> = { Mite: '2018+', Squirt: '2016-17', 'Pee Wee': '2014-15', Bantam: '2012-13', Midget: '2011 & older' };
         const agg: Record<string, { paid: number; req: number; wait: number; years: Record<string, number>; pos: Record<string, number> }> = {};
         for (const r of rows) {
-          if (!isPaid(r) && !isReq(r) && r.status !== 'goalie_waitlist') continue; // abandoned checkouts don't count
-          const d = divisionOf(r.birth_year);
+          if (!isPaid(r) && !isReq(r) && r.status !== 'goalie_waitlist' && r.status !== 'waitlist') continue; // abandoned checkouts don't count
+          const d = (r.age_level as string) || divisionOf(r.birth_year);
           const a = (agg[d] = agg[d] || { paid: 0, req: 0, wait: 0, years: {}, pos: {} });
           if (isPaid(r)) {
             a.paid++;
@@ -281,7 +282,7 @@ export default function LightsOutAdminPage() {
             a.years[yk] = (a.years[yk] || 0) + 1;
             const pk = posOf(r.position);
             a.pos[pk] = (a.pos[pk] || 0) + 1;
-          } else if (r.status === 'goalie_waitlist') a.wait++;
+          } else if (r.status === 'goalie_waitlist' || r.status === 'waitlist') a.wait++;
           else a.req++;
         }
         // Goalie caps per division (Chad, Nov 2026). At the cap, the public
@@ -534,7 +535,7 @@ export default function LightsOutAdminPage() {
         {(['all', 'registered', 'pending', 'requests', 'code_sent', 'waitlist', 'incomplete', 'refunded', 'denied'] as const).map(fk => (
           <button key={fk} onClick={() => setFilter(fk)}
             className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${filter === fk ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
-            {fk === 'all' ? 'All' : fk === 'code_sent' ? 'Code Sent' : fk === 'waitlist' ? 'Goalie Waitlist' : fk === 'pending' ? 'Needs Approval' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
+            {fk === 'all' ? 'All' : fk === 'code_sent' ? 'Code Sent' : fk === 'waitlist' ? 'Waitlist' : fk === 'pending' ? 'Needs Approval' : fk[0].toUpperCase() + fk.slice(1)} ({counts[fk] || 0})
           </button>
         ))}
       </div>
@@ -626,6 +627,7 @@ export default function LightsOutAdminPage() {
                       : st === 'invite_approved' ? <Ic.Mail title="Code sent - not registered yet" />
                       : st === 'invite_requested' ? <Ic.Clock title="Invite request - needs review" />
                       : st === 'goalie_waitlist' ? <Ic.Clock title="Goalie waitlist - waiting for a spot to open" />
+                      : st === 'waitlist' ? <Ic.Clock title="Sold-out waitlist - first in line for the second location" />
                       : (st === 'denied' || st === 'invite_denied') ? <Ic.X title="Denied" />
                       : st === 'refunded' ? <Ic.X title="Refunded - no longer in" />
                       : <Ic.Dash title="Not in" />}

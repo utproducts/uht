@@ -44,7 +44,7 @@ export default function LightsOutBanner({ pitch, variant = 'hero' }: { pitch?: s
                 </Text>
                 <View style={loStyles.cardPill}>
                   <Animated.View style={[loStyles.badgeDot, { width: 5, height: 5, opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }]} />
-                  <Text style={loStyles.cardPillText} maxFontSizeMultiplier={1.1}>INVITE ONLY</Text>
+                  <Text style={loStyles.cardPillText} maxFontSizeMultiplier={1.1}>SOLD OUT</Text>
                 </View>
               </View>
               <Text style={loStyles.cardDates} maxFontSizeMultiplier={1.2}>June 11-13, 2027</Text>
@@ -78,14 +78,14 @@ export default function LightsOutBanner({ pitch, variant = 'hero' }: { pitch?: s
         />
         <View style={loStyles.badge}>
           <Animated.View style={[loStyles.badgeDot, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }]} />
-          <Text style={loStyles.badgeText} maxFontSizeMultiplier={1.2}>INVITE ONLY</Text>
+          <Text style={loStyles.badgeText} maxFontSizeMultiplier={1.2}>SOLD OUT</Text>
         </View>
         <Text style={loStyles.title} maxFontSizeMultiplier={1.2}>
           <Text style={loStyles.titleGlow}>LIGHTS OUT</Text> INVITATIONAL
         </Text>
         <Text style={loStyles.dates} maxFontSizeMultiplier={1.2}>JUNE 11-13, 2027 · ST. LOUIS</Text>
         <Text style={loStyles.pitch} maxFontSizeMultiplier={1.2}>
-          {pitch || 'The arena goes dark. The ice glows. Only Three Stars winners get in.'}
+          {pitch || 'Sold out in 7 days. A second location could be announced within 2 weeks - join the waitlist for first access.'}
         </Text>
         <LinearGradient colors={['#39ff14', '#00ccff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={loStyles.ctaWrap}>
           <Text style={loStyles.ctaText} maxFontSizeMultiplier={1.2}>SEE THE INVITATIONAL</Text>

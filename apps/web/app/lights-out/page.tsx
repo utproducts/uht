@@ -95,10 +95,19 @@ function Lightbox({ src, title, onClose }: { src: string; title: string; onClose
   );
 }
 
-// For families WITHOUT a star: no payment, just a reviewed request. First
-// spots always go to Three Stars winners - the form says so plainly.
-function RequestInviteModal({ onClose }: { onClose: () => void }) {
-  const [f, setF] = useState({ playerName: '', teamName: '', birthYear: '', position: '', parentName: '', email: '', phone: '', reason: '' });
+// SOLD OUT (Nov 2026, 7 days after launch). The only door now is the
+// waitlist: families pick their age level and get in line. If a spot opens,
+// or when the second location is announced, the waitlist registers first.
+const AGE_LEVELS = [
+  ['Mite', 'Born 2018-2023'],
+  ['Squirt', 'Born 2016-2017'],
+  ['Pee Wee', 'Born 2014-2015'],
+  ['Bantam', 'Born 2012-2013'],
+  ['Midget', 'Born 2011 or earlier'],
+] as const;
+
+function WaitlistModal({ onClose }: { onClose: () => void }) {
+  const [f, setF] = useState({ playerName: '', ageLevel: '', position: '', teamName: '', parentName: '', email: '', phone: '' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
@@ -114,15 +123,18 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     setError('');
-    if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)) {
-      setError('Please fill in the player, team, parent name, and a valid email.');
+    if (!f.playerName.trim() || !f.ageLevel || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)) {
+      setError('Please fill in the player name, age level, parent name, and a valid email.');
       return;
     }
     setBusy(true);
     try {
-      const res = await fetch(`${API}/request-invite`, {
+      const res = await fetch(`${API}/waitlist`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...f, playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim() }),
+        body: JSON.stringify({
+          playerName: f.playerName.trim(), ageLevel: f.ageLevel, position: f.position || undefined,
+          teamName: f.teamName.trim() || undefined, parentName: f.parentName.trim(), email: f.email.trim(), phone: f.phone || undefined,
+        }),
       });
       const j = await res.json();
       if (j.success) { setDone(true); setBusy(false); return; }
@@ -135,275 +147,61 @@ function RequestInviteModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.86)' }} onClick={onClose}>
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8" style={{ background: '#070d20', border: '1px solid rgba(0,204,255,.4)', boxShadow: '0 0 60px rgba(0,204,255,.25)' }} onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8" style={{ background: '#070d20', border: '1px solid rgba(255,184,77,.5)', boxShadow: '0 0 60px rgba(255,184,77,.2)' }} onClick={(e) => e.stopPropagation()}>
         <button type="button" onClick={onClose} aria-label="Close"
           className="absolute top-3.5 right-3.5 w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white transition z-10"
-          style={{ background: 'rgba(10,18,40,.9)', border: '1px solid rgba(0,204,255,.4)' }}>
+          style={{ background: 'rgba(10,18,40,.9)', border: '1px solid rgba(255,184,77,.4)' }}>
           <svg style={{ width: 18, height: 18 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
         {done ? (
           <div className="text-center py-6">
-            <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REQUEST RECEIVED</p>
-            <p className="text-white text-xl font-black mb-3">You're on the list.</p>
-            <p className="text-white/70 text-sm leading-relaxed mb-6">We read every single request - some of the best players on the ice never show up on a scoresheet, and that's exactly why the request list exists. Three Stars winners get the first spots, and we go straight to the request list to fill out the roster. We'll email you either way.</p>
+            <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">YOU ARE ON THE WAITLIST</p>
+            <p className="text-white text-xl font-black mb-3">{f.playerName.split(' ')[0] || 'Your player'} is in line.</p>
+            <p className="text-white/70 text-sm leading-relaxed mb-6">No payment was taken. We are working on securing a second location right now - it could be announced in the next 2 weeks - and our waitlist gets the first opportunity to register, before anyone else hears about it. If a spot opens in {f.ageLevel || 'their'} {f.ageLevel ? '' : 'age level'}, you hear first too. A confirmation email is on its way.</p>
             <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a]">DONE</button>
           </div>
         ) : (
           <>
-            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#00ccff] mb-1`}>NO STAR YET?</p>
-            <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>REQUEST AN INVITE</h3>
-            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Think your player belongs on glowing ice? Tell us who they are and why.</p>
-            <p className={`${rajdhani.className} text-[#ffb84d]/85 text-sm font-semibold tracking-[0.1em] mb-4`}>REQUESTING DOES NOT MEAN APPROVAL - THIS IS A VERY LIMITED EVENT AND FIRST SPOTS GO TO OUR THREE STARS WINNERS</p>
+            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#ffb84d] mb-1`}>SOLD OUT IN 7 DAYS</p>
+            <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>JOIN THE WAITLIST</h3>
+            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">Every spot is claimed - but this is not a dead end. We are working on securing a <b className="text-[#7fd8ff]">second location</b> that could be announced in the next 2 weeks, and the waitlist registers first.</p>
+            <p className={`${rajdhani.className} text-[#39ff14]/85 text-sm font-semibold tracking-[0.1em] mb-4`}>FREE TO JOIN - WAITLIST GETS THE FIRST OPPORTUNITY TO REGISTER</p>
             <div className="space-y-3">
               <input className={inputCls} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
-              <input className={inputCls} placeholder="Team name *" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
+              <div>
+                <p className={`${rajdhani.className} text-[12px] font-bold tracking-[0.2em] text-[#7fd8ff]/80 mb-1.5`}>AGE LEVEL *</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {AGE_LEVELS.map(([lvl, yrs]) => (
+                    <button key={lvl} type="button" onClick={() => set('ageLevel', lvl)}
+                      className="rounded-xl px-3 py-2.5 text-left transition-all"
+                      style={f.ageLevel === lvl
+                        ? { background: 'rgba(0,204,255,.12)', border: '2px solid rgba(0,204,255,.75)', boxShadow: '0 0 18px rgba(0,204,255,.2)' }
+                        : { background: 'rgba(10,18,40,.6)', border: '2px solid rgba(29,58,86,.9)' }}>
+                      <span className={`${rajdhani.className} block text-[14px] font-bold tracking-[0.08em] ${f.ageLevel === lvl ? 'text-[#00ccff]' : 'text-white/70'}`}>{lvl.toUpperCase()}</span>
+                      <span className="block text-[10px] text-white/40 leading-tight">{yrs}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} placeholder="Birth year" value={f.birthYear} onChange={(e) => set('birthYear', e.target.value)} />
                 <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
                   <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Position</option>
-                  {['Forward', 'Defense', 'Goalie'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
+                  {['Forward', 'Defense', 'Goalie'].map((pos) => <option key={pos} value={pos} style={{ color: '#111', backgroundColor: '#fff' }}>{pos}</option>)}
                 </select>
-              </div>
-              <input className={inputCls} placeholder="Parent / guardian name *" value={f.parentName} onChange={(e) => set('parentName', e.target.value)} />
-              <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} type="email" placeholder="Email *" value={f.email} onChange={(e) => set('email', e.target.value)} />
-                <input className={inputCls} placeholder="Phone" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
-              </div>
-              <textarea className={`${inputCls} min-h-[80px]`} maxLength={2500} placeholder="Why should your player be considered?" value={f.reason} onChange={(e) => set('reason', e.target.value)} />
-              {error && <p className="text-[#ff6b81] text-xs">{error}</p>}
-              <button onClick={submit} disabled={busy}
-                className={`${rajdhani.className} w-full py-3.5 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] hover:brightness-110 transition disabled:opacity-50`}>
-                {busy ? 'SENDING…' : 'SUBMIT REQUEST'}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: () => void; onRequestInstead: () => void; initialCode?: string }) {
-  const [mode, setMode] = useState<'star' | 'code'>(initialCode ? 'code' : 'star');
-  const [events, setEvents] = useState<any[]>([]);
-  const [f, setF] = useState({ playerName: '', jerseyNumber: '', teamName: '', starEventId: '', inviteCode: initialCode || '', birthYear: '', position: '', jerseySize: '', teeSize: '', parentName: '', email: '', phone: '', payType: 'full' });
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState('');
-  // Division goalie spots at cap: the API refuses checkout and we flip the
-  // modal into free-waitlist mode instead
-  const [waitOffer, setWaitOffer] = useState(false);
-  const [waitDone, setWaitDone] = useState(false);
-
-  useEffect(() => {
-    fetch(`${API}/events`).then(r => r.json()).then(j => { if (j.success) setEvents(j.data || []); }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const set = (k: string, v: string) => {
-    setF(prev => ({ ...prev, [k]: v }));
-    if (k === 'position' || k === 'birthYear') setWaitOffer(false);
-  };
-  const inputCls = 'w-full rounded-xl px-4 py-2.5 text-sm text-white bg-[#0a1228] border border-[#1d3a56] focus:border-[#00ccff] focus:outline-none placeholder:text-white/30';
-
-  const submit = async () => {
-    setError('');
-    const usingCode = mode === 'code';
-    if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)
-      || (!usingCode && !f.starEventId) || (usingCode && f.inviteCode.trim().length < 4)) {
-      setError(usingCode
-        ? 'Please fill in the player, team, parent name, a valid email, and your invite code.'
-        : 'Please fill in the player, team, event, parent name, and a valid email.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(`${API}/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...f,
-          starEventId: mode === 'code' ? undefined : f.starEventId,
-          inviteCode: mode === 'code' ? f.inviteCode.trim().toUpperCase() : undefined,
-          playerName: f.playerName.trim(), teamName: f.teamName.trim(), parentName: f.parentName.trim(), email: f.email.trim(),
-        }),
-      });
-      const j = await res.json();
-      if (j.success && j.data?.checkoutUrl) {
-        window.location.href = j.data.checkoutUrl; // off to Stripe - $550 per player
-        return;
-      }
-      if (j.goalieWaitlist) {
-        setWaitOffer(true);
-        setBusy(false);
-        return;
-      }
-      setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
-    } catch {
-      setError('Something went wrong - please try again.');
-    }
-    setBusy(false);
-  };
-
-  const joinWaitlist = async () => {
-    setError('');
-    if (!f.playerName.trim() || !f.teamName.trim() || !f.parentName.trim() || !/^\S+@\S+\.\S+$/.test(f.email)) {
-      setError('Please fill in the player, team, parent name, and a valid email to join the waitlist.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(`${API}/goalie-waitlist`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playerName: f.playerName.trim(), teamName: f.teamName.trim(), birthYear: f.birthYear.trim() || undefined,
-          position: 'Goalie', parentName: f.parentName.trim(), email: f.email.trim(), phone: f.phone || undefined,
-        }),
-      });
-      const j = await res.json();
-      if (j.success) { setWaitDone(true); setBusy(false); return; }
-      setError(typeof j.error === 'string' ? j.error : 'Something went wrong - please try again.');
-    } catch {
-      setError('Something went wrong - please try again.');
-    }
-    setBusy(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.86)' }} onClick={onClose}>
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6 sm:p-8" style={{ background: '#070d20', border: '1px solid rgba(0,204,255,.4)', boxShadow: '0 0 60px rgba(0,204,255,.25)' }} onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-3.5 right-3.5 w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white transition z-10"
-          style={{ background: 'rgba(10,18,40,.9)', border: '1px solid rgba(0,204,255,.4)' }}
-        >
-          <svg className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-        {waitDone ? (
-          <div className="text-center py-6">
-            <p className="text-[12px] font-black tracking-[0.35em] text-[#ffb84d] mb-4">ON THE GOALIE WAITLIST</p>
-            <p className="text-white text-xl font-black mb-3">{f.playerName.split(' ')[0] || 'Your goalie'} is on the list.</p>
-            <p className="text-white/70 text-sm leading-relaxed mb-6">Goalie spots for this age group are sold out. No payment was taken - the moment a spot opens, we email you a single-use invite code, in waitlist order. A confirmation is on its way to your inbox.</p>
-            <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black text-[#04091a]" style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>DONE</button>
-          </div>
-        ) : done ? (
-          <div className="text-center py-6">
-            <p className="text-[12px] font-black tracking-[0.35em] text-[#39ff14] lo-glow-green mb-4">REGISTRATION RECEIVED</p>
-            <p className="text-white text-xl font-black mb-3">We're confirming the star.</p>
-            <p className="text-white/70 text-sm leading-relaxed mb-6">Every invite is verified against the official scoresheets. You'll get an email the moment {f.playerName.split(' ')[0] || 'your player'}'s spot is confirmed.</p>
-            <button onClick={onClose} className="px-7 py-3 rounded-full text-sm font-black bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a]">DONE</button>
-          </div>
-        ) : (
-          <>
-            <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#39ff14] mb-1`}>OFFICIAL REGISTRATION</p>
-            <h3 className={`${rajdhani.className} text-3xl font-bold tracking-[0.08em] text-white lo-glow mb-1`}>CLAIM YOUR SPOT</h3>
-            <p className="text-white/60 text-[13px] leading-relaxed mb-1.5">For Three Stars winners and invite code holders. Tell us where your player earned their Three Star - we verify every registration against the official scoresheets before the invite is confirmed.</p>
-            <p className={`${rajdhani.className} text-[#39ff14] text-base font-bold tracking-[0.08em] mb-1`}>$550 PER PLAYER (OR $200 DEPOSIT) &middot; ALL SWAG INCLUDED</p>
-            <p className={`${rajdhani.className} text-[#ffb84d]/85 text-sm font-semibold tracking-[0.12em] mb-4`}>EXTREMELY LIMITED EVENT &middot; A $200 DEPOSIT HOLDS YOUR SPOT</p>
-            <div className="space-y-3">
-              {/* How are you invited? */}
-              <div className="grid grid-cols-2 gap-2">
-                {([['star', 'EARNED A THREE STAR'], ['code', 'I HAVE AN INVITE CODE']] as const).map(([val, label]) => (
-                  <button key={val} type="button" onClick={() => setMode(val)}
-                    className={`${rajdhani.className} rounded-xl px-3 py-2.5 text-[13px] font-bold tracking-[0.1em] transition-all`}
-                    style={mode === val
-                      ? { background: 'rgba(0,204,255,.12)', border: '2px solid rgba(0,204,255,.75)', color: '#00ccff', boxShadow: '0 0 18px rgba(0,204,255,.2)' }
-                      : { background: 'rgba(10,18,40,.6)', border: '2px solid rgba(29,58,86,.9)', color: 'rgba(255,255,255,.55)' }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <input className={`${inputCls} col-span-2`} placeholder="Player full name *" value={f.playerName} onChange={(e) => set('playerName', e.target.value)} />
-                <input className={inputCls} placeholder="Jersey #" inputMode="numeric" value={f.jerseyNumber} onChange={(e) => set('jerseyNumber', e.target.value.replace(/[^0-9]/g, '').slice(0, 2))} />
-              </div>
-              <input className={inputCls} placeholder="Team name *" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
-              {mode === 'star' ? (
-                <select className={inputCls} value={f.starEventId} onChange={(e) => set('starEventId', e.target.value)} style={{ color: f.starEventId ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Event where the star was earned *</option>
-                  {events.map((ev) => <option key={ev.id} value={ev.id} style={{ color: '#111', backgroundColor: '#fff' }}>{ev.name}</option>)}
-                </select>
-              ) : (
-                <input className={inputCls} placeholder="Invite code (from your approval email) *" value={f.inviteCode}
-                  onChange={(e) => set('inviteCode', e.target.value.toUpperCase())} style={{ letterSpacing: '2px' }} />
-              )}
-              <p className="text-white/55 text-[12px] leading-snug">
-                No Three Star and no code yet?{' '}
-                <button type="button" onClick={onRequestInstead} className="text-[#39ff14] font-bold underline underline-offset-2 hover:brightness-110">
-                  Request an invite instead - it&apos;s free
-                </button>
-                {' '}- no payment to request.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <input className={inputCls} placeholder="Birth year" value={f.birthYear} onChange={(e) => set('birthYear', e.target.value)} />
-                <select className={inputCls} value={f.position} onChange={(e) => set('position', e.target.value)} style={{ color: f.position ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Position</option>
-                  {['Forward', 'Defense', 'Goalie'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
-                </select>
-              </div>
-              {/* Swag sizes - collected up front so the order sheet fills itself */}
-              <div className="grid grid-cols-2 gap-3">
-                <select className={inputCls} value={f.jerseySize} onChange={(e) => set('jerseySize', e.target.value)} style={{ color: f.jerseySize ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Jersey size</option>
-                  {['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL', 'Goalie Cut Youth S', 'Goalie Cut Youth M', 'Goalie Cut Youth L', 'Goalie Cut Youth XL', 'Goalie Cut Adult S', 'Goalie Cut Adult M', 'Goalie Cut Adult L', 'Goalie Cut Adult XL', 'Goalie Cut Adult XXL'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
-                </select>
-                <select className={inputCls} value={f.teeSize} onChange={(e) => set('teeSize', e.target.value)} style={{ color: f.teeSize ? '#fff' : 'rgba(255,255,255,.35)' }}>
-                  <option value="" style={{ color: '#6e6e73', backgroundColor: '#fff' }}>Tee size</option>
-                  {['Youth S', 'Youth M', 'Youth L', 'Youth XL', 'Adult S', 'Adult M', 'Adult L', 'Adult XL', 'Adult XXL'].map((p) => <option key={p} value={p} style={{ color: '#111', backgroundColor: '#fff' }}>{p}</option>)}
-                </select>
+                <input className={inputCls} placeholder="Team name" value={f.teamName} onChange={(e) => set('teamName', e.target.value)} />
               </div>
               <input className={inputCls} placeholder="Parent / guardian name *" value={f.parentName} onChange={(e) => set('parentName', e.target.value)} />
               <div className="grid grid-cols-2 gap-3">
                 <input className={inputCls} type="email" placeholder="Email *" value={f.email} onChange={(e) => set('email', e.target.value)} />
                 <input className={inputCls} type="tel" placeholder="Phone" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
               </div>
-              {waitOffer ? (
-                <>
-                  <div className="rounded-2xl px-4 py-4" style={{ background: 'rgba(255,184,77,.08)', border: '1px solid rgba(255,184,77,.55)' }}>
-                    <p className={`${rajdhani.className} text-[#ffb84d] text-sm font-bold tracking-[0.12em] mb-1`}>GOALIE SPOTS ARE SOLD OUT FOR THIS AGE GROUP</p>
-                    <p className="text-white/65 text-[12px] leading-snug">That is how fast this event is moving. Join the free goalie waitlist - no payment - and the moment a spot opens, we email you a single-use invite code. Codes go out in waitlist order.</p>
-                  </div>
-                  {error && <p className="text-[#ff6b6b] text-xs font-semibold">{error}</p>}
-                  <button onClick={joinWaitlist} disabled={busy}
-                    className="w-full py-3.5 rounded-full text-sm font-black text-[#04091a] shadow-[0_0_30px_rgba(255,184,77,.3)] hover:brightness-110 transition disabled:opacity-60"
-                    style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>
-                    {busy ? 'JOINING…' : 'JOIN THE GOALIE WAITLIST - FREE'}
-                  </button>
-                  <p className="text-white/40 text-[11px] text-center">No charge to join the waitlist. Your confirmation email arrives right away.</p>
-                </>
-              ) : (
-                <>
-              {/* payment plan stepper */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                {[
-                  ['full', 'PAY IN FULL', '$550', 'Everything locked in today'],
-                  ['deposit', 'DEPOSIT', '$200', 'Non-refundable · $350 due before the event'],
-                ].map(([val, label, price, sub]) => (
-                  <button key={val} type="button" onClick={() => set('payType', val)}
-                    className="rounded-2xl px-4 py-3.5 text-left transition-all"
-                    style={f.payType === val
-                      ? { background: 'rgba(57,255,20,.1)', border: '2px solid rgba(57,255,20,.7)', boxShadow: '0 0 22px rgba(57,255,20,.2)' }
-                      : { background: 'rgba(10,18,40,.6)', border: '2px solid rgba(29,58,86,.9)' }}>
-                    <span className={`${rajdhani.className} block text-sm font-bold tracking-[0.15em] ${f.payType === val ? 'text-[#39ff14]' : 'text-white/60'}`}>{label}</span>
-                    <span className={`${rajdhani.className} block text-2xl font-bold ${f.payType === val ? 'text-white' : 'text-white/70'}`}>{price}</span>
-                    <span className="block text-[11px] leading-snug mt-0.5 text-white/45">{sub}</span>
-                  </button>
-                ))}
-              </div>
-              {error && <p className="text-[#ff6b6b] text-xs font-semibold">{error}</p>}
+              {error && <p className="text-[#ff6b81] text-xs">{error}</p>}
               <button onClick={submit} disabled={busy}
-                className="w-full py-3.5 rounded-full text-sm font-black bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.35)] hover:brightness-110 transition disabled:opacity-60">
-                {busy ? 'STARTING CHECKOUT…' : f.payType === 'deposit' ? 'REGISTER + PAY $200 DEPOSIT' : 'REGISTER + PAY $550'}
+                className={`${rajdhani.className} w-full py-3.5 rounded-full text-base font-bold tracking-[0.12em] text-[#04091a] hover:brightness-110 transition disabled:opacity-50`}
+                style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)', boxShadow: '0 0 30px rgba(255,184,77,.3)' }}>
+                {busy ? 'JOINING…' : 'JOIN THE WAITLIST - FREE'}
               </button>
-              <p className="text-white/40 text-[11px] text-center">Secure payment by Stripe. Invites are confirmed by the UHT team - Three Stars recipients only.</p>
-                </>
-              )}
+              <p className="text-white/40 text-[11px] text-center">No charge to join. Your confirmation email arrives right away.</p>
             </div>
           </>
         )}
@@ -413,27 +211,19 @@ function RegisterModal({ onClose, onRequestInstead, initialCode }: { onClose: ()
 }
 
 export default function LightsOutPage() {
-  const [showRegister, setShowRegister] = useState(false);
-  const [showRequest, setShowRequest] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
   const [paidState, setPaidState] = useState<null | 'verifying' | 'paid' | 'failed'>(null);
-  const [inviteParam, setInviteParam] = useState('');
 
   // Back from Stripe: confirm the session actually paid, then celebrate
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     // Approval emails link here with ?invite=GLOW-XXXXX - open the form with
     // the code already in place so families never hunt for where it goes
-    const code = q.get('invite');
-    if (code) {
-      setInviteParam(code.toUpperCase());
-      setShowRegister(true);
-      window.history.replaceState({}, '', '/lights-out/');
-      return;
-    }
-    // Email REGISTER NOW buttons land here with ?register=1 - straight to the form
-    if (q.get('register')) {
-      setShowRegister(true);
+    // Old invite-code and REGISTER NOW email links land here after the
+    // sellout - open the waitlist so nobody dead-ends
+    if (q.get('invite') || q.get('register')) {
+      setShowWaitlist(true);
       window.history.replaceState({}, '', '/lights-out/');
       return;
     }
@@ -454,6 +244,7 @@ export default function LightsOutPage() {
         @keyframes loFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
         .lo-glow { text-shadow: 0 0 12px rgba(0,204,255,.9), 0 0 40px rgba(0,204,255,.55), 0 0 90px rgba(0,204,255,.3); }
         .lo-glow-green { text-shadow: 0 0 12px rgba(57,255,20,.9), 0 0 42px rgba(57,255,20,.45); }
+        .lo-glow-amber { text-shadow: 0 0 12px rgba(255,184,77,.9), 0 0 42px rgba(255,184,77,.45); }
         .lo-card { background: rgba(10,18,40,.75); border: 1px solid rgba(0,204,255,.22); box-shadow: 0 0 24px rgba(0,204,255,.07) inset; }
         .lo-card:hover { border-color: rgba(0,204,255,.55); box-shadow: 0 0 30px rgba(0,204,255,.18); }
       `}</style>
@@ -494,9 +285,9 @@ export default function LightsOutPage() {
         <div className="grid lg:grid-cols-[1.05fr_0.95fr] items-center gap-10 lg:gap-6 pt-14 pb-16 min-h-[72vh]">
           <div className="text-center lg:text-left order-2 lg:order-1">
             {/* badge */}
-            <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-[#39ff14]/40 mb-7" style={{ animation: 'loPulse 2.6s ease-in-out infinite' }}>
-              <span className="w-2 h-2 rounded-full bg-[#39ff14]" />
-              <span className={`${rajdhani.className} text-sm font-bold tracking-[0.35em] pl-[0.35em] text-[#39ff14]`}>INVITE ONLY</span>
+            <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-[#ffb84d]/50 mb-7" style={{ animation: 'loPulse 2.6s ease-in-out infinite' }}>
+              <span className="w-2 h-2 rounded-full bg-[#ffb84d]" />
+              <span className={`${rajdhani.className} text-sm font-bold tracking-[0.35em] pl-[0.35em] text-[#ffb84d]`}>SOLD OUT</span>
             </div>
 
             <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.5em] text-[#7fd8ff]/70 mb-3`}>UHT PRESENTS</p>
@@ -506,27 +297,24 @@ export default function LightsOutPage() {
               INVITATIONAL
             </h1>
 
-            <p className="mt-6 text-lg sm:text-xl text-white/60 leading-relaxed max-w-xl mx-auto lg:mx-0">
-              UHT's first-ever glow-in-the-dark hockey tournament. The arena goes dark, the ice glows, and only the ones who earned a star get to play.
+            <p className={`${rajdhani.className} mt-5 text-2xl sm:text-3xl font-bold tracking-[0.14em] text-[#ffb84d] lo-glow-amber`}>SOLD OUT IN 7 DAYS</p>
+            <p className="mt-4 text-lg sm:text-xl text-white/60 leading-relaxed max-w-xl mx-auto lg:mx-0">
+              UHT's first-ever glow-in-the-dark hockey tournament filled every single spot in one week. The arena goes dark, the ice glows - and the waitlist is now the only way in.
             </p>
             <p className={`${rajdhani.className} mt-3 text-[#7fd8ff]/70 text-base font-medium tracking-[0.3em]`}>ST. LOUIS, MO &middot; <span className="text-[#39ff14]">JUNE 11-13, 2027</span></p>
 
             <div className="mt-9 flex flex-col sm:flex-row items-center lg:justify-start justify-center gap-4 flex-wrap">
-              <button onClick={() => setShowRegister(true)}
-                className={`${rajdhani.className} group px-10 py-4 rounded-full text-lg font-bold tracking-[0.12em] bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_40px_rgba(57,255,20,.4)] hover:brightness-110 active:scale-[0.98] transition-all`}>
-                REGISTER NOW
+              <button onClick={() => setShowWaitlist(true)}
+                className={`${rajdhani.className} group px-10 py-4 rounded-full text-lg font-bold tracking-[0.12em] text-[#04091a] shadow-[0_0_40px_rgba(255,184,77,.4)] hover:brightness-110 active:scale-[0.98] transition-all`}
+                style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>
+                JOIN THE WAITLIST
                 <svg className="inline-block w-5 h-5 ml-2 -mt-0.5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-              </button>
-              <button onClick={() => setShowRequest(true)}
-                className={`${rajdhani.className} px-8 py-4 rounded-full text-lg font-semibold tracking-[0.12em] bg-white/5 backdrop-blur-sm text-[#39ff14] border border-[#39ff14]/45 hover:bg-[#39ff14]/10 transition-all`}>
-                REQUEST AN INVITE
               </button>
               <a href="/three-stars" className={`${rajdhani.className} px-8 py-4 rounded-full text-lg font-semibold tracking-[0.12em] bg-white/5 backdrop-blur-sm text-white/85 border border-white/20 hover:bg-white/10 hover:border-[#00ccff]/50 transition-all`}>
                 MEET THE THREE STARS
               </a>
             </div>
-            <p className={`${rajdhani.className} mt-5 text-[#7fd8ff]/55 text-sm font-medium tracking-[0.25em]`}>$550 PER PLAYER &middot; THREE STARS WINNERS ONLY &middot; EVERY INVITE IS VERIFIED</p>
-            <p className={`${rajdhani.className} mt-2 text-[#ffb84d]/80 text-sm font-semibold tracking-[0.25em]`}>EXTREMELY LIMITED EVENT &middot; A $200 DEPOSIT HOLDS YOUR SPOT</p>
+            <p className={`${rajdhani.className} mt-5 text-[#7fd8ff]/55 text-sm font-medium tracking-[0.25em]`}>EVERY SPOT CLAIMED &middot; WAITLIST GETS FIRST CRACK AT WHAT COMES NEXT</p>
           </div>
 
           <div className="order-1 lg:order-2 flex justify-center">
@@ -537,6 +325,26 @@ export default function LightsOutPage() {
               style={{ filter: 'drop-shadow(0 0 28px rgba(0,204,255,.35)) drop-shadow(0 0 60px rgba(57,255,20,.18))', animation: 'loFloat 7s ease-in-out infinite' }}
             />
           </div>
+        </div>
+
+        {/* SECOND LOCATION - the sold-out silver lining */}
+        <div className="lo-card rounded-3xl p-7 sm:p-9 text-center mb-14" style={{ borderColor: 'rgba(255,184,77,.45)', boxShadow: '0 0 40px rgba(255,184,77,.12)' }}>
+          <p className={`${rajdhani.className} text-sm font-semibold tracking-[0.35em] text-[#ffb84d] mb-2`}>THIS IS NOT THE END</p>
+          <h2 className={`${rajdhani.className} text-3xl sm:text-4xl font-bold tracking-[0.08em] text-white lo-glow-amber`}>A SECOND LOCATION IS IN THE WORKS</h2>
+          <p className="text-white/70 text-sm mt-4 max-w-2xl mx-auto leading-relaxed">
+            The Lights Out Invitational <b className="text-[#ffb84d]">sold out in 7 days</b> - every single spot claimed.
+            The demand blew us away, so we are working on securing a <b className="text-[#7fd8ff]">second location</b> right now,
+            and it could be announced <b className="text-[#7fd8ff]">in the next 2 weeks</b>.
+          </p>
+          <p className="text-white/70 text-sm mt-3 max-w-2xl mx-auto leading-relaxed">
+            Our waitlist gets the <b className="text-[#39ff14]">first opportunity to register</b> - before anyone else even hears about it.
+            Pick your player's age level and get in line. It is free, and it takes 30 seconds.
+          </p>
+          <button onClick={() => setShowWaitlist(true)}
+            className={`${rajdhani.className} mt-6 px-10 py-3.5 rounded-full text-base font-bold tracking-[0.12em] text-[#04091a] shadow-[0_0_30px_rgba(255,184,77,.35)] hover:brightness-110 transition`}
+            style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>
+            JOIN THE WAITLIST - FREE
+          </button>
         </div>
 
         {/* THE PITCH */}
@@ -596,17 +404,14 @@ export default function LightsOutPage() {
             stood on their head, and earned the star - together on glowing ice for one unforgettable night.
           </p>
           <p className="text-white/70 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
-            Want in? There is only one door: <b className="text-[#00ccff]">win a Three Star at a UHT event.</b> Every game, every tournament, three more invites are earned.
-          </p>
-          <p className="text-white/70 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
-            No star yet but think your player belongs on glowing ice? You can <b className="text-[#39ff14]">request an invite</b> below. Requesting does not mean approval - this is a very limited event and first spots go to our Three Stars winners - but if spots open up, requests are the first place we look.
+            This one <b className="text-[#ffb84d]">sold out in 7 days</b> - but a <b className="text-[#7fd8ff]">second location</b> could be announced in the next 2 weeks,
+            and the waitlist registers first. Get in line now, and keep earning Three Stars at every UHT weekend - stars never stop mattering around here.
           </p>
           <div className={`${rajdhani.className} mt-7 flex flex-col sm:flex-row items-center justify-center gap-3`}>
-            <button onClick={() => setShowRegister(true)}
-              className="px-9 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#39ff14] to-[#00ccff] text-[#04091a] shadow-[0_0_30px_rgba(57,255,20,.4)] hover:brightness-110 transition">REGISTER NOW</button>
+            <button onClick={() => setShowWaitlist(true)}
+              className="px-9 py-3 rounded-full text-base font-bold tracking-[0.12em] text-[#04091a] shadow-[0_0_30px_rgba(255,184,77,.4)] hover:brightness-110 transition"
+              style={{ background: 'linear-gradient(90deg,#ffb84d,#ff8a3d)' }}>JOIN THE WAITLIST</button>
             <a href="/events" className="px-8 py-3 rounded-full text-base font-bold tracking-[0.12em] bg-gradient-to-r from-[#00ccff] to-[#0077b0] text-[#04091a] shadow-[0_0_30px_rgba(0,204,255,.4)] hover:brightness-110 transition">SEE UPCOMING UHT EVENTS</a>
-            <button onClick={() => setShowRequest(true)}
-              className="px-8 py-3 rounded-full text-base font-semibold tracking-[0.12em] border border-[#39ff14]/50 text-[#39ff14] hover:bg-[#39ff14]/10 transition">REQUEST AN INVITE</button>
             <a href="/three-stars" className="px-8 py-3 rounded-full text-base font-semibold tracking-[0.12em] border border-white/25 text-white/85 hover:border-[#00ccff] hover:text-white transition">MEET THE THREE STARS</a>
           </div>
         </div>
@@ -614,8 +419,7 @@ export default function LightsOutPage() {
         <p className="text-center text-[11px] text-white/35 pb-10">Ultimate Hockey Tournaments &middot; Lights Out Invitational &middot; St. Louis, MO</p>
       </div>
 
-      {showRegister && <RegisterModal onClose={() => setShowRegister(false)} onRequestInstead={() => { setShowRegister(false); setShowRequest(true); }} initialCode={inviteParam || undefined} />}
-      {showRequest && <RequestInviteModal onClose={() => setShowRequest(false)} />}
+      {showWaitlist && <WaitlistModal onClose={() => setShowWaitlist(false)} />}
       {lightbox && <Lightbox src={lightbox.src} title={lightbox.title} onClose={() => setLightbox(null)} />}
       {paidState && (
         <div className="fixed inset-0 z-[3400] flex items-center justify-center p-4" style={{ background: 'rgba(2,5,14,.9)' }} onClick={() => paidState !== 'verifying' && setPaidState(null)}>

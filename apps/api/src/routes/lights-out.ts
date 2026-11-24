@@ -80,6 +80,13 @@ lightsOutRoutes.get('/events', async (c) => {
 // years go to a free waitlist instead of checkout. The gate is live-count
 // based, so sending a waitlisted family an invite code - or a refund -
 // reopens checkout automatically. Staff invite codes always pass.
+// SOLD OUT (Chad, Nov 23 2026): every spot claimed in 7 days. New
+// registrations are closed at the API so no stale page or old email link can
+// start a checkout. Balance payments for existing deposits still work
+// (GET /balance/:id is untouched). Flip to false to reopen checkout - e.g.
+// when the second location is announced.
+const SOLD_OUT = true;
+
 const GOALIE_CAPS: { div: string; min: number; max: number; cap: number }[] = [
   { div: 'Mite', min: 2018, max: 2023, cap: 6 },
   { div: 'Squirt', min: 2016, max: 2017, cap: 8 },
@@ -194,7 +201,63 @@ lightsOutRoutes.post('/goalie-waitlist', zValidator('json', inviteRequestSchema)
   return c.json({ success: true, data: { id } });
 });
 
+// Sold-out waitlist - the event filled in 7 days, so families pick their
+// age level and get in line. If a spot opens, or when the second location
+// is announced (targeting the next 2 weeks), the waitlist hears first and
+// registers first. No payment, idempotent per player + email.
+const AGE_LEVELS = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget'] as const;
+const waitlistSchema = z.object({
+  playerName: z.string().min(2).max(80),
+  ageLevel: z.enum(AGE_LEVELS),
+  teamName: z.string().max(120).optional(),
+  position: z.string().max(20).optional(),
+  parentName: z.string().min(2).max(80),
+  email: z.string().email(),
+  phone: z.string().max(30).optional(),
+});
+
+lightsOutRoutes.post('/waitlist', zValidator('json', waitlistSchema), async (c) => {
+  const b = c.req.valid('json');
+  const db = c.env.DB;
+  const dup = await db.prepare(
+    `SELECT id FROM lights_out_registrations WHERE status = 'waitlist' AND LOWER(player_name) = LOWER(?) AND LOWER(email) = LOWER(?)`
+  ).bind(b.playerName.trim(), b.email.trim()).first<any>();
+  if (dup) return c.json({ success: true, data: { id: dup.id, already: true } });
+
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await db.prepare(`
+    INSERT INTO lights_out_registrations (id, player_name, team_name, star_event_id, age_level, position, parent_name, email, phone, status, star_verified, notes)
+    VALUES (?, ?, ?, 'waitlist', ?, ?, ?, ?, ?, 'waitlist', 0, 'Sold-out waitlist - event filled in 7 days')
+  `).bind(id, b.playerName.trim(), b.teamName?.trim() || '', b.ageLevel, b.position || null,
+    b.parentName.trim(), b.email.trim().toLowerCase(), b.phone || null).run();
+
+  const first = b.playerName.trim().split(' ')[0];
+  await sendEmail(c.env, b.email.trim(), `${b.playerName.trim()} is on the Lights Out waitlist`,
+    emailShell(`
+      <h2 style="margin:0 0 14px;color:#39ff14;font-size:19px;">You are on the waitlist</h2>
+      <p style="margin:0 0 14px;">Hi ${b.parentName.trim()},</p>
+      <p style="margin:0 0 14px;">The Lights Out Invitational <b style="color:#ffb84d;">sold out in 7 days</b> - every single spot claimed. <b style="color:#7fd8ff;">${b.playerName.trim()}</b> is now officially on the waitlist for the ${b.ageLevel} age level.</p>
+      <p style="margin:0 0 14px;">Here is the exciting part: we are working on securing a <b style="color:#7fd8ff;">second location</b> right now, and it could be announced in the next 2 weeks. Our waitlist gets the <b>first opportunity to register</b> - before anyone else even hears about it.</p>
+      <p style="margin:0 0 14px;">No payment was taken and there is nothing else you need to do. If a spot opens in ${first}'s age level, or the moment the second location goes live, you will hear from us first.</p>
+      <p style="margin:0;">Keep ${first} skating. We hope to see them under the glow in June.</p>
+    `));
+  await sendEmail(c.env, 'johnny@ultimatetournaments.com', `Lights Out WAITLIST: ${b.playerName.trim()} (${b.ageLevel})`,
+    emailShell(`
+      <p style="margin:0 0 6px;">Player: <b>${b.playerName.trim()}</b> (${b.ageLevel}${b.position ? ', ' + b.position : ''})</p>
+      ${b.teamName?.trim() ? `<p style="margin:0 0 6px;">Team: ${b.teamName.trim()}</p>` : ''}
+      <p style="margin:0 0 6px;">Parent: ${b.parentName.trim()} - ${b.email.trim()} ${b.phone ? '- ' + b.phone : ''}</p>
+      <p style="margin:10px 0 0;color:#7fd8ff;">Sold-out waitlist entry - see the Waitlist filter on the admin Lights Out page.</p>
+    `));
+  return c.json({ success: true, data: { id } });
+});
+
 lightsOutRoutes.post('/register', zValidator('json', registerSchema), async (c) => {
+  if (SOLD_OUT) {
+    return c.json({
+      success: false, soldOut: true,
+      error: 'The Lights Out Invitational is completely SOLD OUT - every spot was claimed in 7 days. Join the waitlist: if a spot opens or our second location is announced, the waitlist gets the first opportunity to register.',
+    }, 409);
+  }
   const b = c.req.valid('json');
   const db = c.env.DB;
 
