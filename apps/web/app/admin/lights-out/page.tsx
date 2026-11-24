@@ -66,6 +66,8 @@ export default function LightsOutAdminPage() {
   // the first step toward building teams per division
   const [divFilter, setDivFilter] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [tab, setTab] = useState<'registrations' | 'teams' | 'swag' | 'jerseys' | 'schedule'>('registrations');
+  const [teamDiv, setTeamDiv] = useState<string | null>(null);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [editRow, setEditRow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
@@ -253,16 +255,27 @@ export default function LightsOutAdminPage() {
   return (
     <div className="max-w-5xl mx-auto px-6 py-6">
       <h1 className="text-2xl font-bold text-[#1d1d1f]">Lights Out Invitational</h1>
-      <p className="text-sm text-[#6e6e73] mt-1 mb-5">
-        Invite requests from the Lights Out page. The star claim is checked against the scoresheets automatically -
-        approving sends the confirmation email to the family.
+      <p className="text-sm text-[#6e6e73] mt-1 mb-4">
+        Sold out in 7 days. Registrations, team building, swag, jerseys and the schedule all live here.
       </p>
+
+      {/* Platform menu - one bar across the top, each section is a tab */}
+      <div className="flex flex-wrap gap-1 mb-6 border-b border-[#e8e8ed]">
+        {([['registrations', 'Registrations'], ['teams', 'Teams'], ['swag', 'Swag'], ['jerseys', 'Jerseys'], ['schedule', 'Schedule']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-5 py-2.5 text-sm font-bold rounded-t-xl border-b-2 -mb-px transition ${tab === k
+              ? 'border-[#003e79] text-[#003e79] bg-[#f0f7ff]'
+              : 'border-transparent text-[#6e6e73] hover:text-[#003e79] hover:bg-[#f8f8fa]'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Money strip + division rollup. Collected sums every paid Lights Out
           registration; Still Owed is what the deposit families have left on
           the $550 full price. Divisions use the current (2026-27) season -
           what each kid is right now. */}
-      {loaded && rows.length > 0 && (() => {
+      {tab === 'registrations' && loaded && rows.length > 0 && (() => {
         const paidRows = rows.filter((r: any) => isPaid(r));
         const collected = paidRows.reduce((s: number, r: any) => s + (r.amount_paid_cents || 0), 0);
         const owed = paidRows.reduce((s: number, r: any) => s + Math.max(0, 55000 - (r.amount_paid_cents || 0)), 0);
@@ -382,9 +395,9 @@ export default function LightsOutAdminPage() {
 
       {/* Swag order: jersey + tee size totals across paid registrations, so
           ordering is one glance - plus who still has not picked */}
-      {loaded && (() => {
+      {tab === 'swag' && loaded && (() => {
         const paid = rows.filter((r: any) => isPaid(r));
-        if (paid.length === 0) return null;
+        if (paid.length === 0) return <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-10 text-center text-sm text-[#86868b]">No paid registrations yet.</div>;
         const unsent = paid.filter((r: any) => !r.sizes_email_sent_at).length;
         const allEmailed = unsent === 0;
         // Jerseys use the manufacturer's real size codes (player CHILD-36 to
@@ -521,6 +534,7 @@ export default function LightsOutAdminPage() {
         );
       })()}
 
+      {tab === 'registrations' && <>
       <div className="flex flex-wrap items-center gap-2 mb-5">
         <div className="relative">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search player, parent, team, email, code..."
@@ -825,6 +839,236 @@ export default function LightsOutAdminPage() {
         </div>
         </>
       )}
+      </>}
+
+      {/* ============ TEAMS TAB - build balanced rosters per division ============ */}
+      {tab === 'teams' && loaded && (() => {
+        const paid = rows.filter((r: any) => isPaid(r));
+        if (paid.length === 0) return <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-10 text-center text-sm text-[#86868b]">No paid registrations yet.</div>;
+        const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
+        const byDiv: Record<string, any[]> = {};
+        for (const r of paid) { const d = divisionOf(r.birth_year); (byDiv[d] = byDiv[d] || []).push(r); }
+        const divs = ORDER.filter(d => byDiv[d]);
+        const sel = teamDiv && byDiv[teamDiv] ? teamDiv : divs[0];
+        const players = [...(byDiv[sel] || [])].sort((a, b) => String(a.player_name).localeCompare(String(b.player_name)));
+        const teams: Record<string, any[]> = {};
+        const unassigned: any[] = [];
+        for (const r of players) { if (r.assigned_team) (teams[r.assigned_team] = teams[r.assigned_team] || []).push(r); else unassigned.push(r); }
+        const teamNames = Object.keys(teams).sort();
+        const posSplit = (list: any[]) => {
+          const c: Record<string, number> = { F: 0, D: 0, G: 0 };
+          for (const r of list) { const k = posOf(r.position); if (c[k] !== undefined) c[k]++; }
+          return c;
+        };
+        const newTeam = (playerId: string) => {
+          const name = window.prompt(`New ${sel} team name (e.g. ${sel} Neon, Team Glow...)`);
+          if (name && name.trim()) assignTeam(playerId, name.trim());
+        };
+        return (
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {divs.map(d => (
+                <button key={d} onClick={() => setTeamDiv(d)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${sel === d ? 'bg-[#003e79] text-white border-[#003e79]' : 'bg-white text-[#3d3d3d] border-[#e8e8ed] hover:border-[#003e79]/40'}`}>
+                  {d} ({(byDiv[d] || []).length})
+                </button>
+              ))}
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {teamNames.map(t => {
+                const list = teams[t];
+                const ps = posSplit(list);
+                return (
+                  <div key={t} className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-hidden">
+                    <div className="px-4 py-2.5 bg-[#f0f7ff] border-b border-[#bfe0f5] flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-black text-[#003e79]">{t}</p>
+                      <p className="text-[11px] font-bold text-[#0a6ebd]">{list.length} · F{ps.F} D{ps.D} G{ps.G}</p>
+                    </div>
+                    <div className="px-4 py-2">
+                      {list.map((r: any) => (
+                        <div key={r.id} className="flex items-center justify-between gap-2 py-1 border-b border-[#f8f8fa] last:border-0">
+                          <p className="text-[13px] font-semibold text-[#1d1d1f] truncate">
+                            {r.player_name}
+                            <span className="text-[11px] font-bold text-[#86868b] ml-1.5">{posOf(r.position)}{r.birth_year ? ` · ${r.birth_year}` : ''}</span>
+                          </p>
+                          <button onClick={() => assignTeam(r.id, null)} title="Remove from team"
+                            className="w-5 h-5 rounded-full bg-[#f0f0f2] text-[#6e6e73] text-[11px] font-bold leading-none hover:bg-red-100 hover:text-red-600 shrink-0">×</button>
+                        </div>
+                      ))}
+                      {unassigned.length > 0 && (
+                        <select value="" onChange={e => { if (e.target.value) assignTeam(e.target.value, t); }}
+                          className="w-full mt-1.5 mb-1 border border-dashed border-[#c7c7cc] rounded-lg px-2 py-1.5 text-xs text-[#6e6e73] bg-[#fafafa]">
+                          <option value="">+ Add a player...</option>
+                          {unassigned.map((r: any) => <option key={r.id} value={r.id}>{r.player_name} ({posOf(r.position)}{r.birth_year ? ` · ${r.birth_year}` : ''})</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="bg-white rounded-2xl shadow-sm border border-amber-200 overflow-hidden">
+                <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-black text-amber-700">Unassigned</p>
+                  <p className="text-[11px] font-bold text-amber-700">{unassigned.length}{(() => { const ps = posSplit(unassigned); return ` · F${ps.F} D${ps.D} G${ps.G}`; })()}</p>
+                </div>
+                <div className="px-4 py-2">
+                  {unassigned.length === 0 && <p className="text-xs text-[#86868b] py-2">Everyone in {sel} has a team.</p>}
+                  {unassigned.map((r: any) => (
+                    <div key={r.id} className="flex items-center justify-between gap-2 py-1 border-b border-[#f8f8fa] last:border-0">
+                      <p className="text-[13px] font-semibold text-[#1d1d1f] truncate">
+                        {r.player_name}
+                        <span className="text-[11px] font-bold text-[#86868b] ml-1.5">{posOf(r.position)}{r.birth_year ? ` · ${r.birth_year}` : ''}</span>
+                      </p>
+                      <select value="" onChange={e => { const v = e.target.value; if (v === '__new__') newTeam(r.id); else if (v) assignTeam(r.id, v); }}
+                        className="border border-[#e0e0e5] rounded-lg px-1.5 py-1 text-[11px] bg-white shrink-0">
+                        <option value="">Assign...</option>
+                        {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
+                        <option value="__new__">+ New team...</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-[#86868b] mt-3">Teams save instantly. We draft balanced rosters by age and position - the F/D/G split on each card keeps the balance honest.</p>
+          </div>
+        );
+      })()}
+
+      {/* ============ JERSEYS TAB - the production sheet per player ============ */}
+      {tab === 'jerseys' && loaded && (() => {
+        const paid = rows.filter((r: any) => isPaid(r));
+        if (paid.length === 0) return <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-10 text-center text-sm text-[#86868b]">No paid registrations yet.</div>;
+        const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget', 'Unknown'];
+        const sorted = [...paid].sort((a: any, b: any) =>
+          (ORDER.indexOf(divisionOf(a.birth_year)) - ORDER.indexOf(divisionOf(b.birth_year)))
+          || String(a.player_name).localeCompare(String(b.player_name)));
+        const jerseyName = (r: any) => r.jersey_name || String(r.player_name || '').trim().split(/\s+/).slice(-1)[0] || '';
+        const goalieCut = (r: any) => String(r.jersey_size || '').startsWith('GC-') || String(r.jersey_size || '').startsWith('Goalie Cut ');
+        const withSize = sorted.filter((r: any) => r.jersey_size).length;
+        const goalies = sorted.filter(goalieCut).length;
+        const repick = sorted.filter((r: any) => !r.jersey_size && r.jersey_size_old).length;
+        const missing = sorted.length - withSize;
+        const dupes: Record<string, number> = {};
+        for (const r of sorted) {
+          const num = String(r.jersey_number_request || r.jersey_number || '').trim();
+          if (num) dupes[`${divisionOf(r.birth_year)}|${num}`] = (dupes[`${divisionOf(r.birth_year)}|${num}`] || 0) + 1;
+        }
+        const exportJerseys = () => {
+          const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+          const lines = [['Division', 'Team', 'Player', 'Name on Jersey', 'Number', 'Cut', 'Jersey Size'].join(',')];
+          for (const r of sorted) {
+            lines.push([divisionOf(r.birth_year), r.assigned_team || '', r.player_name, jerseyName(r),
+              r.jersey_number_request || r.jersey_number || '', goalieCut(r) ? 'Goalie Cut' : (r.jersey_size ? 'Regular' : ''), r.jersey_size || ''].map(esc).join(','));
+          }
+          const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `lights-out-jersey-production-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        };
+        return (
+          <div>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              {[['Players', sorted.length], ['Sizes picked', withSize], ['Goalie cut', goalies], ['Re-picks pending', repick], ['Missing size', missing]].map(([l, n]) => (
+                <div key={l as string} className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-2 shadow-sm">
+                  <p className="text-[10px] font-bold text-[#86868b] uppercase tracking-wide">{l}</p>
+                  <p className={`text-xl font-black leading-tight ${l === 'Missing size' && (n as number) > 0 ? 'text-amber-600' : l === 'Re-picks pending' && (n as number) > 0 ? 'text-orange-600' : 'text-[#003e79]'}`}>{n}</p>
+                </div>
+              ))}
+              <button onClick={exportJerseys}
+                className="ml-auto px-4 py-2 rounded-full text-sm font-bold bg-[#003e79] text-white hover:bg-[#00315f]">
+                Export production sheet
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] overflow-x-auto">
+              <table className="w-full text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <thead>
+                  <tr className="border-b border-[#e8e8ed] bg-[#f8f8fa] text-left">
+                    <th className="px-4 py-2.5 text-[11px] font-bold text-[#86868b] uppercase">Player</th>
+                    <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase">Division</th>
+                    <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase hidden sm:table-cell">Team</th>
+                    <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase">Name on jersey</th>
+                    <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase text-center">#</th>
+                    <th className="px-2 py-2.5 text-[11px] font-bold text-[#86868b] uppercase">Jersey size</th>
+                    <th className="px-4 py-2.5 text-[11px] font-bold text-[#86868b] uppercase hidden sm:table-cell">Tee</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((r: any) => {
+                    const num = String(r.jersey_number_request || r.jersey_number || '').trim();
+                    const dup = num && dupes[`${divisionOf(r.birth_year)}|${num}`] > 1;
+                    return (
+                      <tr key={r.id} className="border-b border-[#f8f8fa] last:border-0">
+                        <td className="px-4 py-1.5 font-semibold text-[#1d1d1f] whitespace-nowrap">{r.player_name}</td>
+                        <td className="px-2 py-1.5 text-[#6e6e73]">{divisionOf(r.birth_year)}</td>
+                        <td className="px-2 py-1.5 text-[#6e6e73] hidden sm:table-cell">{r.assigned_team || <span className="text-[#c7c7cc]">-</span>}</td>
+                        <td className="px-2 py-1.5 font-semibold text-[#003e79] uppercase">{jerseyName(r)}</td>
+                        <td className={`px-2 py-1.5 text-center font-bold ${dup ? 'text-orange-600' : 'text-[#1d1d1f]'}`} title={dup ? 'Number requested by more than one player in this division' : undefined}>{num || '-'}</td>
+                        <td className="px-2 py-1.5">
+                          {r.jersey_size
+                            ? <span className="font-semibold text-[#1d1d1f]">{r.jersey_size}{goalieCut(r) && <span className="text-[10px] font-bold text-orange-600 ml-1.5">GOALIE</span>}</span>
+                            : r.jersey_size_old
+                              ? <span className="text-xs font-semibold text-orange-600">re-pick pending (was {r.jersey_size_old})</span>
+                              : <span className="text-xs font-semibold text-amber-600">missing</span>}
+                        </td>
+                        <td className="px-4 py-1.5 text-[#6e6e73] hidden sm:table-cell">{r.tee_size || <span className="text-[#c7c7cc]">-</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-[#86868b] mt-2">Orange numbers are requested by more than one player in that division - final numbers get settled when teams lock. The export carries division, team, name, number, cut and size, ready for the manufacturer.</p>
+          </div>
+        );
+      })()}
+
+      {/* ============ SCHEDULE TAB - unlocks as teams come together ============ */}
+      {tab === 'schedule' && loaded && (() => {
+        const paid = rows.filter((r: any) => isPaid(r));
+        const ORDER = ['Mite', 'Squirt', 'Pee Wee', 'Bantam', 'Midget'];
+        const byDiv: Record<string, { players: number; teams: Set<string> }> = {};
+        for (const r of paid) {
+          const d = divisionOf(r.birth_year);
+          const a = (byDiv[d] = byDiv[d] || { players: 0, teams: new Set<string>() });
+          a.players++;
+          if (r.assigned_team) a.teams.add(r.assigned_team);
+        }
+        const divs = ORDER.filter(d => byDiv[d]);
+        return (
+          <div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+              {divs.map(d => {
+                const a = byDiv[d];
+                const t = a.teams.size;
+                const ready = t >= 2;
+                return (
+                  <div key={d} className={`rounded-2xl px-4 py-3 shadow-sm border ${ready ? 'bg-white border-emerald-300' : 'bg-white border-[#e8e8ed]'}`}>
+                    <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">{d}</p>
+                    <p className="text-2xl font-black text-[#003e79] leading-tight">{t}<span className="text-[11px] font-bold text-[#86868b] ml-1.5">team{t === 1 ? '' : 's'}</span></p>
+                    <p className="text-[11px] text-[#86868b] font-semibold">{a.players} players</p>
+                    <p className={`text-[10px] font-bold uppercase tracking-wide mt-1 ${ready ? 'text-emerald-700' : 'text-[#a1a1a6]'}`}>{ready ? 'Ready to schedule' : 'Needs teams first'}</p>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm border border-[#e8e8ed] p-8 text-center">
+              <p className="text-base font-bold text-[#1d1d1f] mb-2">The schedule builder lands here next.</p>
+              <p className="text-sm text-[#6e6e73] max-w-lg mx-auto leading-relaxed">
+                Build teams on the Teams tab first - once a division has its rosters, we lay out the June 11-13 weekend here:
+                round robin inside each division, then a championship night under the glow. Game times, rinks and matchups
+                will all be managed from this tab.
+              </p>
+              <button onClick={() => setTab('teams')}
+                className="mt-4 px-5 py-2 rounded-full text-sm font-bold bg-[#003e79] text-white hover:bg-[#00315f]">
+                Go build teams
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
