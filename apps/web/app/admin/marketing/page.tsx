@@ -25,9 +25,10 @@ interface Daily { campaign_id: string; day: string; sent: number; opened: number
 interface Redemption { code: string; team_name: string; used_at: string; amount_cents: number; reg_team: string; }
 
 const EMAIL_LABEL: Record<string, string> = {
-  reengage2026e1: 'Email 1 - check-in',
-  reengage2026e2: 'Email 2 - $100 offer',
-  reengage2026e3: 'Email 3 - last chance',
+  reengage2026e1: 'Comeback 1 - check-in',
+  reengage2026e2: 'Comeback 2 - $100 offer',
+  reengage2026e3: 'Comeback 3 - last chance',
+  couponrem2026: 'Coupon reminder - unused credit',
 };
 
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -220,8 +221,14 @@ export default function MarketingPage() {
   const redemptions: Redemption[] = data?.redemptions || [];
   const recent: any[] = data?.recent || [];
 
+  // Both lanes count: comeback codes + reward codes redeemed after a reminder
+  const allRedemptions: (Redemption & { lane: string })[] = [
+    ...redemptions.map(r => ({ ...r, lane: 'Comeback' })),
+    ...((data?.couponRedemptions || []) as Redemption[]).map(r => ({ ...r, lane: 'Reward reminder' })),
+  ].sort((a, b) => String(b.used_at || '').localeCompare(String(a.used_at || '')));
+
   const totalTargets = statuses.reduce((s, x) => s + x.n, 0);
-  const recovered = redemptions.reduce((s, r) => s + (r.amount_cents || 0), 0);
+  const recovered = allRedemptions.reduce((s, r) => s + (r.amount_cents || 0), 0);
 
   // Open/click rates per e1-cohort day, from the daily email_sends stats
   const dailyByDay = new Map<string, { sent: number; opened: number; clicked: number }>();
@@ -246,7 +253,8 @@ export default function MarketingPage() {
         </div>
         <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[#86868b]">Codes redeemed</p>
-          <p className="text-2xl font-bold text-green-700">{redemptions.length}</p>
+          <p className="text-2xl font-bold text-green-700">{allRedemptions.length}</p>
+          <p className="text-[10px] text-[#86868b] mt-0.5">comeback + reward reminders</p>
         </div>
         <div className="bg-white rounded-xl border border-[#e8e8ed] p-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[#86868b]">Revenue recovered</p>
@@ -419,17 +427,21 @@ export default function MarketingPage() {
               <th className="py-2 pr-4">Email</th><th className="py-2 pr-4">Sent</th><th className="py-2 pr-4">Delivered</th><th className="py-2 pr-4">Opened</th><th className="py-2 pr-4">Clicked</th><th className="py-2">Open rate</th>
             </tr></thead>
             <tbody>
-              {campaigns.map(cp => (
+              {([
+                ...(data?.cityDrip || []).filter((c2: any) => (c2.total_sent || 0) > 0),
+                ...(data?.couponCampaign && (data.couponCampaign.total_sent || 0) > 0 ? [data.couponCampaign] : []),
+                ...campaigns,
+              ] as Campaign[]).map(cp => (
                 <tr key={cp.id} className="border-b border-[#f5f5f7]">
                   <td className="py-2.5 pr-4 font-medium text-[#1d1d1f]">{EMAIL_LABEL[cp.id] || cp.name}</td>
-                  <td className="py-2.5 pr-4">{cp.total_sent}</td>
-                  <td className="py-2.5 pr-4">{cp.total_delivered}</td>
-                  <td className="py-2.5 pr-4">{cp.total_opened}</td>
-                  <td className="py-2.5 pr-4">{cp.total_clicked}</td>
+                  <td className="py-2.5 pr-4">{Number(cp.total_sent || 0).toLocaleString()}</td>
+                  <td className="py-2.5 pr-4">{Number(cp.total_delivered || 0).toLocaleString()}</td>
+                  <td className="py-2.5 pr-4">{Number(cp.total_opened || 0).toLocaleString()}</td>
+                  <td className="py-2.5 pr-4">{Number(cp.total_clicked || 0).toLocaleString()}</td>
                   <td className="py-2.5 font-semibold">{pct(cp.total_opened, cp.total_sent)}</td>
                 </tr>
               ))}
-              {campaigns.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-[#86868b]">No sends yet - first batch goes out at 10am CT</td></tr>}
+              {campaigns.length === 0 && (data?.cityDrip || []).filter((c2: any) => (c2.total_sent || 0) > 0).length === 0 && <tr><td colSpan={6} className="py-6 text-center text-[#86868b]">No sends yet - first batch goes out at 10am CT</td></tr>}
             </tbody>
           </table>
         </div>
@@ -468,13 +480,13 @@ export default function MarketingPage() {
         {/* Redemptions */}
         <div className="bg-white rounded-2xl border border-[#e8e8ed] p-5">
           <h2 className="text-sm font-semibold text-[#1d1d1f] mb-3">Code redemptions</h2>
-          {redemptions.length === 0 && <p className="text-sm text-[#86868b]">None yet</p>}
+          {allRedemptions.length === 0 && <p className="text-sm text-[#86868b]">None yet</p>}
           <div className="space-y-2">
-            {redemptions.slice(0, 15).map((r, i) => (
+            {allRedemptions.slice(0, 15).map((r, i) => (
               <div key={i} className="flex items-center justify-between text-sm border-b border-[#f5f5f7] pb-2">
                 <div className="min-w-0">
                   <p className="font-medium text-[#1d1d1f] truncate">{r.reg_team || r.team_name}</p>
-                  <p className="text-xs text-[#86868b]">{r.code} - {r.used_at?.slice(0, 10)}</p>
+                  <p className="text-xs text-[#86868b]">{r.code} - {r.used_at?.slice(0, 10)} - {r.lane}</p>
                 </div>
                 <span className="text-green-700 font-semibold shrink-0">${((r.amount_cents || 0) / 100).toLocaleString()}</span>
               </div>

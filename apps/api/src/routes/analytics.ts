@@ -1036,7 +1036,7 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
   // Send-calendar extras. Chad wants the calendar to be the permanent sending
   // record - every one-off campaign ever, plus the daily history of the drip
   // lanes and Lights Out waves - so next year he can see what went out when.
-  const [oneOffs, couponSent, loWaves] = await Promise.all([
+  const [oneOffs, couponSent, loWaves, couponRedeemed] = await Promise.all([
     db.prepare(`
       SELECT id, name, subject, status, scheduled_at, sent_at, total_sent, total_opened, audience_filter
       FROM email_campaigns
@@ -1052,6 +1052,19 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
     db.prepare(`
       SELECT date(sent_at) as day, COUNT(*) as n FROM lightsout_targets
       WHERE sent_at IS NOT NULL GROUP BY day
+    `).all().catch(() => ({ results: [] })),
+    // Reward codes redeemed AFTER their reminder email - the coupon lane's
+    // actual conversions, so redeemed codes are counted on the dashboard
+    db.prepare(`
+      SELECT t.code, t.team_name, dc.used_at,
+        COALESCE(er.payment_amount_cents, r.amount_cents, 0) as amount_cents,
+        COALESCE(er.team_name, t.team_name) as reg_team
+      FROM coupon_reminder_targets t
+      JOIN discount_codes dc ON dc.code = t.code
+      LEFT JOIN event_registrations er ON er.id = dc.used_registration_id
+      LEFT JOIN registrations r ON r.id = dc.used_registration_id
+      WHERE t.sent_at IS NOT NULL AND dc.is_used = 1 AND dc.used_at >= t.sent_at
+      ORDER BY dc.used_at DESC
     `).all().catch(() => ({ results: [] })),
   ]);
 
@@ -1085,6 +1098,7 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
       couponCampaign: couponCampaign || null,
       scheduledCampaigns: oneOffs.results || [],
       couponSentDays: (couponSent as any).results || [],
+      couponRedemptions: (couponRedeemed as any).results || [],
       lightsOutWaveDays: (loWaves as any).results || [],
       everyoneAudience,
     },
