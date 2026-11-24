@@ -463,23 +463,30 @@ export default function LightsOutAdminPage() {
           shipped: { label: 'Shipped', cls: 'bg-green-50 text-green-700 border-green-200' },
         };
         const collectedCents = paid.reduce((t: number, r: any) => t + (r.amount_paid_cents || 0), 0);
+        const owedCents = paid.reduce((t: number, r: any) => t + Math.max(0, 55000 - (r.amount_paid_cents || 0)), 0);
+        const onDeposit = paid.filter((r: any) => (r.amount_paid_cents || 0) < 55000).length;
         const swagCostCents = swagItems.reduce((t, it) => t + (it.unit_cost_cents != null ? (it.order_qty ?? (it.qty_per_player || 1) * 225) * it.unit_cost_cents : 0), 0);
         const profitCents = collectedCents - swagCostCents;
         const usd = (c2: number) => (c2 < 0 ? '-$' : '$') + Math.abs(c2 / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         return (
           <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5 lg:max-w-2xl">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 lg:max-w-4xl">
             <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Collected</p>
               <p className="text-2xl font-black text-green-700 leading-tight">{usd(collectedCents)}</p>
               <p className="text-[11px] text-[#86868b] font-semibold leading-snug">{paid.length} paid registrations</p>
             </div>
             <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+              <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Still owed</p>
+              <p className="text-2xl font-black text-amber-600 leading-tight">{usd(owedCents)}</p>
+              <p className="text-[11px] text-[#86868b] font-semibold leading-snug">{owedCents > 0 ? `${onDeposit} on deposit of the $550 full price` : 'everyone is paid in full'}</p>
+            </div>
+            <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Swag cost</p>
               <p className="text-2xl font-black text-[#003e79] leading-tight">{usd(swagCostCents)}</p>
               <p className="text-[11px] text-[#86868b] font-semibold leading-snug">from the item costs below</p>
             </div>
-            <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm col-span-2 sm:col-span-1">
+            <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Profit</p>
               <p className={`text-2xl font-black leading-tight ${profitCents >= 0 ? 'text-green-700' : 'text-red-600'}`}>{usd(profitCents)}</p>
               <p className="text-[11px] text-[#86868b] font-semibold leading-snug">before event expenses + sponsorship money</p>
