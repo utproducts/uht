@@ -178,8 +178,12 @@ export default function LightsOutAdminPage() {
   }, [tab, swagLoaded]);
 
   const updateSwagItem = async (id: string, patch: any) => {
-    // Optimistic - the row updates instantly, the server catches up
-    setSwagItems(prev => prev.map(it => it.id === id ? { ...it, ...(patch.qtyPerPlayer !== undefined ? { qty_per_player: patch.qtyPerPlayer } : {}), ...patch } : it));
+    // Optimistic - the row updates instantly, the server catches up. Patch
+    // keys are camelCase for the API; rows use the DB column names.
+    const COL: Record<string, string> = { qtyPerPlayer: 'qty_per_player', orderQty: 'order_qty', unitCostCents: 'unit_cost_cents' };
+    const local: any = {};
+    for (const [k, v] of Object.entries(patch)) local[COL[k] || k] = v;
+    setSwagItems(prev => prev.map(it => it.id === id ? { ...it, ...local } : it));
     try {
       await fetch(`${API}/admin/swag-items/${id}`, { method: 'PATCH', headers: hdrs({ 'Content-Type': 'application/json' }), body: JSON.stringify(patch) });
     } catch {}
@@ -458,8 +462,29 @@ export default function LightsOutAdminPage() {
           sample: { label: 'Sample received', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
           shipped: { label: 'Shipped', cls: 'bg-green-50 text-green-700 border-green-200' },
         };
+        const collectedCents = paid.reduce((t: number, r: any) => t + (r.amount_paid_cents || 0), 0);
+        const swagCostCents = swagItems.reduce((t, it) => t + (it.unit_cost_cents != null ? (it.order_qty ?? (it.qty_per_player || 1) * 225) * it.unit_cost_cents : 0), 0);
+        const profitCents = collectedCents - swagCostCents;
+        const usd = (c2: number) => (c2 < 0 ? '-$' : '$') + Math.abs(c2 / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         return (
           <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5 lg:max-w-2xl">
+            <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+              <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Collected</p>
+              <p className="text-2xl font-black text-green-700 leading-tight">{usd(collectedCents)}</p>
+              <p className="text-[11px] text-[#86868b] font-semibold leading-snug">{paid.length} paid registrations</p>
+            </div>
+            <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm">
+              <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Swag cost</p>
+              <p className="text-2xl font-black text-[#003e79] leading-tight">{usd(swagCostCents)}</p>
+              <p className="text-[11px] text-[#86868b] font-semibold leading-snug">from the item costs below</p>
+            </div>
+            <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm col-span-2 sm:col-span-1">
+              <p className="text-[11px] font-bold text-[#6e6e73] uppercase tracking-wide">Profit</p>
+              <p className={`text-2xl font-black leading-tight ${profitCents >= 0 ? 'text-green-700' : 'text-red-600'}`}>{usd(profitCents)}</p>
+              <p className="text-[11px] text-[#86868b] font-semibold leading-snug">before event expenses + sponsorship money</p>
+            </div>
+          </div>
           <div className="bg-white border border-[#e8e8ed] rounded-2xl px-4 py-3 shadow-sm mb-5">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
               <p className="text-[11px] font-bold uppercase tracking-widest text-[#86868b]">
