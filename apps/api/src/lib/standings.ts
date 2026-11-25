@@ -74,7 +74,8 @@ export async function computeStandings(
     SELECT g.id, g.event_division_id, g.pool_name, g.home_team_id, g.away_team_id,
            g.home_placeholder, g.away_placeholder,
            g.home_score, g.away_score, g.status, g.game_number
-    FROM games g WHERE g.event_id = ? AND g.game_type = 'pool'`;
+    FROM games g WHERE g.event_id = ? AND g.game_type = 'pool'
+      AND COALESCE(g.counts_toward_standings, 1) = 1`;
   const params: string[] = [eventId];
   if (divisionId) { gq += ' AND g.event_division_id = ?'; params.push(divisionId); }
   const games = ((await db.prepare(gq).bind(...params).all<PoolGame>()).results || []);
@@ -482,7 +483,8 @@ export async function resolveBracketGames(
   const games = ((await db.prepare(`
     SELECT id, event_division_id, game_number, game_type, status,
            home_team_id, away_team_id, home_placeholder, away_placeholder,
-           home_score, away_score, COALESCE(seed_locked, 0) as seed_locked
+           home_score, away_score, COALESCE(seed_locked, 0) as seed_locked,
+           COALESCE(counts_toward_standings, 1) as counts_toward_standings
     FROM games WHERE event_id = ?
   `).bind(eventId).all<BracketGame>()).results || []);
 
@@ -494,7 +496,7 @@ export async function resolveBracketGames(
   // Unplayed pool games per team - fuels the early-clinch check
   const remainingPool = new Map<string, number>();
   for (const g of games) {
-    if (g.game_type !== 'pool' || g.status === 'final') continue;
+    if (g.game_type !== 'pool' || g.status === 'final' || !(g as any).counts_toward_standings) continue;
     for (const tid of [g.home_team_id, g.away_team_id]) {
       if (tid) remainingPool.set(tid, (remainingPool.get(tid) || 0) + 1);
     }
