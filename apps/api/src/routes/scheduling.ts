@@ -2293,7 +2293,26 @@ schedulingRoutes.post('/admin/:eventId/upload-csv', authMiddleware, requireRole(
   // published/hidden state.
   await db.prepare("UPDATE events SET updated_at = datetime('now') WHERE id = ?").bind(eventId).run().catch(() => {});
 
-  return c.json({ success: true, data: { ...summary, committed: true } });
+  // Division format rules (exhibitions, placement/championship structure)
+  // re-apply after every upload so a re-upload never reverts them
+  let formatRules: string[] = [];
+  try {
+    const { applyDivisionFormatRules } = await import('../lib/division-format-rules');
+    formatRules = await applyDivisionFormatRules(db, eventId);
+  } catch (e: any) {
+    formatRules = [`Format rules failed: ${e?.message || 'unknown error'}`];
+  }
+
+  return c.json({ success: true, data: { ...summary, committed: true, formatRules } });
+});
+
+// Run the division format rules on demand against the live schedule
+// (key-authed so it can be fired from automation/support without a login)
+schedulingRoutes.post('/admin/:eventId/apply-format-rules', async (c) => {
+  if (c.req.query('key') !== 'uht-coaches-2026') return c.json({ success: false, error: 'Unauthorized' }, 401);
+  const { applyDivisionFormatRules } = await import('../lib/division-format-rules');
+  const notes = await applyDivisionFormatRules(c.env.DB, c.req.param('eventId'));
+  return c.json({ success: true, data: { applied: notes } });
 });
 
 // ==========================================
