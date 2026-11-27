@@ -299,6 +299,30 @@ const sendCampaignSchema = z.object({
 export async function processSendWave(env: any, campaign: any, audience: any, batchLimit: number): Promise<{ sent: number; failed: number; remaining: number; done: boolean; total: number; totalSent: number; invalidSkipped: number } | { error: string }> {
   const db: D1Database = env.DB;
 
+  // Runaway-campaign guard (Nov 2026: three "Register now" blasts kept
+  // crawling out on Resend rate limits for 6 days and were still sending
+  // after their events had started):
+  // 1. A registration promo tied to an event never sends once that event begins.
+  // 2. No campaign keeps sending more than 48 hours after its first wave.
+  if (campaign.id) {
+    const PROMO_TYPES = ['market_all_events', 'market_specific_event', 'find_team', 'super_saver'];
+    if (campaign.event_id && PROMO_TYPES.includes(campaign.template_type || '')) {
+      const ev = await db.prepare('SELECT start_date FROM events WHERE id = ?').bind(campaign.event_id).first<any>();
+      const today = new Date().toISOString().slice(0, 10);
+      if (ev?.start_date && String(ev.start_date).slice(0, 10) <= today) {
+        await db.prepare("UPDATE email_campaigns SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?").bind(campaign.id).run();
+        return { error: 'Campaign cancelled: its event has already started, so registration promos stop automatically' };
+      }
+    }
+    if (campaign.status === 'sending' && campaign.sent_at) {
+      const startedMs = new Date(String(campaign.sent_at).replace(' ', 'T') + 'Z').getTime();
+      if (Number.isFinite(startedMs) && Date.now() - startedMs > 48 * 3600 * 1000) {
+        await db.prepare("UPDATE email_campaigns SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?").bind(campaign.id).run();
+        return { error: 'Campaign cancelled: stuck in sending for over 48 hours' };
+      }
+    }
+  }
+
   // Build audience — either from registrations query or manual email list
   let uniqueRecipients: { email: string; name: string }[] = [];
 
@@ -350,7 +374,12 @@ export async function processSendWave(env: any, campaign: any, audience: any, ba
       });
     } catch {}
   }
-  await db.prepare(`UPDATE email_campaigns SET status = 'sending', audience_filter = ?, updated_at = datetime('now') WHERE id = ?`)
+  // sent_at doubles as the "sending started" stamp while in flight (the 48h
+  // runaway guard reads it); a fresh start or restart re-stamps it, a
+  // continuing wave preserves it, and completion overwrites it below.
+  await db.prepare(`UPDATE email_campaigns SET status = 'sending',
+      sent_at = CASE WHEN status = 'sending' THEN COALESCE(sent_at, datetime('now')) ELSE datetime('now') END,
+      audience_filter = ?, updated_at = datetime('now') WHERE id = ?`)
     .bind(JSON.stringify(audience), campaign.id).run();
 
   // Resolve recipients to contact ids in bulk
