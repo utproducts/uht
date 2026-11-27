@@ -160,10 +160,11 @@ const gameTypeBadge: Record<string, string> = {
 // ==========================================
 // MOVE RINK PANEL (a sheet goes down mid-event)
 // ==========================================
-function MoveRinkPanel({ eventId, games, rinks, onMoved }: {
+function MoveRinkPanel({ eventId, games, rinks, divisions, onMoved }: {
   eventId: string;
   games: Game[];
   rinks: VenueRink[];
+  divisions: Division[];
   onMoved: () => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
@@ -173,6 +174,8 @@ function MoveRinkPanel({ eventId, games, rinks, onMoved }: {
   const [fromTime, setFromTime] = useState('');
   const [moving, setMoving] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // Games UNchecked by the admin stay behind; new candidates default to checked
+  const [keptBack, setKeptBack] = useState<Set<string>>(new Set());
 
   const UNMOVABLE = ['final', 'cancelled', 'forfeit'];
   const candidates = games.filter(g =>
@@ -180,26 +183,44 @@ function MoveRinkPanel({ eventId, games, rinks, onMoved }: {
     !UNMOVABLE.includes((g as any).status || '') &&
     (!date || (g.start_time || '').slice(0, 10) === date) &&
     (!fromTime || (g.start_time || '').slice(11, 16) >= fromTime)
-  );
+  ).sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+  const picked = candidates.filter(g => !keptBack.has(g.id));
   const days = Array.from(new Set(
     games.filter(g => g.rink_id === fromRinkId).map(g => (g.start_time || '').slice(0, 10)).filter(Boolean)
   )).sort();
   const toName = rinks.find(r => r.id === toRinkId)?.name || '';
+  const divLabel = (g: Game) => {
+    const d = divisions.find(x => x.id === g.event_division_id);
+    return d ? `${d.age_group}${d.division_level ? ' ' + d.division_level : ''}` : '';
+  };
+
+  const toggleGame = (id: string) => {
+    setKeptBack(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const handleMove = async () => {
-    if (!fromRinkId || !toRinkId || fromRinkId === toRinkId || candidates.length === 0) return;
-    if (!confirm(`Move ${candidates.length} game${candidates.length !== 1 ? 's' : ''} to ${toName}? Times and matchups stay the same, and families get a game-update push.`)) return;
+    if (!fromRinkId || !toRinkId || fromRinkId === toRinkId || picked.length === 0) return;
+    if (!confirm(`Move ${picked.length} game${picked.length !== 1 ? 's' : ''} to ${toName}? Times and matchups stay the same, and families get a game-update push.`)) return;
     setMoving(true);
     setResult(null);
     try {
       const res = await authFetch(`${API_BASE}/scheduling/events/${eventId}/move-rink`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromRinkId, toRinkId, ...(date ? { date } : {}), ...(fromTime ? { fromTime } : {}) }),
+        body: JSON.stringify({
+          fromRinkId, toRinkId,
+          ...(date ? { date } : {}), ...(fromTime ? { fromTime } : {}),
+          gameIds: picked.map(g => g.id),
+        }),
       });
       const json = await res.json();
       if (json.success) {
         setResult(`Moved ${json.data.moved} game${json.data.moved !== 1 ? 's' : ''} to ${toName}.`);
+        setKeptBack(new Set());
         await onMoved();
       } else {
         setResult(json.error || 'Move failed');
@@ -225,11 +246,11 @@ function MoveRinkPanel({ eventId, games, rinks, onMoved }: {
         <h3 className="text-sm font-bold text-[#003e79]">Move games to another rink</h3>
         <button onClick={() => { setOpen(false); setResult(null); }} className="text-xs font-semibold text-[#86868b] hover:text-[#1d1d1f]">Close</button>
       </div>
-      <p className="text-xs text-[#6e6e73]">Every unplayed game on the sheet keeps its time and matchup - only the rink changes. Use the day and time filters to move part of the schedule.</p>
+      <p className="text-xs text-[#6e6e73]">Checked games move with their time and matchup unchanged - only the rink changes. Uncheck any game that should stay. The day and time filters narrow the list.</p>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
           <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">From rink</label>
-          <select value={fromRinkId} onChange={e => { setFromRinkId(e.target.value); setResult(null); }}
+          <select value={fromRinkId} onChange={e => { setFromRinkId(e.target.value); setResult(null); setKeptBack(new Set()); }}
             className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2 text-sm">
             <option value="">Select rink</option>
             {rinkOptionGroups(rinks).map(([venue, vRinks]) => (
@@ -265,10 +286,36 @@ function MoveRinkPanel({ eventId, games, rinks, onMoved }: {
             className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+      {fromRinkId && candidates.length > 0 && (
+        <div className="border border-[#e8e8ed] rounded-lg">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[#e8e8ed] bg-[#f5f5f7] rounded-t-lg">
+            <span className="text-xs font-semibold text-[#1d1d1f]">{picked.length} of {candidates.length} selected</span>
+            <div className="flex gap-3">
+              <button onClick={() => setKeptBack(new Set())} className="text-xs font-semibold text-[#003e79] hover:underline">All</button>
+              <button onClick={() => setKeptBack(new Set(candidates.map(g => g.id)))} className="text-xs font-semibold text-[#003e79] hover:underline">None</button>
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto divide-y divide-[#f5f5f7]">
+            {candidates.map(g => (
+              <label key={g.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-[#f0f7ff]">
+                <input type="checkbox" checked={!keptBack.has(g.id)} onChange={() => toggleGame(g.id)}
+                  className="h-4 w-4 accent-[#003e79] shrink-0" />
+                <span className="text-xs text-[#86868b] font-semibold w-24 shrink-0">
+                  {(g.start_time || '').slice(5, 10).replace('-', '/')} {(g.start_time || '').slice(11, 16)}
+                </span>
+                <span className="text-xs text-[#86868b] w-16 shrink-0">{divLabel(g)}</span>
+                <span className="min-w-0 truncate text-[#1d1d1f]">
+                  {g.home_team_name || (g as any).home_placeholder || 'TBD'} vs {g.away_team_name || (g as any).away_placeholder || 'TBD'}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={handleMove} disabled={moving || !fromRinkId || !toRinkId || fromRinkId === toRinkId || candidates.length === 0}
+        <button onClick={handleMove} disabled={moving || !fromRinkId || !toRinkId || fromRinkId === toRinkId || picked.length === 0}
           className="px-5 py-2 rounded-lg text-sm font-semibold bg-[#003e79] text-white disabled:opacity-40 hover:bg-[#00294f] transition">
-          {moving ? 'Moving...' : `Move ${candidates.length} game${candidates.length !== 1 ? 's' : ''}`}
+          {moving ? 'Moving...' : `Move ${picked.length} game${picked.length !== 1 ? 's' : ''}`}
         </button>
         {fromRinkId && candidates.length === 0 && !result && (
           <span className="text-xs text-[#86868b]">No unplayed games match - played and cancelled games never move.</span>
@@ -4048,7 +4095,7 @@ export default function AdminSchedulePage() {
                       ))}
                     </div>
                     {selectedEvent && (
-                      <MoveRinkPanel eventId={selectedEvent.id} games={games} rinks={venueRinks} onMoved={reloadGames} />
+                      <MoveRinkPanel eventId={selectedEvent.id} games={games} rinks={venueRinks} divisions={divisions} onMoved={reloadGames} />
                     )}
                   </div>
 

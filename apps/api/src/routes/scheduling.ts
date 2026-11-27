@@ -960,11 +960,13 @@ const moveRinkSchema = z.object({
   toRinkId: z.string(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   fromTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  // When provided, only these games move (checkbox selection in the builder)
+  gameIds: z.array(z.string()).min(1).max(500).optional(),
 });
 
 schedulingRoutes.post('/events/:eventId/move-rink', authMiddleware, requireRole('admin', 'director'), zValidator('json', moveRinkSchema), async (c) => {
   const eventId = c.req.param('eventId');
-  const { fromRinkId, toRinkId, date, fromTime } = c.req.valid('json');
+  const { fromRinkId, toRinkId, date, fromTime, gameIds } = c.req.valid('json');
   const db = c.env.DB;
 
   if (fromRinkId === toRinkId) return c.json({ success: false, error: 'Pick two different rinks' }, 400);
@@ -975,6 +977,7 @@ schedulingRoutes.post('/events/:eventId/move-rink', authMiddleware, requireRole(
   const binds: any[] = [eventId, fromRinkId];
   if (date) { conds.push('date(start_time) = ?'); binds.push(date); }
   if (fromTime) { conds.push('time(start_time) >= ?'); binds.push(`${fromTime}:00`); }
+  if (gameIds?.length) { conds.push(`id IN (${gameIds.map(() => '?').join(',')})`); binds.push(...gameIds); }
 
   const moving = (await db.prepare(`SELECT id FROM games WHERE ${conds.join(' AND ')}`).bind(...binds).all<any>()).results || [];
   if (moving.length === 0) return c.json({ success: true, data: { moved: 0 } });
