@@ -360,8 +360,12 @@ function EditGameModal({
   );
   const venues = Array.from(new Map(rinks.map(r => [r.venue_id, r.venue_name || 'Venue'])).entries());
   const venueRinkChoices = venueId ? rinks.filter(r => r.venue_id === venueId) : rinks;
-  const [startDate, setStartDate] = useState(game.start_time ? game.start_time.split('T')[0] : '');
-  const [startTime, setStartTime] = useState(game.start_time ? game.start_time.split('T')[1]?.substring(0, 5) : '');
+  // start_time comes back as 'YYYY-MM-DD HH:MM:SS' (CSV uploads) or
+  // 'YYYY-MM-DDTHH:MM:SS' (builder) — slice handles both; split('T') broke
+  // every save on uploaded schedules (date/time came up empty and the save
+  // nulled the game's start time)
+  const [startDate, setStartDate] = useState((game.start_time || '').slice(0, 10));
+  const [startTime, setStartTime] = useState((game.start_time || '').length >= 16 ? (game.start_time || '').slice(11, 16) : '');
   const [gameType, setGameType] = useState(game.game_type);
   const [notes, setNotes] = useState(game.notes || '');
   const [scorekeeperId, setScorekeeperId] = useState(game.scorekeeper_id || '');
@@ -416,8 +420,12 @@ function EditGameModal({
       event_division_id: divisionId || null,
       rink_id: rinkId || null,
       venue_id: venueId || null,
-      start_time: startDate && startTime ? `${startDate}T${startTime}:00` : null,
-      end_time: startDate && endH && endM ? `${startDate}T${endH}:${endM}:00` : null,
+      // Keep the game's existing date separator (uploads use a space, the
+      // builder uses T) so same-day games keep sorting together; when the
+      // date/time fields are blank, leave start_time untouched instead of
+      // wiping it (undefined drops the key from the JSON payload)
+      start_time: startDate && startTime ? `${startDate}${(game.start_time || '').charAt(10) === 'T' ? 'T' : ' '}${startTime}:00` : undefined,
+      end_time: startDate && startTime && endH && endM ? `${startDate}${(game.start_time || '').charAt(10) === 'T' ? 'T' : ' '}${endH}:${endM}:00` : undefined,
       game_type: gameType,
       notes: notes || null,
       home_locker_room: homeLockerRoom || null,
@@ -822,8 +830,10 @@ function AddGameModal({
       home_team_id: homeTeamId || null,
       away_team_id: awayTeamId || null,
       rink_id: rinkId || null,
-      start_time: `${startDate}T${startTime}:00`,
-      end_time: `${startDate}T${String(parseInt(startTime.split(':')[0]) + 1).padStart(2, '0')}:${startTime.split(':')[1]}:00`,
+      // Space separator matches the rest of the schedule (747 of 750 games) —
+      // a T here made new games sort after every same-day uploaded game
+      start_time: `${startDate} ${startTime}:00`,
+      end_time: `${startDate} ${String(parseInt(startTime.split(':')[0]) + 1).padStart(2, '0')}:${startTime.split(':')[1]}:00`,
       game_type: gameType,
       notes: notes || null,
     });
@@ -1597,7 +1607,7 @@ function ScorekeeperAssignment({ eventId, games, staffList, authFetch, onGamesRe
   const scorekeepers = staffList.filter(s => s.roles?.includes('scorekeeper'));
 
   // Unique days and rinks for filters
-  const days = Array.from(new Set(games.map(g => g.start_time?.split('T')[0]).filter((d): d is string => !!d))).sort();
+  const days = Array.from(new Set(games.map(g => g.start_time?.slice(0, 10)).filter((d): d is string => !!d))).sort();
   const rinks = Array.from(new Set(games.map(g => g.rink_name).filter((r): r is string => !!r))).sort();
 
   // Filter games
@@ -1764,7 +1774,7 @@ function ScorekeeperAssignment({ eventId, games, staffList, authFetch, onGamesRe
             </thead>
             <tbody>
               {filteredGames.map(g => {
-                const dayStr = g.start_time?.split('T')[0] || '';
+                const dayStr = g.start_time?.slice(0, 10) || '';
                 return (
                   <tr key={g.id} className={`border-b border-[#f5f5f7] hover:bg-[#fafafa] transition ${selectedGames.has(g.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2">
