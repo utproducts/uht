@@ -838,7 +838,10 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
 
   if (data.home_team_id !== undefined) { updates.push('home_team_id = ?'); values.push(data.home_team_id); }
   if (data.away_team_id !== undefined) { updates.push('away_team_id = ?'); values.push(data.away_team_id); }
-  if (data.event_division_id !== undefined) { updates.push('event_division_id = ?'); values.push(data.event_division_id); }
+  // event_division_id and start_time are NOT NULL in the schema; a null from
+  // an older client means "no change", not "clear it" (nulling them used to
+  // 500 the whole save, so rink/time edits silently never stuck)
+  if (data.event_division_id !== undefined && data.event_division_id !== null) { updates.push('event_division_id = ?'); values.push(data.event_division_id); }
   if (data.seed_locked !== undefined) { updates.push('seed_locked = ?'); values.push(data.seed_locked ? 1 : 0); }
   if (data.rink_id !== undefined) {
     updates.push('rink_id = ?'); values.push(data.rink_id);
@@ -850,7 +853,7 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
     }
   }
   if (data.venue_id !== undefined) { updates.push('venue_id = ?'); values.push(data.venue_id); }
-  if (data.start_time !== undefined) { updates.push('start_time = ?'); values.push(data.start_time); }
+  if (data.start_time !== undefined && data.start_time !== null) { updates.push('start_time = ?'); values.push(data.start_time); }
   if (data.end_time !== undefined) { updates.push('end_time = ?'); values.push(data.end_time); }
   if (data.game_type !== undefined) { updates.push('game_type = ?'); values.push(data.game_type); }
   if (data.pool_name !== undefined) { updates.push('pool_name = ?'); values.push(data.pool_name); }
