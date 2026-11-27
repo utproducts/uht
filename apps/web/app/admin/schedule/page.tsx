@@ -3451,11 +3451,23 @@ export default function AdminSchedulePage() {
 
   // CRUD handlers
   const handleSaveGame = async (gameId: string, updates: any) => {
-    await authFetch(`${API_BASE}/scheduling/games/${gameId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
+    // A failed save must never look like a successful one - surface the why
+    let res: Response | null = null;
+    let json: any = null;
+    try {
+      res = await authFetch(`${API_BASE}/scheduling/games/${gameId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      try { json = await res.json(); } catch {}
+    } catch {}
+    if (!res || !res.ok || !json?.success) {
+      const msg = !res ? 'No connection - check your internet and try again.'
+        : res.status === 401 || res.status === 403 ? 'Your login session expired. Log out, log back in, and retry.'
+        : (typeof json?.error === 'string' ? json.error : `Save failed (HTTP ${res.status}). Try again.`);
+      alert(`Game did not save: ${msg}`);
+    }
     await reloadGames();
   };
 
