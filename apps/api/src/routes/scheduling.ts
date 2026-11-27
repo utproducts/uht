@@ -950,6 +950,47 @@ schedulingRoutes.post('/games/swap', authMiddleware, requireRole('admin', 'direc
 });
 
 // ==========================================
+// BULK RINK MOVE (a sheet goes down mid-event)
+// ==========================================
+// Moves every unplayed game on one rink to another, keeping times and
+// matchups. Optional day / from-time filters narrow the move. Played and
+// cancelled games stay where they were.
+const moveRinkSchema = z.object({
+  fromRinkId: z.string(),
+  toRinkId: z.string(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fromTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+});
+
+schedulingRoutes.post('/events/:eventId/move-rink', authMiddleware, requireRole('admin', 'director'), zValidator('json', moveRinkSchema), async (c) => {
+  const eventId = c.req.param('eventId');
+  const { fromRinkId, toRinkId, date, fromTime } = c.req.valid('json');
+  const db = c.env.DB;
+
+  if (fromRinkId === toRinkId) return c.json({ success: false, error: 'Pick two different rinks' }, 400);
+  const toRink = await db.prepare('SELECT id, venue_id FROM venue_rinks WHERE id = ?').bind(toRinkId).first<any>();
+  if (!toRink) return c.json({ success: false, error: 'Target rink not found' }, 404);
+
+  const conds = ['event_id = ?', 'rink_id = ?', "status NOT IN ('final', 'cancelled', 'forfeit')"];
+  const binds: any[] = [eventId, fromRinkId];
+  if (date) { conds.push('date(start_time) = ?'); binds.push(date); }
+  if (fromTime) { conds.push('time(start_time) >= ?'); binds.push(`${fromTime}:00`); }
+
+  const moving = (await db.prepare(`SELECT id FROM games WHERE ${conds.join(' AND ')}`).bind(...binds).all<any>()).results || [];
+  if (moving.length === 0) return c.json({ success: true, data: { moved: 0 } });
+
+  await db.prepare(`UPDATE games SET rink_id = ?, venue_id = ?, updated_at = datetime('now') WHERE ${conds.join(' AND ')}`)
+    .bind(toRink.id, toRink.venue_id, ...binds).run();
+
+  // Families and staff learn their game changed sheets
+  c.executionCtx.waitUntil(import('../lib/push').then(async pm => {
+    for (const g of moving) await pm.notifyGameChangedPush(db, g.id, 'update').catch(() => {});
+  }).catch(() => {}));
+
+  return c.json({ success: true, data: { moved: moving.length } });
+});
+
+// ==========================================
 // DELETE SINGLE GAME
 // ==========================================
 schedulingRoutes.delete('/games/:gameId', authMiddleware, requireRole('admin', 'director'), async (c) => {

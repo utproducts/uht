@@ -158,6 +158,128 @@ const gameTypeBadge: Record<string, string> = {
 };
 
 // ==========================================
+// MOVE RINK PANEL (a sheet goes down mid-event)
+// ==========================================
+function MoveRinkPanel({ eventId, games, rinks, onMoved }: {
+  eventId: string;
+  games: Game[];
+  rinks: VenueRink[];
+  onMoved: () => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [fromRinkId, setFromRinkId] = useState('');
+  const [toRinkId, setToRinkId] = useState('');
+  const [date, setDate] = useState('');
+  const [fromTime, setFromTime] = useState('');
+  const [moving, setMoving] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const UNMOVABLE = ['final', 'cancelled', 'forfeit'];
+  const candidates = games.filter(g =>
+    g.rink_id === fromRinkId &&
+    !UNMOVABLE.includes((g as any).status || '') &&
+    (!date || (g.start_time || '').slice(0, 10) === date) &&
+    (!fromTime || (g.start_time || '').slice(11, 16) >= fromTime)
+  );
+  const days = Array.from(new Set(
+    games.filter(g => g.rink_id === fromRinkId).map(g => (g.start_time || '').slice(0, 10)).filter(Boolean)
+  )).sort();
+  const toName = rinks.find(r => r.id === toRinkId)?.name || '';
+
+  const handleMove = async () => {
+    if (!fromRinkId || !toRinkId || fromRinkId === toRinkId || candidates.length === 0) return;
+    if (!confirm(`Move ${candidates.length} game${candidates.length !== 1 ? 's' : ''} to ${toName}? Times and matchups stay the same, and families get a game-update push.`)) return;
+    setMoving(true);
+    setResult(null);
+    try {
+      const res = await authFetch(`${API_BASE}/scheduling/events/${eventId}/move-rink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromRinkId, toRinkId, ...(date ? { date } : {}), ...(fromTime ? { fromTime } : {}) }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setResult(`Moved ${json.data.moved} game${json.data.moved !== 1 ? 's' : ''} to ${toName}.`);
+        await onMoved();
+      } else {
+        setResult(json.error || 'Move failed');
+      }
+    } catch {
+      setResult('Move failed - check your connection and try again.');
+    }
+    setMoving(false);
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-[#e8e8ed] text-[#003e79] hover:bg-[#f0f7ff] transition">
+        Rink down? Move games
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-full bg-white rounded-xl border border-[#003e79]/25 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-[#003e79]">Move games to another rink</h3>
+        <button onClick={() => { setOpen(false); setResult(null); }} className="text-xs font-semibold text-[#86868b] hover:text-[#1d1d1f]">Close</button>
+      </div>
+      <p className="text-xs text-[#6e6e73]">Every unplayed game on the sheet keeps its time and matchup - only the rink changes. Use the day and time filters to move part of the schedule.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div>
+          <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">From rink</label>
+          <select value={fromRinkId} onChange={e => { setFromRinkId(e.target.value); setResult(null); }}
+            className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2 text-sm">
+            <option value="">Select rink</option>
+            {rinkOptionGroups(rinks).map(([venue, vRinks]) => (
+              <optgroup key={venue} label={venue}>
+                {vRinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">To rink</label>
+          <select value={toRinkId} onChange={e => { setToRinkId(e.target.value); setResult(null); }}
+            className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2 text-sm">
+            <option value="">Select rink</option>
+            {rinkOptionGroups(rinks.filter(r => r.id !== fromRinkId)).map(([venue, vRinks]) => (
+              <optgroup key={venue} label={venue}>
+                {vRinks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">Day (optional)</label>
+          <select value={date} onChange={e => setDate(e.target.value)}
+            className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2 text-sm">
+            <option value="">All days</option>
+            {days.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-[#86868b] uppercase tracking-widest font-semibold mb-1.5">From time (optional)</label>
+          <input type="time" value={fromTime} onChange={e => setFromTime(e.target.value)}
+            className="w-full border border-[#e8e8ed] rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={handleMove} disabled={moving || !fromRinkId || !toRinkId || fromRinkId === toRinkId || candidates.length === 0}
+          className="px-5 py-2 rounded-lg text-sm font-semibold bg-[#003e79] text-white disabled:opacity-40 hover:bg-[#00294f] transition">
+          {moving ? 'Moving...' : `Move ${candidates.length} game${candidates.length !== 1 ? 's' : ''}`}
+        </button>
+        {fromRinkId && candidates.length === 0 && !result && (
+          <span className="text-xs text-[#86868b]">No unplayed games match - played and cancelled games never move.</span>
+        )}
+        {result && <span className="text-xs font-semibold text-[#003e79]">{result}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 // EDIT GAME MODAL
 // ==========================================
 function EditGameModal({
@@ -3908,21 +4030,26 @@ export default function AdminSchedulePage() {
                 </div>
               ) : (
                 <>
-                  {/* View Toggle */}
-                  <div className="flex flex-wrap gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
-                    {([
-                      { key: 'full' as const, label: 'Full Schedule' },
-                      { key: 'venue' as const, label: 'By Venue' },
-                      { key: 'division' as const, label: 'By Division' },
-                      { key: 'matrix' as const, label: 'Matrix' },
-                      { key: 'staff' as const, label: 'Staff' },
-                      { key: 'bracket' as const, label: 'Bracket Day' },
-                    ]).map(v => (
-                      <button key={v.key} onClick={() => setView(v.key)}
-                        className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${view === v.key ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
-                        {v.label}
-                      </button>
-                    ))}
+                  {/* View Toggle + rink-down bulk move */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap gap-1 bg-[#e8e8ed] rounded-xl p-1 w-fit">
+                      {([
+                        { key: 'full' as const, label: 'Full Schedule' },
+                        { key: 'venue' as const, label: 'By Venue' },
+                        { key: 'division' as const, label: 'By Division' },
+                        { key: 'matrix' as const, label: 'Matrix' },
+                        { key: 'staff' as const, label: 'Staff' },
+                        { key: 'bracket' as const, label: 'Bracket Day' },
+                      ]).map(v => (
+                        <button key={v.key} onClick={() => setView(v.key)}
+                          className={`px-5 py-2 rounded-lg text-sm font-semibold transition ${view === v.key ? 'bg-white text-[#1d1d1f] shadow' : 'text-[#6e6e73] hover:text-[#1d1d1f]'}`}>
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedEvent && (
+                      <MoveRinkPanel eventId={selectedEvent.id} games={games} rinks={venueRinks} onMoved={reloadGames} />
+                    )}
                   </div>
 
                   {view === 'full' && <GameListView games={filteredGames} divisions={divisions} onClickGame={setEditingGame} ageGroupRinks={ageGroupRinks} venueRinks={venueRinks} onSaveGame={handleSaveGame} onSwapGames={handleSwapGames} />}
