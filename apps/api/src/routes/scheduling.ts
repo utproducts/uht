@@ -832,6 +832,22 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
   const game = await db.prepare('SELECT * FROM games WHERE id = ?').bind(gameId).first();
   if (!game) return c.json({ success: false, error: 'Game not found' }, 404);
 
+  // Older clients send a registration id where a team id belongs (the event
+  // roster endpoint aliased er.id as team_id for consumer rows) - resolve it
+  // to the registration's linked team instead of failing the FK
+  for (const k of ['home_team_id', 'away_team_id'] as const) {
+    const v = (data as any)[k];
+    if (!v) continue;
+    const t = await db.prepare('SELECT 1 as ok FROM teams WHERE id = ?').bind(v).first();
+    if (t) continue;
+    const er = await db.prepare('SELECT team_id FROM event_registrations WHERE id = ?').bind(v).first<any>();
+    if (er?.team_id) {
+      (data as any)[k] = er.team_id;
+    } else {
+      return c.json({ success: false, error: 'That team is not linked to a real team yet. Link it with Replace a Team on the Schedules tab, then try again.' }, 400);
+    }
+  }
+
   // Build dynamic update
   const updates: string[] = [];
   const values: any[] = [];
@@ -886,7 +902,17 @@ schedulingRoutes.put('/games/:gameId', authMiddleware, requireRole('admin', 'dir
   updates.push("updated_at = datetime('now')");
   values.push(gameId);
 
-  await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+  try {
+    await db.prepare(`UPDATE games SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+  } catch (e: any) {
+    // Surface what actually broke instead of a blank 500 - with the payload
+    // in the log so a failing edit can be reproduced exactly
+    console.error('Game update failed:', gameId, JSON.stringify(data), String(e?.message || e));
+    const msg = /FOREIGN KEY/i.test(String(e?.message || ''))
+      ? 'One of the selected values (team, division, venue, or rink) no longer exists. Refresh the page and try again.'
+      : `Update failed: ${e?.message || 'database error'}`;
+    return c.json({ success: false, error: msg }, 400);
+  }
 
   // Return updated game with team names and staff names
   const updated = await db.prepare(`

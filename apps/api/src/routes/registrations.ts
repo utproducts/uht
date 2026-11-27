@@ -347,7 +347,11 @@ registrationRoutes.get('/event/:eventId', authMiddleware, requireRole('admin', '
     ...(consumerResult.results || []).map((er: any) => ({
       ...er,
       // Map consumer fields to match the Registration interface
-      team_id: er.id, // consumer regs don't have a team_id, use reg id as placeholder
+      // Real team id when the registration is linked (most are, these days);
+      // the reg id placeholder only for unlinked ones. Aliasing er.id for ALL
+      // rows put registration ids in the schedule builder's team dropdowns,
+      // and assigning one to a game failed the teams foreign key.
+      team_id: er.team_id || er.id,
       event_division_id: er.event_division_id || null,
       amount_cents: er.payment_amount_cents || null,
       paid_cents: null,
