@@ -60,6 +60,35 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
     } catch { /* DB hiccup — keep token roles rather than failing the request */ }
 
     c.set('user', user);
+
+    // App usage: the mobile app sends no analytics of its own, so count it
+    // here — an authenticated non-browser client is the app (RN fetch sends
+    // CFNetwork/okhttp UAs; every browser UA contains Mozilla). One row per
+    // user per hour, KV-deduped, written after the response so requests
+    // never wait on it. Feeds the dashboard's Analytics section.
+    try {
+      const ua = c.req.header('user-agent') || '';
+      if (ua && !ua.includes('Mozilla')) {
+        const hour = new Date().toISOString().slice(0, 13);
+        const key = `appact:${user.id}:${hour}`;
+        c.executionCtx.waitUntil((async () => {
+          try {
+            if (await c.env.SESSIONS.get(key)) return;
+            await c.env.SESSIONS.put(key, '1', { expirationTtl: 7200 });
+            await c.env.DB.prepare(
+              `INSERT INTO user_activity_log (id, user_id, session_id, activity_type, page_path, user_agent)
+               VALUES (?, ?, ?, 'app_open', 'app', ?)`
+            ).bind(
+              crypto.randomUUID().replace(/-/g, ''),
+              user.id,
+              `app:${user.id}:${hour.slice(0, 10)}`,
+              ua.slice(0, 120)
+            ).run();
+          } catch {}
+        })());
+      }
+    } catch {}
+
     await next();
   } catch (err) {
     return c.json({ success: false, error: 'Invalid or expired token' }, 401);

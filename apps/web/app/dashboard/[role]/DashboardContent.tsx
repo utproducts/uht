@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import DirectorDash from './DirectorDash';
 import OrgDashboard from './OrgDashboard';
 import RegistrationTrends from './RegistrationTrends';
+import TrafficAnalytics from './TrafficAnalytics';
 
 // Who owes what — the list behind the Expected Revenue tile, with search and
 // a per-event filter so the money chase is a scan, not a spreadsheet
@@ -585,6 +586,10 @@ export function AdminDash() {
       {/* Registration Trends — month-over-month analytics (replaces Airtable tracking) */}
       <SectionTitle>Registration Trends</SectionTitle>
       <RegistrationTrends />
+
+      {/* Analytics — website page views + app usage from our own tracker */}
+      <SectionTitle>Analytics</SectionTitle>
+      <TrafficAnalytics />
 
       {/* Quick Actions */}
       <SectionTitle>Quick Actions</SectionTitle>

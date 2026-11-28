@@ -1104,3 +1104,85 @@ analyticsRoutes.get('/reports/marketing', authMiddleware, requireRole('admin', '
     },
   });
 });
+
+// ==================
+// ADMIN: Traffic — website page views and app usage per day / week / month.
+// Source is our own tracker (user_activity_log); there is no Google Analytics
+// tag on the site. Admin pages are excluded so staff browsing does not
+// inflate the numbers. App rows (activity_type 'app_open') are written by
+// authMiddleware for non-browser clients, one per user per hour.
+// KV-cached: the monthly bucket scans a year of a 5M+ row table.
+// ==================
+analyticsRoutes.get('/reports/traffic', authMiddleware, requireRole('admin', 'director'), async (c) => {
+  const db = c.env.DB;
+  try {
+    const cached = await c.env.SESSIONS.get('analytics:traffic', 'json');
+    if (cached) return c.json({ success: true, data: cached, cached: true });
+  } catch {}
+
+  const WEB = `activity_type = 'page_view' AND (page_path IS NULL OR page_path NOT LIKE '/admin%')`;
+  const APP = `activity_type = 'app_open'`;
+  // Buckets are Central time (fixed -6: close enough across DST) so "today"
+  // matches the office's day, not UTC's. Week buckets start on Monday:
+  // 'weekday 0' rolls forward to Sunday, then back six days lands on Monday.
+  const dayOf = `date(created_at, '-6 hours')`;
+  const weekOf = `date(created_at, '-6 hours', 'weekday 0', '-6 days')`;
+  const monthOf = `strftime('%Y-%m', datetime(created_at, '-6 hours'))`;
+
+  const [daily, weekly, monthly, appDaily, appWeekly, appMonthly] = await Promise.all([
+    db.prepare(`
+      SELECT ${dayOf} as bucket, COUNT(*) as views, COUNT(DISTINCT session_id) as visitors
+      FROM user_activity_log
+      WHERE ${WEB} AND created_at >= date('now', '-31 days')
+      GROUP BY bucket ORDER BY bucket
+    `).all(),
+    db.prepare(`
+      SELECT ${weekOf} as bucket, COUNT(*) as views, COUNT(DISTINCT session_id) as visitors
+      FROM user_activity_log
+      WHERE ${WEB} AND created_at >= date('now', 'weekday 0', '-6 days', '-78 days')
+      GROUP BY bucket ORDER BY bucket
+    `).all(),
+    db.prepare(`
+      SELECT ${monthOf} as bucket, COUNT(*) as views, COUNT(DISTINCT session_id) as visitors
+      FROM user_activity_log
+      WHERE ${WEB} AND created_at >= date('now', 'start of month', '-11 months', '-1 day')
+      GROUP BY bucket ORDER BY bucket
+    `).all(),
+    db.prepare(`
+      SELECT ${dayOf} as bucket, COUNT(DISTINCT user_id) as users, COUNT(*) as sessions
+      FROM user_activity_log
+      WHERE ${APP} AND created_at >= date('now', '-31 days')
+      GROUP BY bucket ORDER BY bucket
+    `).all(),
+    db.prepare(`
+      SELECT ${weekOf} as bucket, COUNT(DISTINCT user_id) as users, COUNT(*) as sessions
+      FROM user_activity_log
+      WHERE ${APP} AND created_at >= date('now', 'weekday 0', '-6 days', '-78 days')
+      GROUP BY bucket ORDER BY bucket
+    `).all(),
+    db.prepare(`
+      SELECT ${monthOf} as bucket, COUNT(DISTINCT user_id) as users, COUNT(*) as sessions
+      FROM user_activity_log
+      WHERE ${APP} AND created_at >= date('now', 'start of month', '-11 months', '-1 day')
+      GROUP BY bucket ORDER BY bucket
+    `).all(),
+  ]);
+
+  const data = {
+    web: {
+      daily: daily.results || [],
+      weekly: weekly.results || [],
+      monthly: monthly.results || [],
+    },
+    app: {
+      daily: appDaily.results || [],
+      weekly: appWeekly.results || [],
+      monthly: appMonthly.results || [],
+      tracked_since: '2026-11-27',
+    },
+    generated_at: new Date().toISOString(),
+  };
+
+  try { await c.env.SESSIONS.put('analytics:traffic', JSON.stringify(data), { expirationTtl: 1800 }); } catch {}
+  return c.json({ success: true, data });
+});
